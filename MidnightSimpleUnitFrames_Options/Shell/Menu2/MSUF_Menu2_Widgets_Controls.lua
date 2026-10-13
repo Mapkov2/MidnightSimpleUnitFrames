@@ -1146,13 +1146,13 @@ function W.SegmentTabs(ctx, parent, opts)
         local tab = opts.get and opts.get() or (opts.stateKey and M[opts.stateKey]) or defaultTab
         return allowed[tab] and tab or defaultTab
     end
-    local function RefreshTabs()
+    local function RefreshTabs(exact)
         local tab = CurrentTab()
         for key, frame in pairs(frames) do
             if frame and frame.SetShown then frame:SetShown(key == tab) end
         end
         if segment and segment.SetValue then segment:SetValue(tab) end
-        if opts.afterRefresh then opts.afterRefresh(tab) end
+        if opts.afterRefresh and (not exact or not ctx or ctx.key == M.activeKey) then opts.afterRefresh(tab) end
     end
     local function SetTab(tab)
         tab = allowed[tab] and tab or defaultTab
@@ -1162,6 +1162,13 @@ function W.SegmentTabs(ctx, parent, opts)
         end
         RefreshTabs()
         if opts.afterSet then opts.afterSet(tab) end
+    end
+    for key, frame in pairs(frames) do
+        frame._msuf2ExactTabView = { kind = opts.stateKey or "menuTab", value = key, select = function(tab)
+            if opts.set then opts.set(tab)
+            elseif opts.stateKey then M.SetMenuStateValue(opts.stateKey, tab) end
+            RefreshTabs(true)
+        end }
     end
     segment = W.Segment(parent, opts.label, opts.values, opts.width)
     W.MoveWidget(segment, parent, opts.x or 0, opts.y or 0, opts.width, opts.titleJustify or "LEFT")

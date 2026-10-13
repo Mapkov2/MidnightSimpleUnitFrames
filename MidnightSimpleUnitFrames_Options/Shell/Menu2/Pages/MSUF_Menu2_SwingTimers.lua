@@ -227,7 +227,7 @@ local function CopySettings(ctx, ui, target, scopes)
         end
     end)
     M.Refresh(ctx)
-    M.ShowStatusFeedback(M.Format("Copied to %s", target == "all" and M.Tr("All") or M.Tr(LABELS[target])), "ok", 1.8)
+    M.ShowStatusFeedback(M.Format("Copied to %s", target == "all" and M.Tr("All") or M.Tr(LABELS[target])), "ok", 1.8, true)
     return true
 end
 local function BuildCopy(ctx, ui, width)

@@ -325,7 +325,10 @@ local function AttachBoundColorToContextCard(colorControl)
     card = card or nearestHost
     if not card then return false end
     local existingShortcut = card._msuf2ContextColorShortcut
-    if existingShortcut and existingShortcut._msuf2BoundColorShortcut ~= true then return false end
+    if existingShortcut and existingShortcut._msuf2BoundColorShortcut ~= true then
+        colorControl._msuf2ContextColorSearchAnchor = existingShortcut
+        return false
+    end
     card._msuf2ContextColorOwners = card._msuf2ContextColorOwners or {}
     card._msuf2ContextColorOwnerKeys = card._msuf2ContextColorOwnerKeys or {}
     local command = colorControl._msuf2CommandAction
@@ -362,6 +365,7 @@ local function AttachBoundColorToContextCard(colorControl)
         maxTargets = 4,
     })
     if shortcut then
+        colorControl._msuf2ContextColorSearchAnchor = shortcut
         shortcut._msuf2BoundColorShortcut = true
         if colorControl.HookScript and not colorControl._msuf2ContextShortcutEnableHooks then
             colorControl._msuf2ContextShortcutEnableHooks = true

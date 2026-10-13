@@ -1164,8 +1164,15 @@ function W.SettingsRows(ctx, parent, spec)
                 resetBtn:SetAlpha(0.35)
                 resetBtn:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
                 resetBtn:SetScript("OnLeave", function(self) self:SetAlpha(0.35) end)
+                -- Like every menu edit: refused in combat, one undo step.
                 resetBtn:SetScript("OnClick", function()
-                    row.reset()
+                    if M.BlockCombatAction and M.BlockCombatAction() then return end
+                    local label = CardResolve(row.label) or "Setting"
+                    M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("Reset %s", Tr(label))),
+                        "settings-row:reset:" .. tostring(row.id or label), function()
+                            row.reset()
+                            return true
+                        end)
                     if M.RequestRefresh then M.RequestRefresh(ctx, "settings-row-reset") end
                 end)
                 if M.AddTooltip then

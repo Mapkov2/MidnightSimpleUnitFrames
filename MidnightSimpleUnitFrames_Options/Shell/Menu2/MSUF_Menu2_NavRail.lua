@@ -420,7 +420,7 @@ local function CreateHistoryControls(parent)
         if not (message and icon and text ~= "") then return end
         controls._msuf2FeedbackSerial = (controls._msuf2FeedbackSerial or 0) + 1
         local serial = controls._msuf2FeedbackSerial
-        message:SetText(text)
+        T.SetTranslatedText(message, text)
         message:SetTextColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
         message:SetAlpha(1)
         icon:SetAlpha(1)
@@ -462,12 +462,12 @@ local function CreateHistoryControls(parent)
         local canRedo = s.canRedo and true or false
         local canResetAll = s.canResetAll and true or false
         if controls.undoSummary then
-            controls.undoSummary:SetText(HistorySummaryText(s.undoLabel, s.undoCount))
+            T.SetTranslatedText(controls.undoSummary, HistorySummaryText(s.undoLabel, s.undoCount))
             local color = canUndo and T.colors.muted or T.colors.dim
             controls.undoSummary:SetTextColor(color[1], color[2], color[3], canUndo and 0.96 or 0.52)
         end
         if controls.redoSummary then
-            controls.redoSummary:SetText(HistorySummaryText(s.redoLabel, s.redoCount))
+            T.SetTranslatedText(controls.redoSummary, HistorySummaryText(s.redoLabel, s.redoCount))
             local color = canRedo and T.colors.muted or T.colors.dim
             controls.redoSummary:SetTextColor(color[1], color[2], color[3], canRedo and 0.96 or 0.52)
         end
@@ -492,6 +492,39 @@ local function CreateHistoryControls(parent)
     end
     M.RefreshHistoryControls()
     return row
+end
+-- The one-time search intro closes from its close button, its dismiss command
+-- and a menu quiesce: the 10 second auto-hide is a MenuTimer task, which a
+-- quiesce cancels, so the intro would otherwise stay open for the next visit.
+local function InstallSearchIntroHider(parent)
+    local function HideSearchIntro()
+        local intro = parent._msuf2SearchIntro
+        if intro and intro.Hide then intro:Hide() end
+    end
+    M.MenuRuntime:SetQuiesceSettler("search-intro", HideSearchIntro)
+    if M.RegisterVirtualRuntimeControl then
+        M.RegisterVirtualRuntimeControl({
+            controlId = "menu2.menu-chrome.search-intro-dismiss",
+            identityKey = "menu-chrome.search-intro-dismiss",
+            controlPath = "menu-chrome/search-intro-dismiss",
+            pageKey = "menu_chrome",
+            kind = "button",
+            label = "Dismiss search help",
+            classification = "action",
+            actionKey = "set_nav_search_intro",
+            historyMode = "none",
+            help = "Dismisses the one-time settings-search introduction.",
+            command = {
+                kind = "button",
+                historyMode = "none",
+                set = function()
+                    HideSearchIntro()
+                    return true
+                end,
+            },
+        }, "menu-chrome-lazy")
+    end
+    return HideSearchIntro
 end
 local function BuildNavRail(parent)
     M.EnsurePersistentMenuState()
@@ -586,32 +619,7 @@ local function BuildNavRail(parent)
         end)
         if searchPalette then searchPalette:Refresh(query, M.searchResultsPending == true) end
     end
-    local function HideSearchIntro()
-        local intro = parent._msuf2SearchIntro
-        if intro and intro.Hide then intro:Hide() end
-    end
-    if M.RegisterVirtualRuntimeControl then
-        M.RegisterVirtualRuntimeControl({
-            controlId = "menu2.menu-chrome.search-intro-dismiss",
-            identityKey = "menu-chrome.search-intro-dismiss",
-            controlPath = "menu-chrome/search-intro-dismiss",
-            pageKey = "menu_chrome",
-            kind = "button",
-            label = "Dismiss search help",
-            classification = "action",
-            actionKey = "set_nav_search_intro",
-            historyMode = "none",
-            help = "Dismisses the one-time settings-search introduction.",
-            command = {
-                kind = "button",
-                historyMode = "none",
-                set = function()
-                    HideSearchIntro()
-                    return true
-                end,
-            },
-        }, "menu-chrome-lazy")
-    end
+    local HideSearchIntro = InstallSearchIntroHider(parent)
     local function EnsureSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro then return intro end

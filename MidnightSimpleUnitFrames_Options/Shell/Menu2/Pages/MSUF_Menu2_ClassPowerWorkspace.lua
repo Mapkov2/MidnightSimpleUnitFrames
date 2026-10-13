@@ -58,9 +58,17 @@ end
 function Workspace.Decorate(exact, path)
     local kind = Workspace.KindForPath(path)
     exact.searchPrepareKind, exact.searchPrepareValue = "classPowerWorkspace", kind
+    local styleTab = path:match("^style%.(resources)%.") or path:match("^style%.(text)%.")
+        or path:match("^style%.(opacity)%.") or path:match("^style%.(pips)%.")
+    if styleTab then
+        exact.searchPrepareKind, exact.searchPrepareValue = "classPowerStyleTab", styleTab
+        exact.searchPrepareSettingKey = exact.settingKey
+    end
     exact.prepareExactSearchTarget = function()
         if kind == "extras" then M.ResourceExtrasPreview.FocusPath(path) end
-        return Workspace.Select(kind)
+        if not Workspace.Select(kind) then return false end
+        if styleTab and Workspace.current and Workspace.current.selectStyle then Workspace.current.selectStyle(styleTab) end
+        return true
     end
     local persisted = exact.settingKey and (exact.settingKey:find("^bars%.") or exact.settingKey:find("^player%."))
     if Workspace.current and persisted then Workspace.current.keys[kind][exact.settingKey] = true end

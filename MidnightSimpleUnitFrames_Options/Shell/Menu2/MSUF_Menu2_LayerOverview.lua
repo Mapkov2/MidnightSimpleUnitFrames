@@ -879,7 +879,8 @@ end
 
 local function RunLayerHistory(row, callback, fieldLabel)
     if type(M.RunWithHistory) == "function" then
-        return M.RunWithHistory(M.Format("%s: %s", Tr(fieldLabel or "Layer"), Tr(tostring(row.label))), "layer-overview:" .. tostring(row.id), callback)
+        return M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("%s: %s", Tr(fieldLabel or "Layer"), Tr(tostring(row.label)))),
+            "layer-overview:" .. tostring(row.id), callback)
     end
     return callback()
 end

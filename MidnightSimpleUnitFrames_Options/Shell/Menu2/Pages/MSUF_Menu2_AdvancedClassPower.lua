@@ -1115,8 +1115,10 @@ function Page:BuildClassStyle()
     local controlW = cardW - 32
     local resources, text, opacity, pips = M.UnitSectionsShared.MakeTabFrames(section, -108, width, frames, "resources", "text", "opacity", "pips")
     local values = VT("resources", "Textures", "text", "Text", "opacity", "Opacity", "pips", "Pips")
-    RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerStyleTab", label = "Style area", values = values,
-        width = min(620, inner), frames = frames, defaultTab = "resources", x = 32, y = -44 }), "style.workspace_tab", values)
+    local tabs, _, _, selectStyle = W.SegmentTabs(self.ctx, section, { stateKey = "classPowerStyleTab", label = "Style area", values = values,
+        width = min(620, inner), frames = frames, defaultTab = "resources", x = 32, y = -44 })
+    self.workspace.selectStyle = selectStyle
+    RegisterSegment(tabs, "style.workspace_tab", values)
     M.Assign(self.cp, self:Controls(resources, Bars, ApplyClassPowerVisuals, "style.resources", {
         { "color", "toggle", "Color by resource type", "classPowerColorByType", true, group = "cp" },
         { "comboColor", "comboColorMode", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260,

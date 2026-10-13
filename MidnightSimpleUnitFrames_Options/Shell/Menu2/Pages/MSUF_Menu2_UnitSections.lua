@@ -753,7 +753,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                     end
                     local skipped = result.auraSkipped == true or result.castbarSkipped == true
                     if M.ShowStatusFeedback then
-                        M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8)
+                        M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8, true)
                     end
                     popup:Hide()
                     return

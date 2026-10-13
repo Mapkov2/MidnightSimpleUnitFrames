@@ -1832,8 +1832,11 @@ function NativeBuild.Handles(state)
             local selectionAPI = M.PreviewSelectionBar
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editX, box, "portrait")
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "portrait")
+            -- Exact offset rows belong to the Group Frames pages; a preview inside
+            -- another page (each Colors category) keeps its fields ephemeral.
+            local offsetClass = tostring(M.activeKey or ""):match("^gf_") and "setting" or "ephemeral"
             registerControl(selectionBar.editX, "selection.portrait_offset_x", "Party Portrait X Offset",
-                "textinput", "setting", {
+                "textinput", offsetClass, {
                     searchRouteDisposition = "dynamic",
                     searchRouteDispositionReason = "The shared Preview X field is pinned to the Party Portrait handle for this exact Search route.",
                     searchSettingKeys = { "gf_party.portraitOffsetX" },
@@ -1842,7 +1845,7 @@ function NativeBuild.Handles(state)
                     }),
                 })
             registerControl(selectionBar.editY, "selection.portrait_offset_y", "Party Portrait Y Offset",
-                "textinput", "setting", {
+                "textinput", offsetClass, {
                     searchRouteDisposition = "dynamic",
                     searchRouteDispositionReason = "The shared Preview Y field is pinned to the Party Portrait handle for this exact Search route.",
                     searchSettingKeys = { "gf_party.portraitOffsetY" },

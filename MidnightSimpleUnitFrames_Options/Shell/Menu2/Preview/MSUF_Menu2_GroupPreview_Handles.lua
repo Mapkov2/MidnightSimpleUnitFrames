@@ -940,6 +940,11 @@ end
 
 --- Handle factory: the preview handle button (scripts, tooltip, quick actions,
 --- control registration) and its pooled aura icon regions.
+-- A preview gear is a search action on the Group Frames pages only; inside
+-- another page (each Colors category) it stays navigation, as on units.
+local function GroupGearClassification()
+    return tostring(M.activeKey or ""):match("^gf_") and "action" or "navigation"
+end
 function Stage.BindHandleFactory(st)
     local AuraDurationBarColor, H, HandleText, M, OpenHandleSettings, PreviewHelpers, RefreshHandleSelection, RegisterPreviewControl = st.AuraDurationBarColor, st.H, st.HandleText, st.M, st.OpenHandleSettings, st.PreviewHelpers, st.RefreshHandleSelection, st.RegisterPreviewControl
     local SelectHandle, StartHandleDrag, StopHandleDrag, T, Tr, WHITE8X8, ZoomWheel, box = st.SelectHandle, st.StartHandleDrag, st.StopHandleDrag, st.T, st.Tr, st.WHITE8X8, st.ZoomWheel, st.box
@@ -1065,7 +1070,7 @@ function Stage.BindHandleFactory(st)
                     set = function() return OpenHandleSettings(handle) end,
                 }
                 RegisterPreviewControl(gear, "handle." .. tostring(key) .. ".open_settings",
-                    M.Format("Open %s settings", M.Tr(label or key)), "button", "action", {
+                    M.Format("Open %s settings", M.Tr(label or key)), "button", GroupGearClassification(), {
                         historyMode = "none",
                         help = "Opens the exact Group Frames settings section for this preview element.",
                         command = gear._msuf2GroupPreviewOpenCommand,

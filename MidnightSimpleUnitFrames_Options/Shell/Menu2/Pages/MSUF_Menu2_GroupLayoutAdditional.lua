@@ -71,7 +71,8 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
     PrepareAdditionalSwitch(ctx, section, prefix .. "Enabled", "Enable", "rebuild")
     if extra then extra(section, controlWidth) end
     local function Slider(label, key, low, high, step, default, x, y)
-        ScopeSlider(ctx, section, label, low, high, step, controlWidth, prefix .. key, default, "rebuild", x, y, controlWidth, "LEFT")
+        WithExactGroupScope(ScopeSlider(ctx, section, label, low, high, step, controlWidth, prefix .. key,
+            default, "rebuild", x, y, controlWidth, "LEFT"), prefix .. key)
     end
     Slider("Width", "Width", 20, 500, 1, 100, 32, -128)
     Slider("Height", "Height", 10, 200, 1, 24, controlWidth + 64, -128)
@@ -96,7 +97,8 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
 end
 local function BuildTargets(ctx, b)
     BuildAdditionalSection(ctx, b, "party_targets", "Member targets", "targets", function(section, width)
-        BindScopeToggle(ctx, W.ToggleAt(section, "Include your own target", 32, -72, width), "targetsIncludePlayer", false, "rebuild")
+        WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Include your own target", 32, -72, width),
+            "targetsIncludePlayer", false, "rebuild"), "targetsIncludePlayer")
     end)
 end
 local function BuildPets(ctx, b) BuildAdditionalSection(ctx, b, "group_pets", "Pet frames", "pets") end

@@ -67,6 +67,7 @@ end
 function Extras.FocusPath(path)
     local key = path:match("^resource_extras%.(.+)$")
     if key and key:find("^marks%.") then Extras.Select("marks")
+    elseif key == "preview.state" and Extras.Selection() == "marks" then Extras.Select("cost")
     elseif key then Extras.FocusKey(key) end
 end
 

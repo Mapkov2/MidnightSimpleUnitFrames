@@ -1169,7 +1169,8 @@ do
         local section = Read(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua")
         Check(section:find('\n    local threat = FindStatusSpec(unit, "statusThreat")\n'
             .. '    if threat and threat.value == "statusThreat" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'
-            .. '        local meta = ControlMeta(ctx, "status.indicator.threat", "setting")\n', 1, true),
+            .. '        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.threat", threat, selector,'
+            .. ' RefreshStatusSectionState)\n', 1, true),
             "UnitStatusSection: the threat search control must exist only where the status spec does")
         -- Color by threat: built only where the Threat % control exists, same default
         -- as the compile, ::: lists the three curve colors while it is on, and

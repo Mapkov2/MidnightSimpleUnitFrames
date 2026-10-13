@@ -254,6 +254,15 @@ function Variants.BaseSnapshot(db, include)
     return copy
 end
 
+-- The overlay journal of the active profile, read-only, for the menu's diff
+-- history view of the base profile (MSUF_Menu2_Bindings_History.lua). Overlay
+-- edits are captured first, as BaseSnapshot does.
+function Variants.BaseJournal(db)
+    if db ~= activeDB then return nil end
+    CaptureEdits()
+    return journal
+end
+
 -- Reject incompatible values before replacing metadata or staging an import.
 -- The base snapshot avoids comparing a new patch with a temporary live overlay.
 function Variants.ValidateForProfile(db,schema)

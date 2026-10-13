@@ -322,7 +322,8 @@ local function Set(kind, key, value, mode)
         if key == "enabled" then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
         return true
     end
-    return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
+    return M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("Group %s", tostring(key))),
+        "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
 end
 local function Bool(kind, key, default)
     local value = Val(kind, key, default and true or false)
@@ -344,6 +345,12 @@ local function ScopeShortKey(kind)
 end
 local function ScopeShortLabel(kind)
     return M.Tr(ScopeShortKey(kind))
+end
+-- The status line names the scope just selected; the message is translated here.
+local function ShowScopeFeedback()
+    if M.ShowStatusFeedback then
+        M.ShowStatusFeedback(M.Format("%s scope", ScopeShortLabel(M.gfScope)), "info", 1.1, true)
+    end
 end
 local function NormalizeFrameProvider(value)
     if value == "MSUF" then return "MSUF" end
@@ -403,7 +410,7 @@ local function SetSyncedValue(key, value, apply)
         if changed and type(apply) == "function" then apply() end
         return changed
     end
-    return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:synced:" .. tostring(key), Write)
+    return M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("Group %s", tostring(key))), "group:synced:" .. tostring(key), Write)
 end
 --- "DEFAULT" is the pre-release spelling of AUTO; map it so a profile from an in-between
 --- build keeps its choice instead of resetting. Mirrors the engine normalizer.
@@ -884,7 +891,7 @@ local function ScopeSection(ctx, builder, opts)
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
-        if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("%s scope", ScopeShortLabel(M.gfScope)), "info", 1.1) end
+        if previousScope ~= M.gfScope then ShowScopeFeedback() end
         local gf = GF()
         _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope)
         RequestGFPagePreview()
@@ -962,7 +969,7 @@ local function ScopeSection(ctx, builder, opts)
             local function RunCopy()
                 if CopyGroupSettings(CurrentScope(), kind, M.gfCopyScopes) then
                     RefreshContext(ctx)
-                    if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("Copied to %s", ScopeShortLabel(kind)), "ok", 1.3) end
+                    if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("Copied to %s", ScopeShortLabel(kind)), "ok", 1.3, true) end
                 end
             end
             M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(kind), RunCopy)

@@ -114,7 +114,7 @@ local function BuildFullChangelog(ctx)
         local PaintFeatureLink = T.StyleFeatureLink(button, fs) or nil
         button:SetScript("OnClick", function()
             if not OpenMenuLink(link) and type(M.ShowStatusFeedback) == "function" then
-                M.ShowStatusFeedback(Tr("Menu link unavailable"), "danger", 1.6)
+                M.ShowStatusFeedback(Tr("Menu link unavailable"), "danger", 1.6, true)
             end
         end)
         button:SetScript("OnEnter", function()

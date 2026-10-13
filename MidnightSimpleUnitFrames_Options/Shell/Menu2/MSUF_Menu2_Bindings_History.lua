@@ -4,7 +4,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
 -- Menu2 binding layer: edit history.
--- Owns the undo/redo stacks, the history sessions and transactions, the
+-- Owns the undo/redo stacks (each step a diff against the session cursor),
+-- the history sessions with their reset points, the transactions, the
 -- profile snapshot/restore path with its scoped runtime fanout, the history
 -- display labels and the RequestUnitApply/SetUnitValue/RequestGeneralApply/
 -- SetGeneralValue write helpers that checkpoint through it. Split from
@@ -22,12 +23,13 @@ local IsConfigCombatLocked = M.IsConfigCombatLocked
 local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
 local CancelQueuedMenuRefresh = M.CancelQueuedMenuRefresh
-local HISTORY_LIMIT = 500
--- Every entry keeps whole-profile snapshots (consecutive entries share one),
--- so the step count alone allowed hundreds of profile copies. Their estimated
--- size is capped too; the oldest steps go first and the newest always stays.
-local HISTORY_BYTE_BUDGET = 48 * 1024 * 1024
-local SNAPSHOT_ENTRY_BYTES, SNAPSHOT_TABLE_BYTES = 40, 64
+-- Undo keeps diffs, not profile copies: a step holds only the paths it changed
+-- (an ordinary edit is well under 2 KB, so even a large profile keeps far more
+-- than 500 steps). The oldest steps go only when the stored diffs pass this
+-- estimate, which in practice takes many bulk resets or imports; the newest
+-- step always stays. Closing, minimizing or a combat close never trims.
+local HISTORY_BYTE_BUDGET = 4 * 1024 * 1024
+local DIFF_ENTRY_BYTES, DIFF_TABLE_BYTES = 64, 80
 -- Synchronous CaptureHistory nesting only; an open transaction is tracked by
 -- historyTransaction itself because it legitimately spans many frames.
 local historyDepth = 0
@@ -43,6 +45,12 @@ local historySurfaceMarkers = {}
 local historySurfaceCount = 0
 local deferredHistoryCommit
 local historySnapshotFailureReported = false
+-- A scoped step compared only its own profile root: the rest of the cursor
+-- may lag the live profile until SettleHistoryCursor compares all of it.
+local historyCursorPartial = false
+local historyStepSerial = 0
+-- The first step recorded after the last whole-profile compare (its serial).
+local historyFirstUnsyncedStep = 0
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
 end
@@ -150,17 +158,17 @@ local function SnapshotProfileRouting()
     }
 end
 local historyProviders = {}
+local ForgetHistoryPath, SyncHistoryCursor, SettleHistoryCursor
 function M.RegisterHistoryProvider(key, capture, restore)
     if type(key) ~= "string" or key == "" or type(capture) ~= "function" or type(restore) ~= "function" then return false end
     historyProviders[key] = { capture = capture, restore = restore }
-    if historySessionActive then
-        local value = capture()
-        for _, snapshot in ipairs({ historySessionBaseSnapshot, historySessionSnapshot }) do
-            if type(snapshot) == "table" and snapshot._msuf2HistoryState == true then
-                snapshot.externalProviders = snapshot.externalProviders or {}
-                snapshot.externalProviders[key] = value ~= nil and DeepCopy(value) or nil
-            end
-        end
+    -- A provider that registers into an open session joins its start state:
+    -- the cursor takes the value, and no reset point remembers an older one.
+    local cursor = historySessionActive and historySessionSnapshot
+    if type(cursor) == "table" and cursor._msuf2HistoryState == true then
+        cursor.externalProviders = cursor.externalProviders or {}
+        cursor.externalProviders[key] = DeepCopy(capture())
+        ForgetHistoryPath({ "externalProviders", key })
     end
     return true
 end
@@ -185,7 +193,55 @@ local function RestoreHistoryProviders(snapshot, reason, source)
         if provider then provider.restore(DeepCopy(value), reason, source) end
     end
 end
-local function SnapshotDB()
+-- The table at parent[key] as one the view owns: a live table is copied one
+-- level deep before the view writes into it; create makes a missing one.
+local function OwnedViewTable(parent, key, owned, create)
+    local child = parent[key]
+    if type(child) ~= "table" then
+        if not create then return nil end
+        child = {}
+    elseif owned[child] then
+        return child
+    else
+        local copy = {}
+        for field, value in pairs(child) do copy[field] = value end
+        child = copy
+    end
+    owned[child] = true
+    parent[key] = child
+    return child
+end
+-- A read-only view of the variant-free base profile: the values
+-- ProfileVariants.BaseSnapshot copies, without the copy. It shares every table
+-- no overlay touches with the live profile; the tables on an overlaid path are
+-- copied (RestoreInto's writes and its cleanup of created parents, made
+-- copy-on-write). The diff reads it at once and copies what it keeps.
+local function BaseProfileView(db)
+    local Variants, Fields = MSUF.ProfileVariants, MSUF.ProfileFields
+    local journal = Variants.BaseJournal and Variants.BaseJournal(db)
+    local view = {}
+    for key, value in pairs(db) do view[key] = value end
+    if Fields and Fields.CaptureExternal and not Fields.CaptureExternal(db, view) then return nil end
+    if not journal then return view end
+    local owned, created = { [view] = true }, {}
+    for _, record in pairs(journal) do
+        local parent, path = view, record.path
+        for i = 1, #path - 1 do
+            parent = parent and OwnedViewTable(parent, path[i], owned, record.base ~= nil)
+        end
+        if parent then parent[path[#path]] = record.base end
+        for _, prefix in ipairs(record.created) do created[#created + 1] = prefix end
+    end
+    table.sort(created, function(a, b) return #a > #b end)
+    for _, path in ipairs(created) do
+        local parent = view
+        for i = 1, #path - 1 do parent = parent and OwnedViewTable(parent, path[i], owned, false) end
+        local value = parent and parent[path[#path]]
+        if type(value) == "table" and next(value) == nil then parent[path[#path]] = nil end
+    end
+    return view
+end
+local function SnapshotDB(view)
     -- Spec-profile routing is the only persisted options family outside the
     -- active profile DB. Keep its tiny per-character state in the same history
     -- transaction so menu undo and redo remain truthful for every
@@ -195,7 +251,9 @@ local function SnapshotDB()
         and type(externalAPI._CaptureHistorySnapshot) == "function"
         and externalAPI._CaptureHistorySnapshot() or nil
     local profileDB
-    if MSUF.ProfileVariants then profileDB=MSUF.ProfileVariants.BaseSnapshot(M.EnsureDB(),true)
+    if view and MSUF.ProfileVariants then profileDB = BaseProfileView(M.EnsureDB())
+    elseif view then profileDB = M.EnsureDB()
+    elseif MSUF.ProfileVariants then profileDB=MSUF.ProfileVariants.BaseSnapshot(M.EnsureDB(),true)
     else profileDB=DeepCopy(M.EnsureDB()) end
     if type(profileDB)~="table" then return nil end
     return {
@@ -212,8 +270,8 @@ end
 -- a stamp (one saved before a reload) counts as another profile's.
 local snapshotProfiles = setmetatable({}, { __mode = "k" })
 local SnapshotUnstampedDB = SnapshotDB
-SnapshotDB = function()
-    local snapshot = SnapshotUnstampedDB()
+SnapshotDB = function(view)
+    local snapshot = SnapshotUnstampedDB(view)
     local runtime = MSUF.ProfileRuntime
     if type(snapshot) == "table" and runtime and runtime.Identity then
         snapshotProfiles[snapshot] = runtime.Identity()
@@ -235,7 +293,7 @@ end
 local function StackHoldsForeignSnapshot(stack)
     for i = 1, #stack do
         local entry = stack[i]
-        if IsForeignProfileSnapshot(entry.before) or IsForeignProfileSnapshot(entry.after) then return true end
+        if IsForeignProfileSnapshot(entry) then return true end
     end
     return false
 end
@@ -256,7 +314,7 @@ function M.RebaseHistoryForProfileChange()
         or IsForeignProfileSnapshot(historySessionSnapshot)
     for _, marker in pairs(historySurfaceMarkers) do
         if foreign then break end
-        foreign = IsForeignProfileSnapshot(marker.snapshot)
+        foreign = IsForeignProfileSnapshot(marker.point)
     end
     if not foreign then
         local undo, redo = EnsureHistoryStacks()
@@ -289,9 +347,14 @@ local function RestoreProfileRouting(snapshot)
         if next(char) == nil then gdb.char[routing.key] = nil end
     end
 end
+-- The cursor: one owned snapshot of the state the open session last recorded.
+-- Steps are diffs against it and it follows every step, undo and redo, so no
+-- step copies the profile. Without a session each capture starts from a fresh
+-- snapshot that is not kept.
 local function CurrentHistorySnapshot()
-    if historySessionActive and type(historySessionSnapshot) == "table" then return historySessionSnapshot end
-    return SnapshotDB()
+    if not historySessionActive then return SnapshotDB() end
+    if type(historySessionSnapshot) ~= "table" then historySessionSnapshot = SnapshotDB() end
+    return historySessionSnapshot
 end
 local function NotifyHistoryChanged(refreshMenu)
     if M.RefreshHistoryControls then M.RefreshHistoryControls() end
@@ -307,7 +370,8 @@ end
 function M.SyncExternalHistoryState()
     if HistoryBusy() then return false end
     if not historySessionActive then return false end
-    historySessionSnapshot = SnapshotDB()
+    SettleHistoryCursor()
+    SyncHistoryCursor()
     NotifyHistoryChanged(false)
     return true
 end
@@ -334,6 +398,21 @@ local HISTORY_LABEL_OVERRIDES = {
 }
 local historyLabelCache = {}
 local historyLabelCacheCount = 0
+-- Labels a caller translated before it captured (a page reset names itself
+-- "Reset %s" over the translated page title). The display path leaves them
+-- alone: a second lookup would record the translation as a missing locale key.
+local translatedHistoryLabels = {}
+local translatedHistoryLabelCount = 0
+function M.TranslatedHistoryLabel(label)
+    if type(label) ~= "string" or label == "" or translatedHistoryLabels[label] then return label end
+    if translatedHistoryLabelCount >= 300 then
+        WipeTable(translatedHistoryLabels)
+        translatedHistoryLabelCount = 0
+    end
+    translatedHistoryLabels[label] = true
+    translatedHistoryLabelCount = translatedHistoryLabelCount + 1
+    return label
+end
 local function HistoryLabelWord(word)
     local upper = word:upper()
     local mapped = HISTORY_LABEL_WORDS[upper]
@@ -374,7 +453,7 @@ function M.HistoryDisplayLabel(label)
         out = out:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
         if out == "" then out = text end
     end
-    out = M.Tr(out)
+    if not translatedHistoryLabels[text] then out = M.Tr(out) end
     if historyLabelCacheCount > 300 then
         WipeTable(historyLabelCache)
         historyLabelCacheCount = 0
@@ -392,66 +471,355 @@ local function CommandFeedback(text, kind, seconds, translated)
     local fn = M.ShowStatusFeedback or M.ShowInlineFeedback
     if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25, translated) end
 end
--- Estimated bytes of one snapshot: table headers plus hash entries. Strings
--- are interned and shared with the live profile, so they add nothing.
-local snapshotBytes = setmetatable({}, { __mode = "k" })
+-- Estimated bytes a stored step retains: table headers, hash entries and
+-- string payloads (interned strings shared with the profile count anyway).
 local function TableBytes(value, seen)
+    if type(value) == "string" then return #value + 32 end
     if type(value) ~= "table" or seen[value] then return 0 end
     seen[value] = true
-    local bytes = SNAPSHOT_TABLE_BYTES
-    for _, item in pairs(value) do
-        bytes = bytes + SNAPSHOT_ENTRY_BYTES + TableBytes(item, seen)
+    local bytes = DIFF_TABLE_BYTES
+    for key, item in pairs(value) do
+        bytes = bytes + DIFF_ENTRY_BYTES + TableBytes(key, seen) + TableBytes(item, seen)
     end
     return bytes
 end
-local function SnapshotBytes(snapshot)
-    if type(snapshot) ~= "table" then return 0 end
-    local bytes = snapshotBytes[snapshot]
-    if not bytes then
-        bytes = TableBytes(snapshot, {})
-        snapshotBytes[snapshot] = bytes
-    end
-    return bytes
+-- Diff of two history snapshots: one {path, before, after} per changed value.
+-- A created or removed table is one change holding the whole table; nil (no
+-- key) and false stay distinct; list entries are keys like any other. The
+-- profile part is held to the profile snapshot rules (Fields.CopySnapshot:
+-- finite numbers, saveable keys and values, no metatables or cycles, the same
+-- size limits), so a profile that could not be snapshotted cannot be diffed.
+-- Spec routing, Edit Mode add-on elements and history providers are plain data.
+-- "before" values are the cursor's own tables: applying the diff to the cursor
+-- detaches them, so the step owns them without a copy.
+local HUGE = math.huge
+local DIFF_LIMIT_COUNT, DIFF_LIMIT_BYTES, DIFF_LIMIT_DEPTH = 131072, 8388608, 32
+-- The walk visits every value of the profile on each step: keep it to locals.
+local type, pairs, getmetatable = type, pairs, getmetatable
+local diffOut, diffSeen, diffStrictProfile
+local diffCount, diffBytes = 0, 0
+local diffPath = {}
+local function DiffEmit(depth, key, before, after)
+    local path = {}
+    for i = 1, depth do path[i] = diffPath[i] end
+    path[depth + 1] = key
+    diffOut[#diffOut + 1] = { path = path, before = before, after = after }
 end
-local function HistoryStackBytes(stack)
-    local counted, bytes = {}, 0
-    for i = 1, #stack do
-        local entry = stack[i]
-        local before, after = entry.before, entry.after
-        if before and not counted[before] then
-            counted[before] = true
-            bytes = bytes + SnapshotBytes(before)
+local function DiffCopy(value, depth, strict)
+    if not strict then return DeepCopy(value), true end
+    local budget = { count = diffCount, limit = DIFF_LIMIT_COUNT, maxDepth = DIFF_LIMIT_DEPTH - depth,
+        bytes = diffBytes, maxBytes = DIFF_LIMIT_BYTES }
+    local copy, valid = MSUF.ProfileFields.CopySnapshot(value, budget)
+    diffCount, diffBytes = budget.count, budget.bytes
+    return copy, valid
+end
+-- depth: the snapshot depth of a and b; the profile root sits at depth 1.
+-- strict: inside the profile, every key and value passes the snapshot rules.
+local function DiffTable(a, b, depth, strict)
+    if diffSeen[b] then return false end
+    diffSeen[b] = true
+    local deeper = depth + 1
+    for key, value in pairs(b) do
+        local kind = type(value)
+        if strict then
+            local keyKind = type(key)
+            if keyKind == "string" then
+                diffBytes = diffBytes + #key
+            elseif keyKind == "number" then
+                if key ~= key or key == HUGE or key == -HUGE then return false end
+            elseif keyKind ~= "boolean" then
+                return false
+            end
+            if kind == "string" then
+                diffBytes = diffBytes + #value
+            elseif kind == "number" then
+                if value ~= value or value == HUGE or value == -HUGE then return false end
+            elseif kind ~= "boolean" and kind ~= "table" then
+                return false
+            end
+            diffCount = diffCount + 1
+            if diffCount > DIFF_LIMIT_COUNT or diffBytes > DIFF_LIMIT_BYTES then return false end
         end
-        if after and not counted[after] then
-            counted[after] = true
-            bytes = bytes + SnapshotBytes(after)
+        local old = a[key]
+        if kind == "table" then
+            local inner = strict or (diffStrictProfile and depth == 0 and key == "profileDB")
+            if inner and (getmetatable(value) ~= nil or depth >= DIFF_LIMIT_DEPTH) then return false end
+            if type(old) == "table" then
+                diffPath[deeper] = key
+                if not DiffTable(old, value, deeper, inner) then return false end
+            else
+                local copy, valid = DiffCopy(value, depth, inner)
+                if not valid then return false end
+                DiffEmit(depth, key, old, copy)
+            end
+        elseif old ~= value then
+            DiffEmit(depth, key, old, value)
+        end
+    end
+    for key, old in pairs(a) do
+        if b[key] == nil then DiffEmit(depth, key, old, nil) end
+    end
+    diffSeen[b] = nil
+    return true
+end
+local function ProfileDiff(before, after)
+    if type(before) ~= "table" or type(after) ~= "table" then return nil end
+    diffOut, diffSeen, diffCount, diffBytes = {}, {}, 0, 0
+    -- The snapshot rules come with the profile modules; without them the
+    -- profile was copied unchecked, so it is compared unchecked too.
+    diffStrictProfile = MSUF.ProfileVariants ~= nil and MSUF.ProfileFields ~= nil
+    local ok = DiffTable(before, after, 0, false)
+    local changes = ok and diffOut or nil
+    diffOut, diffSeen = nil, nil
+    for i = #diffPath, 1, -1 do diffPath[i] = nil end
+    return changes
+end
+local function ReadHistoryPath(target, path)
+    for i = 1, #path do
+        if type(target) ~= "table" then return nil end
+        target = target[path[i]]
+    end
+    return target
+end
+local function WriteHistoryPath(target, path, value)
+    local last = #path
+    for i = 1, last - 1 do
+        local child = target[path[i]]
+        if type(child) ~= "table" then
+            if value == nil then return end
+            child = {}
+            target[path[i]] = child
+        end
+        target = child
+    end
+    target[path[last]] = value
+end
+
+-- Reset points (each open surface's entry state and the session's start
+-- state) are the cursor plus the first value every path had after the point
+-- was set: a tree of saved values. Every write to the cursor goes through
+-- ApplyChanges, which hands each open point the value it replaces, so a point
+-- always describes its state exactly, as the full snapshots did. Saved values
+-- are never changed in place; a parent saved after a child takes a copy with
+-- the child's value folded in.
+local function NewHistoryPoint()
+    local point = { tree = {} }
+    snapshotProfiles[point] = snapshotProfiles[historySessionSnapshot]
+    return point
+end
+local function FoldSavedValues(node, holder, key)
+    local target = holder[key]
+    if type(target) ~= "table" then
+        target = {}
+        holder[key] = target
+    end
+    for childKey, child in pairs(node.kids) do
+        if child.saved then
+            target[childKey] = child.value
+        elseif child.kids then
+            FoldSavedValues(child, target, childKey)
+        end
+    end
+end
+local function RememberPointValue(point, path, old)
+    local node = point.tree
+    for i = 1, #path do
+        if node.saved then return end
+        local kids = node.kids
+        if not kids then
+            kids = {}
+            node.kids = kids
+        end
+        local child = kids[path[i]]
+        if not child then
+            child = {}
+            kids[path[i]] = child
+        end
+        node = child
+    end
+    if node.saved then return end
+    if node.kids then
+        local box = { DeepCopy(old) }
+        FoldSavedValues(node, box, 1)
+        old, node.kids = box[1], nil
+    end
+    node.saved, node.value = true, old
+end
+local function RememberHistoryValue(path, old)
+    local base = historySessionBaseSnapshot
+    if base then RememberPointValue(base, path, old) end
+    for _, marker in pairs(historySurfaceMarkers) do
+        if marker.point ~= base then RememberPointValue(marker.point, path, old) end
+    end
+end
+ForgetHistoryPath = function(path)
+    local points = { historySessionBaseSnapshot }
+    for _, marker in pairs(historySurfaceMarkers) do points[#points + 1] = marker.point end
+    for _, point in pairs(points) do
+        local node = point.tree
+        for i = 1, #path - 1 do node = node and node.kids and node.kids[path[i]] end
+        if node and node.kids then node.kids[path[#path]] = nil end
+    end
+end
+-- The changes that take the cursor back to a point: {path, before} each.
+local function PointChanges(node, depth, path, out)
+    for key, child in pairs(node.kids or {}) do
+        path[depth + 1] = key
+        if child.saved then
+            local copy = {}
+            for i = 1, depth + 1 do copy[i] = path[i] end
+            out[#out + 1] = { path = copy, before = child.value }
+        else
+            PointChanges(child, depth + 1, path, out)
+        end
+    end
+    path[depth + 1] = nil
+    return out
+end
+local function PointDiffers(node, value)
+    for key, child in pairs(node.kids or {}) do
+        -- A false value is a value: "and value[key] or nil" would read it as absent.
+        local current
+        if type(value) == "table" then current = value[key] end
+        if child.saved then
+            if not DeepEqual(child.value, current) then return true end
+        elseif PointDiffers(child, current) then
+            return true
+        end
+    end
+    return false
+end
+local function RefreshSessionDirty()
+    local base, cursor = historySessionBaseSnapshot, historySessionSnapshot
+    historySessionDirty = historySessionActive and base ~= nil and type(cursor) == "table"
+        and PointDiffers(base.tree, cursor) or false
+end
+
+-- Writes each change's field value into target as a copy (a stored step never
+-- shares a table with the cursor). On the session cursor each open point first
+-- keeps the value it replaces; replaced, when given, collects them for a revert.
+-- A step can hold one path twice (a settled write joined it), so "after" values
+-- replay in order and "before" values rewind in reverse order.
+local function ApplyChanges(target, changes, field, replaced)
+    local remember = historySessionActive and target == historySessionSnapshot
+    local first, last, step = 1, #changes, 1
+    if field == "before" then first, last, step = #changes, 1, -1 end
+    for i = first, last, step do
+        local change = changes[i]
+        local path = change.path
+        if remember or replaced then
+            local old = ReadHistoryPath(target, path)
+            if remember then RememberHistoryValue(path, old) end
+            if replaced then replaced[i] = old end
+        end
+        local value = change[field]
+        if type(value) == "table" then value = DeepCopy(value) end
+        WriteHistoryPath(target, path, value)
+    end
+end
+local function RevertChanges(target, changes, replaced, field)
+    local first, last, step = #changes, 1, -1
+    if field == "before" then first, last, step = 1, #changes, 1 end
+    for i = first, last, step do
+        local old = replaced[i]
+        if type(old) == "table" then old = DeepCopy(old) end
+        WriteHistoryPath(target, changes[i].path, old)
+    end
+end
+-- Bring the session cursor up to the live state (a write that bypassed the
+-- history, a provider that loaded data). Open points keep what it replaces.
+SyncHistoryCursor = function()
+    local cursor = historySessionSnapshot
+    if type(cursor) ~= "table" then
+        historySessionSnapshot = SnapshotDB()
+        return
+    end
+    local drift = ProfileDiff(cursor, SnapshotDB(true))
+    if drift then
+        ApplyChanges(cursor, drift, "after")
+        historyCursorPartial = false
+    end
+end
+-- Steps stay alive in the live stacks and in every open surface's saved copies
+-- (Cancel All puts those back). The budget counts each retained step once.
+-- Odd entries are undo stacks (oldest step at the bottom), even entries redo
+-- stacks (oldest step on top).
+local retainedStacks = {}
+local function RetainedHistoryStacks()
+    local undo, redo = EnsureHistoryStacks()
+    local count = 2
+    retainedStacks[1], retainedStacks[2] = undo, redo
+    for _, marker in pairs(historySurfaceMarkers) do
+        retainedStacks[count + 1], retainedStacks[count + 2] = marker.undo, marker.redo
+        count = count + 2
+    end
+    for i = #retainedStacks, count + 1, -1 do retainedStacks[i] = nil end
+    return retainedStacks, count
+end
+local function CountRetainedSteps(stacks, count)
+    local bytes = 0
+    for s = 1, count do
+        local stack = stacks[s]
+        for i = 1, #stack do stack[i].refs = 0 end
+    end
+    for s = 1, count do
+        local stack = stacks[s]
+        for i = 1, #stack do
+            local entry = stack[i]
+            if entry.refs == 0 then bytes = bytes + entry.bytes end
+            entry.refs = entry.refs + 1
         end
     end
     return bytes
 end
-local function TrimHistoryToBudget(stack)
-    while #stack > 1 and HistoryStackBytes(stack) > HISTORY_BYTE_BUDGET do
-        table.remove(stack, 1)
+function M.HistoryRetainedBytes()
+    return CountRetainedSteps(RetainedHistoryStacks())
+end
+-- Over budget, the oldest retained step goes from every stack that holds it.
+-- It is the bottom of each undo stack it is in; on a redo stack it is the top,
+-- and the later redo steps need it, so that redo stack goes whole. The newest
+-- step of the live undo stack always stays.
+local function TrimHistoryToBudget(budget)
+    local stacks, count = RetainedHistoryStacks()
+    local bytes = CountRetainedSteps(stacks, count)
+    local live = stacks[1]
+    local newest = live[#live]
+    while bytes > budget do
+        local victim
+        for s = 1, count do
+            local stack = stacks[s]
+            local candidate = s % 2 == 1 and stack[1] or stack[#stack]
+            if candidate and (not victim or candidate.seq < victim.seq) then victim = candidate end
+        end
+        if not victim or victim == newest then break end
+        for s = 1, count do
+            local stack = stacks[s]
+            local drop = s % 2 == 1 and (stack[1] == victim and 1 or 0) or (stack[#stack] == victim and #stack or 0)
+            for _ = 1, drop do
+                local entry = s % 2 == 1 and table.remove(stack, 1) or table.remove(stack)
+                entry.refs = entry.refs - 1
+                if entry.refs == 0 then bytes = bytes - entry.bytes end
+            end
+        end
     end
 end
-local function PushHistory(label, source, before, after)
-    if type(before)~="table" or type(after)~="table" then return false end
-    if DeepEqual(before, after) then return false end
-    if historySessionActive and type(historySessionBaseSnapshot) ~= "table" then historySessionBaseSnapshot = before end
+-- Adds one step: the cursor already holds its after values.
+local function RecordHistoryStep(label, source, before, diff)
+    if #diff == 0 then return false end
     local stack, redo = EnsureHistoryStacks()
-    stack[#stack + 1] = {
+    historyStepSerial = historyStepSerial + 1
+    local entry = {
         label = label or "MSUF2 change",
         source = source,
-        before = before,
-        after = after,
+        diff = diff,
     }
-    while #stack > HISTORY_LIMIT do
-        table.remove(stack, 1)
-    end
-    TrimHistoryToBudget(stack)
+    entry.bytes = TableBytes(entry, {})
+    entry.seq = historyStepSerial
+    snapshotProfiles[entry] = snapshotProfiles[before]
+    stack[#stack + 1] = entry
     WipeTable(redo)
+    TrimHistoryToBudget(HISTORY_BYTE_BUDGET)
     if historySessionActive then
-        historySessionSnapshot = after
         historySessionDirty = true
     end
     NotifyHistoryChanged(false)
@@ -459,6 +827,104 @@ local function PushHistory(label, source, before, after)
         M.ShowHistoryFeedback(FeedbackLabel(M.HistoryDisplayLabel(label), 30), 2.0)
     end
     return true
+end
+-- Writes the history did not make (another add-on, a deferred runtime write)
+-- belong to no step of their own. A whole-profile step compares everything, so
+-- such writes since the last compare join it: the first step recorded after
+-- that compare. Scoped steps compare only their root, so the history compares
+-- the whole profile once before an undo, redo, reset, bulk step or session end
+-- relies on the cursor, and what it finds joins the first scoped step recorded
+-- after the last compare. With scoped steps A, B and C after a compare and X
+-- (such a write) after A: undoing C or B keeps X, undoing A removes it. Every bound setter writes inside its root
+-- (menu_bound_setter_scope_smoke), so no step's own writes are found here.
+-- Not while a transaction is open: its own step compares everything.
+SettleHistoryCursor = function()
+    if not historyCursorPartial or historyTransaction or deferredHistoryCommit then return end
+    local cursor = historySessionSnapshot
+    if type(cursor) ~= "table" then
+        historyCursorPartial = false
+        return
+    end
+    if IsConfigCombatLocked() then return end
+    local drift = ProfileDiff(cursor, SnapshotDB(true))
+    historyCursorPartial = false
+    if not drift then
+        ReportHistorySnapshotFailure()
+        return
+    end
+    if #drift == 0 then return end
+    ApplyChanges(cursor, drift, "after")
+    local undo = EnsureHistoryStacks()
+    -- That step, or the oldest kept after it when the budget evicted it.
+    local entry
+    for i = #undo, 1, -1 do
+        if undo[i].seq < historyFirstUnsyncedStep then break end
+        entry = undo[i]
+    end
+    entry = entry or undo[#undo]
+    if not entry then return end
+    local diff = entry.diff
+    for i = 1, #drift do diff[#diff + 1] = drift[i] end
+    entry.bytes = entry.bytes + TableBytes(drift, {})
+    TrimHistoryToBudget(HISTORY_BYTE_BUDGET)
+end
+-- A bound setter names the profile root it writes (a unit, general, bars...):
+-- only that table is compared, so a single edit does not walk the profile.
+-- Variant overlays, add-on roots and a root that is not a table yet take the
+-- whole-profile path.
+local function ScopedHistoryRoot(before, scope)
+    if type(scope) ~= "string" or type(before) ~= "table" or not historySessionActive
+        or before ~= historySessionSnapshot then return nil end
+    local root = scope:match("^([^.]+)")
+    local fields, variants = MSUF.ProfileFields, MSUF.ProfileVariants
+    if not root or (fields and fields.IsExternal and fields.IsExternal(root)) then return nil end
+    local db = M.EnsureDB()
+    if variants and variants.IsMaterialized and variants.IsMaterialized(db) then return nil end
+    local cursorDB = before.profileDB
+    if type(cursorDB) ~= "table" or type(cursorDB[root]) ~= "table" or type(db[root]) ~= "table" then return nil end
+    return root
+end
+-- nil: nothing changed inside the root or it could not be compared; the caller
+-- then compares the whole profile.
+local function PushScopedHistory(label, source, before, root)
+    diffOut, diffSeen, diffCount, diffBytes = {}, {}, 0, 0
+    diffStrictProfile = MSUF.ProfileVariants ~= nil and MSUF.ProfileFields ~= nil
+    diffPath[1], diffPath[2] = "profileDB", root
+    local ok = DiffTable(before.profileDB[root], M.EnsureDB()[root], 2, diffStrictProfile)
+    local diff = ok and diffOut or nil
+    diffOut, diffSeen = nil, nil
+    for i = #diffPath, 1, -1 do diffPath[i] = nil end
+    if not diff or #diff == 0 then return nil end
+    ApplyChanges(before, diff, "after")
+    if not historyCursorPartial then historyFirstUnsyncedStep = historyStepSerial + 1 end
+    historyCursorPartial = true
+    return RecordHistoryStep(label, source, before, diff)
+end
+-- before is the cursor a capture, transaction or prepared change started from;
+-- after is a read-only view of the live state (SnapshotDB(true)).
+local function PushHistory(label, source, before, after)
+    if type(before)~="table" or type(after)~="table" then return false end
+    if IsForeignProfileSnapshot(before) then
+        RebaseHistoryToActiveProfile()
+        return false
+    end
+    local diff = ProfileDiff(before, after)
+    if not diff then
+        ReportHistorySnapshotFailure()
+        return false
+    end
+    ApplyChanges(before, diff, "after")
+    local cursor = historySessionActive and historySessionSnapshot or nil
+    if cursor and cursor ~= before then
+        -- A transaction that outlived its cursor (a cleared history, a closed
+        -- session) keeps its own before state; the cursor catches up apart.
+        local drift = ProfileDiff(cursor, after)
+        if drift then ApplyChanges(cursor, drift, "after") end
+    elseif historySessionActive then
+        historySessionSnapshot = before
+    end
+    if historySessionActive then historyCursorPartial = false end
+    return RecordHistoryStep(label, source, before, diff)
 end
 -- The page on screen repaints in place from the restored values; only a page
 -- that rebuilds itself is built again (M.RepaintPageAfterDataChange).
@@ -814,7 +1280,9 @@ local function RestoreHistoryProfile(activeDB, profileDB, reason)
             if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
             return false
         end
-        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+        local owned = {}
+        for key, value in pairs(profileDB) do owned[key] = value end
+        profileDB = MSUF.ProfileFields.StripExternal(owned)
     end
     DeepReplace(activeDB, profileDB)
     if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
@@ -849,7 +1317,6 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
         externalAPI._RestoreHistorySnapshot(snapshot.externalEditMode, reason or "history")
     end
     RestoreHistoryProviders(snapshot, reason, source)
-    if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
     -- Unrelated history steps must leave UIParent alone. The profile-switch
     -- path restores a captured Blizzard scale without recalculating auto scale.
@@ -914,13 +1381,20 @@ function M.RestoreGuidedTourRestorePoint(snapshot)
     local expectedProfile = type(snapshot) == "table" and tostring(snapshot._msuf2GuidedProfileName or "") or ""
     local activeProfile = tostring(_G.MSUF_ActiveProfile or "Default")
     if expectedProfile == "" or activeProfile ~= expectedProfile then return false, "profile_mismatch" end
-    return ApplyHistorySnapshot(snapshot, "MSUF2_GUIDED_TOUR_RESTORE", "guided_tour:restore_point", true)
+    SettleHistoryCursor()
+    local ok, why = ApplyHistorySnapshot(snapshot, "MSUF2_GUIDED_TOUR_RESTORE", "guided_tour:restore_point", true)
+    -- The restore point lives in saved variables: an open session's cursor
+    -- takes its values, never the table itself.
+    if ok and historySessionActive then SyncHistoryCursor() end
+    return ok, why
 end
 
 function M.IsHistoryCapturing()
     return HistoryBusy()
 end
-function M.CaptureHistory(label, source, fn)
+-- scope: the profile root a bound setter writes ("player", "general.key"...);
+-- without it the step compares the whole profile.
+function M.CaptureHistory(label, source, fn, scope)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
     if historyTransaction and historyTransaction.preparedNudge == true and historyDepth == 0
@@ -939,6 +1413,8 @@ function M.CaptureHistory(label, source, fn)
     end
     -- Without a before-snapshot the edit still applies, only without an undo
     -- entry; the held depth keeps nested writes from retrying the snapshot.
+    local root = scope and ScopedHistoryRoot(historySessionSnapshot, scope)
+    if not root then SettleHistoryCursor() end
     local before = CurrentHistorySnapshot()
     local snapshotted = type(before) == "table"
     if not snapshotted then ReportHistorySnapshotFailure() end
@@ -949,9 +1425,14 @@ function M.CaptureHistory(label, source, fn)
     if result == false then return result end
     local pushed = false
     if snapshotted then
-        local after = SnapshotDB()
-        if type(after) ~= "table" then ReportHistorySnapshotFailure() end
-        pushed = PushHistory(label, source, before, after)
+        root = root and ScopedHistoryRoot(before, scope)
+        if root then pushed = PushScopedHistory(label, source, before, root) end
+        if pushed == nil or not root then
+            -- Nothing changed in the named root: the setter wrote elsewhere.
+            local after = SnapshotDB(true)
+            if type(after) ~= "table" then ReportHistorySnapshotFailure() end
+            pushed = PushHistory(label, source, before, after)
+        end
     end
     if MSUF.ProfileVariants then MSUF.ProfileVariants.RequestApply("PROFILE_VARIANT_SETTING") end
     if (pushed or not snapshotted) and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
@@ -986,7 +1467,7 @@ function M.FlushDeferredHistory(afterSnapshot)
     if IsConfigCombatLocked() or not deferredHistoryCommit then return false end
     local pending = deferredHistoryCommit
     deferredHistoryCommit = nil
-    afterSnapshot = type(afterSnapshot) == "table" and afterSnapshot or SnapshotDB()
+    afterSnapshot = type(afterSnapshot) == "table" and afterSnapshot or SnapshotDB(true)
     local pushed = PushHistory(pending.label, pending.source, pending.before, afterSnapshot)
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed, afterSnapshot
@@ -1002,36 +1483,42 @@ function M.StartHistorySession(surface)
         M.FlushDeferredHistory()
         return true
     end
+    -- A new surface's saved stacks must not miss a write a scoped step left.
+    SettleHistoryCursor()
     if not historySessionActive then
         -- A fresh session starts quiescent: a capture or restore that raised in
         -- an earlier session must not keep refusing every later edit.
         HealLeakedHistoryDepth()
         historyRestoring = false
     end
-    local entrySnapshot
-    if deferredHistoryCommit or not historySessionActive or type(historySessionSnapshot) ~= "table" then
-        entrySnapshot = SnapshotDB()
-    else
-        entrySnapshot = historySessionSnapshot
+    -- A step that combat interrupted is committed first, from its own before
+    -- state. A fresh session then starts its cursor from the live profile; the
+    -- undo stack carries over unchanged, its diffs apply to any later cursor.
+    M.FlushDeferredHistory()
+    local fresh = not historySessionActive
+    if fresh then
+        historyCursorPartial = false
+        historySessionSnapshot = SnapshotDB()
     end
-    M.FlushDeferredHistory(entrySnapshot)
     local undo, redo = EnsureHistoryStacks()
     historySurfaces[surface] = true
     historySurfaceCount = historySurfaceCount + 1
     historySurfaceMarkers[surface] = {
         undo = CopyStack(undo),
         redo = CopyStack(redo),
-        snapshot = entrySnapshot,
+        point = NewHistoryPoint(),
     }
-    if not historySessionActive then
+    if fresh then
         historySessionActive = true
-        historySessionBaseSnapshot = entrySnapshot
-        historySessionSnapshot = historySessionBaseSnapshot
+        historySessionBaseSnapshot = NewHistoryPoint()
         historySessionDirty = false
     end
     NotifyHistoryChanged()
     return true
 end
+-- Ending the last surface drops only the cursor and the reset points. The
+-- undo and redo stacks stay as they are (close, minimize, combat close) until
+-- a profile change, a reload or Clear.
 function M.EndHistorySession(surface)
     local combatLocked = IsConfigCombatLocked()
     surface = tostring(surface or "menu")
@@ -1046,9 +1533,11 @@ function M.EndHistorySession(surface)
         historySurfaceCount = math.max(0, historySurfaceCount - 1)
     end
     if historySurfaceCount == 0 then
+        SettleHistoryCursor()
         historySessionActive = false
         historySessionBaseSnapshot = nil
-        historySessionSnapshot = nil
+        -- Combat refuses the compare: the cursor stays for the next settle.
+        if not historyCursorPartial then historySessionSnapshot = nil end
         historySessionDirty = false
     end
     if combatLocked then
@@ -1058,36 +1547,53 @@ function M.EndHistorySession(surface)
     end
     return true
 end
+-- Take the cursor back to a reset point and the live profile with it (the
+-- profile, spec routing and providers; the caller's restore does the rest).
+-- Writes that bypassed the history are part of what goes back, as with the
+-- full snapshots. Returns the applied changes and the values they replaced, or
+-- nil when the cursor could not be read.
+local function RewindCursorToPoint(point)
+    local cursor = CurrentHistorySnapshot()
+    if type(cursor) ~= "table" then return nil end
+    SyncHistoryCursor()
+    local changes, replaced = PointChanges(point.tree, 0, {}, {}), {}
+    ApplyChanges(cursor, changes, "before", replaced)
+    return cursor, changes, replaced
+end
 function M.CancelHistorySurface(surface, restoreState)
     if IsConfigCombatLocked() then return false end
     surface = tostring(surface or "menu")
     local marker = historySurfaceMarkers[surface]
     if not marker then return false end
-    if IsForeignProfileSnapshot(marker.snapshot) then
+    if IsForeignProfileSnapshot(marker.point) then
         RebaseHistoryToActiveProfile()
         return false
     end
     if historyTransaction then M.CancelHistoryTransaction() end
-    if restoreState == true and type(marker.snapshot) == "table" then
-        local profileDB = HistoryProfileDB(marker.snapshot)
-        if type(profileDB) ~= "table" then return false end
+    if restoreState == true then
+        local cursor, changes, replaced = RewindCursorToPoint(marker.point)
+        if not cursor then return false end
+        local profileDB = HistoryProfileDB(cursor)
         local setterOnly = CaptureSetterOnlySettings()
         historyRestoring = true
-        if not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
+        if type(profileDB) ~= "table"
+            or not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
+            RevertChanges(cursor, changes, replaced, "before")
             historyRestoring = false
             return false
         end
-        RestoreProfileRouting(marker.snapshot)
-        RestoreHistoryProviders(marker.snapshot, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
+        RestoreProfileRouting(cursor)
+        RestoreHistoryProviders(cursor, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
         historyRestoring = false
         ResyncSetterOnlySettings(setterOnly)
+        marker.point.tree = {}
+    else
+        SyncHistoryCursor()
     end
     local undo, redo = EnsureHistoryStacks()
     RestoreStack(undo, marker.undo)
     RestoreStack(redo, marker.redo)
-    historySessionSnapshot = restoreState == true and marker.snapshot or SnapshotDB()
-    historySessionDirty = historySessionActive and type(historySessionBaseSnapshot) == "table"
-        and not DeepEqual(historySessionBaseSnapshot, historySessionSnapshot) or false
+    RefreshSessionDirty()
     NotifyHistoryChanged(true)
     return true
 end
@@ -1097,29 +1603,34 @@ function M.CheckpointHistory(label, source)
     -- slider transaction is live. They are nested effects of the same user
     -- gesture, not a new action, and must never close that transaction.
     if HistoryBusy() or not historySessionActive then return false end
+    SettleHistoryCursor()
     local before = CurrentHistorySnapshot()
-    local after = SnapshotDB()
+    local after = SnapshotDB(true)
     if type(before) ~= "table" or type(after) ~= "table" then ReportHistorySnapshotFailure() end
     local pushed = PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
 end
-function M.BeginHistoryTransaction(label, source)
+-- scope: as for CaptureHistory (a slider or color drag of one bound setting).
+function M.BeginHistoryTransaction(label, source, scope)
     if M.BlockCombatAction() then return false end
     if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
     if HistoryBusy() or not historySessionActive then return false end
+    SettleHistoryCursor()
     local before = CurrentHistorySnapshot()
     if type(before) ~= "table" then ReportHistorySnapshotFailure() end
     historyTransaction = {
         label = label or "MSUF2 change",
         source = source or "menu:transaction",
         before = before,
+        scope = scope,
     }
     return true
 end
 function M.PrepareHistoryChange(label, source)
     if M.BlockCombatAction() then return nil end
     if HistoryBusy() then return nil end
+    SettleHistoryCursor()
     local before = CurrentHistorySnapshot()
     if type(before) ~= "table" then ReportHistorySnapshotFailure() end
     return {
@@ -1153,7 +1664,7 @@ function M.CommitPreparedHistory(prepared)
         M.DeferPreparedHistory(prepared)
         return false
     end
-    local pushed = PushHistory(prepared.label, prepared.source, prepared.before, SnapshotDB())
+    local pushed = PushHistory(prepared.label, prepared.source, prepared.before, SnapshotDB(true))
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
 end
@@ -1165,7 +1676,11 @@ function M.CommitHistoryTransaction()
         DeferHistoryCommit(tx.label, tx.source, tx.before)
         return false
     end
-    local pushed = PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
+    local root = tx.scope and ScopedHistoryRoot(tx.before, tx.scope)
+    local pushed = root and PushScopedHistory(tx.label, tx.source, tx.before, root)
+    if pushed == nil or not root then
+        pushed = PushHistory(tx.label, tx.source, tx.before, SnapshotDB(true))
+    end
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
 end
@@ -1177,7 +1692,10 @@ end
 function M.ResetHistorySession()
     if M.BlockCombatAction() then return false end
     if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
-    local ok, why = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
+    local cursor, changes, replaced = RewindCursorToPoint(historySessionBaseSnapshot)
+    if not cursor then return false end
+    local ok, why = ApplyHistorySnapshot(cursor, "MSUF2_HISTORY_RESET_SESSION")
+    if not ok then RevertChanges(cursor, changes, replaced, "before") end
     if ok then M.ClearHistory() end
     if why == "profile_mismatch" then RebaseHistoryToActiveProfile() end
     if ok then CommandFeedback("Session changes reset", "ok", 1.4) end
@@ -1186,16 +1704,17 @@ end
 function M.ClearHistory()
     if IsConfigCombatLocked() then return false end
     deferredHistoryCommit = nil
+    historyCursorPartial = false
     local undo, redo = EnsureHistoryStacks()
     WipeTable(undo)
     WipeTable(redo)
-    local clearedSnapshot = next(historySurfaces) and SnapshotDB() or nil
-    for surface in pairs(historySurfaces) do
-        historySurfaceMarkers[surface] = { undo = {}, redo = {}, snapshot = clearedSnapshot }
-    end
+    if not historySessionActive then historySessionSnapshot = nil end
     if historySessionActive then
-        historySessionBaseSnapshot = clearedSnapshot or SnapshotDB()
-        historySessionSnapshot = historySessionBaseSnapshot
+        historySessionSnapshot = SnapshotDB()
+        for surface in pairs(historySurfaces) do
+            historySurfaceMarkers[surface] = { undo = {}, redo = {}, point = NewHistoryPoint() }
+        end
+        historySessionBaseSnapshot = NewHistoryPoint()
         historySessionDirty = false
     end
     NotifyHistoryChanged()
@@ -1217,19 +1736,33 @@ function M.GetHistoryState()
         activeSurfaces = historySurfaceCount,
     }
 end
+-- Undo writes a step's before values into the cursor, redo its after values;
+-- the live profile then takes the cursor through the full restore fanout.
+local function ApplyHistoryEntry(entry, field, reason)
+    if IsForeignProfileSnapshot(entry) then return false, "profile_mismatch" end
+    local cursor = CurrentHistorySnapshot()
+    if type(cursor) ~= "table" then return false end
+    local replaced = {}
+    ApplyChanges(cursor, entry.diff, field, replaced)
+    local ok, why = ApplyHistorySnapshot(cursor, reason, entry.source)
+    if not ok then
+        RevertChanges(cursor, entry.diff, replaced, field)
+        return ok, why
+    end
+    RefreshSessionDirty()
+    return true
+end
 function M.Undo()
     if M.BlockCombatAction() then return false end
     if historyTransaction and historyTransaction.preparedNudge == true then M.CommitHistoryTransaction() end
     M.FlushDeferredHistory()
+    SettleHistoryCursor()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(undo)
     if not entry then return false end
-    local ok, why = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO", entry.source)
+    local ok, why = ApplyHistoryEntry(entry, "before", "MSUF2_HISTORY_UNDO")
     if ok then
         redo[#redo + 1] = entry
-        if historySessionActive and type(historySessionBaseSnapshot) == "table" then
-            historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.before)
-        end
     elseif why == "profile_mismatch" then
         RebaseHistoryToActiveProfile()
     else
@@ -1243,15 +1776,13 @@ function M.Redo()
     if M.BlockCombatAction() then return false end
     if historyTransaction and historyTransaction.preparedNudge == true then M.CommitHistoryTransaction() end
     M.FlushDeferredHistory()
+    SettleHistoryCursor()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(redo)
     if not entry then return false end
-    local ok, why = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO", entry.source)
+    local ok, why = ApplyHistoryEntry(entry, "after", "MSUF2_HISTORY_REDO")
     if ok then
         undo[#undo + 1] = entry
-        if historySessionActive and type(historySessionBaseSnapshot) == "table" then
-            historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.after)
-        end
     elseif why == "profile_mismatch" then
         RebaseHistoryToActiveProfile()
     else
@@ -1279,12 +1810,14 @@ function M.RequestUnitApply(unit, reason, opts)
 end
 function M.SetUnitValue(unit, key, value, reason, opts)
     if M.BlockCombatAction() then return false end
+    if not NormalizeHistoryUnit(unit) then return false end
     if not HistoryBusy() then
         return M.CaptureHistory(tostring(key), "unit:" .. tostring(unit) .. ":" .. tostring(key), function()
             return M.SetUnitValue(unit, key, value, reason, opts)
-        end)
+        end, NormalizeHistoryUnit(unit))
     end
     local conf = M.GetUnitDB(unit)
+    if not conf then return false end
     local sameValue = conf[key] == value
     if not sameValue then conf[key] = value end
     local directTextChanged = M.SyncDirectTextOffsets(conf, key)
@@ -1306,7 +1839,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     if not HistoryBusy() then
         return M.CaptureHistory(tostring(key), "general:" .. tostring(key), function()
             return M.SetGeneralValue(key, value, reason, opts)
-        end)
+        end, "general")
     end
     local g = M.GetGeneralDB()
     if g[key] == value then return false end

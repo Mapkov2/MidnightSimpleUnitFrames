@@ -79,11 +79,13 @@ function M.EnsureDB()
     lastEnsuredDB = _G.MSUF_DB
     return _G.MSUF_DB
 end
+-- An unknown unit has no table: answering Player's for it wrote the setting of
+-- a mistyped or unsupported unit into the Player frame.
 function M.GetUnitDB(unit)
-    local db = M.EnsureDB()
     unit = (unit == "tot") and "targettarget" or unit
     unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
-    if not UNIT_KEYS[unit] then unit = "player" end
+    if not UNIT_KEYS[unit] then return nil end
+    local db = M.EnsureDB()
     db[unit] = db[unit] or {}
     return db[unit], db
 end
@@ -258,9 +260,19 @@ local function WidgetHistorySource(ctx, widget, suffix)
     if tostring(key):match("^auras3") then return "auras:" .. tostring(M.auraScope or "shared") .. ":" .. tail end
     return tail
 end
+-- The setting a bound control declares names the profile root its setter
+-- writes, so its undo step compares that root only (MSUF_Menu2_Bindings_History).
+-- A setter that also writes other roots (a switch that restyles every unit)
+-- declares historyScope = false and records whole-profile steps;
+-- menu_bound_setter_scope_smoke drives every bound setter to keep this true.
+local function WidgetHistoryScope(widget)
+    local command = widget and widget._msuf2CommandAction
+    local key = command and command.historyScope ~= false and command.settingKey
+    return type(key) == "string" and key ~= "" and key or nil
+end
 local function CaptureWidgetChange(ctx, widget, label, fn)
     label = label or WidgetHistoryLabel(ctx, widget)
-    return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
+    return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn, WidgetHistoryScope(widget))
 end
 function M.AddRefresher(ctx, fn, key)
     if not (ctx and type(fn) == "function") then return end
@@ -366,6 +378,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         actionKey = opts.actionKey,
         navigationKey = opts.navigationKey,
         historySource = opts.historySource,
+        historyScope = opts.historyScope,
         searchSettingKeys = opts.searchSettingKeys,
         searchSettingKeyPatterns = opts.searchSettingKeyPatterns,
         classification = opts.classification,
@@ -476,7 +489,9 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
         if not M.BeginHistoryTransaction then return end
         local label = WidgetHistoryLabel(ctx, self)
-        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then self._msuf2HistoryTransaction = true end
+        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label), WidgetHistoryScope(self)) then
+            self._msuf2HistoryTransaction = true
+        end
     end
     local function CommitSliderHistory(self)
         if not self._msuf2HistoryTransaction then return end
@@ -584,7 +599,9 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB, metadata)
         if self._msuf2ColorHistoryTransaction then return end
         if not M.BeginHistoryTransaction then return end
         local label = WidgetHistoryLabel(ctx, self)
-        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then self._msuf2ColorHistoryTransaction = true end
+        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label), WidgetHistoryScope(self)) then
+            self._msuf2ColorHistoryTransaction = true
+        end
     end
     local function CommitColorHistory(self)
         if not self._msuf2ColorHistoryTransaction then return end

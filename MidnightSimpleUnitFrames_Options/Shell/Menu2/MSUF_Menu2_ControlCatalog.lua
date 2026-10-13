@@ -468,6 +468,40 @@ local function PromoteExplicitId(record, explicitId)
     return record.controlId
 end
 
+-- A control on a segment tab shows that tab when an exact link opens it. Only
+-- a control search lists (a setting, an action, an indexed control) takes the
+-- tab as its view contract: the contract alone would list ephemeral and
+-- preview controls (test toggles, preview handle gears) as results.
+local function InheritTabPreparation(widget, record)
+    if not widget.GetParent then return end
+    local node, views = widget:GetParent(), nil
+    while node do
+        local view = node._msuf2ExactTabView
+        if type(view) == "table" then
+            views = views or {}
+            views[#views + 1] = view
+        end
+        node = node.GetParent and node:GetParent() or nil
+    end
+    if not views or (widget._msuf2InheritedTabPrepare
+        and widget._msuf2InheritedTabPrepare == widget._msuf2PrepareExactSearchTarget) then return end
+    local previous = widget._msuf2PrepareExactSearchTarget
+    local view = views[1]
+    local listed = record and (record.searchIndexed == true or record.classification == "setting"
+        or record.classification == "action")
+    if not previous and listed then
+        widget._msuf2ExactTargetKinds = { [view.kind] = true }
+        widget._msuf2ExactTargetContracts = { [view.kind] = { [view.value] = true } }
+    end
+    local prepare = function(self, target)
+        if previous then
+            if not previous(self, target) then return false end
+        elseif target.prepareKind ~= view.kind or target.prepareValue ~= view.value then return false end
+        for i = #views, 1, -1 do views[i].select(views[i].value) end
+        return true
+    end
+    widget._msuf2PrepareExactSearchTarget, widget._msuf2InheritedTabPrepare = prepare, prepare
+end
 function M.DeclareExactSearchPreparation(widget, meta)
     if not meta.prepareExactSearchTarget then return end
     widget._msuf2ExactTargetKinds = { [meta.searchPrepareKind] = true }
@@ -476,6 +510,14 @@ function M.DeclareExactSearchPreparation(widget, meta)
     widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = {
         [meta.searchPrepareValue] = meta.searchPrepareSettingKey or true } }
     widget._msuf2PrepareExactSearchTarget = meta.prepareExactSearchTarget
+    if meta.searchPrepareKind == "classPowerStyleTab" then
+        widget._msuf2ExactTargetKinds.classPowerWorkspace = true
+        widget._msuf2ExactTargetContracts.classPowerWorkspace = { class = true }
+    end
+    if meta.searchPrepareKind == "barsAbsorbTab" and meta.legacyBarsSettingKey then
+        widget._msuf2ExactTargetKinds.barsScope = true
+        widget._msuf2ExactTargetContracts.barsScope = { shared = meta.legacyBarsSettingKey }
+    end
 end
 
 --- Exact links into a control that edits one setting per selectable view (a
@@ -495,8 +537,23 @@ function M.DeclareExactViewContract(widget, kind, values, select)
         end
         local value = tostring(target.prepareValue or "")
         local settingKey = values[value]
-        if not settingKey or tostring(target.settingKey or "") ~= settingKey then return false end
+        if not settingKey or (settingKey ~= true and settingKey ~= "*"
+            and tostring(target.settingKey or "") ~= settingKey) then return false end
         return select(value) == true
+    end
+    return widget
+end
+
+--- An exact link to a control that sits on a tab also shows that tab, after the
+--- control's own preparation (a scope, a view) succeeded.
+function M.ShowTabOnExactOpen(widget, showTab)
+    local prepare = widget and widget._msuf2PrepareExactSearchTarget
+    if prepare then
+        widget._msuf2PrepareExactSearchTarget = function(self, target)
+            if prepare(self, target) ~= true then return false end
+            showTab()
+            return true
+        end
     end
     return widget
 end
@@ -583,6 +640,7 @@ function Catalog.Register(widget, meta, registrationSource)
         end
         IndexRecord(record)
     end
+    record.anchor = meta.anchor or record.anchor
 
     record.pageKey = pageKey
     record.searchIndexed = meta.searchIndexed == true
@@ -634,6 +692,7 @@ function Catalog.Register(widget, meta, registrationSource)
     end
     record.classification = classification
     record.classificationSource = reason
+    InheritTabPreparation(widget, record)
 
     widget._msuf2RuntimeControlId = record.controlId
     widget._msuf2RuntimeControlRecord = record
@@ -707,13 +766,17 @@ local function PublicRecord(record)
         settingKey = record.settingKey ~= "" and record.settingKey or nil,
         actionKey = record.actionKey ~= "" and record.actionKey or nil,
         navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
+        anchor = record.anchor,
     }
 end
 
 function Catalog.GetRecords()
     local records = SortedRecords()
     local out = {}
-    for i = 1, #records do out[i] = PublicRecord(records[i]) end
+    for i = 1, #records do
+        if records[i].widget then InheritTabPreparation(records[i].widget, records[i]) end
+        out[i] = PublicRecord(records[i])
+    end
     return out
 end
 
@@ -731,6 +794,7 @@ function Catalog.ResolveExactTarget(pageKey, descriptor)
     if CleanText(record.pageKey) ~= pageKey then return nil, nil, "page_mismatch" end
     local widget = record.widget
     if not widget then return nil, nil, "widget_missing" end
+    InheritTabPreparation(widget, record)
 
     local settingKey = CleanText(descriptor.settingKey)
     local recordSettingKey = CleanText(record.settingKey)
@@ -753,7 +817,12 @@ function Catalog.ResolveExactTarget(pageKey, descriptor)
         if contractSettingKey ~= true and CleanText(contractSettingKey) ~= settingKey then
             return nil, nil, "prepare_setting_mismatch"
         end
+        -- Preparation belongs to this page, including any preview controls it
+        -- registers. Catalog consumers can inspect an inactive cached page.
+        local activeKey = M.activeKey
+        M.activeKey = pageKey
         local prepared = prepare(widget, descriptor)
+        M.activeKey = activeKey
         if prepared ~= true then return nil, nil, "prepare_failed" end
     end
 
@@ -903,6 +972,11 @@ function M.RegisterVirtualRuntimeControl(meta, registrationSource)
     if not token then
         token = { _msuf2VirtualRuntimeControl = true }
         M._virtualRuntimeControlTokens[controlId] = token
+    end
+    token._msuf2VirtualAnchor = meta.anchor
+    if meta.anchor then
+        token.GetParent = function(self) return self._msuf2VirtualAnchor:GetParent() end
+        M.DeclareExactSearchPreparation(token, meta)
     end
     meta.virtual = true
     return Catalog.Register(token, meta, registrationSource or "virtual")

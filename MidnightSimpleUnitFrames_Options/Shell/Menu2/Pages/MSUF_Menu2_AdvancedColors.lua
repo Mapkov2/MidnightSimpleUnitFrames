@@ -942,14 +942,15 @@ local function BuildAuraAndPortraitColors(ctx, b, CH, part)
     if part == "auras" then return end
 
     local portrait = b:CollapsibleSection("colors_portrait", "Portrait Colors", 180, false)
+    -- Both colors write general and every unit frame (SetAllPortraitRGB): whole-profile undo.
     ColorValueAt(ctx, portrait, "Border custom color", 12, -10,
         function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
         function(r, g, c) SetAllPortraitRGB("portraitBorderColor", r, g, c) end,
-        nil, nil, Meta("portrait.border_color"), { 1, 1, 1 })
+        nil, nil, Meta("portrait.border_color", nil, { historyScope = false }), { 1, 1, 1 })
     ColorValueAt(ctx, portrait, "Background color", 12, -46,
         function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
         function(r, g, c) SetAllPortraitRGB("portraitBgColor", r, g, c) end,
-        nil, nil, Meta("portrait.background_color"), { 0.05, 0.05, 0.05 })
+        nil, nil, Meta("portrait.background_color", nil, { historyScope = false }), { 0.05, 0.05, 0.05 })
     CH.ButtonAt(portrait, "Reset portrait colors", 12, -118, 170, function()
         SetAllPortraitRGB("portraitBorderColor", 1, 1, 1)
         SetAllPortraitRGB("portraitBgColor", 0.05, 0.05, 0.05)
@@ -2188,6 +2189,12 @@ local function BuildColors(ctx)
             return category
         end
         category.building = true
+        category.container._msuf2ExactTabView = {
+            kind = "colorsPainterCategory", value = categoryKey,
+            select = function()
+                M.ColorsSetPainterCategory(categoryKey)
+            end,
+        }
         local refreshers = ctx and ctx.refreshers
         local inner = W.PageBuilder(ctx, {
             parent = category.container,

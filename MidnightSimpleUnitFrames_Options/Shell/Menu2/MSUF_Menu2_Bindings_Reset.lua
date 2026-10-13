@@ -690,7 +690,7 @@ local function ResetPageImpl(pageKey)
     ResyncSetterOnlySettings(setterOnly)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
-        M.ShowStatusFeedback(Fmt("%s reset", M.Tr(tostring(info.label or pageKey))), "ok", 1.4)
+        M.ShowStatusFeedback(Fmt("%s reset", M.Tr(tostring(info.label or pageKey))), "ok", 1.4, true)
     else
         print("|cffffd700MSUF:|r " .. Fmt("%s reset", M.Tr(tostring(info.label or pageKey))))
     end
@@ -737,7 +737,7 @@ function M.ResetPageToDefaults(pageKey)
     if info.kind == "profile" then return ResetPageImpl(pageKey) end
     -- The undo entry's name, like the provider path: "Reset %s" over the
     -- translated page title.
-    local label = string.format(M.Tr("Reset %s"), M.Tr(tostring(info.label or pageKey)))
+    local label = M.TranslatedHistoryLabel(string.format(M.Tr("Reset %s"), M.Tr(tostring(info.label or pageKey))))
     return M.RunWithHistory(label, "page:reset:" .. tostring(pageKey), function()
         return ResetPageImpl(pageKey)
     end)

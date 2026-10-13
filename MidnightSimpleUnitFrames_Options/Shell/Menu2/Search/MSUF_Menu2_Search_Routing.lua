@@ -71,8 +71,12 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
     local catalog = M.RuntimeControlCatalog
     if controlId ~= "" then
         if not (catalog and type(catalog.ResolveExactTarget) == "function") then return nil, false, true end
-        local _, widget = catalog.ResolveExactTarget(pageKey, exactTarget)
-        if widget then return widget, true, true end
+        local record, widget = catalog.ResolveExactTarget(pageKey, exactTarget)
+        if widget then
+            local anchor = record.anchor
+                or (widget.IsShown and not widget:IsShown() and widget._msuf2ContextColorSearchAnchor) or widget
+            return anchor, true, true
+        end
         return nil, false, true
     end
     local settingKey = tostring(exactTarget.settingKey or "")
@@ -1155,9 +1159,25 @@ end
 -- it. Returns nil for every other kind.
 local function SearchRouteExactView(route, pageKey, exactTarget)
     local kind, value = exactTarget.prepareKind, tostring(exactTarget.prepareValue or "")
-    if kind == "barsScope" then
+    if kind == "dashboardDisclosure" then
+        route = type(route) == "table" and route or {}
+        if pageKey == "home" and (value == "dashboardScalingOpen" or value == "dashboardRecoveryOpen"
+            or value == "dashboardSupportOpen") then SearchRouteSetState(route, value, true) end
+        return route
+    elseif kind == "auraStyleContainer" then
+        route = type(route) == "table" and route or {}
+        if pageKey == "auras3_styling" and value == "buff" then SearchRouteSetState(route, "auraAppearanceContainer", value) end
+        return route
+    elseif kind == "barsScope" then
         route = type(route) == "table" and route or {}
         if pageKey == "opt_bars" and value == "shared" then SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", value) end
+        return route
+    elseif kind == "barsAbsorbTab" then
+        route = type(route) == "table" and route or {}
+        if pageKey == "opt_bars" then
+            SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", "shared")
+            SearchRouteSetTable(route, "globalBarsAbsorbTabSelection", "shared", value)
+        end
         return route
     elseif kind == "unitTextureLayer" then
         route = type(route) == "table" and route or {}
@@ -1184,7 +1204,8 @@ local function SearchRouteExactView(route, pageKey, exactTarget)
 end
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return route end
-    local workspaceKind = exactTarget.prepareKind == "classPowerWorkspace" and exactTarget.prepareValue
+    local workspaceKind = exactTarget.prepareKind == "classPowerStyleTab" and "class"
+        or exactTarget.prepareKind == "classPowerWorkspace" and exactTarget.prepareValue
         or ("|" .. tostring(exactTarget.prepareContracts or "") .. "|"):match("|classPowerWorkspace=([^=|]+)=%*|")
     if pageKey == "classpower" and workspaceKind then
         local kind = workspaceKind
@@ -1257,6 +1278,11 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
         and (pageKey ~= "profiles" or not M.ProfileSearch.Prepare(exactTarget)) then return false, false, false end
     route = route or SearchRouteForTarget(pageKey, query, routingFallback)
     route = SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
+    if exactTarget and exactTarget.sectionId then
+        route = type(route) == "table" and route or {}
+        SearchRouteOpenAccordion(route, pageKey, exactTarget.sectionId)
+        if exactTarget.prepareKind == "unitAuraWorkspace" then SearchRouteOpenAccordion(route, pageKey, "auras") end
+    end
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
     local selected = M.SelectPage(pageKey)
@@ -1266,6 +1292,14 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
         local entry = M.cache and M.cache[pageKey]
         if entry and entry.wrapper then
             region, exactMatched = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
+        end
+        -- A cached aura view can predate a lazily materialized style section.
+        -- Repair that incomplete view once; ordinary exact opens keep its tree.
+        if not region and exactTarget and exactTarget.prepareKind == "unitAuraWorkspace"
+            and exactTarget.controlId and not M.RuntimeControlCatalog.Get(exactTarget.controlId) then
+            M.RepaintPageAfterDataChange(pageKey, "exact-aura-view", { rebuild = true })
+            ApplyRouteSectionsInPlace(pageKey, route)
+            region, exactMatched = FindCurrentSearchAnchor(pageKey, query, fallback, nil, exactTarget)
         end
     end
     RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget) end)

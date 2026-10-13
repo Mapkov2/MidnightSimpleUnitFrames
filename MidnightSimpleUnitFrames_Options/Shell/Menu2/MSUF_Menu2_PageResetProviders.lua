@@ -153,7 +153,7 @@ function M.ResetProviderPage(key, provider)
         -- session, discard) stays as it was, and no entry is added.
         M.SyncExternalHistoryState()
     end
-    local ok = M.RunWithHistory(HistoryLabel(provider, key), "page:reset:" .. key, function()
+    local ok = M.RunWithHistory(M.TranslatedHistoryLabel(HistoryLabel(provider, key)), "page:reset:" .. key, function()
         local ran, result = RunStep("page-reset provider reset", provider.reset, key)
         if ran and result == false then return false end
         return result == true or nil

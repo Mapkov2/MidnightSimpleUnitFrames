@@ -124,7 +124,10 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         -- through the bound sliders; the adjacent gear is navigation.
         if exposeHandle then Register(handle, "handle." .. tostring(key), handle._label or key, "button", "ephemeral") end
         local gear = exposeHandle and handle._msuf2SettingsGear
-        if gear and gear._msuf2UnitPreviewOpenCommand then
+        -- An action only on the preview's own unit page: a preview shown inside
+        -- another page (each Colors category) keeps its gears as navigation,
+        -- so search does not list every element's gear once per category.
+        if gear and gear._msuf2UnitPreviewOpenCommand and tostring(pageKey or ""):match("^uf_") then
             Register(gear, "handle." .. tostring(key) .. ".open_settings",
                 M2.Format("Open %s settings", M2.TranslateText(tostring((handle and handle._label) or key or "preview element"))),
                 "button", "action", {
@@ -148,8 +151,11 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
             local selectionAPI = M2.PreviewSelectionBar
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editX, box, "dispelSymbol")
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "dispelSymbol")
+            -- Exact rows on the Player page only; a preview inside another page
+            -- (each Colors category) keeps the two fields ephemeral.
+            local offsetClass = tostring(pageKey or ""):match("^uf_") and "setting" or "ephemeral"
             Register(selectionBar.editX, "selection.dispel_symbol_offset_x", "UnitFrame Dispel Symbol Offset X",
-                "textinput", "setting", {
+                "textinput", offsetClass, {
                     searchRouteDisposition = "dynamic",
                     searchRouteDispositionReason = "The shared Preview X field is pinned to the Player-owned Dispel Symbol handle for this exact Search route.",
                     searchSettingKeys = { "player.unitDispelSymbolX" },
@@ -158,7 +164,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                     }),
                 })
             Register(selectionBar.editY, "selection.dispel_symbol_offset_y", "UnitFrame Dispel Symbol Offset Y",
-                "textinput", "setting", {
+                "textinput", offsetClass, {
                     searchRouteDisposition = "dynamic",
                     searchRouteDispositionReason = "The shared Preview Y field is pinned to the Player-owned Dispel Symbol handle for this exact Search route.",
                     searchSettingKeys = { "player.unitDispelSymbolY" },

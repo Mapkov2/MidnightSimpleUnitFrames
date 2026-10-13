@@ -89,7 +89,8 @@ for _, file in ipairs({ "MSUF_Menu2_UnitStatusSection.lua" }) do
     local source = Read(PAGES .. file)
     Check(source:find('\n    local happiness = FindStatusSpec(unit, "statusPetHappiness")\n'
         .. '    if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'
-        .. '        local meta = ControlMeta(ctx, "status.indicator.pet_happiness", "setting")\n', 1, true),
+        .. '        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.pet_happiness", happiness,'
+        .. ' selector, RefreshStatusSectionState)\n', 1, true),
         file .. " no longer registers the Pet Happiness control only where the status spec exists")
     Check(source:find('M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")', 1, true),
         file .. " no longer registers the Pet Happiness virtual control")

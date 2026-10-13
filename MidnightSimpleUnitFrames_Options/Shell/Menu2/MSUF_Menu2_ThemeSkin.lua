@@ -186,7 +186,7 @@ local function ReapplyAndRefresh()
         M.SelectPage(M.activeKey)
     end
     if M.ShowStatusFeedback then
-        M.ShowStatusFeedback(M.Tr(active and "Theme updated" or "Theme reset"), "info", 1.4)
+        M.ShowStatusFeedback(M.Tr(active and "Theme updated" or "Theme reset"), "info", 1.4, true)
     end
 end
 

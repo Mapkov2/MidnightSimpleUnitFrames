@@ -382,6 +382,15 @@ local function BuildGFTransparencySection(ctx, b)
         end
         W.SetControlShown(oocCard, ooc)
     end
+    for _, card in ipairs({ healthOpacityCard, opacityOptionsCard, oocCard }) do
+        card._msuf2ExactTabView = {
+            kind = "groupTransparencyTab", value = card == oocCard and "ooc" or "combat",
+            select = function(value)
+                transparencyTab = value
+                ApplyTransparencyTab()
+            end,
+        }
+    end
     local stateBar = W.ScopeOverrideBar(ctx, transparency, {
         values = {
             { value = "combat", text = "General" },

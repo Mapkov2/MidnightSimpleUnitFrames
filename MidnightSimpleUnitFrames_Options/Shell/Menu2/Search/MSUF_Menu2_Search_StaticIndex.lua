@@ -126,30 +126,55 @@ end
 
 -- Contracts carry exact view identities. A multi-view selector without one
 -- matching setting is deliberately ambiguous and must not guess a destination.
-local PREPARE_KINDS = { groupSizingTab = true, groupScope = true, groupAuraWorkspace = true,
-    unitAuraWorkspace = true, unitAlphaTab = true }
-local function ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
-    if not PREPARE_KINDS[k] then return kind, value, score, ambiguous end
-    local rank = settingKey and settingKey ~= "" and setting == settingKey and 2
-        or (setting == "*" or setting == true) and 1 or 0
-    if rank > score then return k, v, rank, false end
+-- Every kind a contract names is a view: the generator proves each kind and
+-- value against the control's own prepare hook (a kind without a hook fails
+-- the build), and Catalog.ResolveExactTarget re-checks the hook at run time.
+-- So the contract is the whole list. A hand-kept list left the portrait tabs,
+-- texture layer views and the Bars scope without a prepareKind, and the tab
+-- switch never ran for them.
+-- A control whose setting key depends on the selected view has none of its own
+-- (the texture layer slot controls, the Bars scope controls). When its contract
+-- names exactly one view, that view's setting is the control's key: the third
+-- result, which the prepare hook compares against the target's settingKey. Rank
+-- 3 is the control's own key, 2 a wildcard, 1 that key-less single view.
+local function ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, setting, settingKey)
+    local hasKey = settingKey ~= nil and settingKey ~= ""
+    local rank = hasKey and setting == settingKey and 3
+        or (setting == "*" or setting == true) and 2
+        or (not hasKey and type(setting) == "string") and 1 or 0
+    if rank > score then return k, v, rank, false, setting end
     if rank > 0 and rank == score and (kind ~= k or value ~= v) then ambiguous = true end
-    return kind, value, score, ambiguous
+    return kind, value, score, ambiguous, picked
 end
 function Search.ResolveExactPreparation(contracts, settingKey)
-    local kind, value, score, ambiguous = nil, nil, 0, false
+    local kind, value, score, ambiguous, picked = nil, nil, 0, false, nil
+    local aliasKey, aliasAmbiguous
+    local function Alias(setting)
+        if type(setting) ~= "string" or setting == "*" then return end
+        if aliasKey and aliasKey ~= setting then aliasAmbiguous = true end
+        aliasKey = setting
+    end
     if type(contracts) == "string" then
         for k, v, setting in contracts:gmatch("([^|=]+)=([^|=]+)=([^|]+)") do
-            kind, value, score, ambiguous = ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
+            Alias(setting)
+            kind, value, score, ambiguous, picked =
+                ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, setting, settingKey)
         end
     elseif type(contracts) == "table" then
         for k, values in pairs(contracts) do
             for v, setting in pairs(values) do
-                kind, value, score, ambiguous = ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
+                Alias(setting)
+                kind, value, score, ambiguous, picked =
+                    ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, setting, settingKey)
             end
         end
     end
-    if not ambiguous then return kind, value end
+    if not ambiguous then
+        if picked == "*" or picked == true then
+            picked = not aliasAmbiguous and aliasKey or nil
+        end
+        return kind, value, picked
+    end
 end
 
 local function DecodeLine(decoder, line)
@@ -191,7 +216,8 @@ local function DecodeLine(decoder, line)
             haystack = haystack .. " " .. hintNorm
         end
 
-        local prepareKind, prepareValue = Search.ResolveExactPreparation(exactTargetContracts, settingKey)
+        local prepareKind, prepareValue, declaredSetting = Search.ResolveExactPreparation(exactTargetContracts, settingKey)
+        if settingKey == "" then settingKey = declaredSetting or "" end
         local count = decoder.count + 1
         decoder.count = count
         records[count] = {

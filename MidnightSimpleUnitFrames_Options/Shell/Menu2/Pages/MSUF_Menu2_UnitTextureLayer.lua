@@ -416,7 +416,7 @@ local function TextureLayerActions(ctx, unit, s)
         end
         local changed
         if type(M.RunWithHistory) == "function" then
-            changed = M.RunWithHistory(M.Format("Texture: %s", M.Tr(texture.text)),
+            changed = M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("Texture: %s", M.Tr(texture.text))),
                 "unit:texture-layer-texture:" .. tostring(unit) .. ":" .. tostring(boundSlot), Write)
         else
             changed = Write()
@@ -908,6 +908,15 @@ local function TextureLayerSelectors(ctx, s)
         for key, card in pairs(cardsByTab) do
             W.SetControlShown(card, key == tab)
         end
+    end
+    for tab, card in pairs(cardsByTab) do
+        card._msuf2ExactTabView = {
+            kind = "unitTextureLayer", value = tostring(s.boundSlot) .. "_" .. tab,
+            select = function(value)
+                M.unitTexLayerTab[unit] = value:match("^%d_(.+)$")
+                ApplyTab()
+            end,
+        }
     end
     local slotValues = {
         { value = 1, text = "Texture 1" },

@@ -112,6 +112,10 @@ end
 
 local function CancelSearchBackgroundIndex()
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+    -- A search cut off before it ran left an empty list labelled with its query.
+    -- Forget the label, so the next paint searches again instead of showing
+    -- "no match" for a query nobody answered.
+    if M.searchResultsPending then M.searchResultsQuery = nil end
     M.searchResultsPending = nil
     SEARCH_STATE.indexing = false
     SEARCH_STATE.indexQueue = nil
@@ -1624,8 +1628,12 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
         entry.settingKey, entry.actionKey = catalog.settingKey, catalog.actionKey
     end
     local prepareKind, prepareValue = entry.searchPrepareKind, entry.searchPrepareValue
-    if not prepareKind and widget then
-        prepareKind, prepareValue = Search.ResolveExactPreparation(widget._msuf2ExactTargetContracts, entry.settingKey)
+    local declaredSetting
+    if widget then
+        local kind, value
+        kind, value, declaredSetting = Search.ResolveExactPreparation(widget._msuf2ExactTargetContracts, entry.settingKey)
+        if not prepareKind then prepareKind, prepareValue = kind, value end
+        if kind ~= prepareKind or value ~= prepareValue then declaredSetting = nil end
     end
     if not M.SupportsSearchTarget(entry.pageKey, entry.settingKey, prepareKind, prepareValue) then return nil end
     -- One build shares a page's info (and the page text cache AddSearchRecord
@@ -1681,7 +1689,7 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
         if controlId ~= "" or settingKey ~= "" then
             rec.exactTarget = {
                 pageKey = entry.pageKey,
-                settingKey = entry.settingKey,
+                settingKey = (entry.settingKey ~= nil and entry.settingKey ~= "") and entry.settingKey or declaredSetting,
                 controlId = entry.controlId,
                 sectionId = rec.sectionId,
                 identityKey = entry.identityKey,
@@ -1753,12 +1761,16 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
     -- can be tagged (MSUF_Menu2_AdvancedColors.lua); Midnight shares the index file.
     ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Ecolor%2Etapped"] = "SupportsTapDenied",
     ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Etap%2Edenied%2Egray"] = "SupportsTapDenied",
+    -- Fonts > Name shortening: Character names, built where characters carry a
+    -- surname (MSUF_Menu2_GlobalFonts.lua); Midnight shares the index file.
+    ["id\031opt_fonts\031menu2%2Eopt%2Efonts%2Eglobal%2Ename%2Eshortening%2Echaracter%2Ename%2Eparts"] = "HasCharacterSurnames",
 }
 -- Rows of controls a client builds only where it has the unit or group scope
 -- (M.SupportsFrameScope): Group Frames > Layout > Friendly bosses needs boss
 -- units (MSUF_Menu2_GroupLayoutAdditional.lua), the Mythic raid group cap the
 -- Mythic Raid scope (MSUF_Menu2_GroupLayout.lua).
 local STATIC_ROW_FRAME_SCOPE = {
+    ["id\031opt_bars\031menu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Epreview%2Eboss%2Etarget"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossenabled"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosshealeronly"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosswidth"] = "boss",

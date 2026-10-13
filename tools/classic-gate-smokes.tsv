@@ -357,6 +357,12 @@ clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {
 clients+Forever	lua	tools/tests/profile_rename_suite_order_smoke.lua	{root} {flavor}	Profile rename did not ask the Suite first: {flavor}
 clients+Forever	lua	tools/tests/search_feature_targets_smoke.lua	{root} {flavor}	Exact feature search targets and profile navigation: {flavor}
 clients+Forever	lua	tools/tests/search_exact_route_sections_smoke.lua	{root} {flavor}	Exact search reaches controls in closed lazy sections: {flavor}
+clients+Forever	lua	tools/tests/search_exact_visibility_smoke.lua	{root} {flavor}	Exact search left a control on a hidden view: {flavor}
+clients+Forever	lua	tools/tests/menu_search_quiesce_smoke.lua	{root} {flavor}	An interrupted menu search or the search intro survived a quiesce: {flavor}
+clients+Forever	lua	tools/tests/menu_undo_deep_history_smoke.lua	{root} {flavor}	Menu undo kept fewer than 1000 steps, missed an exact round trip or lost steps on close, minimize or combat: {flavor}
+clients+Forever	lua	tools/tests/menu_bound_setter_scope_smoke.lua	{root} {flavor}	A bound control with a scoped undo step wrote outside its profile root: {flavor}
+clients+Forever	lua	tools/tests/menu_status_feedback_translated_smoke.lua	{root} {flavor}	A translated menu status message became a missing locale key: {flavor}
+clients+Forever	lua	tools/tests/menu_unit_db_rows_guard_smoke.lua	{root} {flavor}	An unknown unit got a profile table or a settings row reset skipped history: {flavor}
 clients+Forever	lua	tools/tests/search_sliced_index_smoke.lua	{root} {flavor}	A cold search index builds in menu-task slices with synchronous results: {flavor}
 clients+Forever	lua	tools/tests/options_loader_readiness_smoke.lua	{root} {flavor}	Cold Options keybind readiness and menu navigation: {flavor}
 clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	Localized menu search queries and FAQ coverage: {flavor}	nightly

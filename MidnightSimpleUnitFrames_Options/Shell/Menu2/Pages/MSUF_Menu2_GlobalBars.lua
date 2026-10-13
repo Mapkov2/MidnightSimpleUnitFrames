@@ -1274,6 +1274,25 @@ local function BuildTempMaxHealthSection(ctx, b)
     end))
 end
 
+function GP.AbsorbControlMeta(parent, path, classification, frames, selectTab)
+    local meta = Meta(path, classification)
+    local prepare = meta.prepareExactSearchTarget
+    local tab = parent == frames.negative and "negative" or parent == frames.heal and "heal" or "positive"
+    meta.searchPrepareKind, meta.searchPrepareValue = "barsAbsorbTab", tab
+    meta.legacyBarsSettingKey = meta.searchPrepareSettingKey
+    meta.searchPrepareSettingKey = nil
+    meta.prepareExactSearchTarget = function(widget, target)
+        if prepare then
+            local scoped = {}
+            for key, value in pairs(target) do scoped[key] = value end
+            scoped.prepareKind, scoped.prepareValue = "barsScope", "shared"
+            if not prepare(widget, scoped) then return false end
+        end
+        selectTab(tab)
+        return true
+    end
+    return meta
+end
 local function BuildAbsorbSection(ctx, b)
     local section = b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true)
     local sectionW = section._msuf2Width or ctx.width or 720
@@ -1308,7 +1327,7 @@ local function BuildAbsorbSection(ctx, b)
             historySource = "menu:bars-heal-prediction-color",
         })
     end
-    local tabs = W.SegmentTabs(ctx, section, {
+    local tabs, _, _, SelectAbsorbTab = W.SegmentTabs(ctx, section, {
         label = "", values = tabValues, width = min(660, sectionW - 48),
         frames = tabFrames, defaultTab = "positive", get = CurrentTab,
         set = function(value) M.globalBarsAbsorbTabSelection[CurrentBarsScope()] = value or "positive" end,
@@ -1341,7 +1360,7 @@ local function BuildAbsorbSection(ctx, b)
                 BarScopeSet(key, numeric and (tonumber(value) or fallback) or (value or fallback), reason, true)
                 Apply(reason)
             end,
-            Meta(path or ("absorb." .. key)))
+            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
@@ -1353,7 +1372,7 @@ local function BuildAbsorbSection(ctx, b)
                 BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
                 Apply(reason)
             end,
-            defaultValue, Meta(path or ("absorb." .. key)))
+            defaultValue, GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
@@ -1367,7 +1386,7 @@ local function BuildAbsorbSection(ctx, b)
                 if onSet then onSet(value) end
                 Apply(reason)
             end,
-            Meta(path or ("absorb." .. key)))
+            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
         return control
     end
     local function BindTest(parent, category, x, y, width, path)
@@ -1375,7 +1394,7 @@ local function BuildAbsorbSection(ctx, b)
         M.BindBoolWidget(ctx, control,
             function() return IsAbsorbTextureTestEnabled(category) == true end,
             function(value) SetAbsorbTextureTest(value and true or false, category) end,
-            Meta(path, "ephemeral"))
+            GP.AbsorbControlMeta(parent, path, "ephemeral", tabFrames, SelectAbsorbTab))
         return control
     end
     local function ResolveBarPreviewTexture(key, fallback)
@@ -1958,7 +1977,8 @@ local function BuildSlantedSection(ctx, b)
             if value and not SlantedStylesSelected() then ApplySlantedToAll() end
             RefreshSlanted("slanted-bar-enabled")
         end,
-        Meta("slanted.enabled"))
+        -- Turning it on restyles every unit and group frame: whole-profile undo.
+        Meta("slanted.enabled", nil, { historyScope = false }))
     if type(M.RegisterSearchWidget) == "function" then
         M.RegisterSearchWidget(enabled, {
             label = "Enable slanted bars", kind = "toggle",

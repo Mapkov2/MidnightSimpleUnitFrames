@@ -1268,6 +1268,10 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 RefreshStylePreview()
             end,
             AuraControlMeta(ctx, "style.appearance.native-flow.weapon-enchants"))
+        M.DeclareExactViewContract(weaponEnchants, "auraStyleContainer", { buff = true }, function()
+            M.auraAppearanceContainer = "buff"
+            return true
+        end)
         AddTooltip(weaponEnchants, "Native weapon enchant auras",
             "Adds Blizzard's temporary weapon-enchantment buttons to the Player Buff container. This is one shared setting and uses the native aura flow without an MSUF ticker or OnUpdate.")
         M.TrackRefresh(ctx, function()

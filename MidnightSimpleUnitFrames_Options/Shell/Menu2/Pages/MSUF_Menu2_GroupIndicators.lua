@@ -672,6 +672,20 @@ function StatusIcons.DeclareExactLevelText(state, control)
         return CurrentScope() == scope and CurrentGFStatusSpec().value == "levelText"
     end)
 end
+--- An option of one indicator (Threat %, the Level Text difficulty color) shows
+--- only while that indicator is selected and edits the current scope: an exact
+--- link selects the indicator there. That is its only view, so it replaces the
+--- tab contract the control inherited (the selection opens that tab itself).
+function StatusIcons.DeclareExactStatusOption(state, control, status)
+    if not control then return end
+    control._msuf2ExactTargetKinds, control._msuf2ExactTargetContracts = nil, nil
+    M.DeclareExactViewContract(control, "groupStatusOption", { [status] = true }, function(value)
+        M.SetMenuStateValue("gfStatusIconSelection", value)
+        if state.sicons._msuf2GuidedSelectTab then state.sicons._msuf2GuidedSelectTab("basic") end
+        state.RefreshStatusIconMenu()
+        return CurrentGFStatusSpec().value == value
+    end)
+end
 --- Selected Indicator: the indicator, its switch, its style and icon, the
 --- Level Text and Threat % options and the role filter.
 function StatusIcons.BuildSelectedCard(state, ctx)
@@ -727,6 +741,7 @@ function StatusIcons.BuildSelectedCard(state, ctx)
         end)
     --- Level Text only: the same difficulty grading as the unit-frame level indicator.
     local levelDifficultyColor = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by level difficulty", 16, -106, siconLeftW - 32), "levelTextDifficultyColor", true, "visual")
+    StatusIcons.DeclareExactStatusOption(state, levelDifficultyColor, "levelText")
     if M.AddTooltip then
         M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
             "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
@@ -737,6 +752,8 @@ function StatusIcons.BuildSelectedCard(state, ctx)
     if MSUF.Client and MSUF.Client.SupportsThreatText == true then
         threatColorCurve = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by threat", 16, -106, siconLeftW - 32), "threatTextColorCurve", true, "visual")
         threatBackground = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Background", 16, -136, siconLeftW - 32), "threatTextBackground", false, "visual")
+        StatusIcons.DeclareExactStatusOption(state, threatColorCurve, "threatText")
+        StatusIcons.DeclareExactStatusOption(state, threatBackground, "threatText")
         if M.AddTooltip then
             M.AddTooltip(threatColorCurve, "Color by threat",
                 "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.", { hook = true })

@@ -75,3 +75,20 @@ Check(patch.value == overlay, "the variant's stored value became " .. tostring(p
 Check(db.player.offsetX == base, "the base value became " .. tostring(db.player.offsetX))
 
 print("menu_history_cancel_variant_smoke: " .. flavor .. " ok (Cancel All keeps the variant overlay and the add-on root)")
+
+-- External variant roots exist in their provider, not in MSUF_DB. The diff
+-- view must capture that root before it substitutes the remembered base.
+suiteStore.smoke = 1
+Check(V.Replace(db, { version = 1, entries = { { name = "External", conditions = {},
+    patch = { { path = { "suiteModules", "smoke" }, value = 4 } } } } }), "external variant refused")
+Check(suiteStore.smoke == 4 and db.suiteModules == nil, "external overlay did not retain provider ownership")
+M.ClearHistory()
+Check(M.StartHistorySession("edit_mode"), "external session did not start")
+Check(M.CaptureHistory("External edit", "edit_mode:external:suite", function()
+    suiteStore.smoke = 7
+    return true
+end), "external overlay edit refused")
+Check(M.Undo() and suiteStore.smoke == 4, "external overlay Undo lost its base or patch")
+Check(M.Redo() and suiteStore.smoke == 7, "external overlay Redo lost its patch")
+Check(M.CancelHistorySurface("edit_mode", true) and suiteStore.smoke == 4, "external overlay Cancel lost its entry value")
+Check(db.suiteModules == nil, "external diff leaked its synthetic root into MSUF_DB")

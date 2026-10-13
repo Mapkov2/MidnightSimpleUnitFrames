@@ -32,6 +32,16 @@ local function DashboardMeta(semanticPath, classification, exact)
     if type(exact) == "table" then
         for key, value in pairs(exact) do meta[key] = value end
     end
+    local disclosure = semanticPath:find("^scaling%.") and "dashboardScalingOpen"
+        or semanticPath:find("^display_recovery%.") and "dashboardRecoveryOpen"
+        or semanticPath:find("^support%.") and "dashboardSupportOpen"
+    if disclosure and not semanticPath:find("%.disclosure$") then
+        meta.searchPrepareKind, meta.searchPrepareValue = "dashboardDisclosure", disclosure
+        meta.prepareExactSearchTarget = function()
+            M.SetMenuStateValue(disclosure, true)
+            return true
+        end
+    end
     return meta
 end
 local function RegisterDashboardControl(widget, meta, label, kind, values)
@@ -867,7 +877,7 @@ function Dashboard.BuildSuiteCard(state, ctx, top)
             if MSUF.SuiteLink.OpenInstaller() == true then
                 M.HideSlashMenuAndMinibar(M.frame)
             elseif M.ShowStatusFeedback then
-                M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4)
+                M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4, true)
             end
         end, "primary", "suite.setup", "ephemeral",
             { help = "Opens the MSUF Suite setup: profile, modules and UI scaling." })
@@ -966,7 +976,7 @@ function Dashboard.BuildRecoveryCard(state)
         W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
             or "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
-            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4) end
+            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4, true) end
         end, "primary", "display_recovery.reset_positions")
         AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
         local factoryY = recoveryWrap and -126 or -94
@@ -974,14 +984,14 @@ function Dashboard.BuildRecoveryCard(state)
         --- is usually troubleshooting and wants the complete list, not a subset.
         local printHelp = Button(recovery, "Print Help", 146, -94, 86, 22, function()
             if not RunMSUFSlashCommand("help all") and M.ShowStatusFeedback then
-                M.ShowStatusFeedback(M.Tr("Help unavailable"), "danger", 1.4)
+                M.ShowStatusFeedback(M.Tr("Help unavailable"), "danger", 1.4, true)
             end
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
         local msufX = recoveryWrap and 16 or (recoveryW - (state.hasSuiteReset and 336 or 168))
         local msufReset = Button(recovery, "MSUF Factory Reset", msufX, factoryY, 156, 22, function()
             if not ShowFactoryResetConfirm("msuf") and M.ShowStatusFeedback then
-                M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+                M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4, true)
             end
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
         AddTooltip(msufReset, "MSUF Factory Reset", "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
@@ -990,7 +1000,7 @@ function Dashboard.BuildRecoveryCard(state)
             local suiteY = state.recoveryStacked and -158 or factoryY
             local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
                 if not ShowFactoryResetConfirm("suite") and M.ShowStatusFeedback then
-                    M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+                    M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4, true)
                 end
             end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true })
             AddTooltip(suiteReset, "Suite Factory Reset", "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
