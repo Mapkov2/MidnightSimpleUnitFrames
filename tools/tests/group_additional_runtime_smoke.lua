@@ -175,6 +175,7 @@ MSUF.UFBarTextCommon = { ApplyHealthStatusColor = function(bar) Count("Paint"); 
 dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
 local function Load(client)
     MSUF.Client = client
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))("MSUF", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF", MSUF)
 end
 local supportedEvents = { INSTANCE_ENCOUNTER_ENGAGE_UNIT = true, UNIT_TARGETABLE_CHANGED = true }

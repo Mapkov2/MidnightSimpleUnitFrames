@@ -908,9 +908,6 @@ function GF.ScanHeader(key, kind)
   return found
 end
 
-function GF.ScheduleScan(key, kind)
-  return GF.ScanHeader(key, kind)
-end
 
 function GF.ForEachFrame(fn, includeHidden, a, b, c)
   if type(fn) ~= "function" then return false end

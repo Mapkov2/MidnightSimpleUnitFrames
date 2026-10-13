@@ -21,7 +21,6 @@ local TranslateFramePosition = EditUtil.TranslateFramePosition
 local C_Timer = C_Timer
 local CreateFrame = CreateFrame
 local GetNumGroupMembers = GetNumGroupMembers
-local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetTime = GetTime
 local UIParent = UIParent
 local floor, max, min = math.floor, math.max, math.min
@@ -227,13 +226,8 @@ local function GetRuntimePreviewCount(kind)
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
 
   if kind == "party" then
-    local conf = GetConf(kind)
-    local n = GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0
-    if n > 0 and (not conf or conf.showPlayer ~= false) then
-      n = n + 1
-    elseif n == 0 and conf and conf.showSolo == true and conf.showPlayer ~= false then
-      n = 1
-    end
+    local gf = GF()
+    local n = gf and gf.GetLiveLayoutCount and gf.GetLiveLayoutCount(kind) or 0
     return n > 0 and n or nil
   end
 
@@ -1016,10 +1010,6 @@ ExportPublic("MSUF_GF_EM2_SetPreviewNudgeTarget", GF_EM2_SetPreviewNudgeTarget)
 
 local function GF_EM2_SetActivePreviewKind(kind)
   _activePreviewKind = NormalizeKind(kind)
-  local gf = GF()
-  if gf and type(gf.EM2_SetActivePreviewKind) == "function" then
-    gf.EM2_SetActivePreviewKind(_activePreviewKind)
-  end
   if _em2Active and _previewShownByEM2 then
     ShowPreviewOnly()
   end

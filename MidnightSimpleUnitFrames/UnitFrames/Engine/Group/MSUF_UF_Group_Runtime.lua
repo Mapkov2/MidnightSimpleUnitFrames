@@ -440,7 +440,7 @@ local function SetupWantedHeaders(kind)
     local header, scanHandled
     header, scanHandled = SetupLiveHeader("party", "party")
     if GF.ShowHeaders then GF.ShowHeaders("party") elseif header and header.Show then header:Show() end
-    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
+    if not scanHandled and GF.ScanHeader then GF.ScanHeader("party", "party") end
   elseif scope ~= "raid" and scope ~= "priority" then
     RetireHeader("party")
   end
@@ -449,7 +449,7 @@ local function SetupWantedHeaders(kind)
     local header, scanHandled
     header, scanHandled = SetupLiveHeader("raid", raidKind)
     if GF.ShowHeaders then GF.ShowHeaders("raid") elseif header and header.Show then header:Show() end
-    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
+    if not scanHandled and GF.ScanHeader then GF.ScanHeader("raid", raidKind) end
   elseif scope ~= "party" and scope ~= "priority" then
     RetireHeader("raid")
   end
@@ -715,13 +715,13 @@ end
 function GF.RefreshUnitBindings(kind)
   if InCombat() then return GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING) end
   local did = false
-  if GF.headers and GF.ScheduleScan then
+  if GF.headers and GF.ScanHeader then
     if (not kind or kind == "party") and GF.headers.party then
-      did = GF.ScheduleScan("party", "party") or did
+      did = GF.ScanHeader("party", "party") or did
     end
     local raidKind = LiveRaidKind()
     if (not kind or kind == "raid" or kind == "mythicraid" or kind == raidKind) and GF.headers.raid then
-      did = GF.ScheduleScan("raid", raidKind) or did
+      did = GF.ScanHeader("raid", raidKind) or did
     end
     local priorityHeader = GF.headers.priority
     local priorityKind = LivePriorityKind() or (priorityHeader and priorityHeader._msufGFKind) or raidKind
@@ -729,7 +729,7 @@ function GF.RefreshUnitBindings(kind)
     local priorityMatches = not kind or kind == "priority" or kind == "gf_priority" or kind == priorityKind
       or (priorityRaidLike and (kind == "raid" or kind == "mythicraid"))
     if priorityMatches and priorityHeader then
-      did = GF.ScheduleScan("priority", priorityKind) or did
+      did = GF.ScanHeader("priority", priorityKind) or did
     end
   end
   return did
@@ -859,30 +859,6 @@ function GF.RefreshGroupNames(unit)
     return frame and RefreshGroupNameFrame(frame) or false
   end
   return GF.ForEachFrame(RefreshGroupNameFrame, true)
-end
-
-function GF.EM2_SetActivePreviewKind(kind)
-  GF._activePreviewKind = kind
-  return true
-end
-
-function GF.EM2_NudgePreview(key, dx, dy)
-  if InCombat() then return true end
-  local kind = key
-  if key == "gf_party" then kind = "party"
-  elseif key == "gf_raid" then kind = "raid"
-  elseif key == "gf_mythicraid" then kind = "mythicraid" end
-  if kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" then return false end
-  local conf = Conf(kind)
-  if not conf then return false end
-  if GF.EnsureStableGridPosition then
-    local count = GF.GetLiveLayoutCount and GF.GetLiveLayoutCount(kind) or nil
-    GF.EnsureStableGridPosition(kind, count, conf)
-  end
-  conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + (tonumber(dx) or 0)) + 0.5)
-  conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + (tonumber(dy) or 0)) + 0.5)
-  conf.positionMode = GF.GRID_POSITION_MODES.STABLE
-  return GF.RefreshGeometry(kind)
 end
 
 --- Reasons that map to a work unit in FlushDeferred. Anything else falls back to
@@ -1113,8 +1089,6 @@ local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RefreshOutlineGeometry", "RefreshOutlineGeometry" },
   { "MSUF_GF_RefreshColors", "RefreshColors" },
   { "MSUF_GF_RefreshFonts", "RefreshFonts" },
-  { "MSUF_GF_EM2_SetActivePreviewKind", "EM2_SetActivePreviewKind" },
-  { "MSUF_GF_EM2_NudgePreview", "EM2_NudgePreview" },
 }
 
 MSUF.GroupFrames = GF

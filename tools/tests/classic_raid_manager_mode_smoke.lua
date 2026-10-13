@@ -273,6 +273,8 @@ _G.MSUF_NS.Client = { IsClassic = true }
 GF.GetConf = function() return headerConf end
 GF.GetScaledFrameMetrics = function() return 80, 32, 1 end
 local headersPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua"
+local controllerChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
+controllerChunk("MidnightSimpleUnitFrames", _G.MSUF_NS)
 assert(loadfile(headersPath))("MidnightSimpleUnitFrames", _G.MSUF_NS)
 
 local SecureSort = assert(loadfile(root .. "/tools/tests/secure_group_sort.lua"))()
@@ -395,6 +397,8 @@ raidNames[2] = "Maya"
 -- The shared Engine file also loads on Mainline, where the secure child must
 -- still carry the native 12.x aura container template.
 _G.MSUF_NS.Client = { IsClassic = false }
+local controllerChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
+controllerChunk("MidnightSimpleUnitFrames", _G.MSUF_NS)
 assert(loadfile(headersPath))("MidnightSimpleUnitFrames", _G.MSUF_NS)
 header = assert(GF.SetupHeader("raid", "raid"), "Mainline raid header did not build")
 assert(header:GetAttribute("auraContainerTemplate") == "CustomAuraContainerTemplate",

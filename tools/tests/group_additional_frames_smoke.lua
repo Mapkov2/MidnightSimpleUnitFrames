@@ -70,6 +70,7 @@ MSUF.Util = { InCombat = function(event)
     if event == "PLAYER_REGEN_ENABLED" then startingCombat = false end
     return startingCombat or combat
 end }
+assert(loadfile(root.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))("MSUF",MSUF)
 local GF=MSUF.GF
 function GF.GetConf() return conf end
 function GF.EnsureDB() end

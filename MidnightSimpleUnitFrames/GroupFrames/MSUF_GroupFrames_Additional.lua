@@ -491,17 +491,7 @@ local function ClearPetHeader(header)
         end
     end
 end
-local PET_ATTRIBUTES = { "template", "templateType", "showRaid", "showParty", "showPlayer", "showSolo", "sortMethod",
-    "startingIndex", "point", "xOffset", "yOffset", "columnAnchorPoint", "columnSpacing", "unitsPerColumn", "maxColumns",
-    "initialConfigFunction" }
 local wanted = {}
--- startingIndex addresses the already filtered/sorted pet list. A second native
--- header owns only the partial final row; neither header needs visibility hooks.
--- Attributes are written only when they change, inside one _ignore window, so a
--- roster or settings pass that changes nothing leaves the header alone.
--- SecureGroupPetHeader_OnAttributeChanged returns for every write in that window
--- and for the closing write too, so one trailing write outside it runs the single
--- update a shown header needs (the main headers' layout nonce).
 local function ConfigurePetHeader(header, kind, conf, width, height, units, rows, start)
     header._msufAdditionalKind, header._msufAdditionalPrefix = kind, "pets"
     wanted.template, wanted.templateType = "MSUF_GroupAdditionalUnitTemplate", "Button"
@@ -511,27 +501,7 @@ local function ConfigurePetHeader(header, kind, conf, width, height, units, rows
     wanted.columnAnchorPoint, wanted.columnSpacing = "TOP", 2
     wanted.unitsPerColumn, wanted.maxColumns = units, rows
     wanted.initialConfigFunction = ("self:SetWidth(%d); self:SetHeight(%d); self:SetAttribute('type1','target')"):format(width, height)
-    local cache = header._msufAttributes
-    if not cache then
-        cache = {}
-        header._msufAttributes = cache
-    end
-    local changed = false
-    for i = 1, #PET_ATTRIBUTES do
-        local key = PET_ATTRIBUTES[i]
-        if cache[key] ~= wanted[key] then
-            if not changed then
-                header:SetAttribute("_ignore", true)
-                changed = true
-            end
-            header:SetAttribute(key, wanted[key])
-            cache[key] = wanted[key]
-        end
-    end
-    if changed then
-        header:SetAttribute("_ignore", nil)
-        header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
-    end
+    GF.HeaderController(header, GF.HeaderRecipes.pets, wanted)
     for i = 1, 40 do
         local child = header:GetAttribute(CHILD_KEYS[i])
         if not child then break end

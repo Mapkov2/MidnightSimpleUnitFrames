@@ -115,56 +115,22 @@ local function Conf(kind)
     if type(gp.Conf) == "function" then return gp.Conf(kind) end
     return {}
 end
--- The preview spec is the compiled group spec with the preview role's power and
--- status. It is refilled in place while the compiled spec keeps its identity
--- and gets new tables only when the compiler hands out a new spec, so its own
--- identity changes exactly when a live frame's would: Auras3 caches the preview
--- lane config by that identity like a live frame's (sources and revisions too).
+-- The native menu sample uses the same role/geometry overlay as live bindings.
 local previewSpecSlots = {}
-local function RefillShallow(out, src)
-    for k in pairs(out) do out[k] = nil end
-    for k, v in pairs(src) do out[k] = v end
-    return out
-end
-local function PreviewSpecSlot(kind, base)
-    local slot = previewSpecSlots[kind]
-    if not slot or slot.base ~= base then
-        slot = { base = base, spec = {}, power = {}, status = {} }
-        previewSpecSlots[kind] = slot
-    end
-    return slot
-end
 local function CompiledSpec(kind)
     local gf = MSUF and MSUF.GF
     if gf and type(gf.CompileSpec) == "function" then
         kind = kind or CurrentScope()
         local base = gf.CompileSpec(kind, nil, nil)
         if type(base) ~= "table" then return base end
-        local slot = PreviewSpecSlot(kind, base)
-        local spec = RefillShallow(slot.spec, base)
-        local conf = Conf(kind)
-        local previewRole = PreviewRole(kind)
-        spec.key = "gf_" .. tostring(kind)
-        spec.groupKind = kind
+        local metrics = previewSpecSlots[kind]
+        if not metrics or metrics.base ~= base then
+            metrics = {}
+            previewSpecSlots[kind] = metrics
+        end
+        metrics.base, metrics.conf = base, Conf(kind)
+        local spec = gf.ComputeFrameOverlay(kind, PreviewRole(kind), metrics)
         spec._msufMenu2PreviewRuntime = true
-        if type(base.power) == "table" then
-            local power = RefillShallow(slot.power, base.power)
-            local powerHeight = tonumber(power.height) or 0
-            if type(gf.GetEffectivePowerHeight) == "function" then
-                powerHeight = tonumber(gf.GetEffectivePowerHeight(kind, nil, previewRole, conf)) or 0
-            elseif type(gf.ShouldShowPowerBarForRole) == "function" and gf.ShouldShowPowerBarForRole(kind, previewRole, conf) ~= true then
-                powerHeight = 0
-            end
-            power.enabled = powerHeight > 0
-            power.height = powerHeight
-            spec.power = power
-            spec.showPowerText = powerHeight > 0 and base.showPowerText == true
-        end
-        if type(base.status) == "table" then
-            local status = RefillShallow(slot.status, base.status)
-            status.roleValue = previewRole
-            spec.status = status
-        end
         return spec
     end
     return nil

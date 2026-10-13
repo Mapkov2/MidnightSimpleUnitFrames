@@ -184,7 +184,7 @@ function runtimeGF.SetupHeader(key, kind)
   if header then
     -- Mirrors the visible hide/show rebind path in Headers.lua: that owner has
     -- already applied the now-existing children and Runtime must not scan twice.
-    runtimeGF.ScheduleScan(key, kind)
+    runtimeGF.ScanHeader(key, kind)
     return header, true
   end
   header = { shown = false, children = {}, _msufGFKind = kind }
@@ -200,7 +200,7 @@ function runtimeGF.SetupHeader(key, kind)
   return header, false
 end
 
-function runtimeGF.ScheduleScan(key)
+function runtimeGF.ScanHeader(key)
   scanCalls = scanCalls + 1
   local header = runtimeGF.headers[key]
   Check(header and header.shown == true, "runtime scanned a hidden SecureGroupHeader")

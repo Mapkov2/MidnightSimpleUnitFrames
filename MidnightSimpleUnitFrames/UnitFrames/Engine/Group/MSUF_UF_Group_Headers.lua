@@ -43,7 +43,6 @@ GF._headerPool = GF._headerPool or {}
 GF.raidGroupHeaders = GF.raidGroupHeaders or {}
 GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 
-local NIL_ATTR = {}
 local BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local IsUnitToken = UF and UF.IsUnitToken
@@ -430,43 +429,6 @@ local function GrowthAttributes(growth, spacing, groupGrowth)
     return "RIGHT", -spacing, 0, groupGrowth == "UP" and "BOTTOM" or "TOP"
   end
   return "TOP", 0, -spacing, groupGrowth == "LEFT" and "RIGHT" or "LEFT"
-end
-
-local function AttrChanged(header, key, value)
-  local cache = header and header._msufGFAttrCache
-  if not cache then
-    return true
-  end
-  local normalized = value == nil and NIL_ATTR or value
-  return cache[key] ~= normalized
-end
-
-local function SetAttrIfChanged(header, key, value)
-  local cache = header._msufGFAttrCache
-  if not cache then
-    cache = {}
-    header._msufGFAttrCache = cache
-  end
-  local normalized = value == nil and NIL_ATTR or value
-  if cache[key] == normalized then
-    return false
-  end
-  header:SetAttribute(key, value)
-  cache[key] = normalized
-  return true
-end
-
---- Blizzard's SecureGroupHeader reuses active children and adds their new
---- SetPoint anchors without clearing the previous anchor topology. Reset only
---- when point names or the configured row/column topology changes so pooled/live headers
---- cannot retain stale TOP/BOTTOM or LEFT/RIGHT constraints.
-local function ResetManagedChildAnchors(header)
-  if not (header and header.GetAttribute) then return end
-  for index = 1, 40 do
-    local child = header:GetAttribute("child" .. index)
-    if not child then return end
-    if child.ClearAllPoints then child:ClearAllPoints() end
-  end
 end
 
 local function ClampInt(value, fallback, minValue, maxValue)
@@ -1203,36 +1165,6 @@ local function BuildPreservedSortState(conf, groupIndex, snapshot)
   }
 end
 
-local function SortStateChanged(header, state)
-  return AttrChanged(header, "sortMethod", state.sortMethod)
-    or AttrChanged(header, "sortDir", state.sortDir)
-    or AttrChanged(header, "groupBy", state.groupBy)
-    or AttrChanged(header, "groupingOrder", state.groupingOrder)
-    or AttrChanged(header, "nameList", state.nameList)
-    or AttrChanged(header, "_msufSortMode", state.mode)
-    or AttrChanged(header, "_msufPlayerFirstInRole", state.playerFirst)
-end
-
-local function ApplySortAttributes(header, state)
-  local changed = false
-  if state.sortMethod == "NAMELIST" then
-    changed = SetAttrIfChanged(header, "nameList", state.nameList) or changed
-    changed = SetAttrIfChanged(header, "sortMethod", "NAMELIST") or changed
-    changed = SetAttrIfChanged(header, "sortDir", state.sortDir) or changed
-    changed = SetAttrIfChanged(header, "groupBy", nil) or changed
-    changed = SetAttrIfChanged(header, "groupingOrder", nil) or changed
-  else
-    changed = SetAttrIfChanged(header, "nameList", nil) or changed
-    changed = SetAttrIfChanged(header, "sortMethod", state.sortMethod) or changed
-    changed = SetAttrIfChanged(header, "sortDir", state.sortDir) or changed
-    changed = SetAttrIfChanged(header, "groupBy", state.groupBy) or changed
-    changed = SetAttrIfChanged(header, "groupingOrder", state.groupingOrder) or changed
-  end
-  changed = SetAttrIfChanged(header, "_msufSortMode", state.mode) or changed
-  changed = SetAttrIfChanged(header, "_msufPlayerFirstInRole", state.playerFirst) or changed
-  return changed
-end
-
 --- SecureUnitButtonTemplate + PingableUnitFrameTemplate with registerForClicks="AnyUp"
 --- (GroupFrames/MSUF_GroupFrames_Additional.xml). The header births children in
 --- combat too and RegisterForClicks is protected, so the template carries it.
@@ -1583,91 +1515,42 @@ local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW,
   return true
 end
 
+local function HeaderValues(header)
+  local values = header._msufHeaderValues
+  if not values then values = {} header._msufHeaderValues = values end
+  return values
+end
+
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
-  local buttonTemplate = SECURE_UNIT_BUTTON_TEMPLATE
   local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
   local columns = preservedGroupIndex and floor((5 + upc - 1) / upc)
     or RequiredHeaderColumns(kind, conf, layoutCount)
-  local initialWidth = floor((w or 80) + 0.5)
-  local initialHeight = floor((h or 32) + 0.5)
-  local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
-    or AttrChanged(header, "initial-height", initialHeight)
-  local secureInitChanged = AttrChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION)
-  local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
   local sortState = preservedGroupIndex and BuildPreservedSortState(conf, preservedGroupIndex, preservedSortSnapshot)
     or BuildSortState(key, kind, conf)
   local groupFilter
   if sortState.sortMethod ~= "NAMELIST" and LiveGroupKind() ~= nil then
-    local selectedValue1
-    if not (key == "party") then selectedValue1 = ResolveGroupFilter(conf) end
-    groupFilter = preservedGroupIndex and tostring(preservedGroupIndex)
-      or (selectedValue1)
+    if key ~= "party" then groupFilter = ResolveGroupFilter(conf) end
+    if preservedGroupIndex then groupFilter = tostring(preservedGroupIndex) end
   end
-  local childAnchorTopologyChanged = AttrChanged(header, "point", point)
-    or AttrChanged(header, "columnAnchorPoint", columnAnchor)
-    or AttrChanged(header, "unitsPerColumn", upc)
-    or AttrChanged(header, "maxColumns", columns)
-  local shouldHide = header.IsShown and header:IsShown()
-    and (AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
-      or AttrChanged(header, "template", buttonTemplate)
-      or sizeChanged
-      or AttrChanged(header, "xOffset", xOffset)
-      or AttrChanged(header, "yOffset", yOffset)
-      or AttrChanged(header, "columnSpacing", spacing)
-      or childAnchorTopologyChanged
-      or AttrChanged(header, "groupFilter", groupFilter)
-      or secureInitChanged
-      or SortStateChanged(header, sortState))
-
-  if shouldHide then
-    header:Hide()
-  end
-  if childAnchorTopologyChanged then
-    ResetManagedChildAnchors(header)
-  end
-
-  local changed = false
-  -- 12.1 can create AuraContainers for SecureGroupHeader children inside the
-  -- restricted header environment. Birth one inert native owner for every
-  -- party/raid child so Auras3 can adopt it without a Lua-side frame birth,
-  -- including children added while combat lockdown is active.
-  changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
-  changed = SetAttrIfChanged(header, "template", buttonTemplate) or changed
-  changed = SetAttrIfChanged(header, "templateType", "Button") or changed
-  changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
-  changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
-  changed = SetAttrIfChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION) or changed
-  changed = SetAttrIfChanged(header, "oUF-headerType", "group") or changed
-  if UF and type(UF.ForEachPingBindingAttribute) == "function" then
-    UF.ForEachPingBindingAttribute(function(attribute, key)
-      changed = SetAttrIfChanged(header, attribute, key) or changed
-    end)
-  end
-  if initCfg then
-    header:SetAttribute("initialConfigFunction", initCfg)
-    changed = true
-  end
-  changed = SetAttrIfChanged(header, "showPlayer", conf.showPlayer ~= false) or changed
-  changed = SetAttrIfChanged(header, "showSolo", conf.showSolo == true) or changed
-  changed = SetAttrIfChanged(header, "showParty", key == "party") or changed
-  changed = SetAttrIfChanged(header, "showRaid", key == "raid" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true) or changed
-  changed = SetAttrIfChanged(header, "point", point) or changed
-  changed = SetAttrIfChanged(header, "xOffset", xOffset) or changed
-  changed = SetAttrIfChanged(header, "yOffset", yOffset) or changed
-  changed = SetAttrIfChanged(header, "columnSpacing", spacing) or changed
-  changed = SetAttrIfChanged(header, "columnAnchorPoint", columnAnchor) or changed
-  changed = SetAttrIfChanged(header, "unitsPerColumn", upc) or changed
-  changed = SetAttrIfChanged(header, "maxColumns", columns) or changed
-  if sortState.sortMethod == "NAMELIST" then
-    changed = ApplySortAttributes(header, sortState) or changed
-    changed = SetAttrIfChanged(header, "groupFilter", nil) or changed
-  else
-    changed = SetAttrIfChanged(header, "groupFilter", groupFilter) or changed
-    changed = ApplySortAttributes(header, sortState) or changed
-  end
-  return changed, shouldHide, sortState
+  local values = HeaderValues(header)
+  values.auraContainerTemplate, values.template = SECURE_AURA_CONTAINER_TEMPLATE, SECURE_UNIT_BUTTON_TEMPLATE
+  values.templateType, values["oUF-headerType"] = "Button", "group"
+  values["initial-width"], values["initial-height"] = floor((w or 80) + 0.5), floor((h or 32) + 0.5)
+  values._msufSecureInitVersion = SECURE_INIT_VERSION
+  values.showPlayer, values.showSolo = conf.showPlayer ~= false, conf.showSolo == true
+  values.showParty = key == "party"
+  values.showRaid = key == "raid" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true
+  values.point, values.xOffset, values.yOffset = point, xOffset, yOffset
+  values.columnSpacing, values.columnAnchorPoint = spacing, columnAnchor
+  values.unitsPerColumn, values.maxColumns, values.groupFilter = upc, columns, groupFilter
+  values.nameList, values.sortMethod, values.sortDir = sortState.nameList, sortState.sortMethod, sortState.sortDir
+  values.groupBy = sortState.sortMethod ~= "NAMELIST" and sortState.groupBy or nil
+  values.groupingOrder = sortState.sortMethod ~= "NAMELIST" and sortState.groupingOrder or nil
+  values._msufSortMode, values._msufPlayerFirstInRole = sortState.mode, sortState.playerFirst
+  local changed, hidden = GF.HeaderController(header, GF.HeaderRecipes.group, values, BuildInitialConfigFunction)
+  return changed, hidden, sortState
 end
 
 local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
@@ -1742,7 +1625,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     PositionPreservedRaidHeader(header, positionIndex, conf, anchor, spacing, blockW, blockH)
 
     if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
-      local coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
+      local coalescedShow = GF.ScanHeader and BeginHeaderLayoutRebind(header)
       header:Show()
       EndHeaderLayoutRebind(header, coalescedShow)
     elseif header._msufPreservedGroupAllowed ~= true then
@@ -1815,69 +1698,24 @@ local function PositionPriorityAnchor(anchor, conf, totalW, totalH, kind)
 end
 
 local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
-  local kindChanged = header._msufGFKind ~= nil and header._msufGFKind ~= kind
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
   local unitsPerColumn = ClampInt(conf.unitsPerColumn, 5, 1, 5)
-  local maxColumns = math.ceil(5 / unitsPerColumn)
-  local initialWidth = floor((w or 80) + 0.5)
-  local initialHeight = floor((h or 32) + 0.5)
-  local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
-    or AttrChanged(header, "initial-height", initialHeight)
-  local secureInitChanged = AttrChanged(header, "_msufPrioritySecureInitVersion", PRIORITY_SECURE_INIT_VERSION)
-  local topologyChanged = AttrChanged(header, "point", point)
-    or AttrChanged(header, "xOffset", xOffset)
-    or AttrChanged(header, "yOffset", yOffset)
-    or AttrChanged(header, "unitsPerColumn", unitsPerColumn)
-    or AttrChanged(header, "maxColumns", maxColumns)
-  local shouldHide = header.IsShown and header:IsShown()
-    and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
-      or AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
-      or AttrChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE)
-      or AttrChanged(header, "nameList", nameList))
-
-  if shouldHide then header:Hide() end
-  if topologyChanged then ResetManagedChildAnchors(header) end
-
-  local changed = kindChanged
-  changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
-  changed = SetAttrIfChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE) or changed
-  changed = SetAttrIfChanged(header, "templateType", "Button") or changed
-  changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
-  changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
-  changed = SetAttrIfChanged(header, "_msufPrioritySecureInitVersion", PRIORITY_SECURE_INIT_VERSION) or changed
-  changed = SetAttrIfChanged(header, "oUF-headerType", "group") or changed
-  changed = SetAttrIfChanged(header, "_msufPriorityHeader", true) or changed
-  if UF and type(UF.ForEachPingBindingAttribute) == "function" then
-    UF.ForEachPingBindingAttribute(function(attribute, key)
-      changed = SetAttrIfChanged(header, attribute, key) or changed
-    end)
-  end
-  if sizeChanged or secureInitChanged then
-    header:SetAttribute("initialConfigFunction", BuildInitialConfigFunction(initialWidth, initialHeight))
-    changed = true
-  end
-  changed = SetAttrIfChanged(header, "showPlayer", true) or changed
-  changed = SetAttrIfChanged(header, "showSolo", false) or changed
-  changed = SetAttrIfChanged(header, "showParty", kind == "party") or changed
-  changed = SetAttrIfChanged(header, "showRaid", kind ~= "party" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true) or changed
-  changed = SetAttrIfChanged(header, "groupFilter", nil) or changed
-  changed = SetAttrIfChanged(header, "roleFilter", nil) or changed
-  changed = SetAttrIfChanged(header, "groupBy", nil) or changed
-  changed = SetAttrIfChanged(header, "groupingOrder", nil) or changed
-  changed = SetAttrIfChanged(header, "nameList", nameList) or changed
-  changed = SetAttrIfChanged(header, "sortMethod", "NAMELIST") or changed
-  changed = SetAttrIfChanged(header, "sortDir", "ASC") or changed
-  changed = SetAttrIfChanged(header, "point", point) or changed
-  changed = SetAttrIfChanged(header, "xOffset", xOffset) or changed
-  changed = SetAttrIfChanged(header, "yOffset", yOffset) or changed
-  changed = SetAttrIfChanged(header, "columnSpacing", spacing) or changed
-  changed = SetAttrIfChanged(header, "columnAnchorPoint", columnAnchor) or changed
-  changed = SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn) or changed
-  changed = SetAttrIfChanged(header, "maxColumns", maxColumns) or changed
-  header._msufGFKind = kind
-  header._msufGFKey = "priority"
-  header._msufGFPriorityHeader = true
-  return changed, shouldHide
+  local values = HeaderValues(header)
+  values.kind = kind
+  values.auraContainerTemplate, values.template = SECURE_AURA_CONTAINER_TEMPLATE, SECURE_UNIT_BUTTON_TEMPLATE
+  values.templateType, values["oUF-headerType"], values._msufPriorityHeader = "Button", "group", true
+  values["initial-width"], values["initial-height"] = floor((w or 80) + 0.5), floor((h or 32) + 0.5)
+  values._msufPrioritySecureInitVersion = PRIORITY_SECURE_INIT_VERSION
+  values.showPlayer, values.showSolo, values.showParty = true, false, kind == "party"
+  values.showRaid = kind ~= "party" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true
+  values.groupFilter, values.roleFilter, values.groupBy, values.groupingOrder = nil, nil, nil, nil
+  values.nameList, values.sortMethod, values.sortDir = nameList, "NAMELIST", "ASC"
+  values.point, values.xOffset, values.yOffset = point, xOffset, yOffset
+  values.columnSpacing, values.columnAnchorPoint = spacing, columnAnchor
+  values.unitsPerColumn, values.maxColumns = unitsPerColumn, math.ceil(5 / unitsPerColumn)
+  local changed, hidden = GF.HeaderController(header, GF.HeaderRecipes.priority, values, BuildInitialConfigFunction)
+  header._msufGFKind, header._msufGFKey, header._msufGFPriorityHeader = kind, "priority", true
+  return changed, hidden
 end
 
 --- Tag the priority header's children in one expansion. The caller hands the
@@ -1912,21 +1750,13 @@ function GF.SetupPriorityHeader(kind, nameList, count)
 
   local header = GF.headers.priority
   local newHeader, reused = false, false
-  if not header and GF._forceRecreateHeaders ~= true then
+  if not header then
     header = GF._headerPool.priority
     if header then
       GF._headerPool.priority = nil
       GF.headers.priority = header
       reused = true
     end
-  end
-  if header and GF._forceRecreateHeaders == true then
-    RetireHeader(header)
-    if header.UnregisterAllEvents then header:UnregisterAllEvents() end
-    header._msufGFPriorityHeaderEvents = nil
-    GF.headers.priority = nil
-    GF._headerPool.priority = nil
-    header = nil
   end
   if not header then
     header = CreateSecureHeader(HeaderName("priority"), anchor)
@@ -1941,7 +1771,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   end
 
   local changed, wasHidden = ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
-  local needsScan = changed or newHeader or reused or wasHidden or GF._forceScanHeaders == true
+  local needsScan = changed or newHeader or reused or wasHidden
   if header:GetParent() ~= anchor then header:SetParent(anchor) end
   header:ClearAllPoints()
   local origin = conf.growth == "UP" and "BOTTOMLEFT"
@@ -1958,7 +1788,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   if needsScan and header.GetChildren then
     TagPriorityChildren(kind, header:GetChildren())
   end
-  if needsScan and GF.ScheduleScan then GF.ScheduleScan("priority", kind) end
+  if needsScan and GF.ScanHeader then GF.ScanHeader("priority", kind) end
   return header, needsScan
 end
 
@@ -2000,7 +1830,7 @@ function GF.SetupHeader(key, kind)
   local newHeader = false
   local reused = false
 
-  if not header and GF._forceRecreateHeaders ~= true then
+  if not header then
     local pooled = GF._headerPool[key]
     if pooled then
       GF._headerPool[key] = nil
@@ -2010,13 +1840,6 @@ function GF.SetupHeader(key, kind)
     end
   end
 
-  if header and GF._forceRecreateHeaders == true then
-    RetireHeader(header)
-    GF.headers[key] = nil
-    GF._headerPool[key] = nil
-    header = nil
-    reused = false
-  end
 
   if not header then
     header = CreateSecureHeader(HeaderName(key), anchor)
@@ -2039,7 +1862,7 @@ function GF.SetupHeader(key, kind)
   header:SetPoint(point, anchor, point, 0, 0)
   local coalescedShow
   if wasHiddenForLayout then
-    coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
+    coalescedShow = GF.ScanHeader and BeginHeaderLayoutRebind(header)
     header:Show()
   end
   --- Filtering and preserved-group layouts can make Blizzard's real secure
@@ -2063,10 +1886,10 @@ function GF.SetupHeader(key, kind)
   -- new/reused hidden header cannot consume the scan here. Runtime shows it and
   -- performs the one required scan afterward. A visible hide/show rebind can be
   -- scanned synchronously here and reports that work as already handled.
-  local needsChildScan = newHeader or reused or GF._forceScanHeaders == true or wasHiddenForLayout == true
+  local needsChildScan = newHeader or reused or wasHiddenForLayout == true
   local scanHandled = false
-  if GF.ScheduleScan and needsChildScan and header.IsShown and header:IsShown() then
-    GF.ScheduleScan(key, kind)
+  if GF.ScanHeader and needsChildScan and header.IsShown and header:IsShown() then
+    GF.ScanHeader(key, kind)
     scanHandled = true
   end
   ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)

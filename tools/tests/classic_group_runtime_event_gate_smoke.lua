@@ -52,7 +52,7 @@ local function NewRuntimeGF(arena)
   runtimeGF.ApplyBlizzardGroupFrameOwnership = noop
   runtimeGF.ApplyGroupBorder = noop
   function runtimeGF.SetupHeader() return { Show = noop }, true end
-  function runtimeGF.ScheduleScan() return false end
+  function runtimeGF.ScanHeader() return false end
   function runtimeGF.RetireHeader() return true end
   function runtimeGF.IsArenaPartyContext() return arena == true end
   return runtimeGF

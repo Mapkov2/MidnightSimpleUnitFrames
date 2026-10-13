@@ -40,9 +40,10 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 --   Refresh/runtime (Runtime):  MSUF_GF_RebuildAll, _RefreshAll, _Refresh,
 --       _RefreshVisuals, _RefreshGeometry, _RefreshOverlays, _RefreshBorder,
 --       _RefreshOutlineGeometry, _RefreshColors, _RefreshFonts,
---       _UpdateGroupVisibility, _EM2_SetActivePreviewKind, _EM2_NudgePreview,
+--       _UpdateGroupVisibility,
 --       _ForceAuraTextColorRefresh. EM2 follows runtime mutations through
 --       GF.RegisterRuntimeObserver; nothing re-wraps these bridges.
+--   Edit Mode (EM2): MSUF_GF_EM2_SetActivePreviewKind, _EM2_NudgePreview.
 --   Preview (Preview):  MSUF_GF_ShowPreview, _HidePreview, _SetPreviewAnchor,
 --       _RefreshPreviewLayout, _RefreshPreviewBox.  NOTE: Preview.lua loads
 --       after Runtime.lua and OWNS the real preview implementation -- Runtime

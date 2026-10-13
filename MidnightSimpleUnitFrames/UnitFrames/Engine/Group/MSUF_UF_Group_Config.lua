@@ -1963,6 +1963,7 @@ function GF.RefreshCompiledSpecDomains(kind, mask)
     elseif border then
       RefreshBorderDomain(refreshKind, base, conf)
     end
+    GF.RefreshFrameOverlayScope(base)
   end
 
   if kind then
@@ -2033,137 +2034,23 @@ local function StampCompiledSpec(kind, base)
   base._msufGFCompileSerial = compiledSpecSerialByKind[kind] or GF._compiledSpecSerial or 1
 end
 
-local function CopyShallow(dst, src)
-  wipe(dst)
-  for k, v in pairs(src) do
-    dst[k] = v
-  end
-  return dst
-end
-
-local TEXT_SPEC_ROOT_KEYS = {
-  "font", "fontFlags", "fontSize", "nameFontSize", "healthFontSize", "powerFontSize",
-  "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY",
-  "showName", "showHealthText", "showPowerText", "text",
-}
-
--- Frame-specific strip geometry must use the same available health area as
--- Health.Layout. Priority dimensions and role-filtered power differ per frame.
-local function PatchNameBarHeight(base, spec, frame, conf, powerHeight)
-  local group = base.group
-  if not (group and group.nameBarEnabled) then
-    spec.group, spec.health, spec.text = group, base.health, base.text
-    frame._msufGFNameBarBase = nil
-    return
-  end
-  local power = spec.power
-  local powerInset = power and power.enabled and power.embed ~= false and power.detached ~= true and powerHeight or 0
-  local height = math.max(0, math.min(group.nameBarHeight, spec.height - powerInset - 1))
-  local changed = frame._msufGFNameBarBase ~= base or frame._msufGFNameBarHeight ~= height
-    or frame._msufGFNameBarTextRevision ~= base._msufTextLayoutRevision
-    or frame._msufGFNameBarColorRevision ~= base._msufTextColorRevision
-  local ownGroup, health, text = frame._msufGFNameBarGroup, frame._msufGFNameBarHealth, frame._msufGFNameBarText
-  if changed then
-    ownGroup, health, text = ownGroup or {}, health or {}, text or {}
-    CopyShallow(ownGroup, group)
-    CopyShallow(health, base.health)
-    CopyShallow(text, base.text)
-    ownGroup.nameBarHeight, health.topInset = height, height
-    local fontSize = Num(conf.nameFontSize, 12)
-    local baseline = base.text.nameY + math.max(0, group.nameBarHeight - fontSize) / 2
-    text.nameY = baseline - math.max(0, height - fontSize) / 2
-    frame._msufGFNameBarGroup, frame._msufGFNameBarHealth, frame._msufGFNameBarText = ownGroup, health, text
-    frame._msufGFNameBarBase, frame._msufGFNameBarHeight = base, height
-    frame._msufGFNameBarTextRevision = base._msufTextLayoutRevision
-    frame._msufGFNameBarColorRevision = base._msufTextColorRevision
-  end
-  spec.group, spec.health, spec.text = ownGroup, health, text
-end
-
 local function PatchFrameSpec(base, kind, frame, unit, conf)
-  local spec = frame._msufGFSpec
-  if not spec then
-    spec = {}
-    frame._msufGFSpec = spec
-  end
-  if frame._msufGFSpecBase ~= base then
-    CopyShallow(spec, base)
-    frame._msufGFSpecBase = base
-    frame._msufGFTextLayoutRevision = base._msufTextLayoutRevision
-    frame._msufGFTextColorRevision = base._msufTextColorRevision
-    frame._msufGFPowerVisualRevision = base._msufPowerVisualRevision
-    frame._msufGFBorderVisualRevision = base._msufBorderVisualRevision
-  else
-    if frame._msufGFTextLayoutRevision ~= base._msufTextLayoutRevision then
-      for i = 1, #TEXT_SPEC_ROOT_KEYS do
-        local key = TEXT_SPEC_ROOT_KEYS[i]
-        spec[key] = base[key]
-      end
-      spec._msufTextLayoutRevision = base._msufTextLayoutRevision
-      frame._msufGFTextLayoutRevision = base._msufTextLayoutRevision
-    end
-    if frame._msufGFTextColorRevision ~= base._msufTextColorRevision then
-      spec.textColor = base.textColor
-      spec.texture = base.texture
-      spec.backgroundTexture = base.backgroundTexture
-      spec.backgroundAlpha = base.backgroundAlpha
-      spec._msufTextColorRevision = base._msufTextColorRevision
-      frame._msufGFTextColorRevision = base._msufTextColorRevision
-    end
-    if frame._msufGFBorderVisualRevision ~= base._msufBorderVisualRevision then
-      spec.border = base.border
-      spec._msufBorderVisualRevision = base._msufBorderVisualRevision
-      frame._msufGFBorderVisualRevision = base._msufBorderVisualRevision
-    end
-  end
+  local metrics = frame._msufGFOverlayMetrics
+  if not metrics then metrics = {} frame._msufGFOverlayMetrics = metrics end
+  metrics.base, metrics.conf = base, conf
   local shell = frame._msufSecureShell or frame
   local header = shell.GetParent and shell:GetParent()
   local previewCount = (frame._msufGFIsPreviewFrame or shell._msufGFIsPreviewFrame) and GF.GetActivePreviewCount
     and GF.GetActivePreviewCount(kind) or nil
   if (shell._msufGFPriorityFrame or (header and header._msufGFPriorityHeader)) and GF.GetPriorityFrameMetrics then
-    spec.width, spec.height = GF.GetPriorityFrameMetrics(kind)
+    metrics.width, metrics.height = GF.GetPriorityFrameMetrics(kind)
   elseif previewCount and GF.GetLayoutTier and GF.GetLayoutTier(kind, previewCount) then
-    -- A sample count can sit in another size tier than the live roster.
-    spec.width, spec.height = GF.GetScaledFrameMetrics(kind, previewCount)
+    metrics.width, metrics.height = GF.GetScaledFrameMetrics(kind, previewCount)
   else
-    spec.width, spec.height = base.width, base.height
+    metrics.width, metrics.height = base.width, base.height
   end
-  spec.unit = unit
-  spec.key = "gf_" .. kind
-  spec.groupKind = kind
-
-  local role = GetRole(unit)
-  local powerHeight = EffectivePowerHeight(kind, unit, role, conf)
-  local power = frame._msufGFPowerSpec
-  if not power then
-    power = {}
-    frame._msufGFPowerSpec = power
-  end
-  if frame._msufGFPowerSpecBase ~= base.power
-    or frame._msufGFPowerVisualRevision ~= base._msufPowerVisualRevision then
-    CopyShallow(power, base.power)
-    frame._msufGFPowerSpecBase = base.power
-    frame._msufGFPowerVisualRevision = base._msufPowerVisualRevision
-  end
-  power.enabled = powerHeight > 0
-  power.height = powerHeight
-  spec.power = power
-  PatchNameBarHeight(base, spec, frame, conf, powerHeight)
-  -- Power text is part of the same role-gated runtime ownership as the bar.
-  -- A DPS frame with its power bar disabled must not retain PowerText events.
-  spec.showPowerText = powerHeight > 0 and base.showPowerText == true
-
-  local status = frame._msufGFStatusSpec
-  if not status then
-    status = {}
-    frame._msufGFStatusSpec = status
-  end
-  if frame._msufGFStatusSpecBase ~= base.status then
-    CopyShallow(status, base.status)
-    frame._msufGFStatusSpecBase = base.status
-  end
-  status.roleValue = role
-  spec.status = status
+  local spec = GF.ComputeFrameOverlay(kind, unit, metrics)
+  frame._msufGFSpec, frame._msufGFSpecBase = spec, base
   return spec
 end
 

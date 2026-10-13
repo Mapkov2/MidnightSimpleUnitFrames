@@ -190,6 +190,8 @@ local function Load(isForever)
     end
     dofile(repo .. "/tools/tests/group_dependencies.lua")(ns)
     _G.MSUF_NS = ns
+    local controller = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
+    controller("MidnightSimpleUnitFrames", ns)
     assert(loadfile(headersPath))("MidnightSimpleUnitFrames", ns)
     return GF, conf
 end

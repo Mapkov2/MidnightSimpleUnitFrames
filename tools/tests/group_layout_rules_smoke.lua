@@ -45,10 +45,13 @@ Health.Layout(f,{power={enabled=true,height=4},health={topInset=0}}); assert(bar
 -- while ensuring shared scope tables remain reusable by ordinary frames.
 local configFile=assert(io.open(root.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua","rb"))
 local configSource=configFile:read("*a"):gsub("\r", "");configFile:close()
-local patchSource=assert(configSource:match("local function PatchNameBarHeight(.-)\n%-%-%-%s*Main compile entry"))
-local patchFactory=assert(loadstring("return function(GF,CopyShallow,Num,GetRole,EffectivePowerHeight,TEXT_SPEC_ROOT_KEYS) local function PatchNameBarHeight"..patchSource.." return PatchFrameSpec end"))()
-local function Copy(dst,src) wipe(dst);for k,v in pairs(src) do dst[k]=v end;return dst end
-local patch=patchFactory({GetPriorityFrameMetrics=function() return 100,10 end},Copy,function(v,d) return tonumber(v) or d end,function() return "HEALER" end,function(_,_,_,c) return c.powerHeight or 0 end,{"text"})
+local patchSource=assert(configSource:match("local function PatchFrameSpec(.-)\n%-%-%-%s*Main compile entry"))
+local patchFactory=assert(loadstring("return function(GF) local function PatchFrameSpec"..patchSource.." return PatchFrameSpec end"))()
+local overlayGF={GetPriorityFrameMetrics=function() return 100,10 end,GetUnitGroupRole=function() return "HEALER" end,
+ GetEffectivePowerHeight=function(_,_,_,c) return c.powerHeight or 0 end}
+local overlayChunk=assert(loadfile(root.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_FrameOverlay.lua"))
+overlayChunk("MSUF",{GF=overlayGF,UF={NumberWithFallback=function(v,d) return tonumber(v) or d end}})
+local patch=patchFactory(overlayGF)
 local base={width=100,height=20,group={nameBarEnabled=true,nameBarHeight=15},health={topInset=15},text={nameY=-1.5},power={},status={},_msufTextLayoutRevision=1,_msufTextColorRevision=1}
 local settings={nameFontSize=12,powerHeight=6}
 local normal={};local normalSpec=patch(base,"party",normal,"player",settings)
@@ -61,13 +64,13 @@ assert(normalSpec.group.nameBarHeight==13,"Priority geometry mutated another fra
 local groupCache,healthCache,textCache=prioritySpec.group,prioritySpec.health,prioritySpec.text
 prioritySpec=patch(base,"party",priority,"player",{nameFontSize=12,powerHeight=0})
 assert(prioritySpec.group==groupCache and prioritySpec.health==healthCache and prioritySpec.text==textCache,"unchanged geometry allocated new tables")
-base._msufTextColorRevision=2;base.group.nameBarR=.7
+base._msufTextColorRevision=2;base.group.nameBarR=.7;overlayGF.RefreshFrameOverlayScope(base)
 prioritySpec=patch(base,"party",priority,"player",{nameFontSize=12,powerHeight=0})
 assert(prioritySpec.group.nameBarR==.7,"memoized per-frame group missed color refresh")
-base.power.detached=true;base._msufPowerVisualRevision=2
+base.power.detached=true;base._msufPowerVisualRevision=2;overlayGF.RefreshFrameOverlayScope(base)
 normalSpec=patch(base,"party",normal,"player",settings)
 assert(normalSpec.group.nameBarHeight==15 and normalSpec.health.topInset==15,"detached power incorrectly consumed strip space")
-base.group.nameBarEnabled=false
+base.group.nameBarEnabled=false;overlayGF.RefreshFrameOverlayScope(base)
 prioritySpec=patch(base,"party",priority,"player",settings)
 assert(prioritySpec.group==base.group and prioritySpec.health==base.health and prioritySpec.text==base.text,"disabled strip retained stale per-frame ownership")
 -- Raid group filter: a missing scope conf allows the group instead of erroring

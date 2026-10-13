@@ -37,6 +37,8 @@ local ns = {
 ns.Require = function(n) return _G[n] end
 local GF = ns.GF
 
+local overlay = assert(loadfile(ROOT .. "UnitFrames/Engine/Group/MSUF_UF_Group_FrameOverlay.lua"))
+overlay("MidnightSimpleUnitFrames", ns)
 local chunk = assert(loadfile(ROOT .. "UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))
 chunk("MidnightSimpleUnitFrames", ns)
 

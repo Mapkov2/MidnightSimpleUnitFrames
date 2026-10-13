@@ -631,3 +631,5 @@ clients	lua	tools/tests/classpower_ownership_notification_order_smoke.lua	{root}
 -	lua	tools/tests/castbar_target_bar_never_borrows_focus_bar_smoke.lua	{root}	Castbar target/focus isolation smoke failed
 -	lua	tools/tests/unitframe_castbar_disable_hides_pool_bars_smoke.lua	{root}	Unit-frame castbar disable did not hide the boss/arena pool bars
 -	lua	tools/tests/boss_castbar_scale_and_range_alpha_use_pooled_bars_smoke.lua	{root}	Boss castbar scale and range alpha did not use the pooled bars
+clients+Forever	lua	tools/tests/group_header_attribute_sequence_smoke.lua	{root/} {flavor}	Ordered group header attributes changed: {flavor}
+clients+Forever	lua	tools/tests/group_frame_overlay_shared_spec_smoke.lua	{root/} {flavor}	Shared group frame-overlay contract failed: {flavor}
