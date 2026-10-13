@@ -1228,6 +1228,29 @@ do
         end
     end
 
+    local structuralRefreshPending = false
+    local structuralRefreshWork
+    local function RunDeferredStructuralRefresh()
+        local refresh = structuralRefreshWork
+        structuralRefreshPending = false
+        structuralRefreshWork = nil
+        refresh()
+    end
+
+    --- Spec swaps emit several structural events together. One delayed key
+    --- keeps the existing settle window and the client's signature re-check.
+    local function ScheduleStructuralRefresh(refresh)
+        structuralRefreshWork = refresh
+        if structuralRefreshPending then return end
+        structuralRefreshPending = true
+        local scheduler = MSUF.Scheduler
+        if scheduler then
+            scheduler.ScheduleAfter("MSUF_CP_STRUCTURAL_REFRESH", 0.1, RunDeferredStructuralRefresh)
+        else
+            C_Timer.After(0.1, RunDeferredStructuralRefresh)
+        end
+    end
+
     --- Talent/spec/display events can invalidate render mode. Compare the
     --- structural signature first; only fall back to FullRefresh when the shape
     --- of the resource display actually changed.
@@ -1238,7 +1261,7 @@ do
                 or powerType ~= CP.structuralPowerType
                 or renderMode ~= CP.structuralRenderMode then
                 if useTimer then
-                    C_Timer.After(0.1, DeferredStructuralRefresh)
+                    ScheduleStructuralRefresh(DeferredStructuralRefresh)
                 else
                     ThrottledFullRefresh()
                 end
@@ -1256,7 +1279,7 @@ do
         end
 
         if useTimer then
-            C_Timer.After(0.1, FullRefresh)
+            ScheduleStructuralRefresh(FullRefresh)
         else
             FullRefresh()
         end

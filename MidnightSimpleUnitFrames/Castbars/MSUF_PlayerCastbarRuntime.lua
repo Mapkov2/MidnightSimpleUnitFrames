@@ -955,6 +955,10 @@ local function DisablePlayerCastbar(frame)
     frame:Hide()
 end
 
+local function ShowPlayerInterruptFeedback(frame, interruptedBy)
+    ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, "player", INTERRUPTED))
+end
+
 local function HandleEmpowerEvent(frame, event, ...)
     if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
         if event == "UNIT_SPELLCAST_EMPOWER_START" then
@@ -963,20 +967,30 @@ local function HandleEmpowerEvent(frame, event, ...)
         CallEmpowerStart(frame, select(3, ...))
         return true
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-        ClearEmpower(frame, true)
+        -- Keep the feedback deadline when INTERRUPTED arrives first.
+        if frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime then
+            ClearEmpower(frame, false)
+            return true
+        end
+        local complete = select(4, ...)
+        -- CastingBarMixin:HandleCastStop treats an incomplete empower as an
+        -- interrupt. Restricted completion is never tested as a Lua boolean.
+        if not issecretvalue(complete) and complete == false then
+            ClearEmpower(frame, false)
+            ShowPlayerInterruptFeedback(frame, select(5, ...))
+        else
+            ClearEmpower(frame, true)
+        end
         return true
     end
     return false
-end
-
-local function ShowPlayerInterruptFeedback(frame, interruptedBy)
-    ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, "player", INTERRUPTED))
 end
 
 local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
+        ClearEmpower(frame, false)
         ShowPlayerInterruptFeedback(frame, select(4, ...))
         return true
     elseif event == "UNIT_SPELLCAST_STOP"

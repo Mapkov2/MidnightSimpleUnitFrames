@@ -104,6 +104,26 @@ local function UnitCastbarLife(world, frame, unit, barID)
     Fire("UNIT_SPELLCAST_EMPOWER_STOP", nil, barID + 2)
     world:Advance(0.8)
 
+    -- Restricted empower completion is secret. The interrupter identifies a
+    -- kick without reading complete, for both secret and readable GUIDs.
+    for _, interrupter in ipairs({ world.Secrets.New("string"), "kicker-guid" }) do
+        world:StartChannel(unit, "Fire Breath", 2, barID + 2, { empowered = true })
+        Fire("UNIT_SPELLCAST_EMPOWER_START", nil, barID + 2)
+        world:Advance(0.1)
+        world.channeling[unit] = nil
+        local S = world.Secrets.New
+        world:Fire(frame, "UNIT_SPELLCAST_EMPOWER_STOP", unit, S("string"), S(), S("boolean"), interrupter, barID + 2)
+        local expected = world.Secrets.IsSecret(interrupter) and "Interrupted" or "|cff000000Kicker|r interrupted"
+        -- The smoke enables name shortening; narrow bars may clip the source
+        -- label. Its raw text must still be exactly the configured feedback.
+        if not (frame:IsShown() and frame.interrupted and frame._msufRawCastText == expected and frame.castText.text ~= "") then
+            Fail(unit .. ": restricted kicked empower label: " .. tostring(frame._msufRawCastText) .. ", expected " .. expected)
+        end
+        world:Advance(0.2)
+        if not (frame:IsShown() and frame.interrupted) then Fail(unit .. ": stop re-check replaced empower kick feedback") end
+        world:Advance(0.8)
+    end
+
     world:StartCast(unit, "Frostbolt", 2, barID + 3)
     Fire("UNIT_SPELLCAST_START", nil, barID + 3)
     world:Advance(0.3)

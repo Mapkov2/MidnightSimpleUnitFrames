@@ -1342,7 +1342,11 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
     if event == "UNIT_SPELLCAST_EMPOWER_STOP" then
         local complete = interruptedBy
         interruptedBy, castBarID = castBarID, empowerCastBarID
-        if not toPlainIsSecret(complete) and complete == false then
+        if toPlainIsSecret(complete) then
+            -- A secret completion uses CHANNEL_STOP's interrupter presence rule.
+            complete = not (toPlainIsSecret(interruptedBy) or interruptedBy ~= nil)
+        end
+        if complete == false then
             OnCastInterrupted(frame, event, eventUnit, interruptedBy, castBarID)
             return
         end

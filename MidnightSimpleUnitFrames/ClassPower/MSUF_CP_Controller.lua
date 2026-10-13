@@ -1590,6 +1590,7 @@ local function ClassPowerOnRareEvent(event, arg1)
     or event == "TRAIT_CONFIG_UPDATED"
     or event == "UPDATE_SHAPESHIFT_FORM"
     then
+        if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 ~= "player" then return end
         CP_HandleRareStructuralEvent(true)
         return
     end
