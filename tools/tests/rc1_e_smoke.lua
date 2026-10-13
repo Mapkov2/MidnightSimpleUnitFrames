@@ -68,6 +68,9 @@ for _, locale in ipairs(LOCALES) do
         setfenv(chunk, env)
         chunk("MidnightSimpleUnitFrames", namespace)
     end
+    -- The client drops English identity pairs on write; keep every pack line
+    -- so "every pack defines key" still checks the pack file.
+    getmetatable(namespace.L).__newindex = rawset
     assert(namespace.FinalizeLocale() == locale, "the " .. locale .. " pack did not select itself")
     packs[locale] = namespace.L
 end

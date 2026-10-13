@@ -123,6 +123,17 @@ local function EnsureFallback(tableRef)
     end
 end
 
+--- In an English pack an identity pair (key == value) reads the same through
+--- the fallback, so storing it only costs a hash node and keeps its key string
+--- alive: ~4,400 lines, ~0.5 MB. FinalizeLocale drops them on write for enUS
+--- and enGB only. Other packs keep theirs, because there an identity entry
+--- marks text that is deliberately the same in that language.
+local IDENTITY_FREE_LOCALES = { enUS = true, enGB = true }
+
+local function SkipIdentityWrite(tableRef, k, v)
+    if k ~= v then rawset(tableRef, k, v) end
+end
+
 EnsureFallback(L)
 
 MSUF.LocaleRegistry = {}
@@ -210,6 +221,10 @@ function MSUF.FinalizeLocale()
 
     MSUF.LOCALE = NormalizeLocale(SavedLocale())
     Wipe(L)
+    local meta = getmetatable(L)
+    if IDENTITY_FREE_LOCALES[MSUF.LOCALE] and meta and meta.__newindex == nil then
+        meta.__newindex = SkipIdentityWrite
+    end
     local loader = LocaleLoaders[MSUF.LOCALE]
     Wipe(LocaleLoaders)
     if type(loader) == "function" then loader() end

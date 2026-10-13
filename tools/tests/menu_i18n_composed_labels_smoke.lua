@@ -130,6 +130,8 @@ local function LoadPack(locale)
     _G.MSUF_NS, _G.MSUF, _G.MSUF_L = namespace, namespace, nil
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Locales/" .. locale .. ".lua"))("MidnightSimpleUnitFrames", namespace)
+    -- The client drops English identity pairs on write; keep every pack line here.
+    if namespace.L and getmetatable(namespace.L) then getmetatable(namespace.L).__newindex = rawset end
     if namespace.FinalizeLocale then namespace.FinalizeLocale() end
     return _G.MSUF_L or namespace.L or {}
 end

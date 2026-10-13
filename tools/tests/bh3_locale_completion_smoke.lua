@@ -58,6 +58,8 @@ for _,locale in ipairs(locales) do
  for _,file in ipairs({"MSUF_Localization",locale}) do
   local fn=assert(loadfile(root.."/MidnightSimpleUnitFrames/Locales/"..file..".lua"));setfenv(fn,env);fn("MSUF",ns)
  end
+ -- The client drops English identity pairs on write; keep every pack line here.
+ getmetatable(ns.L).__newindex=rawset
  assert(ns.FinalizeLocale()==locale);packs[locale]=ns.L
  for _,key in ipairs(KEYS) do
   local value=rawget(ns.L,key);assert(type(value)=="string",locale..": missing reviewed key "..key)
