@@ -95,7 +95,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- compact changelog moved to the Options addon (largest selections Mainline koKR
         -- 16,761,021, TBC 14,636,117), so the wave-1 allowance is withdrawn and both limits
         -- return to the 6.50 values 16,905,000 / 14,785,000; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16905000 or 14785000),
+        -- 2026-10-13 (7.0 menu translations): Mainline 16,905,000 -> 16,980,000 and
+        -- Classic 14,785,000 -> 14,855,000 for +202,506 LF bytes for 280 translated keys
+        -- in ten packs (largest selections Mainline koKR 16,971,902, TBC 14,846,998); no
+        -- catalog was added. Locale-selective loading is being investigated as a
+        -- follow-up to win this back.
+        assert(bytes < (suffix == "Mainline" and 16980000 or 14855000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

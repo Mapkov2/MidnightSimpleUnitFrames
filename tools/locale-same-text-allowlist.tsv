@@ -1,0 +1,318 @@
+# Strings a translated language pack may leave as the English key, read by menu_page_labels_locale_smoke.lua
+# and locale_static_strings_smoke.lua (which also fails a row that no longer excuses a real omission).
+# Columns: Pack (* for every translated pack, or a comma list such as deDE,frFR)	Key (the exact string, with \n, \t and \\ escaped)	Reason.
+Pack	Key	Reason
+# Names, tokens, sample values and spell lists that pass through the locale table. Not menu text.
+*	2002 Bold	Font name from a media registration, not menu text.
+*	AR CrystalzcuheiGBK Demibold	Font name from a media registration, not menu text.
+*	AR ZhongkaiGBK Medium	Font name from a media registration, not menu text.
+*	AR ZhongkaiGBK Medium (Combat)	Font name from a media registration, not menu text.
+*	Arial (default)	Font name from a media registration, not menu text.
+*	Expressway Bold (MSUF)	Font name from a media registration, not menu text.
+*	Expressway Condensed Light (MSUF)	Font name from a media registration, not menu text.
+*	Expressway ExtraBold (MSUF)	Font name from a media registration, not menu text.
+*	Expressway Regular (MSUF)	Font name from a media registration, not menu text.
+*	Expressway SemiBold (MSUF)	Font name from a media registration, not menu text.
+*	Fritz Soundscape	Font name from a media registration, not menu text.
+*	Friz Quadrata (default)	Font name from a media registration, not menu text.
+*	MoK	Font name from a media registration, not menu text.
+*	Morpheus (default)	Font name from a media registration, not menu text.
+*	Nimrod MT	Font name from a media registration, not menu text.
+*	Skurri (default)	Font name from a media registration, not menu text.
+*	Rondo Colored Border	Portrait border pack name.
+*	Rondo WoW Icon Border	Portrait border pack name.
+*	MSUF	Product, module or author name.
+*	MSUF Suite	Product, module or author name.
+*	MSUF Suite %s	Product, module or author name.
+*	MSUF Glyphs	Product, module or author name.
+*	MSUF Letters	Product, module or author name.
+*	MSUF Minimal	Product, module or author name.
+*	MSUF Shapes	Product, module or author name.
+*	MSUF Roles	Product, module or author name.
+*	Mapko	Product, module or author name.
+*	MapkoSkin	Product, module or author name.
+*	BLIZZARD	Internal token or setting name that passes through the locale table; not menu text.
+*	BUFF	Internal token or setting name that passes through the locale table; not menu text.
+*	DEBUFF	Internal token or setting name that passes through the locale table; not menu text.
+*	Hex	Hexadecimal color entry label; the same in every language.
+*	Point	Profile field label derived from a setting name (ProfileVariants FieldLabel), not a translatable menu string.
+*	Strata	Profile field label derived from a setting name (ProfileVariants FieldLabel), not a translatable menu string.
+*	Auras3	Profile field label derived from a setting name (ProfileVariants FieldLabel), not a translatable menu string.
+*	404K - 100.0%	Sample value or number format; the same in every language.
+*	630.0k - 63.4%	Sample value or number format; the same in every language.
+*	%s   x: %d   y: %d	Sample value or number format; the same in every language.
+*	Minimap	Fallback for a missing Blizzard string (HUD_EDIT_MODE_MINIMAP_LABEL); the client string wins.
+*	Beacon variants, Eternal Flame, and Dawnlight.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Blistering Scales, Ebon Might, Prescience, Inferno's Blessing, Symbiotic Bloom, Shifting Sands.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Deadly, Wound, Crippling, Numbing, Instant, Atrophic, Amplifying.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Dream Breath, Dream Flight, Echo, Reversion, Lifebind, Verdant Embrace.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Earth Shield, Riptide, Earthliving Weapon, Ancestral Vigor, Hydrobubble.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Power Word: Shield, Atonement, Void Shield, and Unfolding Vision variants.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Rejuvenation, Regrowth, Lifebloom, Wild Growth, Germination, Symbiotic Blooms.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Renew, Prayer of Mending, Echo of Light.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Soothing Mist, Renewing Mist, Enveloping Mist, Aspect of Harmony, Coalescence.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Windfury, Flametongue, Earthliving, Tidecaller's Guard, Thunderstrike Ward.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Mage Icicles and Hunter Tip of the Spear.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Rite of Sanctification and Rite of Adjuration.	A list of spell names: the client shows spell names in its own language and MSUF carries no spell-name translations.
+*	Blizzard portrait ring frame direction mirror corner top bottom left right automatic	Search keyword list registered as a control label; the registration, not the keywords, needs fixing.
+# Search breadcrumb segments derived from control paths and used by fewer than 8 index rows.
+*	Abbrev	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Accent	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Alternative	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Animation	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Arcane	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Assignment	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Bg	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Binding	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Blink	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Browse	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	By	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Character	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Check	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Chunked	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ci	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Click	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Combo	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Cost	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Crosshair	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Curve	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Custom Id	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Denied	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Difficulty	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Empower	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Enchant Item	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Enter	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Extra	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Factory	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Fallback	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Feature	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Feedback	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Fg	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Fill	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Gain	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Game	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Gcdbar	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Git	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Heal	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Hint	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Hl	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ignore	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	In	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Independent	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Interruptible	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ironfur	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ko	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Last	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Latency	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Layer2	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Layer3	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Leave	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Lock	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Loss	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Lost	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Match	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Msuf	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Multi Spec	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Native Flow	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Negative	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Nickname	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Not	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Nsrt	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Of	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Offhand	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Oposite	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Option	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Or	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Out	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Over	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Overview	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Pay	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Per	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ping	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Pins	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Playerdefensives	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Positive	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Powerbar	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Print	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Range	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Reach	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Realtime	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Recovery	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Reduce	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Regen	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Reserved	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Scope	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Selection	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Shake	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Shortening	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Skin	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Spark	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Stage	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Start	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Stripe	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Switch	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Tap	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Targetdots	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Time	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Totem	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Totems	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Trade	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Ui	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Upcoming	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Use	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Variants	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Version	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Very	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Wago	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Welcome	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+*	Window	Search breadcrumb segment derived from a control path (HintFromControlPath), not a section title; a segment of fewer than 8 index rows stays English until breadcrumbs use real section titles.
+# Words, abbreviations and formats the listed languages share with English.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR	%d px	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	%d px / %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	%d px / %s / %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	%s / %d px	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR	%s px	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	1 px	Unit, resolution, abbreviation or format shared across these languages.
+*	1080p	Unit, resolution, abbreviation or format shared across these languages.
+*	1440p	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	2 px	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	4K	Unit, resolution, abbreviation or format shared across these languages.
+deDE	AFK	Unit, resolution, abbreviation or format shared across these languages.
+frFR	Activation	Same word in this language.
+deDE,frFR,itIT,ptBR	Aggro	Same word in this language.
+frFR	Alliance	Same word in this language.
+*	Alt	Keyboard modifier name, printed that way on the key.
+deDE,frFR,itIT,ptBR	Ankh	Same word in this language.
+deDE,esES,esMX,itIT,ptBR	Arena	Same word in this language.
+deDE,esES,esMX,itIT,ptBR	Arena %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,ptBR	Aura	Same word in this language.
+esES,esMX,frFR,ptBR	Auras	Same word in this language.
+deDE	Blacklist	Same word in this language.
+*	Blizzard	Product, service, theme or rendering-mode name.
+deDE,frFR,itIT	Boss	Same word in this language.
+deDE,frFR,itIT	Boss %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,frFR	Buff	Same word in this language.
+deDE,frFR	Buffs	Same word in this language.
+esES,esMX	Cancelable	Same word in this language.
+deDE,esES,esMX,frFR,itIT,ptBR	Chi	Same word in this language.
+esES,esMX	Color	Same word in this language.
+frFR	Combat	Same word in this language.
+frFR	Compact	Same word in this language.
+deDE	Container:	Unit, resolution, abbreviation or format shared across these languages.
+esES,esMX,frFR,itIT,koKR,ptBR,ruRU,zhCN,zhTW	Ctrl	Keyboard modifier name, printed that way on the key.
+deDE	DND	Unit, resolution, abbreviation or format shared across these languages.
+esES,esMX,frFR,itIT,koKR,ptBR,zhCN,zhTW	DPS	Unit, resolution, abbreviation or format shared across these languages.
+deDE	Debuff	Same word in this language.
+deDE	Dialog	Same word in this language.
+frFR	Direction	Same word in this language.
+*	Discord	Product, service, theme or rendering-mode name.
+frFR	Dragon	Same word in this language.
+deDE	Dungeon	Same word in this language.
+deDE,ptBR	Elite	Same word in this language.
+frFR	Essence	Same word in this language.
+deDE	Filter	Same word in this language.
+itIT	Focus	Same word in this language.
+deDE,frFR	Format	Same word in this language.
+esES,esMX	General	Same word in this language.
+*	GitHub	Product, service, theme or rendering-mode name.
+deDE,esES,esMX,frFR	Global	Same word in this language.
+deDE,koKR	HP	Unit, resolution, abbreviation or format shared across these languages.
+deDE,koKR	HP %s	Unit, resolution, abbreviation or format shared across these languages.
+ruRU	HP >	Unit, resolution, abbreviation or format shared across these languages.
+deDE,ptBR	IDs: %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,ptBR	Jade	Product, service, theme or rendering-mode name.
+deDE,frFR,itIT,ptBR,zhCN,zhTW	Ko-fi	Product, service, theme or rendering-mode name.
+deDE,ptBR	Layout	Same word in this language.
+deDE,ptBR	Link	Same word in this language.
+*	MSUF Forever	Product, service, theme or rendering-mode name.
+itIT	Maelstrom	Same word in this language.
+frFR	Mage	Same word in this language.
+deDE	Mana	Same word in this language.
+esES,esMX	Manual	Same word in this language.
+*	Mapkotwo	Product, service, theme or rendering-mode name.
+deDE,frFR,itIT	Max	Same word in this language.
+frFR	Menu	Same word in this language.
+frFR,ptBR	Menu %d%%	Unit, resolution, abbreviation or format shared across these languages.
+*	Midnight	Product, service, theme or rendering-mode name.
+deDE,esES,esMX,frFR,itIT,ptBR	Midnight Blue	Product, service, theme or rendering-mode name.
+deDE,esES,esMX,frFR,itIT,ptBR	Midnight Dark	Product, service, theme or rendering-mode name.
+frFR	Mode	Same word in this language.
+frFR	Modes	Same word in this language.
+frFR	Modules	Same word in this language.
+frFR	Monochrome	Same word in this language.
+deDE	Name	Same word in this language.
+deDE	Name %s	Unit, resolution, abbreviation or format shared across these languages.
+deDE,frFR	Navigation	Same word in this language.
+esES,esMX,itIT	No	Same word in this language.
+deDE,esES,esMX	Normal	Same word in this language.
+deDE,itIT	Offline %d%%	Unit, resolution, abbreviation or format shared across these languages.
+deDE	Offline %s s	Unit, resolution, abbreviation or format shared across these languages.
+frFR	Options	Same word in this language.
+deDE,esES,esMX,ptBR	Original	Same word in this language.
+deDE,frFR	Paladin	Same word in this language.
+deDE,esES,esMX,frFR,itIT,ptBR,zhCN,zhTW	Patreon	Product, service, theme or rendering-mode name.
+frFR	Pause	Same word in this language.
+deDE,esES,esMX,frFR,itIT,ptBR,ruRU,zhTW	PayPal	Product, service, theme or rendering-mode name.
+deDE,frFR	Phase	Same word in this language.
+deDE,frFR,itIT,ptBR	Pixel	Same word in this language.
+frFR	Poison	Same word in this language.
+frFR	Portrait	Same word in this language.
+deDE,frFR	Position	Same word in this language.
+frFR	Purge	Same word in this language.
+deDE,itIT,koKR,ruRU,zhCN,zhTW	PvP	Unit, resolution, abbreviation or format shared across these languages.
+frFR	Rage	Same word in this language.
+frFR	Raid	Same word in this language.
+frFR	Rare	Same word in this language.
+deDE,frFR	Relief	Same word in this language.
+itIT	Rendering	Same word in this language.
+esES,esMX	Roles	Same word in this language.
+deDE	STATUS	Unit, resolution, abbreviation or format shared across these languages.
+koKR,ptBR,ruRU,zhCN,zhTW	Shift	Keyboard modifier name, printed that way on the key.
+deDE,frFR,itIT,ptBR	Shuriken	Same word in this language.
+deDE,itIT	Slot X	Unit, resolution, abbreviation or format shared across these languages.
+deDE,itIT	Slot Y	Unit, resolution, abbreviation or format shared across these languages.
+*	Slug	Product, service, theme or rendering-mode name.
+deDE,frFR,itIT	Solo	Same word in this language.
+deDE	Status	Same word in this language.
+frFR	Style	Same word in this language.
+deDE	Symbol	Same word in this language.
+deDE,frFR	Tank	Same word in this language.
+deDE	Text	Same word in this language.
+deDE	Text X	Unit, resolution, abbreviation or format shared across these languages.
+deDE	Text Y	Unit, resolution, abbreviation or format shared across these languages.
+frFR,itIT	Texture	Same word in this language.
+frFR,itIT	Texture (SharedMedia)	Unit, resolution, abbreviation or format shared across these languages.
+frFR,itIT	Texture 1	Unit, resolution, abbreviation or format shared across these languages.
+frFR,itIT	Texture 2	Unit, resolution, abbreviation or format shared across these languages.
+frFR,itIT	Texture 3	Unit, resolution, abbreviation or format shared across these languages.
+itIT	Texture:	Unit, resolution, abbreviation or format shared across these languages.
+itIT	Texture: %s	Unit, resolution, abbreviation or format shared across these languages.
+frFR	Textures	Same word in this language.
+deDE,itIT	Timer	Same word in this language.
+itIT	Timer X	Unit, resolution, abbreviation or format shared across these languages.
+itIT	Timer Y	Unit, resolution, abbreviation or format shared across these languages.
+deDE	Tooltip	Same word in this language.
+esES,esMX,ptBR	Trivial	Same word in this language.
+frFR	Type	Same word in this language.
+*	UX Pro	Product, service, theme or rendering-mode name.
+frFR	Urgent	Same word in this language.
+deDE	Version:	Unit, resolution, abbreviation or format shared across these languages.
+frFR	Violet	Same word in this language.
+esES,esMX,frFR	Visible	Same word in this language.
+deDE	Whitelist	Same word in this language.
+*	X	Unit, resolution, abbreviation or format shared across these languages.
+*	Y	Unit, resolution, abbreviation or format shared across these languages.
+deDE,esES,esMX,frFR,itIT,ptBR	Zoom %d%%	Unit, resolution, abbreviation or format shared across these languages.
+esES,esMX,frFR,itIT,ptBR	~5 min	Unit, resolution, abbreviation or format shared across these languages.
+deDE	Container	Same word in this language.
+*	DoT	Abbreviation or word that is the same in every language.
+deDE,esES,esMX,itIT,ptBR	Editor	Same word in this language.
+deDE,esES,esMX,frFR,ptBR	Extras	Same word in this language.
+deDE,frFR	Index	Same word in this language.
+deDE	Kick	Same word in this language.
+deDE,frFR	Maximum	Same word in this language.
+deDE	Mouseover	Same word in this language.
+deDE,itIT,ptBR	Offline	Same word in this language.
+frFR,itIT,ptBR	Swing	Same word in this language.
+deDE,esES,esMX,itIT,ptBR	Token	Same word in this language.
+esES,esMX,itIT,ptBR	arena	Same word in this language.

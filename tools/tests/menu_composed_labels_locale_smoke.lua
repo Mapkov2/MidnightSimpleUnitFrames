@@ -78,6 +78,6 @@ for _, frame in ipairs(mw.world.widgets.frames) do
         deadTitle = frame._msuf2Title:GetText()
     end
 end
-Check(deadTitle == "Dead/offline opacity : 90%", "the Colors page opacity title reads " .. tostring(deadTitle))
+Check(deadTitle == "Opacité mort/hors ligne : 90%", "the Colors page opacity title reads " .. tostring(deadTitle))
 
 print("menu_composed_labels_locale_smoke: " .. flavor .. " ok (menu scale and opacity titles translate as whole formats)")

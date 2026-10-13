@@ -423,7 +423,7 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
             or colorMode == "health_gradient" and "Health gradient" or "Custom tint"
         local translate = M.TranslateText or M.Tr
         if type(translate) == "function" then fillLabel, colorLabel = translate(fillLabel), translate(colorLabel) end
-        preview.mode:SetText(fillLabel .. "  |  " .. colorLabel)
+        T.SetTranslatedText(preview.mode, fillLabel .. "  |  " .. colorLabel)
     end
     preview.resolvedFillMode, preview.resolvedColorMode = fillMode, colorMode
     local resolved = preview.resolvedBackground or {}

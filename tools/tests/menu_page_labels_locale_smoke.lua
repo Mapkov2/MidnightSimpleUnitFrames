@@ -1,25 +1,41 @@
--- menu_page_labels_locale_smoke.lua <repoRoot> <flavor>
+-- menu_page_labels_locale_smoke.lua <repoRoot> <flavor> [reportFile]
 --
--- Every menu-facing string must exist in all twelve language packs.
+-- Every menu-facing string must exist in all ten translated language packs, and
+-- must not be the English key itself.
 -- locale_key_coverage_smoke compares the packs with each other, so a label that
--- no pack defines passes it. This smoke closes that gap for the page files it
--- names: it boots the flavor's real core and Options graph
--- (tools/tests/client_world.lua), builds the pages that use those files, and
--- records every string the menu translates while doing so (MSUF.Translate),
--- every tooltip, every dropdown entry and every color shortcut target, each
--- attributed to the page file whose call produced it. A string that appears
--- literally in that page file and is missing from any of the ten translated
--- packs fails, as does a missing entry from REQUIRED (strings of other page
--- files whose controls these changes touched).
+-- no pack defines passes it. This smoke closes that gap for the Options menu: it
+-- boots the flavor's real core and Options graph (tools/tests/client_world.lua),
+-- builds every page, and records every string the menu resolves through the locale
+-- table (rawget on MSUF.L, so a helper that captured MSUF.Translate at load time
+-- is seen too). A page is not one state: its content differs by unit, lane, tool,
+-- group scope and selected indicator, so after the default build the smoke visits
+--   * every segment tab of every page in place,
+--   * every Aura workspace view (unit page x lane/container x tool, group scope x
+--     lane x tool, the global Appearance products, the Dashboard cards),
+--   * the selectable status indicators of the Player and Target pages, the Group
+--     status icons and corner slots, and every Class Resources workspace,
+-- rebuilds the owning page in each and records again. Tooltips (OnEnter), dropdown
+-- entries (their value lists) and color shortcut targets are translated only when
+-- the player hovers or opens them, so those paths are run too.
+--
+-- A recorded string counts when it is a quoted literal of a loaded addon file: text
+-- composed at run time (profile names, spell names) is data, not a key. A counted
+-- string fails when a pack lacks it or defines it as the English key, unless
+-- tools/locale-same-text-allowlist.tsv excuses it for that pack (a proper name, a
+-- unit, a word the language shares). The bundled release notes are not scanned:
+-- most of their entries have never been translated and are not menu labels.
 --
 -- enUS and enGB fall back to the key itself (MSUF_Localization.lua), so the ten
 -- other packs are the ones checked.
 --
 -- Plain Lua 5.1 with the repo root and a flavor (a client matrix Suffix or
--- Forever) as arguments.
+-- Forever) as arguments. A third argument names a file that receives every failing
+-- string as text, file, first state, packs without a translation, packs that keep
+-- the English text (tab separated), for translators.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required (a client matrix Suffix or Forever)")
+local reportPath = arg and arg[3]
 assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
     "menu_page_labels_locale_smoke boots the real TOC graph; run it with plain Lua 5.1")
 
@@ -28,67 +44,9 @@ local function Check(condition, message)
     return condition
 end
 
--- Page files whose literal labels must all be translated, and the pages that build them.
-local CHECKED_FILES = {
-    "MSUF_Menu2_Advanced.lua",
-    "MSUF_Menu2_AdvancedClassPower.lua",
-    "MSUF_Menu2_AdvancedColors.lua",
-    "MSUF_Menu2_AdvancedColors_Context.lua",
-    "MSUF_Menu2_AdvancedColors_Group.lua",
-    "MSUF_Menu2_AdvancedColors_Meta.lua",
-    "MSUF_Menu2_AdvancedColors_Resources.lua",
-    "MSUF_Menu2_AdvancedGameplay.lua",
-    "MSUF_Menu2_AdvancedProfiles.lua",
-    "MSUF_Menu2_AuraControls.lua",
-    "MSUF_Menu2_AuraSettings.lua",
-    "MSUF_Menu2_Auras.lua",
-    "MSUF_Menu2_Auras_CustomWorkspace.lua",
-    "MSUF_Menu2_Auras_Group.lua",
-    "MSUF_Menu2_Auras_Preview.lua",
-    "MSUF_Menu2_ColorPainter.lua",
-    "MSUF_Menu2_Global.lua",
-    "MSUF_Menu2_GlobalBars.lua",
-    "MSUF_Menu2_GlobalCastbars.lua",
-    "MSUF_Menu2_GlobalCastbars_Preview.lua",
-    "MSUF_Menu2_GlobalFonts.lua",
-    "MSUF_Menu2_GlobalMisc.lua",
-    "MSUF_Menu2_Group.lua",
-    "MSUF_Menu2_GroupAuras.lua",
-    "MSUF_Menu2_GroupBars.lua",
-    "MSUF_Menu2_GroupIndicators.lua",
-    "MSUF_Menu2_GroupLayout.lua",
-    "MSUF_Menu2_GroupLayoutAdditional.lua",
-    "MSUF_Menu2_GroupPreview.lua",
-    "MSUF_Menu2_GroupPriority.lua",
-    "MSUF_Menu2_GroupSpecs.lua",
-    "MSUF_Menu2_Group_SpellModel.lua",
-    "MSUF_Menu2_ProfileSearch.lua",
-    "MSUF_Menu2_ProfileSync.lua",
-    "MSUF_Menu2_ProfileVariants.lua",
-    "MSUF_Menu2_ResourceExtras.lua",
-    "MSUF_Menu2_SwingTimers.lua",
-    "MSUF_Menu2_SwingTimersPreview.lua",
-    "MSUF_Menu2_Unit.lua",
-    "MSUF_Menu2_UnitAlpha.lua",
-    "MSUF_Menu2_UnitDispel.lua",
-    "MSUF_Menu2_UnitFrameVisuals.lua",
-    "MSUF_Menu2_UnitLazy.lua",
-    "MSUF_Menu2_UnitRangeFade.lua",
-    "MSUF_Menu2_UnitSectionShared.lua",
-    "MSUF_Menu2_UnitSections.lua",
-    "MSUF_Menu2_UnitStatusSection.lua",
-    "MSUF_Menu2_UnitText.lua",
-    "MSUF_Menu2_UnitTextureLayer.lua"
-}
-
-local PAGES = { "swingtimers", "uf_player", "uf_target", "classpower", "opt_colors", "opt_castbar", "profiles" }
--- Labels of other page files that these pages show and must translate too, and
--- labels these files show only in a state the build does not reach.
--- ("Show on Arena castbars" is still English in every pack: localized search on
--- Classic Era finds the Castbar page for "cast bar" only through that English label,
--- see search_locale_queries_smoke.)
--- The Additional resources toggles and colors are labelled through the shared
--- Advanced page builders, so their translations are recorded for those files.
+-- Strings whose controls these changes touched that no page build reaches in a
+-- state of its own: format keys that replaced concatenated text
+-- (menu_pages_quality_smoke section 10) and the Profiles page variant error.
 local REQUIRED = {
     "Show on Target castbar", "Show on Focus castbar", "Show on Boss castbars",
     "Place GCD bar separately", "Spell-specific channel tick markers",
@@ -98,48 +56,19 @@ local REQUIRED = {
     "Seconds and global cooldowns", "Show the time from (seconds left, 0 = always)",
     "Warn during the last global cooldown", "Arcane Soul phase bar",
     "The saved profile variants cannot be read (%s). They are kept unchanged, and editing them here is blocked.",
-    -- Group and aura page formats that replaced concatenated text
-    -- (menu_pages_quality_smoke section 10).
     "%s px", "Name %s", "HP %s", "Power %s", "Offline %d%%", "Offline visible", "Offline hidden",
     "Border %s", "IDs: %s", "%s: %s", "%s Indicator", "Group %s", "Texture: %s",
 }
 
 ---------------------------------------------------------------------------
--- The ten translated packs, executed as the client runs them.
+-- The ten translated packs, executed as the client runs them, and the strings
+-- they may leave in English (tools/locale-same-text-allowlist.tsv).
 ---------------------------------------------------------------------------
-local LOCALES_DIR = "MidnightSimpleUnitFrames/Locales/"
-local LOCALES = { "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
-local function LoadPack(locale)
-    local previousGetLocale, previousCreateFrame = _G.GetLocale, _G.CreateFrame
-    local previousNS, previousMSUF, previousL = _G.MSUF_NS, _G.MSUF, _G.MSUF_L
-    _G.GetLocale = function() return locale end
-    _G.CreateFrame = nil
-    local namespace = {}
-    _G.MSUF_NS, _G.MSUF = namespace, namespace
-    assert(loadfile(root .. "/" .. LOCALES_DIR .. "MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)
-    assert(loadfile(root .. "/" .. LOCALES_DIR .. locale .. ".lua"))("MidnightSimpleUnitFrames", namespace)
-    namespace.FinalizeLocale()
-    local keys = {}
-    for key, value in pairs(namespace.L) do
-        if type(key) == "string" and type(value) == "string" then keys[key] = value end
-    end
-    _G.GetLocale, _G.CreateFrame = previousGetLocale, previousCreateFrame
-    _G.MSUF_NS, _G.MSUF, _G.MSUF_L = previousNS, previousMSUF, previousL
-    return keys
-end
-local packs = {}
-for _, locale in ipairs(LOCALES) do packs[locale] = LoadPack(locale) end
-local function MissingIn(key)
-    local _, words = key:gsub("%S+", "")
-    local proper = key:find("^MSUF ") or key == "Midnight Simple Unit Frames"
-    local missing = {}
-    for _, locale in ipairs(LOCALES) do
-        if not packs[locale][key] or (words >= 3 and not proper and packs[locale][key] == key) then
-            missing[#missing + 1] = locale
-        end
-    end
-    return missing
-end
+local Packs = assert(loadfile(root .. "/tools/tests/locale_packs.lua"))()
+local LOCALES = Packs.LOCALES
+local packs = Packs.Load(root)
+local allowlist = Packs.ReadAllowlist(root, packs)
+local function MissingIn(key) return Packs.Missing(packs, allowlist, key) end
 
 ---------------------------------------------------------------------------
 -- Boot the client and give the page builders the widget surface they use.
@@ -180,6 +109,10 @@ end
 local env, MSUF = world.env, world.core
 local M = Check(world.options.MSUF2, "Menu2 did not load")
 env.InCombatLockdown = function() return false end
+-- The tooltip frame is a bare stub; the hover path calls these.
+for _, name in ipairs({ "SetOwner", "SetText", "AddLine", "AddDoubleLine", "ClearLines", "SetHyperlink", "SetSpellByID" }) do
+    env.GameTooltip[name] = function() end
+end
 -- The GCD Bar section exists only where the client drives the bar natively.
 env.C_Spell = setmetatable({ GetSpellCooldownDuration = function() return nil end },
     { __index = function() return World.Stub end })
@@ -198,108 +131,371 @@ M.scrollChild = M.scrollChild or env.CreateFrame("Frame", nil, env.UIParent)
 M.GetContentMetrics = M.GetContentMetrics or function() return 900, 800 end
 
 ---------------------------------------------------------------------------
--- Record every translated string, by the page file whose call produced it.
+-- Record every string the menu resolves through the locale table, with the
+-- state that first produced it.
 ---------------------------------------------------------------------------
-local byFile = {}
-local function PageFile()
-    for level = 3, 60 do
-        local info = debug.getinfo(level, "S")
-        if not info then return nil end
-        local file = info.source:gsub("\\", "/"):match("Shell/Menu2/Pages/([%w_]+%.lua)")
-        if file then return file end
+local hit, hitState = {}, {}
+local currentState = "default"
+local function Record(text)
+    if type(text) == "string" and text ~= "" and hit[text] == nil then
+        hit[text] = true
+        hitState[text] = currentState
     end
 end
-local function Record(text, file)
-    file = file or PageFile()
-    if type(text) == "string" and file then
-        byFile[file] = byFile[file] or {}
-        byFile[file][text] = true
+local L = MSUF.L
+local nativeRawget = rawget
+env.rawget = function(table, key)
+    if table == L and type(key) == "string" then Record(key) end
+    return nativeRawget(table, key)
+end
+local fallback = getmetatable(L).__index
+getmetatable(L).__index = function(table, key)
+    if type(key) == "string" then Record(key) end
+    return fallback(table, key)
+end
+
+-- Tooltips and dropdown entries are translated when the player hovers or opens
+-- them, color shortcut targets when the popup opens: run those paths here.
+local function DropdownText(item)
+    if type(item) ~= "table" then return item end
+    if item.translate == false then return nil end
+    return item.text or item.label or item[1] or item.value
+end
+local function Harvest(frames, from)
+    for index = from, #frames do
+        local frame = frames[index]
+        local scripts = rawget(frame, "scripts")
+        if rawget(frame, "_msuf2TooltipTarget") and scripts and scripts.OnEnter then pcall(scripts.OnEnter, frame) end
+        local values = rawget(frame, "values")
+        if values ~= nil and rawget(frame, "SetValues") then
+            local list = values
+            if type(list) == "function" then
+                local ok, resolved = pcall(list)
+                list = ok and resolved or nil
+            end
+            for _, item in ipairs(type(list) == "table" and list or {}) do
+                Record(DropdownText(item))
+                if type(item) == "table" then
+                    for _, field in ipairs({ "tooltip", "description", "tooltipTitle" }) do Record(item[field]) end
+                end
+            end
+        end
     end
 end
-local Translate = Check(MSUF.Translate, "MSUF.Translate is missing")
-MSUF.Translate = function(text, ...)
-    Record(text)
-    return Translate(text, ...)
-end
-local AddTooltip = M.AddTooltip
-M.AddTooltip = function(control, title, text, ...)
-    local file = PageFile()
-    Record(title, file)
-    Record(text, file)
-    if AddTooltip then return AddTooltip(control, title, text, ...) end
-end
--- Dropdown entries and color shortcut targets are translated when the list or
--- the popup opens; open them here.
 local W = M.Widgets
-local Dropdown = W.Dropdown
-W.Dropdown = function(section, label, values, ...)
-    local widget = Dropdown(section, label, values, ...)
-    local file = PageFile()
-    local list = type(values) == "function" and values() or values
-    for _, item in ipairs(type(list) == "table" and list or {}) do
-        if type(item) == "table" then Record(item.text, file) end
-    end
-    return widget
-end
 local Shortcut = W.AttachContextColorShortcut
 if Shortcut then
     W.AttachContextColorShortcut = function(section, opts, ...)
-        local file = PageFile()
         if type(opts) == "table" then
-            Record(opts.title, file)
+            Record(opts.title)
             for _, target in ipairs(type(opts.getTargets) == "function" and opts.getTargets() or {}) do
-                if type(target) == "table" then Record(target.label, file) end
+                if type(target) == "table" then Record(target.label) end
             end
         end
         return Shortcut(section, opts, ...)
     end
 end
 
-PAGES = {}
-for key in pairs(M.pages) do PAGES[#PAGES + 1] = key end
-table.sort(PAGES)
-local built = {}
-for _, key in ipairs(PAGES) do
-    if M.pages[key] then
-        Check(M.BuildPageEntry(key, true), "the " .. key .. " page did not build")
+---------------------------------------------------------------------------
+-- State visits. Menu2 slices hidden lazy sections through construction timers,
+-- and a unit page reaches them two ways (inline sections through
+-- UnitPage.BuildSectionLazy, registered sections through spec.lazy). Both are
+-- forced eager for a rebuild, or the page would come back without every lazily
+-- built section. The frames of a visit are dropped afterwards (a stub widget
+-- keeps its parent's child list), or the many views would exhaust memory.
+---------------------------------------------------------------------------
+local function EnsureTable(owner, key)
+    local value = owner[key]
+    if type(value) ~= "table" then
+        value = {}
+        owner[key] = value
+    end
+    return value
+end
+
+local function RebuildPage(pageKey)
+    local timer, menuTimer = env.C_Timer, M.MenuTimer
+    local after = timer and timer.After
+    local menuAfter, menuNewTimer = menuTimer and menuTimer.After, menuTimer and menuTimer.NewTimer
+    local function RunNow(_, callback) if type(callback) == "function" then callback() end end
+    if timer then timer.After = RunNow end
+    if menuTimer then
+        menuTimer.After = RunNow
+        menuTimer.NewTimer = function(_, callback)
+            RunNow(nil, callback)
+            return { Cancel = function() end }
+        end
+    end
+    local unitPage = type(M.UnitPage) == "table" and M.UnitPage or nil
+    local lazyBuilder = unitPage and unitPage.BuildSectionLazy
+    local registry = unitPage and type(unitPage._sectionRegistry) == "table" and unitPage._sectionRegistry or {}
+    local specLazy = {}
+    if unitPage then unitPage.BuildSectionLazy = nil end
+    for index = 1, #registry do
+        local spec = registry[index]
+        if type(spec) == "table" then specLazy[index] = spec.lazy; spec.lazy = false end
+    end
+    M.InvalidatePage(pageKey)
+    -- In game the page being built is the active one.
+    local activeKey = M.activeKey
+    M.activeKey = pageKey
+    local ok, result = pcall(M.BuildPageEntry, pageKey, true)
+    M.activeKey = activeKey
+    for index = 1, #registry do
+        local spec = registry[index]
+        if type(spec) == "table" then spec.lazy = specLazy[index] end
+    end
+    if unitPage then unitPage.BuildSectionLazy = lazyBuilder end
+    if timer then timer.After = after end
+    if menuTimer then menuTimer.After, menuTimer.NewTimer = menuAfter, menuNewTimer end
+    Check(ok and result ~= nil, "the " .. pageKey .. " view " .. currentState .. " did not build: " .. tostring(result))
+end
+
+local frames = world.widgets.frames
+local visits = 0
+--- Drops the frames a visit created, and their entry in each parent's child list.
+local function DropFrames(from)
+    local dropped, parents = {}, {}
+    for index = from, #frames do dropped[frames[index]] = true end
+    for frame in pairs(dropped) do
+        local parent = rawget(frame, "parent")
+        if type(parent) == "table" and not dropped[parent] then parents[parent] = true end
+    end
+    for parent in pairs(parents) do
+        local children = rawget(parent, "children")
+        if type(children) == "table" then
+            local kept = {}
+            for _, child in ipairs(children) do
+                if not dropped[child] then kept[#kept + 1] = child end
+            end
+            parent.children = kept
+        end
+    end
+    for index = #frames, from, -1 do frames[index] = nil end
+end
+local function Visit(pageKey, label)
+    currentState = pageKey .. "/" .. label
+    local from = #frames + 1
+    RebuildPage(pageKey)
+    Harvest(frames, from)
+    DropFrames(from)
+    visits = visits + 1
+    if visits % 100 == 0 then collectgarbage() end
+end
+
+-- Default build of every page, remembering each segment tab strip to visit it.
+local strips = {}
+local SegmentTabs = W.SegmentTabs
+W.SegmentTabs = function(ctx, parent, opts)
+    local segment, refresh, current, setTab = SegmentTabs(ctx, parent, opts)
+    strips[#strips + 1] = { opts = opts, set = setTab, current = current, page = currentState }
+    return segment, refresh, current, setTab
+end
+local pageKeys = {}
+for key in pairs(M.pages) do pageKeys[#pageKeys + 1] = key end
+table.sort(pageKeys)
+for _, key in ipairs(pageKeys) do
+    currentState = key .. "/default"
+    Check(M.BuildPageEntry(key, true), "the " .. key .. " page did not build")
+    world.widgets:RunTimers(20000)
+end
+W.SegmentTabs = SegmentTabs
+currentState = "default/harvest"
+Harvest(frames, 1)
+-- Every tab of every strip, in place (all tab bodies exist; a tab may build lazily when shown).
+local tabSets = 0
+for _, strip in ipairs(strips) do
+    local original = strip.current()
+    for _, item in ipairs(strip.opts.values or {}) do
+        currentState = "tab/" .. tostring(strip.page) .. "/" .. tostring(item.value)
+        pcall(strip.set, item.value)
         world.widgets:RunTimers(20000)
-        built[#built + 1] = key
+        tabSets = tabSets + 1
+    end
+    pcall(strip.set, original)
+end
+Harvest(frames, 1)
+strips = nil
+collectgarbage()
+
+-- The finite Aura workspace views, the same matrix the search index collects
+-- (.github/scripts/search_static_index_project.lua): four unit frames and every
+-- container tool, three group scopes and every lane tool, the global Appearance
+-- products and their compatibility landings. A Custom container is also visited
+-- as a Debuff container, where its Filters and Behavior branch on the aura type.
+local pages = M.pages
+local model = Check(world.env.MSUF_NS.MSUF_Auras3 and world.env.MSUF_NS.MSUF_Auras3.MenuModel, "the Auras3 menu model did not load")
+local UNIT_PAGES = {
+    { unit = "player", page = "uf_player" }, { unit = "pet", page = "uf_pet" }, { unit = "target", page = "uf_target" },
+    { unit = "focus", page = "uf_focus" }, { unit = "boss", page = "uf_boss" }, { unit = "arena", page = "uf_arena" },
+}
+local LANE_TOOLS = { "layout", "behavior", "filters", "blacklist", "style" }
+local CUSTOM_TOOLS = { "setup", "layout", "behavior", "filters", "whitelist", "style" }
+local AURA_TYPE_TOOLS = { "filters", "behavior" }
+local INDEX4_TOOLS = {
+    player = { "setup", "layout", "behavior", "filters", "defensives", "style" },
+    other = { "setup", "layout", "behavior", "filters", "dots", "style" },
+}
+local EXTERNALS_TOOLS = { "layout", "behavior", "style" }
+local GROUP_SCOPES = { "party", "raid", "mythicraid" }
+local APPEARANCE_PRODUCTS = { "buff", "debuff", "playerDefensives", "targetDots" }
+local function SetCustomAuraType(unit, index, auraType)
+    local item = model.CustomContainer(unit, index, true)
+    if type(item) == "table" then item.auraType = auraType end
+end
+for _, row in ipairs(UNIT_PAGES) do
+    if pages[row.page] then
+        local function UnitView(container, tool)
+            EnsureTable(M, "unitAuraTabSelection")[row.unit] = container
+            EnsureTable(EnsureTable(M, "unitAuraToolSelection"), row.unit)[container] = tool
+            Visit(row.page, container .. "/" .. tool)
+        end
+        for _, lane in ipairs({ "buff", "debuff" }) do
+            for _, tool in ipairs(LANE_TOOLS) do UnitView(lane, tool) end
+        end
+        for index = 1, 3 do
+            local container = "custom" .. index
+            SetCustomAuraType(row.unit, index, "BUFF")
+            for _, tool in ipairs(CUSTOM_TOOLS) do UnitView(container, tool) end
+            SetCustomAuraType(row.unit, index, "DEBUFF")
+            for _, tool in ipairs(AURA_TYPE_TOOLS) do UnitView(container, tool) end
+            SetCustomAuraType(row.unit, index, "BUFF")
+        end
+        for _, tool in ipairs(INDEX4_TOOLS[row.unit] or INDEX4_TOOLS.other) do UnitView("custom4", tool) end
+        UnitView("buff", "layout")
+    end
+end
+for _, scope in ipairs(GROUP_SCOPES) do
+    if M.SupportsFrameScope(scope) then
+        M.gfScope = scope
+        for _, pageKey in ipairs({ "gf_layout", "gf_bars", "gf_indicators", "gf_priority" }) do
+            if pages[pageKey] then Visit(pageKey, scope) end
+        end
+        if pages.gf_auras then
+            local function GroupView(lane, tool)
+                EnsureTable(M, "gfAuraLaneSelection")[scope] = lane
+                EnsureTable(EnsureTable(M, "gfAuraToolSelection"), scope)[lane] = tool
+                Visit("gf_auras", scope .. "/" .. lane .. "/" .. tool)
+            end
+            for _, lane in ipairs({ "buff", "debuff" }) do
+                for _, tool in ipairs(LANE_TOOLS) do GroupView(lane, tool) end
+            end
+            for _, tool in ipairs(EXTERNALS_TOOLS) do GroupView("externals", tool) end
+        end
+    end
+end
+for _, product in ipairs(APPEARANCE_PRODUCTS) do
+    -- The Mainline Aura page keeps the selected product in auraAppearanceContainer,
+    -- the Classic one in auraSharedStyleContainer.
+    M.auraAppearanceContainer, M.auraSharedStyleContainer = product, product
+    if product == "buff" or product == "debuff" then M.auraStyleGFLane = product end
+    if pages.auras3_styling then Visit("auras3_styling", product) end
+    for _, pageKey in ipairs({ "auras3_buffs", "auras3_debuffs" }) do
+        if pages[pageKey] and (product == "buff" or product == "debuff") then Visit(pageKey, product) end
+    end
+end
+-- The Dashboard's Display & recovery and Scaling cards build their controls only while open.
+if pages.home then
+    M.dashboardRecoveryOpen, M.dashboardScalingOpen = true, true
+    Visit("home", "cards")
+end
+-- The selectable indicators: each status indicator of a unit page changes the
+-- icon styles and tooltips its section lists; so do the group status icons and
+-- corner slots and the Class Resources workspaces.
+local UNIT_STATUS = { "leader", "assist", "raidmarker", "level", "bossNumber", "raceText", "classText", "raidgroupname", "eliteicon",
+    "statusText", "statusGhostText", "statusAFKText", "statusAFKTimer", "statusDNDText", "statusCombat", "statusResting",
+    "statusIncomingRes", "stance", "statusPvp", "statusPetHappiness", "statusPetXP", "statusThreat" }
+for _, unit in ipairs({ "player", "target" }) do
+    if pages["uf_" .. unit] then
+        for _, value in ipairs(UNIT_STATUS) do
+            EnsureTable(M, "unitStatusSelection")[unit] = value
+            Visit("uf_" .. unit, "status/" .. value)
+        end
+    end
+end
+if pages.gf_indicators then
+    M.gfScope = "party"
+    for _, value in ipairs({ "roleIcon", "leaderIcon", "assistIcon", "raidMarker", "readyCheckIcon", "summonIcon", "resurrectIcon",
+        "pvpIcon", "phaseIcon", "statusText", "statusGhostText", "statusAFKText", "statusAFKTimer", "statusDNDText", "levelText", "threatText" }) do
+        M.gfStatusIconSelection = value
+        Visit("gf_indicators", "status/" .. value)
+    end
+    for _, slot in ipairs({ "TL", "TR", "BL", "BR", "C" }) do
+        M.gfCornerSlotSelection = slot
+        Visit("gf_indicators", "corner/" .. slot)
+    end
+end
+if pages.classpower then
+    for _, workspace in ipairs({ "class", "power", "hp", "mana", "extras" }) do
+        M.classPowerWorkspaceKey = workspace
+        Visit("classpower", "workspace/" .. workspace)
     end
 end
 
 ---------------------------------------------------------------------------
--- Every literal label of the checked files is translated in every pack.
+-- The quoted literals of the loaded files (the release notes excepted): a
+-- recorded string that is no literal anywhere is composed at run time.
 ---------------------------------------------------------------------------
-local function Literal(source, text)
-    local quoted = '"' .. text:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n") .. '"'
-    return source:find(quoted, 1, true) ~= nil
-end
-local NON_TEXT = { Mapko = true, MapkoSkin = true, P = true, HEX = true, Hex = true, ["404K - 100.0%"] = true }
-local problems, checked = {}, 0
-for _, file in ipairs(CHECKED_FILES) do
-    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/" .. file, "rb"))
-    local source = handle:read("*a"):gsub("\r\n", "\n")
-    handle:close()
-    local keys = {}
-    for text in pairs(byFile[file] or {}) do
-        if not NON_TEXT[text] and not text:find("^MSUF ") and text:find("%a") and not text:find("|c", 1, true) and not text:find("|T", 1, true) and Literal(source, text) then
-            keys[#keys + 1] = text
+local literalFile = {}
+do
+    local paths = {}
+    for _, list in ipairs({ world.corePaths or {}, world.optionsPaths or {} }) do
+        for _, path in ipairs(list) do paths[#paths + 1] = path end
+    end
+    for _, path in ipairs(paths) do
+        local relative = path:sub(1, #root + 1) == root .. "/" and path:sub(#root + 2) or path
+        if not relative:find("/Locales/", 1, true) and not relative:find("AliasData", 1, true)
+            and not relative:find("StaticIndex_Data", 1, true) and not relative:find("Changelog", 1, true) then
+            local handle = io.open(path, "rb")
+            if handle then
+                local source = handle:read("*a"):gsub("\r\n", "\n")
+                handle:close()
+                local function Add(piece)
+                    if #piece >= 2 and literalFile[piece] == nil and piece:find("%a") then literalFile[piece] = relative end
+                end
+                Packs.ScanLiterals(source, function(piece)
+                    Add(piece)
+                    -- Packed dropdown lists: "KEY=Label|KEY2=Label2".
+                    if piece:find("|", 1, true) and piece:find("=", 1, true) then
+                        for entry in piece:gmatch("[^|]+") do
+                            local label = entry:match("^[%w_]+=(.+)$")
+                            if label then Add(label) end
+                        end
+                    end
+                end)
+            end
         end
     end
-    table.sort(keys)
-    checked = checked + #keys
-    for _, text in ipairs(keys) do
-        local missing = MissingIn(text)
-        if #missing > 0 then
-            problems[#problems + 1] = string.format("%s: %q is missing from %s", file, text, table.concat(missing, ","))
-        end
+end
+
+---------------------------------------------------------------------------
+-- Every counted string is translated in every pack.
+---------------------------------------------------------------------------
+local texts = {}
+for text in pairs(hit) do
+    if literalFile[text] then texts[#texts + 1] = text end
+end
+table.sort(texts)
+local problems, report = {}, {}
+for _, text in ipairs(texts) do
+    local missing = MissingIn(text)
+    if #missing > 0 then
+        local escaped = text:gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\t", "\\t")
+        problems[#problems + 1] = string.format("%s (%s): %q is untranslated in %s", literalFile[text]:match("[^/]+$"),
+            hitState[text], text:sub(1, 90), table.concat(missing, ","))
+        report[#report + 1] = table.concat({ escaped, literalFile[text], hitState[text], table.concat(missing, ",") }, "\t")
     end
 end
 for _, text in ipairs(REQUIRED) do
     local missing = MissingIn(text)
     if #missing > 0 then
-        problems[#problems + 1] = string.format("required: %q is missing from %s", text, table.concat(missing, ","))
+        problems[#problems + 1] = string.format("required: %q is untranslated in %s", text, table.concat(missing, ","))
     end
+end
+if reportPath then
+    local handle = assert(io.open(reportPath, "wb"))
+    handle:write(table.concat(report, "\n"), "\n")
+    handle:close()
 end
 -- Composed labels must translate the format and its label independently.
 do
@@ -321,11 +517,23 @@ do
     M.Tr, M.TranslateText, M.Format = oldTr, oldTranslateText, oldFormat
 end
 
-Check(#problems == 0, #problems .. " untranslated menu label(s):\n  " .. table.concat(problems, "\n  "))
-Check(checked > 0, "no literal label of the checked page files was recorded")
+local shown = {}
+for index = 1, math.min(#problems, 40) do shown[index] = problems[index] end
+if #problems > #shown then shown[#shown + 1] = "... and " .. (#problems - #shown) .. " more (pass a report file as the third argument for all)" end
+Check(#problems == 0, #problems .. " untranslated menu string(s) (first state in brackets):\n  " .. table.concat(shown, "\n  "))
+Check(#texts > 0, "no literal menu string was recorded")
 if flavor == "Forever" then
-    Check(next(byFile["MSUF_Menu2_SwingTimers.lua"] or {}) ~= nil, "the Swing Timers page recorded no label on WoW Forever")
+    local swing = false
+    for _, state in pairs(hitState) do
+        if state:find("^swingtimers/") then swing = true break end
+    end
+    Check(swing, "the Swing Timers page recorded no label on WoW Forever")
+end
+local inViews = 0
+for _, text in ipairs(texts) do
+    local state = hitState[text]
+    if not (state:find("/default$") or state:find("^default/") or state:find("^tab/")) then inViews = inViews + 1 end
 end
 
-print(string.format("menu_page_labels_locale_smoke: ok (%s; %d literal labels of %d page files on %s translated in %d packs)",
-    flavor, checked, #CHECKED_FILES, table.concat(built, ","), #LOCALES))
+print(string.format("menu_page_labels_locale_smoke: ok (%s; %d menu strings in %d packs: %d pages with %d tab selections, %d more in %d workspace and indicator views)",
+    flavor, #texts, #LOCALES, #pageKeys, tabSets, inViews, visits))

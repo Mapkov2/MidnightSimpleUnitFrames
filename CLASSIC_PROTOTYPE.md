@@ -692,6 +692,30 @@ line for every raise. The 7.0 wave-1 bug fixes share one bounded allowance
 under the 6.50 values; until then no change raises them again without a dated
 line explaining why.
 
+### Menu translations
+
+Every menu-facing string exists in all ten translated packs and differs from
+the English key. `tools/tests/menu_page_labels_locale_smoke.lua` boots each
+client and records every string the built menu resolves through the locale
+table (a helper that captured `MSUF.Translate` at load time is seen too): the
+default build of every page, every segment tab, every Aura workspace view (unit
+page x lane or container x tool, group scope x lane x tool, the Appearance
+products), the selectable status indicators and Class Resources workspaces,
+plus tooltips and dropdown entries, which are translated only on hover or open.
+`tools/tests/locale_static_strings_smoke.lua` covers what no page build
+reaches: every label and breadcrumb segment of both baked search indexes and
+every literal handed to a translation call (prompts, chat lines). A string may
+stay English only through a reasoned row in
+`tools/locale-same-text-allowlist.tsv` (a name, a token that passes through the
+locale table, a word the language shares); the static smoke fails a row that no
+longer excuses a real omission. The last argument of either smoke names a file
+that receives every failing string with the packs that lack it and the first
+state that produced it, for translators. The bundled release notes
+(`State/MSUF_Changelog.lua`) are not scanned: most of their entries were never
+translated. Search breadcrumb segments are derived from control paths; one used
+by fewer than 8 index rows stays English (allowlist) until breadcrumbs are built
+from real section titles.
+
 ### What the gate does not prove
 
 These are source/runtime-mock gates, not a substitute for logging into every
