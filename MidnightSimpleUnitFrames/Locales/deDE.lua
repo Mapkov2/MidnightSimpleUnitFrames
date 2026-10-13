@@ -7138,6 +7138,24 @@ L["Resource helpers stay visible when Player is hidden. Marks and mana overlays 
 
 L["Icon height (percent)"] = "Symbolhöhe (Prozent)"
 
+
+-- Profiles page: delete several profiles at once.
+L["Delete several profiles"] = "Mehrere Profile löschen"
+L["Choose profiles in a list and delete them together. The active profile and Default are not offered."] = "Wähle Profile in einer Liste aus und lösche sie gemeinsam. Das aktive Profil und Default werden nicht angeboten."
+L["Delete profiles"] = "Profile löschen"
+L["Click profiles to select them. The active profile and Default cannot be deleted here."] = "Klicke auf Profile, um sie auszuwählen. Das aktive Profil und Default können hier nicht gelöscht werden."
+L["Select unused"] = "Ungenutzte auswählen"
+L["Clear selection"] = "Auswahl leeren"
+L["Delete selected (%d)"] = "Ausgewählte löschen (%d)"
+L["Protected"] = "Geschützt"
+L["Unused"] = "Ungenutzt"
+L["Used by 1 character"] = "Von 1 Charakter genutzt"
+L["Used by %d characters"] = "Von %d Charakteren genutzt"
+L["Spec profile"] = "Spec-Profil"
+L["New-character default"] = "Standard für neue Charaktere"
+L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "%d ausgewählte Profile löschen?\n\n%s\n\nCharaktere, die sie nutzen, wechseln zu Default. Ohne Export lässt sich das nicht rückgängig machen."
+L["Profiles deleted: %d"] = "Profile gelöscht: %d"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

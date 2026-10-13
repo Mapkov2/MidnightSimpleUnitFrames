@@ -7033,6 +7033,24 @@ L["Resource helpers stay visible when Player is hidden. Marks and mana overlays 
 
 L["Icon height (percent)"] = "Hauteur de l’icône (pourcentage)"
 
+
+-- Profiles page: delete several profiles at once.
+L["Delete several profiles"] = "Supprimer plusieurs profils"
+L["Choose profiles in a list and delete them together. The active profile and Default are not offered."] = "Choisissez des profils dans une liste et supprimez-les ensemble. Le profil actif et Default ne sont pas proposés."
+L["Delete profiles"] = "Supprimer des profils"
+L["Click profiles to select them. The active profile and Default cannot be deleted here."] = "Cliquez sur les profils pour les sélectionner. Le profil actif et Default ne peuvent pas être supprimés ici."
+L["Select unused"] = "Sélectionner les inutilisés"
+L["Clear selection"] = "Effacer la sélection"
+L["Delete selected (%d)"] = "Supprimer la sélection (%d)"
+L["Protected"] = "Protégé"
+L["Unused"] = "Inutilisé"
+L["Used by 1 character"] = "Utilisé par 1 personnage"
+L["Used by %d characters"] = "Utilisé par %d personnages"
+L["Spec profile"] = "Profil de spécialisation"
+L["New-character default"] = "Par défaut pour les nouveaux personnages"
+L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Supprimer %d profils sélectionnés ?\n\n%s\n\nLes personnages qui les utilisent passent à Default. Sans export, cette action est irréversible."
+L["Profiles deleted: %d"] = "Profils supprimés : %d"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

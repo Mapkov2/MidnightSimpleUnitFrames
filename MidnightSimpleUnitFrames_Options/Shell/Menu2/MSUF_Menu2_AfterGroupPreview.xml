@@ -33,6 +33,7 @@
     <Script file="Pages\MSUF_Menu2_ProfileSearch.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileVariants.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileSync.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileCleanup.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>

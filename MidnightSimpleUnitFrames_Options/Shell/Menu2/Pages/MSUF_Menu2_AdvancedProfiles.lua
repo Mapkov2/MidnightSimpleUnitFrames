@@ -798,6 +798,22 @@ end
         M.TrackRefresh(ctx, RefreshManagementState)
     end
 end
+-- The danger zone's other actions touch the active profile only. This one opens
+-- a list of the whole account pool (MSUF_Menu2_ProfileCleanup.lua) to delete
+-- several profiles at once.
+function ProfilesPage.ProfileCleanup(state)
+    local ctx, dangerPanel = state.ctx, state.dangerPanel
+    local width = max(150, min(220, state.dangerW - 220))
+    local cleanup = T.Button(dangerPanel, "Delete several profiles", width, state.buttonH, { noSearch = true, history = false })
+    T.SkinDangerButton(cleanup)
+    T.CenterButtonLabel(cleanup)
+    cleanup:SetPoint("TOPRIGHT", dangerPanel, "TOPRIGHT", -20, -14)
+    cleanup:SetScript("OnClick", function()
+        M.ProfileCleanup.Open(function() RefreshAfterProfileChange(ctx) end)
+    end)
+    state.AddProfileTooltip(cleanup, "Delete several profiles",
+        "Choose profiles in a list and delete them together. The active profile and Default are not offered.")
+end
 function ProfilesPage.Specializations(state)
     local ctx, b, contentW = state.ctx, state.b, state.contentW
     local specs = GetSpecMeta()
@@ -1242,6 +1258,7 @@ function ProfilesPage.Build(ctx)
     ProfilesPage.Hero(state)
     ProfilesPage.ManagementLayout(state)
     ProfilesPage.ManagementControls(state)
+    ProfilesPage.ProfileCleanup(state)
     ProfilesPage.Specializations(state)
     if M.ProfileVariantPage then M.ProfileVariantPage.Build(state,GetSpecMeta()) end
     if M.ProfileSyncPage then M.ProfileSyncPage.Build(state) end

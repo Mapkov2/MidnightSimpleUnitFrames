@@ -6935,6 +6935,24 @@ L["Resource helpers stay visible when Player is hidden. Marks and mana overlays 
 
 L["Icon height (percent)"] = "圖示高度（百分比）"
 
+
+-- Profiles page: delete several profiles at once.
+L["Delete several profiles"] = "刪除多個設定檔"
+L["Choose profiles in a list and delete them together. The active profile and Default are not offered."] = "在清單中選擇設定檔並一起刪除。目前設定檔與 Default 無法選擇。"
+L["Delete profiles"] = "刪除設定檔"
+L["Click profiles to select them. The active profile and Default cannot be deleted here."] = "點擊設定檔以選取。目前設定檔與 Default 無法在此刪除。"
+L["Select unused"] = "選取未使用的"
+L["Clear selection"] = "清除選取"
+L["Delete selected (%d)"] = "刪除所選 (%d)"
+L["Protected"] = "受保護"
+L["Unused"] = "未使用"
+L["Used by 1 character"] = "1 個角色使用中"
+L["Used by %d characters"] = "%d 個角色使用中"
+L["Spec profile"] = "專精設定檔"
+L["New-character default"] = "新角色預設"
+L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "刪除所選的 %d 個設定檔？\n\n%s\n\n使用它們的角色會切換到 Default。沒有匯出就無法復原。"
+L["Profiles deleted: %d"] = "已刪除設定檔：%d"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

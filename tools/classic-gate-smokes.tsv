@@ -340,6 +340,8 @@ clients+Forever	lua	tools/tests/profile_unit_selection_pettarget_smoke.lua	{root
 clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {flavor}	Swing timers did not travel with the Gameplay export: {flavor}
 -	lua	tools/tests/profile_none_name_smoke.lua	{root} Mainline	A profile named None could not be assigned: Mainline
 -	lua	tools/tests/profile_none_name_smoke.lua	{root} Forever	A profile named None could not be assigned: Forever
+-	lua	tools/tests/profile_bulk_delete_smoke.lua	{root} Mainline	Deleting several profiles failed: Mainline
+-	lua	tools/tests/profile_bulk_delete_smoke.lua	{root} Forever	Deleting several profiles failed: Forever
 -	lua	tools/tests/slash_profile_resolve_smoke.lua	{root}	/msuf load or delete resolved the wrong profile
 -	lua	tools/tests/profile_name_length_smoke.lua	{root}	A profile name the Suite cannot follow was accepted
 clients+Forever	lua	tools/tests/profile_rename_suite_order_smoke.lua	{root} {flavor}	Profile rename did not ask the Suite first: {flavor}

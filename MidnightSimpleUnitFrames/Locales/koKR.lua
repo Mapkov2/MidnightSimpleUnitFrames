@@ -6935,6 +6935,24 @@ L["Resource helpers stay visible when Player is hidden. Marks and mana overlays 
 
 L["Icon height (percent)"] = "아이콘 높이 (백분율)"
 
+
+-- Profiles page: delete several profiles at once.
+L["Delete several profiles"] = "여러 프로필 삭제"
+L["Choose profiles in a list and delete them together. The active profile and Default are not offered."] = "목록에서 프로필을 골라 한 번에 삭제합니다. 활성 프로필과 Default는 목록에서 선택할 수 없습니다."
+L["Delete profiles"] = "프로필 삭제"
+L["Click profiles to select them. The active profile and Default cannot be deleted here."] = "프로필을 클릭해 선택하세요. 활성 프로필과 Default는 여기서 삭제할 수 없습니다."
+L["Select unused"] = "사용하지 않는 프로필 선택"
+L["Clear selection"] = "선택 해제"
+L["Delete selected (%d)"] = "선택 항목 삭제 (%d)"
+L["Protected"] = "보호됨"
+L["Unused"] = "사용 안 함"
+L["Used by 1 character"] = "캐릭터 1명이 사용 중"
+L["Used by %d characters"] = "캐릭터 %d명이 사용 중"
+L["Spec profile"] = "전문화 프로필"
+L["New-character default"] = "새 캐릭터 기본값"
+L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "선택한 프로필 %d개를 삭제하시겠습니까?\n\n%s\n\n이 프로필을 사용하는 캐릭터는 Default로 전환됩니다. 내보내기 없이는 되돌릴 수 없습니다."
+L["Profiles deleted: %d"] = "삭제된 프로필: %d"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

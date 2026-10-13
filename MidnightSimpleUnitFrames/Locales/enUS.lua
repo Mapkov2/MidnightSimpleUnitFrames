@@ -5036,6 +5036,24 @@ L["Independent of Player Frame visibility"] = "Independent of Player Frame visib
 L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."
 L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."
 
+
+-- Profiles page: delete several profiles at once.
+L["Delete several profiles"] = "Delete several profiles"
+L["Choose profiles in a list and delete them together. The active profile and Default are not offered."] = "Choose profiles in a list and delete them together. The active profile and Default are not offered."
+L["Delete profiles"] = "Delete profiles"
+L["Click profiles to select them. The active profile and Default cannot be deleted here."] = "Click profiles to select them. The active profile and Default cannot be deleted here."
+L["Select unused"] = "Select unused"
+L["Clear selection"] = "Clear selection"
+L["Delete selected (%d)"] = "Delete selected (%d)"
+L["Protected"] = "Protected"
+L["Unused"] = "Unused"
+L["Used by 1 character"] = "Used by 1 character"
+L["Used by %d characters"] = "Used by %d characters"
+L["Spec profile"] = "Spec profile"
+L["New-character default"] = "New-character default"
+L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."
+L["Profiles deleted: %d"] = "Profiles deleted: %d"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

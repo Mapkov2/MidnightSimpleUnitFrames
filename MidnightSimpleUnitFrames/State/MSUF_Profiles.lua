@@ -388,7 +388,8 @@ function MSUF_ResetProfile(name)
     ProfileChat("note", "Profile '%s' reset to defaults.", name)
     return true
  end
-function MSUF_DeleteProfile(name)
+--- quiet: the caller reports (MSUF_DeleteProfiles prints one summary line).
+local function DeleteProfile(name, quiet)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     name = name or MSUF_ActiveProfile
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
@@ -444,9 +445,29 @@ function MSUF_DeleteProfile(name)
         MSUF_SwitchProfile(fallbackName)
     end
     MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
-    ProfileChat("note", "Profile '%s' deleted.", name)
+    if not quiet then ProfileChat("note", "Profile '%s' deleted.", name) end
     return true
  end
+function MSUF_DeleteProfile(name)
+    return DeleteProfile(name, false)
+end
+--- The Profiles page cleanup list deletes several profiles at once. Every name
+--- takes the MSUF_DeleteProfile path above (character bindings, spec maps, the
+--- new-character default, sync groups, the Suite); one chat line reports the
+--- count. Returns how many profiles were deleted.
+function MSUF_DeleteProfiles(names)
+    local deleted = 0
+    for i = 1, type(names) == "table" and #names or 0 do
+        -- A profile/spec switch may have changed the active profile while the
+        -- cleanup confirmation was open. Its dedicated delete stays separate.
+        local name = names[i]
+        if type(name) == "string" and name ~= MSUF_ActiveProfile and DeleteProfile(name, true) == true then
+            deleted = deleted + 1
+        end
+    end
+    if deleted > 0 then ProfileChat("note", "Profiles deleted: %d", deleted) end
+    return deleted
+end
 function MSUF_CopyProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
@@ -2806,6 +2827,7 @@ ExportPublic("MSUF_CreateProfile", MSUF_CreateProfile)
 ExportPublic("MSUF_SwitchProfile", MSUF_SwitchProfile)
 ExportPublic("MSUF_ResetProfile", MSUF_ResetProfile)
 ExportPublic("MSUF_DeleteProfile", MSUF_DeleteProfile)
+ExportPublic("MSUF_DeleteProfiles", MSUF_DeleteProfiles)
 ExportPublic("MSUF_CopyProfile", MSUF_CopyProfile)
 ExportPublic("MSUF_RenameProfile", MSUF_RenameProfile)
 ExportPublic("MSUF_GetAllProfiles", MSUF_GetAllProfiles)

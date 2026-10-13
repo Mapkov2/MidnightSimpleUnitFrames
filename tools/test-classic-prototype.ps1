@@ -1197,6 +1197,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSearch.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSync.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua",

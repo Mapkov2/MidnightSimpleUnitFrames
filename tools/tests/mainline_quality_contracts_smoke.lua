@@ -142,7 +142,10 @@ end)
 -- 5. Deleting a profile moves characters to a survivor that does not depend on pairs() order.
 Contract("profile delete fallback", function()
     local profiles = Read(CORE .. "State/MSUF_Profiles.lua")
-    local body = FunctionBody(profiles, "function MSUF_DeleteProfile(name)", "MSUF_DeleteProfile")
+    -- MSUF_DeleteProfile and the bulk MSUF_DeleteProfiles both run DeleteProfile.
+    local body = FunctionBody(profiles, "local function DeleteProfile(name, quiet)", "MSUF_DeleteProfile")
+    assert(FunctionBody(profiles, "function MSUF_DeleteProfile(name)", "MSUF_DeleteProfile")
+        :find("return DeleteProfile(name, false)", 1, true), "MSUF_DeleteProfile bypasses DeleteProfile")
     assert(not body:find("fallbackName = fallbackName or profileName", 1, true),
         "MSUF_DeleteProfile picks its fallback profile by pairs() order")
     assert(body:find('type(profiles["Default"]) == "table"', 1, true) and body:find("profileName < fallbackName", 1, true),

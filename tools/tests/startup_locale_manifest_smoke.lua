@@ -77,7 +77,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 16,880,832 after); no catalog or Options code was added.
         -- 2026-10-12: rectangular aura geometry and one translated height control
         -- add under 5 KB to Classic startup; no catalog or Options code added.
-        assert(bytes < (suffix == "Mainline" and 16890000 or 14770000),
+        -- 2026-10-13 (delete several profiles): Mainline 16,890,000 -> 16,905,000
+        -- and Classic 14,770,000 -> 14,785,000 for 15 labels/prompts in the twelve
+        -- packs plus MSUF_DeleteProfiles (16,626 LF bytes; largest selection koKR
+        -- 16,883,294 -> 16,899,920, TBC/enUS 14,766,022 -> 14,782,648). The list
+        -- itself is Options code; no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16905000 or 14785000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
