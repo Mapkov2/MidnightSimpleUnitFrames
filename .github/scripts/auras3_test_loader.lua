@@ -537,13 +537,7 @@ local function DependencyChunk(path, ...)
         PrepareSharedDependencies(path, dependencyNamespace)
         if direct then PrepareDirectContracts(source, dependencyNamespace) end
         if setfenv and getfenv then setfenv(chunk, getfenv(1)) end
-        local result = chunk(addon, namespace, ...)
-        if path:match("MSUF_Auras3_Core%.lua$") and namespace and namespace.MSUF_Auras3 then
-            local root = assert(Normalize(path):match("^(.-)MidnightSimpleUnitFrames/Auras3/")):gsub("/$", "")
-            local fixture = assert(originalLoadfile(root .. "/tools/tests/auras3_runtime_fixture.lua"))()
-            fixture.Attach(root, namespace.MSUF_Auras3)
-        end
-        return result
+        return chunk(addon, namespace, ...)
     end
 end
 
@@ -595,12 +589,6 @@ function Loader.LoadFile(path, ...)
             end
         end
         for i = 1, #chunks - 1 do chunks[i](...) end
-        if path:match("MSUF_Auras3_UnitFrames%.lua$") then
-            local _, namespace = ...
-            local root = assert(Normalize(path):match("^(.-)MidnightSimpleUnitFrames/Auras3/")):gsub("/$", "")
-            local fixture = assert(originalLoadfile(root .. "/tools/tests/auras3_runtime_fixture.lua"))()
-            fixture.Attach(root, namespace.MSUF_Auras3)
-        end
         return chunks[#chunks](...)
     end
 end

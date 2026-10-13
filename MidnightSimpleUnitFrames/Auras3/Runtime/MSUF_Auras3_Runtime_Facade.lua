@@ -568,8 +568,5 @@ UF.RegisterElement("Auras", AurasElement)
 A3.NotifyPreview = Facade.NotifyAuraColdpathPreview
 A3.EnsureDeferredRuntimeDriver = Facade.EnsureDeferredAuraRuntimeDriver
 
-local exports = {
-}
-for name, value in pairs(exports) do Facade[name] = value end
 return Facade
 end

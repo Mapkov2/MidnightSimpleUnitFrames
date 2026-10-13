@@ -559,12 +559,10 @@ end
 -- Host contract shared by both backends. Topology nesting and preview delivery
 -- are backend-owned; hosts never inspect their state or dispatch private helpers.
 function A3.BeginTopologyBatch()
-    if A3._BeginDirectIdentityEventTopologyBatch then return A3._BeginDirectIdentityEventTopologyBatch() end
     return false
 end
 
 function A3.EndTopologyBatch()
-    if A3._EndDirectIdentityEventTopologyBatch then return A3._EndDirectIdentityEventTopologyBatch() end
     return false
 end
 

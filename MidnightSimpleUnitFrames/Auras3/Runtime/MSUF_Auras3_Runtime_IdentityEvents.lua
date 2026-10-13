@@ -9,7 +9,6 @@ local Runtime = A3.Runtime
 local Identity = Runtime.Identity
 local IdentityRefresh = Runtime.IdentityRefresh
 local Presence = Runtime.Presence
-local next = next
 local pairs = pairs
 local type = type
 local InCombat = dependencies.Platform.InCombat

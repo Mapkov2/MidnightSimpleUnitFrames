@@ -13,7 +13,6 @@ local OWNED_FIELDS = {
   width = true, height = true, unit = true, key = true, groupKind = true,
   power = true, status = true, group = true, health = true, text = true,
   showPowerText = true, scope = true, _msufGFConf = true,
-  _msufA3NativeGroupConfigCache = true,
 }
 
 function GF.RefreshFrameOverlayScope(base)
@@ -90,11 +89,6 @@ function GF.ComputeFrameOverlay(kind, unitOrRole, metrics)
     and spec.width == width and spec.height == height
     and spec.status.roleValue == role and spec.power.height == powerHeight then return spec end
   spec = OverlayTable(metrics, "spec", scope.values)
-  if metrics.scope ~= scope then
-    -- Retain the existing one-time cache-pointer handoff on a new base. The
-    -- cache's ownership and lifetime are unchanged until its separate move.
-    spec._msufA3NativeGroupConfigCache = base._msufA3NativeGroupConfigCache
-  end
   metrics.scope, metrics.revision = scope, scope.revision
   spec.width, spec.height = width, height
   spec.scope, spec._msufGFConf = base.scope, base._msufGFConf

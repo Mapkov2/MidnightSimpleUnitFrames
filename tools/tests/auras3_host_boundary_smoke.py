@@ -27,7 +27,11 @@ for rel in paths:
                 aliases.add(target)
                 changed = True
     names = "|".join(re.escape(name) for name in sorted(aliases))
-    pattern = rf"\b(?:{names}|MSUF\.MSUF_Auras3|_G\.MSUF_Auras3)\s*(?:\.\s*(_\w+)|\[\s*['\"](_\w+)['\"]\s*\])"
+    # Any namespace spelling of the module table counts as a host handle, and the
+    # Runtime record plus underscore fields are private to the owning backends.
+    owner = rf"(?:{names}|(?:\w+\.)*MSUF_Auras3|UF\.Auras3)"
+    private = r"(?:_\w+|Runtime)"
+    pattern = rf"\b{owner}\s*(?:\.\s*({private})\b|\[\s*['\"]({private})['\"]\s*\])"
     for match in re.finditer(pattern, source):
         violations.append(f"{rel}: private host access {match.group(0)}")
 if violations:

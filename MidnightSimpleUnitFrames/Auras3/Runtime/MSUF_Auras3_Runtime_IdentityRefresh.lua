@@ -272,7 +272,5 @@ IdentityRefresh.UpdateDirectIdentityPlayerTaxiState = function()
     return previous, current
 end
 
-local exports = {}
-for name, value in pairs(exports) do IdentityRefresh[name] = value end
 return IdentityRefresh
 end
