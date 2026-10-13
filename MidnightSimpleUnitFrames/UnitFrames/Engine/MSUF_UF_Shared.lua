@@ -509,6 +509,17 @@ function Shared.ClassPowerAutoFitWidth(count, slot, gap, snap, region)
   return (size * count) + ((count - 1) * autoGap)
 end
 
+--- How a class resource container sits on the player frame for a width mode:
+--- the pixels it is narrower than the frame, then the pixels its left edge is
+--- inset. "player" spans the frame exactly; every other mode (custom width,
+--- pip auto-fit, cooldown viewer fallbacks) is 4 px narrower and 2 px inset.
+--- ClassPower's Layout.ResolveWidth/Position apply the same rule; the compiled
+--- spec (UF_Config ClassPowerFallbackWidth) and the previews call this one.
+function Shared.ClassPowerFrameInsets(widthMode)
+  if widthMode == nil or widthMode == "player" then return 0, 0 end
+  return 4, 2
+end
+
 local function MaskHas(mask, flag)
   mask = tonumber(mask) or 0
   flag = tonumber(flag) or 0

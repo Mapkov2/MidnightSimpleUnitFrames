@@ -622,3 +622,4 @@ clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {fla
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} hud	Edit Mode input and session integrity hud failed
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} snapshot	Edit Mode input and session integrity snapshot failed
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} danders	Edit Mode input and session integrity danders failed
+clients+Forever	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} {flavor}	Menu preview drifted from the live element it stands for: {flavor}

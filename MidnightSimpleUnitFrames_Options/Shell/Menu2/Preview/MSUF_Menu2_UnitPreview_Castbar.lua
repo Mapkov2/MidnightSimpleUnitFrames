@@ -78,6 +78,9 @@ local function ExternalWidthSourceFrame(source)
         return _G.UtilityCooldownViewer
     end
 end
+--- The live castbar frame a unit's preview projects from (boss and arena: the
+--- first frame of their pool). Runtime.lua reads the same lookup for scale and
+--- detached offset.
 local function RuntimeCastbarFrame(key)
     key = CanonKey(key)
     if key == "boss" then
@@ -101,6 +104,7 @@ local function RuntimeCastbarFrame(key)
         return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbarPreview
     end
 end
+Castbar.RuntimeFrame = RuntimeCastbarFrame
 local function RuntimeUnitFrame(key)
     key = CanonKey(key)
     local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key

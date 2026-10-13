@@ -189,15 +189,6 @@ local function ResolveHPShape(bars, player)
     return ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
 local ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
-local function AutoFitPips(segCount, height, gap)
-    segCount = floor(tonumber(segCount) or 1)
-    if segCount < 1 then segCount = 1 elseif segCount > 10 then segCount = 10 end
-    height = floor(tonumber(height) or 1)
-    if height < 1 then height = 1 end
-    gap = floor(tonumber(gap) or 0)
-    if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
-    return (segCount * height) + ((segCount - 1) * gap)
-end
 local function AnimationEnabled(preview)
     return preview and preview._animationEnabled == true
 end
@@ -851,26 +842,42 @@ local function UpdateMeterFill(frame, fraction)
     if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
     return true
 end
-local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeBar)
-    local shape = not nativeBar and CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)] or nil
-    local widthMode = bars and bars.classPowerWidthMode or "player"
-    local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES
-    local width
+--- Width of the class resource container on a player frame `frameW` wide, by the
+--- live rule (ClassPower Layout.ResolveWidth): the pip auto-fit, a Cooldown
+--- Manager viewer's scaled width, the custom width, else the frame width less
+--- the engine's inset. Unclamped like the live container; the unit preview and
+--- this page each clamp for their own canvas. `nativeBar` is a Warrior-style
+--- bar that never takes a pip shape.
+function CPPreview.ContainerWidth(bars, frameW, height, segCount, nativeBar)
+    bars = bars or {}
+    local UFShared = MSUF.UF.Shared
+    local widthMode = bars.classPowerWidthMode or "player"
+    frameW = tonumber(frameW) or 275
+    local shape = not nativeBar and CP_SHAPES[NormalizeClassShape(bars.classPowerShape)] or nil
     if shape and widthMode == "auto_pips" then
-        width = AutoFitPips(segCount, height, bars.classPowerGap)
-    elseif cdmFrames and cdmFrames[widthMode] then
-        local frameName = cdmFrames[widthMode]
+        return UFShared.ClassPowerAutoFitWidth(segCount, height, bars.classPowerGap)
+    end
+    local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES
+    local frameName = cdmFrames and cdmFrames[widthMode]
+    if frameName then
         local source = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
         local scaleWidth = _G.MSUF_CDM_GetScaledWidth
-        width = source and source.IsShown and source:IsShown() and type(scaleWidth) == "function" and scaleWidth(source, _G.MSUF_ClassPowerContainer)
-        if not width then width = (tonumber(frameW) or 275) - 4 end
+        local width = source and source.IsShown and source:IsShown() and type(scaleWidth) == "function" and scaleWidth(source, _G.MSUF_ClassPowerContainer)
+        if tonumber(width) and width >= 30 then return width end
     elseif widthMode == "custom" then
-        width = tonumber(bars.classPowerWidth)
-        if not width or width < 30 then width = (tonumber(frameW) or 275) - 4 end
-    else
-        width = (tonumber(frameW) or 275) - (widthMode == "player" and 0 or 4)
+        local width = tonumber(bars.classPowerWidth) or 0
+        if width >= 30 then return width end
     end
-    width = tonumber(width) or 275
+    return frameW - UFShared.ClassPowerFrameInsets(widthMode)
+end
+--- Distance of the container's left edge from the player frame (ClassPower
+--- Layout.Position); the Offset X setting comes on top.
+function CPPreview.ContainerInsetX(bars)
+    local _, insetX = MSUF.UF.Shared.ClassPowerFrameInsets(bars and bars.classPowerWidthMode or "player")
+    return insetX
+end
+local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeBar)
+    local width = tonumber(CPPreview.ContainerWidth(bars, frameW, height, segCount, nativeBar)) or 275
     if width < 20 then width = 20 elseif width > 800 then width = 800 end
     if maxWidth and width > maxWidth then width = maxWidth end
     return floor(width + 0.5)
@@ -927,8 +934,7 @@ local function RenderClassPower(preview, bars, player, spec)
     -- offsets and anchor.
     local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72,
         spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
-    local insetX = (bars.classPowerWidthMode or "player") == "player" and 0 or 2
-    local x = insetX + (tonumber(bars.classPowerOffsetX) or 0)
+    local x = CPPreview.ContainerInsetX(bars) + (tonumber(bars.classPowerOffsetX) or 0)
     -- Same anchor as the live container (ClassPower Layout.Position).
     local y = (tonumber(bars.classPowerOffsetY) or 0) - 2
     frame:SetSize(w, h)

@@ -218,20 +218,12 @@ local UNIT_CP_ROUNDED_OPTS = {
 }
 local NormalizePreviewClassPowerShape = CPPreview.NormalizeClassShape
 local NormalizePreviewClassPowerShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
--- The pip auto-fit width is the engine's own rule, the one the live class
--- resource layout applies (up to 18 Sweeping Strikes pips); a preview passes no
--- pixel snap. A copy here capped the count at 10.
-local UFShared = MSUF.UF and MSUF.UF.Shared or {}
+-- The container width is the live class resource layout's rule (player frame
+-- width, custom width, pip auto-fit, Cooldown Manager viewer), shared with the
+-- Class Resources page preview; only the canvas clamp is this preview's own.
 local function PreviewClassPowerWidth(bars, frameW, cpH, segCount)
-    bars = bars or {}
-    local shape = NormalizePreviewClassPowerShape(bars.classPowerShape)
-    if PREVIEW_CLASS_POWER_SHAPES[shape] and bars.classPowerWidthMode == "auto_pips" then
-        local w = UFShared.ClassPowerAutoFitWidth(segCount, cpH, bars.classPowerGap)
-        if w < 1 then w = 1 elseif w > 800 then w = 800 end
-        return w
-    end
-    local w = (bars.classPowerWidthMode == "custom") and (tonumber(bars.classPowerWidth) or (frameW - 4)) or (frameW - 4)
-    if w < 30 then w = frameW - 4 elseif w > 800 then w = 800 end
+    local w = tonumber(CPPreview.ContainerWidth(bars, frameW, cpH, segCount)) or frameW
+    if w < 1 then w = 1 elseif w > 800 then w = 800 end
     return w
 end
 local function PreviewClassTextLevel(owner, bars)
@@ -388,8 +380,9 @@ local function PreviewPowerBackgroundColor(renderState, power, conf, pr, pg, pb,
 end
 
 --- The fourth return is true when the colour follows the health value, so the
---- animation tick knows to repaint it.
-local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, general, data, fr, fg, fb)
+--- animation tick knows to repaint it. The ramp is the live one: the gradient
+--- stops of the compiled health spec, interpolated by the engine's own rule.
+local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, general, data, fr, fg, fb, runtimeHealth)
     local mode = general.colorHealthTextByHealth
     if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then mode = conf.colorHealthTextByHealth end
     local byHealth = runtimeText and runtimeText.healthColorByHealth == true
@@ -403,9 +396,11 @@ local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, gen
     if not byHealth then return fr, fg, fb, false end
     local pct = tonumber(data.hp) or 1
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-    if pct <= 0.5 then return 1, pct * 2, 0, true end
-    return (1 - pct) * 2, 1, 0, true
+    local r, g, b = MSUF.UFBarTextCommon.HealthGradientColorFromValues(runtimeHealth, pct, 1)
+    return r, g, b, true
 end
+-- Reused argument of Portrait.BorderColor, which reads only the style.
+local PREVIEW_BORDER_STYLE = { style = "NONE" }
 local function PreviewLiveFrame(key)
     local uf = MSUF and MSUF.UF
     local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
@@ -1960,7 +1955,7 @@ function Stage.MeasureLayerFootprint(st)
                 cx, cy = 0, -1 - cpH
             end
         else
-            cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
+            cx = CPPreview.ContainerInsetX(bars) + (tonumber(bars.classPowerOffsetX) or 0)
             cy = h - 2 - cpH + (tonumber(bars.classPowerOffsetY) or 0)
         end
         minX, maxX = min(minX, cx), max(maxX, cx + cpW)
@@ -1978,7 +1973,7 @@ function Stage.MeasureLayerFootprint(st)
         local dBottom = -detachedH + dy
         if box._runtimeDetachedPowerAnchorClass and classPowerOn then
             local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
-            local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
+            local cx = CPPreview.ContainerInsetX(bars) + (tonumber(bars.classPowerOffsetX) or 0)
             local cy = h - 2 - cpH + (tonumber(bars.classPowerOffsetY) or 0)
             dLeft = cx + (cpW - dW) * 0.5 + dx
             dBottom = cy - detachedH + dy
@@ -2700,7 +2695,7 @@ function Stage.RenderClassPower(st)
         else
             -- Same anchor as the live container (ClassPower Layout.Position).
             mock.classPower:SetPoint("TOPLEFT", mock, "TOPLEFT",
-                S(2 + (tonumber(bars.classPowerOffsetX) or 0)),
+                S(CPPreview.ContainerInsetX(bars) + (tonumber(bars.classPowerOffsetX) or 0)),
                 S((tonumber(bars.classPowerOffsetY) or 0) - 2))
         end
         local cp = box._msufClassPowerPreviewScratch
@@ -3122,7 +3117,8 @@ function Stage.ApplyTextStyle(st)
     end
     mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, box._fontPreviewTextAlpha)
     mock.totInlineText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
-    local hpTextR, hpTextG, hpTextB, hpTextFollowsHealth = ResolvePreviewHealthTextColor(RenderState, runtimeText, conf, g, data, fr, fg, fb)
+    local hpTextR, hpTextG, hpTextB, hpTextFollowsHealth = ResolvePreviewHealthTextColor(RenderState, runtimeText, conf, g, data, fr, fg, fb,
+        runtimeSpec and runtimeSpec.health)
     st.hpTextFollowsHealth = hpTextFollowsHealth
     SetTextColorSet(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha, mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct)
     if runtimeText and runtimeText.directLayout == true and runtimeText.healthColorByHealth ~= true and runtimeText.healthColorByClass ~= true then
@@ -3441,7 +3437,6 @@ function Stage.RenderPortrait(st)
         end
         if hasPortrait then
         mock.portrait.tex:Show()
-        local cr, cg, cb = RenderState.ClassColor(data.class)
         local renderMode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.render) or PortraitStyleGet(key, "portraitRender", "2D")
         local previewShape = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.shape)
             or PortraitStyleGet(key, "portraitShape", "SQUARE")
@@ -3581,11 +3576,13 @@ function Stage.RenderPortrait(st)
                 (portraitBorder and portraitBorder.b) or g.portraitBorderColorB or 1,
                 (portraitBorder and portraitBorder.a) or g.portraitBorderColorA or 1
             )
-        elseif bStyle == "CLASS_COLOR" then
-            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
-        elseif bStyle == "REACTION" then
+        elseif bStyle == "CLASS_COLOR" or bStyle == "REACTION" then
+            -- The live element's own rule (Portrait.BorderColor): the stock class colour,
+            -- and the reaction a hostile (2) or friendly (5) sample unit has toward the player.
             local hostile = (key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget" or key == "pettarget")
-            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
+            PREVIEW_BORDER_STYLE.style = bStyle
+            local br, bg, bb, ba = MSUF.UF.elements.Portrait.BorderColor(PREVIEW_BORDER_STYLE, data.class, hostile and 2 or 5)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, br, bg, bb, ba)
         else
             RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
         end
@@ -4402,7 +4399,8 @@ function Preview.RefreshAnimation(box)
     Stage.AnimateClassPower(st)
     Stage.PaintValueTexts(st)
     if st.hpTextFollowsHealth then
-        local r, g, b = ResolvePreviewHealthTextColor(st.R, st.runtimeText, st.conf, st.g, data, st.fr, st.fg, st.fb)
+        local r, g, b = ResolvePreviewHealthTextColor(st.R, st.runtimeText, st.conf, st.g, data, st.fr, st.fg, st.fb,
+            st.runtimeSpec and st.runtimeSpec.health)
         SetTextColorSet(r, g, b, box._fontPreviewTextAlpha, mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct)
     end
     Stage.PlaceValueTextHandles(st)

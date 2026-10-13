@@ -1,14 +1,17 @@
 --- Unit preview runtime readers.
 ---
---- These helpers are read-only for regular page switches. Profile swaps/reset
---- replace MSUF_DB, so the preview must invalidate stale cached specs before
---- it reads them.
+--- The live specs are compiled and applied by the runtime (Config.Refresh inside
+--- Factory.Apply, which a profile swap or reset runs). The preview never starts a
+--- recompile itself: that would replace the sub-tables the live frames compare by
+--- identity without applying them. SpecForPreviewKey only follows the runtime's
+--- own state, so Config.GetSpec still recompiles when the runtime has marked its
+--- specs dirty out of combat (or holds none for the unit); a recompile is then
+--- already queued to apply.
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
-local lastDBRef, lastProfileName
 local CoreFrame = MSUF.UF.GetFrame
 local function ClampRuntimeVisualScale(scale)
     scale = tonumber(scale)
@@ -24,22 +27,7 @@ local function ClampEffectiveScaleRatio(scale)
     if scale > 8 then return 8 end
     return scale
 end
-local function LiveCastbarFrame(key)
-    if key == "boss" then
-        local bars = _G.MSUF_BossCastbars
-        return (type(bars) == "table" and bars[1])
-            or _G.MSUF_BossCastbar1
-            or _G.MSUF_boss1CastBar
-            or _G.MSUF_BossCastbarPreview
-            or _G.MSUF_BossCastbarPreview1
-    elseif key == "player" then
-        return _G.MSUF_PlayerCastbar or _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbarPreview
-    elseif key == "target" then
-        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbarPreview
-    elseif key == "focus" then
-        return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbarPreview
-    end
-end
+local LiveCastbarFrame = MSUF.UFPreviewCastbar.RuntimeFrame
 local function ScaledCenter(frame)
     if not (frame and frame.GetCenter and frame.GetEffectiveScale) then return nil end
     local x, y = frame:GetCenter()
@@ -72,15 +60,6 @@ function Runtime.SpecForPreviewKey(key)
     local config = uf and uf.Config
     local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     if not runtimeUnit or not PreviewUnitSupported(runtimeUnit) then return nil end
-    local dbRef, profileName = _G.MSUF_DB, _G.MSUF_ActiveProfile
-    if config and (dbRef ~= lastDBRef or profileName ~= lastProfileName) then
-        lastDBRef, lastProfileName = dbRef, profileName
-        if type(config.Refresh) == "function" and not (_G.InCombatLockdown and _G.InCombatLockdown()) then
-            config.Refresh()
-        else
-            config.dirty = true
-        end
-    end
     local specs = config and config.specs
     local spec = type(specs) == "table" and specs[runtimeUnit] or nil
     if spec and config and config.dirty ~= true then return spec end

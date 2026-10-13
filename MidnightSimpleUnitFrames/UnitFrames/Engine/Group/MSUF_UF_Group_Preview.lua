@@ -1057,15 +1057,6 @@ local function PreviewHealthColor(frame, class, hpPct)
   return ClassColor(class)
 end
 
-local function ShortName(name, frame)
-  local rt = frame and frame._msufTextRuntime
-  local maxChars = rt and tonumber(rt.nameShortenMax) or 0
-  if maxChars > 0 and type(name) == "string" and #name > maxChars then
-    return name:sub(1, maxChars) .. ((rt and rt.nameShortenDots == false) and "" or "...")
-  end
-  return name
-end
-
 local function PercentFactory(pct)
   pct = floor((pct or 0) + 0.5)
   return function() return pct end
@@ -1260,7 +1251,9 @@ local function ApplyPreviewData(frame, index, kind)
   -- player-backed dummy outside Edit Mode.
   frame._msufPreviewNameText = showPreviewName and (name or "Preview") or nil
   if showPreviewName then
-    frame.nameText:SetText(ShortName(frame._msufPreviewNameText, frame))
+    -- The engine paints the sample name: UTF-8 aware legacy shortening, or the
+    -- full name inside the layout's clip window, exactly like a live frame.
+    MSUF.UFText.UpdateName(frame, "MSUF_PREVIEW_NAME", frame.MSUFUnitKey)
     local r, g, b = PreviewNameColor(kind, class)
     local a = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
     frame.nameText:SetTextColor(r, g, b, a)

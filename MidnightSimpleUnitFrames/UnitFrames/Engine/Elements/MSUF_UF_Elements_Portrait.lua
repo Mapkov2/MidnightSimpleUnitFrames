@@ -1088,21 +1088,22 @@ UpdateCastPortrait = function(frame, p, event)
   return false
 end
 
-ResolvePortraitBorderColor = function(frame, p, class)
-  local border = p and p.border
+--- The colour of a portrait border style: stock class colour, reaction red /
+--- orange / green, or the configured RGBA. `class` is a class token and
+--- `reaction` the unit's reaction toward the player. The menu previews call
+--- this too (Portrait.BorderColor), so they cannot drift from the live border.
+local function BorderStyleColor(border, class, reaction)
   local style = border and border.style or "NONE"
   if style == "NONE" then
     return nil
   end
   if style == "CLASS_COLOR" then
-    class = class or BossPreviewClassToken(frame.MSUFUnitKey, frame) or UnitClassToken(frame.MSUFUnitKey)
     local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
     if c then
       return c.r or 1, c.g or 1, c.b or 1, 1
     end
     return 1, 1, 1, 1
   elseif style == "REACTION" then
-    local reaction = UnitReaction and UnitReaction(frame.MSUFUnitKey, "player")
     -- 12.1 can hand back a secret reaction for hostile units; any compare or
     -- coercion on it throws, so fall back to the neutral white tint instead.
     if issecretvalue(reaction) == true then
@@ -1118,6 +1119,19 @@ ResolvePortraitBorderColor = function(frame, p, class)
     return 1, 1, 1, 1
   end
   return border.r or 1, border.g or 1, border.b or 1, border.a or 1
+end
+Portrait.BorderColor = BorderStyleColor
+
+ResolvePortraitBorderColor = function(frame, p, class)
+  local border = p and p.border
+  local style = border and border.style or "NONE"
+  local reaction
+  if style == "CLASS_COLOR" then
+    class = class or BossPreviewClassToken(frame.MSUFUnitKey, frame) or UnitClassToken(frame.MSUFUnitKey)
+  elseif style == "REACTION" then
+    reaction = UnitReaction and UnitReaction(frame.MSUFUnitKey, "player")
+  end
+  return BorderStyleColor(border, class, reaction)
 end
 
 PortraitBorderNeedsUpdate = function(event, p)

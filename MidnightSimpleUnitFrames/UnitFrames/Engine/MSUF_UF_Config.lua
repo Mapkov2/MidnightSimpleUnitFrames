@@ -902,7 +902,7 @@ local function ClassPowerFallbackWidth(out, bars)
       return custom
     end
   end
-  local inset = widthMode == "player" and 0 or 4
+  local inset = Shared.ClassPowerFrameInsets(widthMode)
   return max(1, Number(out and out.width, 275) - inset)
 end
 

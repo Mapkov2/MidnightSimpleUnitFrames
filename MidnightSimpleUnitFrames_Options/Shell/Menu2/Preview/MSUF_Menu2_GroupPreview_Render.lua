@@ -429,22 +429,15 @@ local function HideGroupPreviewPortraitBorder(holder)
     if holder.artBorder then holder.artBorder:Hide() end
 end
 
-local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, ScaleValue, ClassColor, classToken)
+local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, ScaleValue, classToken)
     local cfg = portrait and portrait.border
     local style = cfg and cfg.style or "NONE"
     if style == "NONE" then
         HideGroupPreviewPortraitBorder(holder)
         return
     end
-    local r, g, b, a
-    if style == "CLASS_COLOR" then
-        r, g, b = ClassColor(classToken, 1, 1, 1)
-        a = 1
-    elseif style == "REACTION" then
-        r, g, b, a = 0.1, 0.85, 0.1, 1
-    else
-        r, g, b, a = cfg.r or 1, cfg.g or 1, cfg.b or 1, cfg.a or 1
-    end
+    -- The live element's own rule; group members are friendly (reaction 5, green).
+    local r, g, b, a = MSUF.UF.elements.Portrait.BorderColor(cfg, classToken, 5)
     local thick = ScaleValue(cfg.thickness or 2, previewScale, 1)
     local shape = portrait.shape or "SQUARE"
     if cfg.art == "RELIEF" then
@@ -819,7 +812,7 @@ local function PaintGroupPreviewPortrait(scene)
     else
         holder.bg:Hide()
     end
-    LayoutGroupPreviewPortraitBorder(holder, portrait, scale, ScaleValue, scene.S.ClassColor, classToken)
+    LayoutGroupPreviewPortraitBorder(holder, portrait, scale, ScaleValue, classToken)
     if holder == handle and holder.ring then holder.ring:SetAlpha(configuredPortraitAlpha) end
     holder:Show()
 end
@@ -1676,9 +1669,9 @@ local function GroupHealthSlotText(gf, htx, mode, hidePercentSymbol, absorbIcon,
 end
 local function GroupHealthTextColor(htx, fakeHP)
     if htx.byHealth then
-        local pct = fakeHP / htx.fakeMax
-        if pct <= 0.5 then return 1, pct * 2, 0 end
-        return (1 - pct) * 2, 1, 0
+        -- The live ramp: the configured gradient stops of the compiled health spec.
+        local r, g, b = MSUF.UFBarTextCommon.HealthGradientColorFromValues(htx.health, fakeHP, htx.fakeMax)
+        if r ~= nil then return r, g, b end
     end
     return htx.r, htx.g, htx.b
 end
@@ -3534,6 +3527,7 @@ function Stage.RenderHealthText(st, env)
             hpTextR, hpTextG, hpTextB = ClassColor(cls, hpTextR, hpTextG, hpTextB)
         end
         htx.byHealth = healthTextByHealth and not healthTextByClass or false
+        htx.health = runtimeSpec and runtimeSpec.health
         htx.r, htx.g, htx.b, htx.alpha = hpTextR, hpTextG, hpTextB, textAlpha
         hpTextR, hpTextG, hpTextB = GroupHealthTextColor(htx, fakeHP)
         htx.percentDecimals = runtimeText.healthPercentDecimals or ((conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0)
