@@ -1,5 +1,408 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.50 - 2026-10-13
+
+Stable release of MSUF 6.50 for all supported clients, including Retail WoW 12.1.5.
+
+### Highlights
+
+- **MSUF 6.50 completes the 6.5 line.** It brings 104 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_startup","controlId":"menu2.opt.misc.global.setting.show.welcome.message","settingKey":"general.showWelcomeMessage","prepareKind":"","prepareValue":"","query":"show welcome message","label":"Show welcome message"} -->
+- **Arena Frames:** dedicated opponent frames with their own castbars, auras, settings and Edit Mode movers, including preparation, stealth and trinket states. Midnight supports three opponents; TBC and Mists support five.
+<!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"frame_basics","controlId":"menu2.uf_arena.unit.basics.enabled","settingKey":"arena.enabled","prepareKind":"","prepareValue":"","query":"arena frames enable","label":"Arena Frames"} -->
+- **Pet Target:** a separate frame for your pet's target, with independent styling, settings, preview and placement.
+<!-- msuf-menu-link: {"pageKey":"uf_pettarget","sectionId":"frame_basics","controlId":"menu2.uf_pettarget.unit.basics.enabled","settingKey":"pettarget.enabled","prepareKind":"","prepareValue":"","query":"pet target enable","label":"Pet Target"} -->
+- **Pet Auras:** configurable buff and debuff lanes directly on the Pet frame, plus client-supported Pet XP and Pet Happiness.
+<!-- msuf-menu-link: {"pageKey":"uf_pet","sectionId":"auras","controlId":"menu2.uf_pet.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.pet.buff.visible","prepareKind":"","prepareValue":"","query":"pet buff aura visible","label":"Pet buff visibility"} -->
+- **Slanted Frames:** angular shapes for supported Unit and Group Frames, Power bars, castbars and Class Resources. True Outline and Texture borders now follow both Slanted and Rounded edges, keep the selected outline color, and each frame scope can use its own cut direction.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.enabled","settingKey":"bars.slantedBarsEnabled","prepareKind":"","prepareValue":"","query":"enable slanted bars","label":"Enable slanted bars"} -->
+- **Cosmetic Texture Layering:** decorate each Unit Frame with up to three independent texture layers. Choose textures or supported Blizzard artwork and adjust placement, size, opacity, colors, crop and mirroring, with matching previews.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.enabled","settingKey":"player.texLayerEnabled","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"enable texture layer","label":"Enable Texture Layer"} -->
+- **Unified client support:** one source for Midnight, Classic Era, TBC, Mists and WoW Forever, with client-appropriate settings and runtime behavior.
+<!-- msuf-menu-link: none -->
+
+### Group layouts and organisation
+
+- **Name strips:** give group names a separate strip above the health bar, with adjustable height, color and opacity.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"name_bar","controlId":"menu2.gf_layout.group.field.namebarenabled","settingKey":"gf_party.nameBarEnabled","prepareKind":"groupScope","prepareValue":"party","query":"name strip above health bar","label":"Show names on a strip above the health bar"} -->
+- **Member target frames:** display group members' targets in a separate block, with independent position and dimensions and an option to include your own target.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"party_targets","controlId":"menu2.gf_layout.group.field.targetsenabled","settingKey":"gf_party.targetsEnabled","prepareKind":"groupScope","prepareValue":"party","query":"member target frames","label":"Member targets"} -->
+- **Group Pet frames:** use a separate pet block with its own position, dimensions, columns, text size and pet-count limit.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"group_pets","controlId":"menu2.gf_layout.group.field.petsenabled","settingKey":"gf_raid.petsEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"group pet frames","label":"Pet frames"} -->
+- **Healer mana rows:** show a separate mana row for members with the assigned Healer role, with independent placement, size, amount text and text color.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"healer_mana","controlId":"menu2.gf_layout.group.field.healermanaenabled","settingKey":"gf_raid.healerManaEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"healer mana bars","label":"Healer mana bars"} -->
+- **Allied boss frames:** display dedicated friendly-boss frames on clients with boss units, optionally restricted to players with the assigned Healer role.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"friendly_bosses","controlId":"menu2.gf_layout.group.field.friendlybossenabled","settingKey":"gf_party.friendlyBossEnabled","prepareKind":"groupScope","prepareValue":"party","query":"allied boss frames","label":"Allied boss frames"} -->
+- **Raid-size layouts:** choose manual or group-size scaling and separate width, height, growth, scale and optional position for 1–10, 11–20, 21–25 and 26+ players. Base dimensions remain the fallback.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"scaling","controlId":"menu2.gf_layout.group.field.layouttiersenabled","settingKey":"gf_raid.layoutTiersEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"raid size overrides","label":"Use raid size overrides"} -->
+- **Scale related visuals:** indicators, aura icons and tracked buffs can independently scale with frame dimensions. Hidden groups can be excluded from the size calculation.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"scaling","controlId":"menu2.gf_layout.group.field.autoscaleindicatorsonresize","settingKey":"gf_raid.autoScaleIndicatorsOnResize","prepareKind":"groupScope","prepareValue":"raid","query":"scale indicators with frame dimensions","label":"Scale indicators with frame dimensions"} -->
+- **Class priority sorting:** drag classes into a preferred order within the configured group and role order. Eligible raid role layouts can sort names alphabetically within roles.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortclasspriority","settingKey":"gf_raid.sortClassPriority","prepareKind":"groupScope","prepareValue":"raid","query":"class priority sorting","label":"Use class priority"} -->
+- **Raid-wide role sorting:** the unified line includes sorting tanks, healers and damage dealers across the whole raid, including supported preserved-group layouts.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortrolesacrossraid","settingKey":"gf_raid.sortRolesAcrossRaid","prepareKind":"groupScope","prepareValue":"raid","query":"sort roles across entire raid","label":"Sort roles across entire raid"} -->
+- **Small-raid organisation:** use Party layout for raids of up to five players, center solo layouts, collapse empty preserved groups and hide groups 5–8 in supported Mythic raids.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"layout_advanced","controlId":"menu2.gf_layout.group.field.smallraidasparty","settingKey":"gf_party.smallRaidAsParty","prepareKind":"groupScope","prepareValue":"party","query":"party layout small raids","label":"Use Party layout for raids up to 5 players"} -->
+- **Header switches:** Name strip, Member targets, Pet frames, Allied boss frames, Healer mana bars and Forever Buff coverage can be toggled while their accordion is closed.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"healer_mana","controlId":"menu2.gf_layout.group.field.healermanaenabled","settingKey":"gf_raid.healerManaEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"healer mana bars","label":"Healer mana bars"} -->
+- **Healer mana colors:** text color lives under Colors > Group > Healer mana bars and remains available through the section's three-dot shortcut. Existing values are retained, and edits follow the shared Party, Raid and Mythic Raid color behavior.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames_healer_mana","controlId":"menu2.opt.colors.advanced.group.frame.healer.mana.text.color","settingKey":"gf_party.healerManaTextR","prepareKind":"","prepareValue":"","query":"healer mana text color","label":"Healer mana text color"} -->
+- **Threat percentage:** Classic Era, TBC and Forever can show Threat % on supported Target, Focus, Boss, Party and Raid frames; 100% means you have aggro. Group values use your current target. Placement, size, background and low/medium/high colors are adjustable. Party starts enabled in the supplied defaults; Raid is opt-in.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.enabled","settingKey":"target.showThreatIndicator","prepareKind":"unitStatus","prepareValue":"statusThreat","query":"target threat percent","label":"Threat %"} -->
+- **Group level text:** Party and Raid can show optional level text with difficulty coloring; it starts disabled.
+<!-- msuf-menu-link: {"pageKey":"gf_indicators","sectionId":"sicons","controlId":"menu2.gf_indicators.group.status.selected.enabled","settingKey":"gf_party.levelText","prepareKind":"groupStatus","prepareValue":"party_levelText","query":"group level text","label":"Level Text"} -->
+
+### Unit frames and status information
+
+- **Pet Target:** a complete independent Unit Frame with its own controls, defaults, preview and placement.
+<!-- msuf-menu-link: {"pageKey":"uf_pettarget","sectionId":"frame_basics","controlId":"menu2.uf_pettarget.unit.basics.enabled","settingKey":"pettarget.enabled","prepareKind":"","prepareValue":"","query":"pet target enable","label":"Pet Target"} -->
+- **Pet information:** configurable buffs and debuffs, client-gated XP and Pet Happiness. Forever uses Blizzard's three happiness atlases when available.
+<!-- msuf-menu-link: {"pageKey":"uf_pet","sectionId":"status_icons","controlId":"menu2.uf_pet.unit.status.selected.enabled","settingKey":"pet.showPetHappinessIndicator","prepareKind":"unitStatus","prepareValue":"statusPetHappiness","query":"pet happiness","label":"Pet Happiness"} -->
+- **Difficulty-colored levels:** configurable red, orange, white, green and gray bands identify relative difficulty, including unknown levels. Existing per-frame level colors are retained where already selected.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.level.difficulty_color","settingKey":"target.levelIndicatorDifficultyColor","prepareKind":"","prepareValue":"","query":"level difficulty colors","label":"Level Difficulty Colors"} -->
+- **Round level badge:** an optional gold-rimmed badge follows the level indicator's position, size and layer, using native artwork or a bundled fallback.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.level.forever_badge","settingKey":"player.levelIndicatorForeverBadge","prepareKind":"unitStatus","prepareValue":"level","query":"round level badge","label":"Round Level Badge"} -->
+- **Tagged mobs:** optionally gray names and applicable health-bar colors for mobs tagged by another player.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_unit","controlId":"menu2.opt.colors.advanced.npc.tap.denied.gray","settingKey":"general.tapDeniedGray","prepareKind":"","prepareValue":"","query":"gray out mobs tagged by others","label":"Gray out mobs tagged by others"} -->
+- **Classic load conditions:** expose No target and Out of combat and no target where supported.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"load_conditions","controlId":"menu2.uf_player.unit.load_condition.loadcondhidenotarget","settingKey":"player.loadCondHideNoTarget","prepareKind":"","prepareValue":"","query":"hide no target load condition","label":"No target"} -->
+- **Forever names:** choose full character name, first name or surname through the Fonts page where the name is readable.
+<!-- msuf-menu-link: {"pageKey":"opt_fonts","sectionId":"fonts_name_shortening","controlId":"menu2.opt.fonts.global.name.shortening.character.name.parts","settingKey":"general.characterNameParts","prepareKind":"","prepareValue":"","query":"character names first name surname","label":"Character names (all frames)"} -->
+- **Incoming-heal prediction:** supported Classic clients can opt into prediction from all healers; player-only prediction remains the default.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_absorb","controlId":"menu2.opt.bars.global.absorb.heal.prediction.all.healers","settingKey":"general.healPredAllHealers","prepareKind":"barsScope","prepareValue":"shared","query":"include healing from others","label":"Include healing from others"} -->
+- **Health and prediction appearance:** the unified line includes independent Full bar or Missing health only backgrounds, configurable color sources and Keep Absorbs + Prediction Visible.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_background","controlId":"menu2.opt.colors.advanced.background.fill.mode","settingKey":"general.barBgFillMode","prepareKind":"","prepareValue":"","query":"background fill missing health only","label":"Background Fill"} -->
+- **Text visibility:** the unified line retains independent Name, Health and Power mouseover visibility with fade timing, and injured-only Unit Frame visibility.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.name.mouseover","settingKey":"player.nameTextMouseover","prepareKind":"","prepareValue":"","query":"name text mouseover","label":"Only show on mouseover"} -->
+
+### Shapes, borders, portraits and artwork
+
+- **Slanted scopes:** configure Unit Frames, Group Frames, Power bars, castbars, Class Resources and mouseover surfaces with matching previews.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.units","settingKey":"bars.slantedUnitFrames","prepareKind":"","prepareValue":"","query":"slanted unit frames","label":"Unit frames"} -->
+- **Rounded fallback:** turning off Slanted restores the active Rounded fallback without discarding saved frame styles, including imported profiles.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
+- **Styled shaped borders:** True Outline and Texture borders follow rounded corners and slanted edges on Unit and Group Frames, with matching style, color and thickness in previews. Configure them under Bars > Frame Outline.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_outline","controlId":"menu2.opt.bars.global.outline.texture","settingKey":"bars.barOutlineTexture","prepareKind":"barsScope","prepareValue":"shared","query":"frame outline style","label":"Outline style"} -->
+- **Frame-shape controls:** configure shapes through Bars. The duplicate shape picker in each unit's Frame Basics section has been removed.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
+- **Per-frame cut direction:** Slanted Unit, Group and castbar scopes can follow the shared cut direction or use their own. Bars, castbar and group previews show the chosen cut.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.direction","settingKey":"bars.slantedBarDirection","prepareKind":"","prepareValue":"","query":"cut direction","label":"Cut direction"} -->
+- **Outline colors across shapes:** Texture and True Outline borders use the selected outline color on square, rounded and slanted frames, while active highlights keep their own colors. Set the shared color under Colors > Bar & Prediction Colors > Bar Outline Color.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_bar_colors","controlId":"menu2.opt.colors.advanced.bar.outline.color","settingKey":"general.barOutlineColor","prepareKind":"","prepareValue":"","query":"bar outline color","label":"Bar Outline Color"} -->
+- **Texture Layer strata:** layers always draw at their Unit Frame's strata. The ineffective strata choice was replaced by an explanation in the layer settings.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.level","settingKey":"player.texLayerLevel","prepareKind":"unitTextureLayer","prepareValue":"1_advanced","query":"texture layer layer","label":"Layer (0-30)"} -->
+- **Cosmetic Texture Layers:** up to three decoration slots per Unit Frame, with independent textures, geometry, opacity and layering. Crop, mirror, class-color and health-gradient options support decorative accents, with optional target/combat conditions and matching previews.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.enabled","settingKey":"player.texLayerEnabled","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"enable texture layer","label":"Enable Texture Layer"} -->
+- **Portrait dragons:** Blizzard-style portraits offer elite, rare and boss decorations, with additional placement, size and layering choices.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"portrait","controlId":"menu2.uf_target.unit.portrait.portraitblizzardelite","settingKey":"target.portraitBlizzardElite","prepareKind":"unitPortraitTab","prepareValue":"border","query":"elite rare dragon portrait","label":"Elite and rare dragon"} -->
+- **Portrait connector and rim:** add the bottom-right gold connector and suppress a duplicate standalone rim when complete Blizzard frame artwork already includes one.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitblizzardcorner","settingKey":"player.portraitBlizzardCorner","prepareKind":"unitPortraitTab","prepareValue":"border","query":"portrait gold corner connector","label":"Gold corner connector"} -->
+- **Portrait adjustments:** zoom, left-to-right flip, inset-shadow strength and corner direction, with matching per-unit previews.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitzoom","settingKey":"player.portraitZoom","prepareKind":"","prepareValue":"","query":"portrait zoom","label":"Portrait zoom"} -->
+- **Temporary portrait preview:** preview classification artwork on the live portrait; closing the section or entering combat restores the real unit classification.
+<!-- msuf-menu-link: none -->
+- **Native atlas Texture Layers:** use Blizzard atlases with matching runtime and preview crops and an ordinary texture fallback when the atlas is unavailable.
+<!-- msuf-menu-link: none -->
+- **Native status artwork:** leader, assistant and combat indicators use matching native art where available and texture fallbacks on older clients.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.selected.enabled","settingKey":"player.showLeaderIcon","prepareKind":"unitStatus","prepareValue":"leader","query":"leader indicator","label":"Leader"} -->
+- **Menu appearances:** Classic Glass, Midnight and Midnight Dark are available across supported clients.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+
+### Class Resources and Additional Resources
+
+- **Independent Edit Mode movers:** move Class Resources and detached Player Power together or separately. Inactive resources, including Druid Combo Points outside Cat Form, retain an editable mover.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.x","settingKey":"bars.classPowerOffsetX","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"class resource x offset","label":"Class Resource X offset"} -->
+- **Detached Power geometry:** independent width, height and position controls; Energy bars anchored to Combo Points continue to follow them.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"detached power width","label":"Power width"} -->
+- **Full Player-frame width:** Class Resources using Player frame width span the full frame.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.width.mode","settingKey":"bars.classPowerWidthMode","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"class resource width mode","label":"Width mode"} -->
+- **Resource workspace:** direct resource selection, scoped controls, Copy To, Quick Setup and reset actions in one shared workspace.
+<!-- msuf-menu-link: none -->
+- **Dedicated helper controls:** Additional Resources have their own sections, color shortcuts and runtime-rendered previews.
+<!-- msuf-menu-link: none -->
+- **Marks and thresholds:** place absolute or percentage marks on Player Power, Class Resource or Alternative Mana; restrict by power type, choose width and color, and change color above or below a threshold.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_marks","controlId":"menu2.classpower.advanced.resource.extras.marks.add","settingKey":"bars.resourceMarks","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"add resource mark","label":"Add resource mark"} -->
+- **Mana spend preview:** show upcoming mana costs. Supported clients also provide regeneration-pause and mana-return helpers.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_extras","controlId":"menu2.classpower.advanced.resource.extras.mana.upcoming.cost","settingKey":"bars.manaUpcomingCost","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"mana spend preview","label":"Mana spend preview"} -->
+- **Midnight resource helpers:** Ignore Pain duration and Arcane window timing, with shared geometry and separate colors.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_pain","controlId":"menu2.classpower.advanced.resource.extras.show.ignore.pain","settingKey":"bars.showIgnorePain","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"ignore pain duration","label":"Ignore Pain duration"} -->
+- **Arcane timing modes:** seconds, global cooldowns or both, with adjustable countdown visibility, warning timing and phase colors.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_arcane","controlId":"menu2.classpower.advanced.resource.extras.arcane.window.text","settingKey":"bars.arcaneWindowText","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"arcane window text","label":"Arcane window text"} -->
+- **Out-of-combat hiding:** optionally hide Player Power together with Class Resource when Hide out of combat is enabled. Edit Mode keeps both visible for placement.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visibility","controlId":"menu2.classpower.advanced.visibility.sync.player.power.ooc","settingKey":"bars.classPowerSyncPlayerPowerOOC","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"hide player power with class resource","label":"Hide player power with Class Resource"} -->
+- **Explicit Mana and Alternative Mana:** client-specific resource selection, placement and text settings remain available alongside the main class resource.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"mana automatic displayed resource","label":"Displayed resource"} -->
+- **Additional resource colors:** helper colors are available under Colors > Additional resource colors.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_resource_extras","controlId":"menu2.colors.advanced.resource.extras.mana.cost.color","settingKey":"bars.manaCostColor","prepareKind":"","prepareValue":"","query":"additional resource colors","label":"Mana spend preview"} -->
+
+### Auras and castbars
+
+- **Pet aura lanes:** configure Pet buffs and debuffs independently on the Pet page.
+<!-- msuf-menu-link: {"pageKey":"uf_pet","sectionId":"auras","controlId":"menu2.uf_pet.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.pet.buff.visible","prepareKind":"","prepareValue":"","query":"pet buff aura visible","label":"Pet buff visibility"} -->
+- **Rank-aware Classic matching:** Era, TBC and Mists can match readable aura names when spell ranks or cast IDs differ from the visible aura ID. Their generated alias catalogs are no longer loaded or packaged.
+<!-- msuf-menu-link: none -->
+- **Forever aura aliases:** rebuilt the localized spell-name catalog from all eleven build-70009 locale exports and revalidated the curated aura IDs.
+<!-- msuf-menu-link: none -->
+- **Aura workspaces:** the unified line includes scope-specific ordering and filtering, the curated MSUF Highlights Group Buff filter, custom-priority containers and combat collection in the blacklist workspace.
+<!-- msuf-menu-link: {"pageKey":"gf_auras","sectionId":"auras","controlId":"menu2.gf_auras.auras.group-workspace.lane.buff.tool-selector","settingKey":"gf_party.auras.buff.filterToken","prepareKind":"groupAuraWorkspace","prepareValue":"party_buff_filters","query":"msuf highlights buff filter","label":"MSUF Highlights"} -->
+- **Native Mainline tooltip options:** aura caster names and spell IDs follow client availability.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_tooltips","controlId":"menu2.opt.misc.global.setting.tooltip.show.aura.caster.names","settingKey":"general.tooltipShowAuraCasterNames","prepareKind":"","prepareValue":"","query":"aura tooltip caster names","label":"Show caster names in aura tooltips"} -->
+- **Independent GCD bar:** supported clients can position it separately, with size, opacity, time and spell display, idle-background and combat-only options.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_gcd","controlId":"menu2.opt.castbar.global.gcd.gcd.bar.detached","settingKey":"general.gcdBarDetached","prepareKind":"","prepareValue":"","query":"place gcd bar separately","label":"Place GCD bar separately"} -->
+- **Final channel tick:** add a final-tick accent to supported spell-specific Player castbar markers.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.accent.last.tick","settingKey":"general.castbarAccentLastTick","prepareKind":"","prepareValue":"","query":"highlight last channel tick","label":"Highlight last channel tick"} -->
+- **Classic channel data:** Era and Forever use rank-specific channel information, with up to fifteen ticks where supported. TBC and Mists retain their existing tables.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.show.channel.ticks","settingKey":"general.castbarShowChannelTicks","prepareKind":"","prepareValue":"","query":"channel tick markers","label":"Spell-specific channel tick markers"} -->
+- **Arena castbar configuration:** icon, spell-name and cast-time options apply to supported opponent frames, including all five TBC and Mists slots.
+<!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"castbar","controlId":"menu2.uf_arena.unit.castbar.feature.msuf2_castbar_icon","settingKey":"general.showArenaCastIcon","prepareKind":"","prepareValue":"","query":"arena castbar icon","label":"Arena castbar icon"} -->
+- **Arena PvP trinket:** the enemy PvP trinket has its own Arena page section with show, size, side, offset and layer settings. It appears in the Arena page preview and MSUF Edit Mode, and the arena frame's Edit Mode popup adjusts it directly.
+<!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"pvp_trinket","controlId":"menu2.uf_arena.unit.trinket.show","settingKey":"arena.showTrinket","prepareKind":"","prepareValue":"","query":"show pvp trinket","label":"Show PvP trinket"} -->
+- **Focus Kick:** the unified line includes the option to retain the Focus castbar beside the compact interrupt icon.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_focus_kick","controlId":"menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar","settingKey":"general.focusKickShowCastbar","prepareKind":"","prepareValue":"","query":"show castbar with focus kick icon","label":"Show castbar with Focus Kick icon"} -->
+- **Interrupt readiness:** tracks only interrupts the character has learned, including Demonology's Axe Toss through Command Demon. Spells of another specialization and missing pets no longer count as a ready interrupt.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target","settingKey":"general.kickReadyShowTarget","prepareKind":"","prepareValue":"","query":"show on target castbar","label":"Show on Target castbar"} -->
+- **Corner Show when missing:** corner indicators set to Show when missing light up while the aura is missing on Classic clients. Retail and WoW Forever explain why the choice is unavailable there and keep the saved setting.
+<!-- msuf-menu-link: {"pageKey":"gf_indicators","sectionId":"ci","controlId":"menu2.gf_indicators.group.corner.editor.mode","settingKey":"gf_party.ciCustomTL.mode","prepareKind":"groupCornerSlot","prepareValue":"party_TL","query":"corner indicator show when missing","label":"When"} -->
+
+### WoW Forever Swing Timers and buff coverage
+
+- **Main Hand, Off Hand and Ranged timers:** separate appearance and text controls, fill direction, elapsed or remaining time, custom labels and saved placement.
+<!-- msuf-menu-link: {"pageKey":"swingtimers","sectionId":"swing_module","controlId":"menu2.swingtimers.swing.enabled","settingKey":"swingTimers.enabled","prepareKind":"","prepareValue":"","query":"swing timer module","label":"Enable Swing Timer module"} -->
+- **Swing helpers:** an off-hand lane inside the main-hand bar, queued-attack cues and reach warnings.
+<!-- msuf-menu-link: {"pageKey":"swingtimers","sectionId":"swing_main","controlId":"menu2.swingtimers.swing.main.offhand.lane","settingKey":"swingTimers.main.offhandLane","prepareKind":"","prepareValue":"","query":"off-hand lane main-hand bar","label":"Show the off-hand timer as a lane in the main-hand bar"} -->
+- **Swing preview and transfer:** embedded menu preview, drag placement and category-based Copy To. Disabling the module restores Blizzard's previous swing-bar visibility.
+<!-- msuf-menu-link: {"pageKey":"swingtimers","sectionId":"swing_module","controlId":"menu2.swingtimers.swing.enabled","settingKey":"swingTimers.enabled","prepareKind":"","prepareValue":"","query":"swing timer module","label":"Enable Swing Timer module"} -->
+- **Group buff coverage:** check selected Mark of the Wild, Thorns, Arcane Intellect, Paladin blessings, Fortitude and Divine Spirit buffs against available group providers.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoverageenabled","settingKey":"gf_party.buffCoverageEnabled","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage icons","label":"Show buff coverage icons"} -->
+- **Buff reminder rules:** optional glow, tank-only Thorns and mana-user rules for Intellect and Spirit.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoverageglow","settingKey":"gf_party.buffCoverageGlow","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage glow missing icons","label":"Glow missing icons"} -->
+- **Restricted-state visibility:** coverage icons hide in restricted states by default. The optional combat-display mode retains known coverage where fresh aura data is unavailable.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoveragecombat","settingKey":"gf_party.buffCoverageCombat","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage keep showing during combat","label":"Keep showing during combat"} -->
+
+### Profiles and transfer
+
+- **Profile variants:** override selected settings and layouts for specializations, locations or a hotkey while retaining the base profile. Variants have recording controls, conditions, priority, field selection and import/export.
+<!-- msuf-menu-link: none -->
+- **Selected Unit Frame export and import:** transfer supported Player, Target, Target of Target, Pet, Focus, Focus Target, Boss and Arena selections. Each selection carries its own settings, auras and castbar.
+<!-- msuf-menu-link: none -->
+- **Scoped imports:** apply selected frames to the current or a new profile while preserving other frames and shared settings. Inherited appearance follows the receiving profile.
+<!-- msuf-menu-link: none -->
+- **Selection validation:** empty selections, unsupported frames and settings outside the selected scope are rejected. Full-profile and category transfers retain their formats.
+<!-- msuf-menu-link: none -->
+- **Client-aware defaults:** fresh installs, new profiles and resets use the factory layout, with revised power bars, separate Alternative Mana placement, compact raid geometry and updated text/aura positions.
+<!-- msuf-menu-link: none -->
+- **Factory visual settings:** updated Slug font rendering, Focus/Target-of-Target placement and Pet transparency. Factory castbars fill left to right, the cleanse border uses Dispellable by group, and Target buffs/debuffs share one line. Existing profiles retain their chosen settings.
+<!-- msuf-menu-link: none -->
+- **Forever factory layout:** a dedicated client layout with revised Unit Frame defaults and 80% health-fill opacity.
+<!-- msuf-menu-link: none -->
+- **Section Copy To:** includes supported portrait connector, rim, level badge, atlas, text mouseover, clickable portrait, chunked fill and prediction-opacity settings. Unavailable destinations are marked or filtered.
+<!-- msuf-menu-link: none -->
+- **Supported profile formats:** the unified line retains MSUF 6.x profiles and their supported Wago envelope. Pre-6.0 conversion and its import controls were retired during the alpha series.
+<!-- msuf-menu-link: none -->
+
+### Menu, search and controller controls
+
+- Section headers provide their feature switch, summary and three-dot actions for reset and Copy To.
+<!-- msuf-menu-link: none -->
+- Disabled frame scopes dim their settings while keeping frame selection and previews usable.
+<!-- msuf-menu-link: none -->
+- Clearer navigation, section labels, help text and explanations for unavailable controls; menu clicks and hover use consistent accent styling.
+<!-- msuf-menu-link: none -->
+- Search follows client capabilities and preserves field edits.
+<!-- msuf-menu-link: none -->
+- **Conversational search:** natural task phrasing in English and German, such as "make my target health numbers bigger", routes to the matching page or setting.
+<!-- msuf-menu-link: none -->
+- **Search greeting:** the Dashboard search card greets you by name for the time of day: morning, midday, afternoon, evening or night.
+<!-- msuf-menu-link: none -->
+- Updated menu and Edit Mode labels, prompts, tooltips, status text, history, chat messages and placeholders across all twelve supported locales.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_language","controlId":"menu2.opt.misc.global.language.selection","settingKey":"general.menuLocale","prepareKind":"","prepareValue":"","query":"menu language","label":"Menu language"} -->
+- Typed HEX colors commit on Enter through the shared color-picker apply path.
+<!-- msuf-menu-link: none -->
+- Blizzard Micro Menu and Bags controls expose horizontal and vertical orientation where the client provides it.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_external_edit_mode","controlId":"menu2.opt.misc.global.setting.blizzard.edit.mode.integration","settingKey":"general.blizzardEditModeIntegration","prepareKind":"","prepareValue":"","query":"blizzard frames msuf edit mode","label":"Show Blizzard frames in MSUF Edit Mode"} -->
+- Blizzard Damage Meter appearance settings changed in MSUF Edit Mode are saved and apply after a UI reload; width and height still apply at once.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_external_edit_mode","controlId":"menu2.opt.misc.global.setting.blizzard.edit.mode.integration","settingKey":"general.blizzardEditModeIntegration","prepareKind":"","prepareValue":"","query":"blizzard frames msuf edit mode","label":"Show Blizzard frames in MSUF Edit Mode"} -->
+- Compatible MSUF Suite windows integrate with MSUF profiles, fonts, anchors, menu controls and controller navigation. External Edit Mode elements can open their settings popup centered.
+<!-- msuf-menu-link: none -->
+- Forever controller controls cover D-pad focus, confirm/cancel, dropdowns, anchors, search and switching MSUF windows.
+<!-- msuf-menu-link: none -->
+- The on-screen keyboard supports text and exact numeric entry. Controller actions include slider adjustment, preview and Edit Mode nudges, and supported Undo/Redo.
+<!-- msuf-menu-link: none -->
+- Localized button hints, focus highlights and haptic feedback accompany supported controller actions. Navigation releases input in combat and while Blizzard panels own it.
+<!-- msuf-menu-link: none -->
+
+### Client Support & Packaging
+
+- **Supported client paths:** Midnight 12.0.7/12.1.0/12.1.5, Classic Era 1.15.9, TBC 2.5.6, Mists 5.5.4 and WoW Forever 1.60.1 through the Mainline manifest and Interface 16001.
+<!-- msuf-menu-link: none -->
+- The package contains the **core addon and load-on-demand Options addon**.
+<!-- msuf-menu-link: none -->
+- The in-game Assistant is retired and no longer shipped. Its saved chat data is removed once and excluded from profile transfers. For a manual update, remove any old `MidnightSimpleUnitFrames_Assistant` folder from `Interface/AddOns`.
+<!-- msuf-menu-link: none -->
+- WoW Forever is detected through its client marker, including the dedicated project identifier present in build 70170. Unknown clients retain a guarded fallback.
+<!-- msuf-menu-link: none -->
+- Every client runs version 6.50: Midnight, WoW Forever, Classic Era, TBC and Mists. `/msuf clientinfo` reports the detected client and addon version for bug reports.
+<!-- msuf-menu-link: none -->
+- Menus and search hide unavailable controls, including unsupported Arena Frames, Empowered Casts, pet information and Cooldown Manager anchors. Forever group choices are limited to Party and Raid.
+<!-- msuf-menu-link: none -->
+- Retail 12.1.5 uses the supported native aura, scheduling and pixel-rounding paths; older Mainline versions retain their compatible fallbacks.
+<!-- msuf-menu-link: none -->
+- Validated against Blizzard's 12.1.5 interface source (build 70077) and WoW Forever build 70291, including the reworked Forever combo point frame.
+<!-- msuf-menu-link: none -->
+- Mainline core and Options appear in the MSUF category in the AddOn list; version labels follow the current game type.
+<!-- msuf-menu-link: none -->
+- Added Forever game-version targeting and Wago publishing support to the release pipeline, with expanded startup, menu-index, locale and package validation.
+<!-- msuf-menu-link: none -->
+- The Forever menu title follows the detected client. Classic Glass, initially Forever-specific, is available alongside Midnight and Midnight Dark across supported clients.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+
+### Bug Fixes - Group frames and secure layouts
+
+- Fixed group layout changes at combat entry, preserved layout capacity and role ordering for members joining during combat, and returned previewed groups to their live headers.
+- Fixed small-raid Party layouts, class-priority identity reads, filters, extra-block names and housing visibility, including consistent dead/offline backgrounds.
+- Newly created group and Pet buttons retain click handling and pixel alignment in combat.
+- Member target frames refresh when compound unit tokens receive no native unit event.
+- Healer mana rows and allied boss frames repaint when a unit token is reassigned; healer mana text receives its font before its first update.
+- Raid Manager expanded state survives settings reapplication. Hidden mode leaves its toggles click-through; Forever's gamepad-opened manager stays visible with its panel and closes with it.
+- Classic and Forever members without an assigned role retain their power bar when enabled for any role, while explicit role filters still apply.
+- Fixed roster-slot aura rebinding, preserved subgroup geometry, configured columns, role sorting and world-entry refreshes in the unified client line.
+- Fixed disappearing Forever Party, Raid and Priority frames during secure group setup. Updated initialization follows Blizzard's repaired load order.
+- Saved negative-heal-absorb overrides remain consistent across group layouts and logins. Group sorting, previews and Edit Mode use the same layout settings.
+- Party and Raid bar and background textures chosen on the Bars page apply after Copy To. Turning Custom settings off or resetting the scope returns the frames to the shared texture.
+
+### Bug Fixes - Auras and indicators
+
+- **Removed the baked-in Blizzard icon border (#159):** runtime icons, reminders and menu/Edit Mode previews share a minimum crop while preserving stronger configured zoom.
+- Classic aura lanes honor all nine anchors, the menu layer range, Player-first sorting and the correct Pet overrides.
+- Combat-only filters refresh at the combat transition; AUTO dispel symbols follow the frame's strata.
+- Custom auras compile on supported Classic Arena Frames. Classic Edit Mode retains click forwarding and avoids rewiring sealed native aura buttons.
+- Fixed aura refreshes after profile switches, resets, imports, specialization changes and roster-slot changes.
+- Fixed Friendly, Enemy and Both conditions on Classic cleanse borders, permanent-aura rules, faction updates and sorting agreement between lanes and custom containers.
+- Era dispel scans retain the HARMFUL|RAID filter. Untouched sparse factory aura layouts from Alpha 18 through Beta 3 are repaired while customized aura owners are preserved.
+- Filtered-out auras can reappear. Failed or interrupted full refreshes recover instead of leaving later updates stuck or half-merged.
+- Shaped dispel borders use the actual debuff color. Missing Classic atlases use bundled symbol artwork, and disabled symbols clear immediately.
+- Classic menus hide unsupported Pandemic-only options and show correct client-specific search entries.
+- Aura icons allow clicks through to their unit frame.
+- Rounded highlight borders retain their thickness and state; group highlight detection remains available when aura icons are disabled.
+- Classic Custom Priority containers sort by the dragged priority order, and turning off a group lane's cooldown text no longer removes its cooldown swipe.
+- Classic blacklist presets hide every rank of their spells, and the Purge border lights from real aura data.
+- Custom containers set to Only mine no longer hide other casters' copies from the regular buff and debuff lanes.
+- Custom Priority containers apply their filters and Max icons, and binding an item to a tracked Buff Reminder spell applies immediately.
+- The aura Name Overlay follows target, focus and roster changes; while auras are restricted it updates once the restriction ends.
+- Entering combat with the Boss or Arena page open removes the preview aura icons and restores the real boss and arena auras.
+
+### Bug Fixes - Class Resources, power and status
+
+- Class Resource settings apply after saved profiles load and stay synchronized with variants and page resets.
+- Fixed explicit Mana selection and Alternative Mana overlap; classes without a mana pool no longer inherit an unusable Alternative Mana bar.
+- Class resources refresh after death and resurrection. Mists Monk Chi updates after settings changes.
+- Resource maxima trigger required layout changes; Stagger colors, Ironfur and aura-count visibility repaint correctly.
+- Mists Burning Embers use the unmodified maximum; Affliction shards use the supported spell gate. Midnight Affliction/Demonology prediction receives cast events.
+- Mists Death Knight runes use their rune-type colors unless an explicit override is selected. Combo Points and aura-based resources refresh correctly.
+- Eclipse respects its text mode and removes auras that end early. Player Power regains its color after Eclipse.
+- Alternative Mana returns after Edit Mode, and disabling the secondary Player HP module hides its bar.
+- Resource marks use the displayed resource's range, remain above pips and handle restricted power percentages through the supported native path.
+- Hidden Class Resources and detached Power keep their Edit Mode movers; attached bars retain their maintained anchor while the visible resource is inactive.
+- AFK timers resume after combat, and death state updates on direct health ticks.
+- Unit tooltips display available AFK/DND flags. Inline target-of-target text follows the visible edge of the name glyphs.
+- Native managed class-resource bars retain Blizzard lifecycle handling while their visuals are concealed. Totem takeover restores only the frame-position flag owned by MSUF.
+- Mists Balance Eclipse colors apply. Mists specialization profiles, per-spec crosshair spells, the Monk totem preview and specialization tooltips read the client's specialization.
+- Class Resources > Reset selected also resets Additional Resource settings whose sections were never opened.
+- The AFK Timer works without AFK Text. Power text with maximum values and frame transparency stay error-free when the client restricts those values.
+
+### Bug Fixes - Castbars and Arena Frames
+
+- Arena bars honor Show icon, Spell name and Cast time, with corrected time-text positioning in runtime and previews.
+- Castbar movers follow bars after they move, and font updates preserve cast-target class colors.
+- Interrupt feedback follows the displayed cast, including late interruption events and successive rapid interrupts.
+- The Interrupt Ready indicator considers all available interrupts with client-appropriate spell lists. Classic has a cooldown fallback, and the ready border retains its color after rebuilding.
+- Castbar fill direction and countdown mode work together.
+- TBC and Mists width matching and portrait previews include all five Arena opponents. Their castbars retain a native event frame when the shared event bus declines a subscription, and all three text regions clear their font cache after a font change.
+- Arena power text refreshes when a slot binds to a different opponent, including Solo Shuffle rounds.
+- Arena and Boss bars share consistent frame lifecycle handling, restore native text when needed and refresh outlines and cooldown state.
+- Native managed castbars retain Blizzard lifecycle handling while MSUF conceals their visuals.
+- Restricted cast, duration, swing, aura, health and power values follow supported native formatting and rendering paths.
+- Target and focus changes clear the previous cast's not-interruptible tint, and the castbar glow no longer repaints non-interruptible casts.
+- Interrupted player channels show their Interrupted feedback; the Focus interrupt tracker shows its kick confirmation and repaints with the Unavailable cast fill style.
+- Talented Disintegrate shows all channel ticks. Castbar glow stays inside rounded and slanted castbars, and castbars and the totem preview handle restricted frame strata.
+- Handing the player castbar back to Blizzard no longer leaves Blizzard's castbar tainted.
+
+### Bug Fixes - Shapes, portraits and prediction
+
+- Rounded borders and masks retain the selected shape; imported Slanted styles use the current Rounded fallback when Slanted is disabled.
+- Styled shaped borders and previews retain matching style, color and thickness.
+- Fixed portrait rim/mask alignment, direction, zoom, foreground opacity and layering after native refreshes. Atlas artwork retains its full image and flip direction.
+- Status badges and level numbers remain within native overlay limits for imported high layer values. Disabling Level also removes its fallback badge ring.
+- Missing-health backgrounds no longer show a fully reversed bar at full health; rounded health backgrounds retain their intended opacity in instanced combat.
+- Global font and texture changes preserve frame opacity and update affected text. Protected prediction values retain their over-absorb glow.
+- Unit frames recover after instance or housing visibility changes, resume event routes and refresh stance text. Portrait variants update without a reload.
+- Previews retain their layer choices, fit dropdown chips inside their panels and keep Class Resource geometry aligned with the live bar.
+- Fixed black Forever preview backgrounds, with scene fallbacks on other clients. Classic previews render power gradients and the Class Resource text layer; Mists Boss previews include the boss-target marker.
+- Font previews and the related default-setting inconsistencies are corrected.
+- Scoped outline colors enable their override even when the color matches the shared value. The Basics section reset also clears an older per-frame shape.
+- Unit previews place detached castbars correctly and translate their placeholder names.
+
+### Bug Fixes - Profiles, imports and resets
+
+- Malformed imports are staged and validated before profile creation or switching and cannot overwrite the active profile.
+- Oversized compressed imports are rejected before inflation. Forever factory profiles decode their compressed CBOR format correctly.
+- Missing imported fonts fall back safely, and imports validate fonts through the font registry. Incomplete startup font values no longer abort the menu or Edit Mode.
+- First login and profile resets apply the factory profile instead of code defaults, including Focus Target.
+- `/msuf reset` restores factory dimensions, positions, layout and text visibility. `/msuf profile <name>` saves the current settings.
+- Imports preserve dispel-migration stamps and supported numeric spell IDs; variants retain the resource-extra keys needed to represent removals.
+- A Blizzard Edit Mode snapshot is imported only when its import option is selected.
+- Selected-frame aura imports avoid full-profile resets and repair defaults on a private copy before applying the selected settings.
+- Profile deletion reassigns characters to Default or the alphabetically first remaining profile, rather than depending on table order.
+- Profile names remain as typed. Scale history, dropdown alignment and page refreshes remain consistent across profile changes. Copy To preserves supported font, texture, gradient and status settings.
+- Page resets retain Undo. Edit Mode Cancel and Undo cannot write an earlier profile's edits into a newly selected profile; history remains bounded for large profiles.
+- New/reset Forever profiles follow the intended disabled global-scale default while preserving explicitly enabled settings, including changes made immediately after reset.
+- Profile switches re-apply gameplay overlays, unit tooltip visibility and highlights, and keep aura tooltip options that MSUF did not set.
+- Upgrades keep per-frame dispel overlay and symbol options that were turned off. Archived pre-6.0 profiles with the same name are kept under numbered names.
+- Unit Frame imports no longer replace Gameplay and Color settings, and Selected Unit Frame transfers no longer carry the shared Cast Target Name Color.
+- `/msuf default confirm` resets the profile named in its warning, and a color picker left open across a profile switch no longer writes into the new profile.
+
+### Bug Fixes - Menu, search, Edit Mode and integrations
+
+- Fixed exact-search targets, Unicode normalization, field-edit preservation and refreshes of visible pages without rebuilding unaffected pages.
+- Fixed Class Resource card containment, left-aligned titles, spacing and preview fit on narrow windows, plus Group Anchor/class-priority wrapped text and Portrait/Healer mana spacing.
+- Section switch labels toggle their feature; disabled frame scopes keep navigation and previews usable.
+- Edit Mode Cancel discards unfinished text edits before restoration. Supported drag positions survive combat interruptions, and history commits defer safely through combat entry.
+- Configuration and focus-preview keyboard input stop at combat entry. ConsolePort Game Menu movement and resizing wait until combat ends.
+- Fixed preview lifecycle and animation behavior, including resource movement staying within Edit Mode and shared runtime/preview geometry.
+- Cooldown Manager anchors are offered and applied only when supported; imported unsupported anchors fall back to the normal global anchor.
+- Hiding Blizzard's TargetFrame also stops the hidden Forever ComboFrame from updating.
+- Fixed repeated Forever welcome/tour prompts and analytics initialization writing to the wrong global.
+- Corrected malformed Classic AddOn-list title colors that displayed a stray letter. Pet Happiness is labeled correctly on every supported client.
+- Unknown clients no longer offer unsupported Arena Frames; the guarded Mainline diagnostic requests `/msuf clientinfo` where needed.
+- Edit Mode Cancel All restores setter-driven options such as the minimap icon and frame scale. Selecting another element closes the aura popup so nudges move the selected element.
+- Search results for out-of-combat fading open the matching tab. Classic Era no longer offers a Focus anchor for the Combat Timer or group layouts, and controls without Blizzard counterparts explain why.
+- The Combat Timer starts on the first second of combat. The combat crosshair follows the personal nameplate and keeps its centered anchor when the nameplate height is restricted.
+- Unit tooltips show the faction in the client's language. WoW Forever's Gamepad UI no longer opens a hidden buff bar, and changing Damage Meter settings no longer leaves Blizzard's meter tainted.
+- Guided Setup hints, aura filter labels, Ready Check, Crowd Control and Russian terms are translated in every supported language; counts in the Priority and Layer overviews use whole translated sentences.
+
+### Performance
+
+- Hidden Unit Frames suspend their event routes until shown again.
+- Unrelated power events skip resource-text work; thresholds share a resource read, and Mists rune types refresh on their native event.
+- Aura sorting runs only when the selected sort mode and changed timing require it. Icon layout and shaped dispel geometry are reapplied only when their inputs change.
+- Aura containers are reused after retirement. Compatible group-aura previews share compiled configuration across rows.
+- Styled borders reuse textures and layout. Combat color updates avoid rebuilding border geometry.
+- Changing the Frame Outline style refreshes only the affected borders, and border event updates reuse prepared artwork.
+- Aura font changes reuse existing aura containers, and Classic Only mine lanes compact stale arrival entries.
+- Closed menu sections defer controls and decoration. Repeated header layout and owned-button skin work reuse existing state.
+- Cold search indexes build in short menu-task slices; exact searches retain synchronous results and prepare required lazy sections.
+- Options, aura workspaces and search reuse existing page state. Color previews avoid duplicate render requests and preserve staged construction.
+- Aura-resource and cast-expiry paths avoid per-event closures; shared aura countdown drivers stop when idle.
+- Arena castbar geometry is checked per style change, and the Mists trinket fallback stays off unrelated combat logs.
+- Completed pixel-layout setup is reused. Zoning avoids duplicate raid-header rebuilds.
+- Native Mainline scheduling coalesces keyed delayed work where supported; older clients keep compatible event-driven timer fallbacks.
+- Health gradients, backgrounds, protected text, prediction and aura-name fallback paths include the shared runtime's sample reuse, cached writers and bounded refresh work.
+- Version information is read once at load instead of on each display or analytics pass.
+- Shared client, defaults, aura, castbar and group owners reduce duplicated implementations while retaining client-specific behavior.
+- Opening Options from the Game Menu shares the keybind's deferred first-load boundary, reducing first-open script-time pressure.
+- Shared target-based Combo Point handling covers Classic and Forever; client defaults, Class Resources and previews use consolidated owners.
+- Preview animation, factory-profile decoding and search avoid repeated work.
+
 ## 6.5-beta20 - 2026-10-10
 
 Release candidate for MSUF 6.50, including the latest menu, preview, portrait and group-control fixes.

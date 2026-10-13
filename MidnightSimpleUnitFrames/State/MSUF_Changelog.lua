@@ -8,15 +8,15 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "11347CBB5A77A342F400F90BA130A8FFE895151FEAD509A1B2DB292A5964A513",
-    currentVersion = "6.5-beta20",
+    sourceSha256 = "E73F0A9FB2C96776FE14B283D52590D321FBE99EA01E3D7788393647A342B5FA",
+    currentVersion = "6.50",
     historyFromVersion = "6.151",
-    previousVersion = "6.21",
-    rangeLabel = "6.21 -> 6.5-beta20",
+    previousVersion = "6.151",
+    rangeLabel = "6.151 -> 6.50",
     entries = {
         {
-            version = "6.5-beta20",
-            date = "2026-10-10",
+            version = "6.50",
+            date = "2026-10-13",
             sections = {
                 {
                     title = "Highlights",

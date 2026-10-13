@@ -93,12 +93,17 @@ local function ClientInterface()
     return type(interface) == "number" and interface or nil
 end
 
---- Major.minor of the running client, so the greeting names the current patch
---- instead of a literal that goes stale on the next one.
+--- The running client patch; Retail includes a nonzero patch component.
+--- Other clients keep their existing major.minor greeting.
 local function ClientPatch()
     local interface = ClientInterface()
     if interface == nil then return "12.1" end
-    return floor(interface / 10000) .. "." .. (floor(interface / 100) % 100)
+    local patch = floor(interface / 10000) .. "." .. (floor(interface / 100) % 100)
+    local client = MSUF.Client
+    if client.IsRetail and not client.IsForever and interface % 100 > 0 then
+        return patch .. "." .. (interface % 100)
+    end
+    return patch
 end
 
 local function IsClientAtLeast(requiredMajor, requiredMinor)
