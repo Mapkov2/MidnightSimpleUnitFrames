@@ -612,3 +612,13 @@ clients+Forever	lua	tools/tests/group_headers_secret_subgroup_smoke.lua	{root} {
 clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {flavor}	Group role overlay normalisation and refresh: {flavor}
 -	lua	tools/tests/group_name_update_budget_smoke.lua	{root} Mainline	Group name event instruction budget: Mainline
 -	lua	tools/tests/group_name_update_budget_smoke.lua	{root} Vanilla	Group name event instruction budget: Vanilla
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} coordinates	Edit Mode input and session integrity coordinates failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} registry	Edit Mode input and session integrity registry failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} callbacks	Edit Mode input and session integrity callbacks failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} login	Edit Mode input and session integrity login failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} escape	Edit Mode input and session integrity escape failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} abort	Edit Mode input and session integrity abort failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} movers	Edit Mode input and session integrity movers failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} hud	Edit Mode input and session integrity hud failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} snapshot	Edit Mode input and session integrity snapshot failed
+-	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} danders	Edit Mode input and session integrity danders failed

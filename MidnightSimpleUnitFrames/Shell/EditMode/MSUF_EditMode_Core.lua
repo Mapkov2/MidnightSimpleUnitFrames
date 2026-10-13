@@ -64,17 +64,27 @@ function Util.FramePositionValues(frame)
         EditRound(right - left), EditRound(top - bottom)
 end
 
+-- Match the nudge offset limit; the geometry conversion can amplify a typed
+-- visual delta on scaled frames, so bound both the input and changed offset.
+local function EditPositionNumber(value)
+    value = tonumber(value)
+    if not value or value ~= value or value <= -math.huge or value >= math.huge then return nil end
+    return value
+end
+
+local function EditPositionClamp(value)
+    return math.max(-4096, math.min(4096, value))
+end
+
 function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, displayX, displayY)
+    local savedX = EditPositionNumber(currentOffsetX) or 0
+    local savedY = EditPositionNumber(currentOffsetY) or 0
+    local requestedX = EditPositionNumber(displayX)
+    local requestedY = EditPositionNumber(displayY)
     local left, right, top, _, frameScale, uiScale = EditFrameRectToUI(frame)
-    if not left then
-        return tonumber(currentOffsetX) or 0, tonumber(currentOffsetY) or 0, false
-    end
+    if not left then return savedX, savedY, false end
     local centerX, centerY = EditScreenCenter()
     local currentX, currentY = EditHorizontalPosition(left, right, centerX), top - centerY
-    local savedX = tonumber(currentOffsetX) or 0
-    local savedY = tonumber(currentOffsetY) or 0
-    local requestedX = tonumber(displayX)
-    local requestedY = tonumber(displayY)
     local scaleRatio = uiScale / frameScale
     local nextX, nextY = savedX, savedY
     --- The edit boxes show rounded geometry. Treat that same rounded value as
@@ -82,6 +92,7 @@ function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, disp
     --- sub-pixel position drift. After a resize, the rounded reference edge
     --- changes and the old field value deliberately restores it.
     if requestedX ~= nil and requestedX ~= EditRound(currentX) then
+        requestedX = EditPositionClamp(requestedX)
         local currentEdgeX
         if requestedX < 0 then
             currentEdgeX = right - centerX
@@ -93,11 +104,12 @@ function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, disp
             currentEdgeX = left - centerX
         end
         if currentEdgeX ~= nil then
-            nextX = EditRound(savedX + (requestedX - currentEdgeX) * scaleRatio)
+            nextX = EditPositionClamp(EditRound(savedX + (requestedX - currentEdgeX) * scaleRatio))
         end
     end
     if requestedY ~= nil and requestedY ~= EditRound(currentY) then
-        nextY = EditRound(savedY + (requestedY - currentY) * scaleRatio)
+        requestedY = EditPositionClamp(requestedY)
+        nextY = EditPositionClamp(EditRound(savedY + (requestedY - currentY) * scaleRatio))
     end
     return nextX, nextY, nextX ~= savedX or nextY ~= savedY
 end

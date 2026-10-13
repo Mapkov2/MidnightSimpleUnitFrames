@@ -9,7 +9,7 @@ local ReportError = MSUF.ReportError or _G.MSUF_ReportError
 
 local API, External = { VERSION = 1 }, {}
 local records, owners, listeners = {}, {}, {}
-local sessionActive, sessionSnapshot = false, nil
+local sessionActive, sessionSnapshot, sessionNotificationPending = false, nil, false
 EM2.ExternalElements = External
 
 local Export = MSUF.ExportPublic
@@ -77,15 +77,32 @@ local function Report(record, name, err)
     ReportError("EditMode.ExternalAPI", message)
 end
 
--- These handlers belong to the registration, so unregistering releases them.
--- The operation and owner are immutable; nested callbacks cannot change context.
-
+-- Keep secondary callback returns across the host boundary without allocating
+-- a closure/table per call. Nested calls use separate reusable depth slots.
+local function PrepareInvoker(record)
+    local depth, callbacks, details = 0, {}, {}
+    local label = "EditMode.ExternalAPI " .. tostring(record.owner)
+    local function step(...)
+        local result, detail = callbacks[depth](...)
+        details[depth] = detail
+        return result
+    end
+    record._invoke = function(name, callback, ...)
+        depth = depth + 1
+        callbacks[depth] = callback
+        local ok, result = MSUF.RunHostAPIStep(label .. "/" .. name, step, ...)
+        local detail = details[depth]
+        callbacks[depth], details[depth] = nil, nil
+        depth = depth - 1
+        return ok, result, detail
+    end
+end
 
 local function Invoke(record, name, ...)
     local callback = record and record[name]
     if type(callback) ~= "function" then return false, "callback_missing" end
-    local result, detail = callback(...)
-
+    local ok, result, detail = record._invoke(name, callback, ...)
+    if not ok then return false, "callback_error" end
     if result == false then return false, detail or "callback_rejected" end
     return true, result, detail
 end
@@ -142,7 +159,7 @@ local CALLBACKS = {
 --- popup. Each spec is { id, label, kind = "number"|"toggle", get, set } with
 --- min/max required for numbers. Values flow through get/set only; MSUF never
 --- touches the owner's storage.
-local function PrepareControls(list)
+local function PrepareControls(list, owner)
     if list == nil then return nil end
     if type(list) ~= "table" then return nil, "invalid_extraControls" end
     local prepared = {}
@@ -167,13 +184,14 @@ local function PrepareControls(list)
         if #prepared >= 12 then return nil, "too_many_controls" end
         local stepValue = tonumber(spec.step)
         prepared[#prepared + 1] = {
-            id = spec.id, label = spec.label, kind = spec.kind,
+            owner = owner, id = spec.id, label = spec.label, kind = spec.kind,
             get = spec.get, set = spec.set, min = minValue, max = maxValue,
             step = (spec.kind == "number" and Finite(stepValue) and stepValue > 0) and stepValue or nil,
             transient = spec.transient == true,
         }
     end
     if #prepared == 0 then return nil end
+    for i = 1, #prepared do PrepareInvoker(prepared[i]) end
     return prepared
 end
 
@@ -198,12 +216,16 @@ local function Prepare(owner, element)
     if type(element.movePosition) ~= "function" and not positionPair then
         return nil, "movePosition_or_get_set_required"
     end
-    local controls, controlsReason = PrepareControls(element.extraControls)
+    local controls, controlsReason = PrepareControls(element.extraControls, owner)
     if controlsReason then return nil, controlsReason end
     local key = Key(owner, element.id)
     if records[key] or (EM2.Registry.Get and EM2.Registry.Get(key)) then return nil, "element_already_registered" end
-    local record = { owner = owner, key = key }
+    local collision = element.key and EM2.Registry.Get and EM2.Registry.Get(element.key)
+    if collision and not collision.externalPublicElement then return nil, "element_already_registered" end
+    local record = {}
     for field, value in pairs(element) do record[field] = value end
+    record.owner, record.key = owner, key
+    PrepareInvoker(record)
     record.extraControls = controls
     record.order = Finite(tonumber(record.order)) and tonumber(record.order) or 1000
     record.group = type(record.group) == "string" and record.group or owner
@@ -234,12 +256,15 @@ local function Add(record)
         canOpenSettings = type(record.openSettings) == "function",
         getFrame = function() return Frame(record) end,
         isEnabled = function() return Enabled(record) end,
-        getInspectorValues = record.getInspectorValues,
+        getInspectorValues = function()
+            local ok, values = Invoke(record, "getInspectorValues")
+            return ok and values or nil
+        end,
     })
     if sessionActive then
         local state = Capture(record)
         if state then sessionSnapshot[record.key] = state end
-        if record.onSessionChanged then Invoke(record, "onSessionChanged", true, "join") end
+        if record.onSessionChanged and not sessionNotificationPending then Invoke(record, "onSessionChanged", true, "join") end
     end
 end
 
@@ -329,7 +354,9 @@ end
 
 function API.RegisterSessionListener(owner, callback)
     if not ValidName(owner) or type(callback) ~= "function" then return false end
-    listeners[owner] = { callback = callback }
+    local listener = { owner = owner, callback = callback }
+    PrepareInvoker(listener)
+    listeners[owner] = listener
     return true
 end
 
@@ -466,7 +493,8 @@ function External.GetControlValue(key, id)
     local record = records[key]
     local spec = ControlSpec(record, id)
     if not spec then return nil end
-    return spec.get()
+    local ok, value = spec._invoke("get", spec.get)
+    if ok then return value end
 end
 
 --- One undo transaction per committed control change; the element's own
@@ -489,13 +517,13 @@ function External.ApplyControl(key, id, value)
     --- no undo entry, no capture/rollback — the owner's set either applies or
     --- reports failure and the popup re-syncs to the real state.
     if spec.transient then
-        if spec.set(value) == false then return false end
+        if not Invoke(spec, "set", value) then return false end
         Refresh()
         return true
     end
     local before = Capture(record)
     if not before or undo.BeginChange("external", key, spec.label) ~= true then return false end
-    if spec.set(value) == false then
+    if not Invoke(spec, "set", value) then
         undo.CancelChange()
         Restore(record, before, "rollback")
         return false
@@ -603,33 +631,39 @@ function External.GetInspectorValues(key)
         state and tonumber(state.width), state and tonumber(state.height)
 end
 
---- MSUF's own adapters (owner "MSUF.*") hear about the session first: an
---- error in another addon's callback still surfaces on the normal Lua error
---- path, but can no longer skip MSUF's own session start or teardown.
+--- MSUF's own adapters (owner "MSUF.*") hear about the session first.
+--- Each callback is isolated so another owner's failure cannot skip teardown.
 local function IsOwnListener(owner)
     return type(owner) == "string" and owner:sub(1, 5) == "MSUF."
 end
 
 local function NotifySession(enabled, reason)
     for owner, listener in pairs(listeners) do
-        if IsOwnListener(owner) then listener.callback(enabled, reason) end
+        if IsOwnListener(owner) then Invoke(listener, "callback", enabled, reason) end
     end
     for _, record in pairs(records) do
         if record.onSessionChanged then Invoke(record, "onSessionChanged", enabled, reason) end
     end
     for owner, listener in pairs(listeners) do
-        if not IsOwnListener(owner) then listener.callback(enabled, reason) end
+        if not IsOwnListener(owner) then Invoke(listener, "callback", enabled, reason) end
     end
 end
 
-function External.BeginSession()
+function External.NotifySessionStarted()
+    if not sessionActive or not sessionNotificationPending then return false end
+    sessionNotificationPending = false
+    NotifySession(true, "enter")
+    return true
+end
+
+function External.BeginSession(deferNotify)
     if sessionActive then return true end
     --- The session starts only with its entry snapshot complete, so a capture
     --- that raises leaves no half-filled snapshot for the next entry to reuse.
     local snapshot = {}
     for key, record in pairs(records) do snapshot[key] = Capture(record) end
-    sessionActive, sessionSnapshot = true, snapshot
-    NotifySession(true, "enter")
+    sessionActive, sessionSnapshot, sessionNotificationPending = true, snapshot, true
+    if not deferNotify then External.NotifySessionStarted() end
     return true
 end
 
@@ -641,7 +675,7 @@ function External.EndSession(outcome)
             if records[key] and state then Restore(records[key], state, "discard") end
         end
     end
-    sessionActive, sessionSnapshot = false, nil
+    sessionActive, sessionSnapshot, sessionNotificationPending = false, nil, false
     NotifySession(false, outcome)
     return true
 end
@@ -677,6 +711,7 @@ function External.RestoreHistoryState(snapshot)
 end
 
 API._BeginSession = External.BeginSession
+API._NotifySessionStarted = External.NotifySessionStarted
 API._EndSession = External.EndSession
 API._CaptureHistorySnapshot = External.CaptureHistorySnapshot
 API._RestoreHistorySnapshot = External.RestoreHistorySnapshot

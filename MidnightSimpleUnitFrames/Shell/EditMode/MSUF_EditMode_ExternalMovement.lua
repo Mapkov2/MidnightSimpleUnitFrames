@@ -180,7 +180,10 @@ function Controller:ClearBindingMoveState(binding)
     end
     local ticker = self:DragAdapter()
     if ticker and binding.externalDrag then ticker.EndExternalDrag(binding.externalDrag, false) end
-    if binding.historyChange and EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+    if binding.historyChange and EM2.Undo then
+        if changed then self:BridgeUndoCall(EM2.Undo.CommitChange)
+        elseif EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+    end
     binding.externalDrag = nil
     binding.externalApplied = nil
     binding.historyChange = nil

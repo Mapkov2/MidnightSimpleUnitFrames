@@ -522,8 +522,9 @@ end
 --- one whose frame does not exist right now hides.
 local function SyncRegisteredMovers(reg)
     for k, c in pairs(reg) do
-        local f = c.getFrame and c.getFrame()
-        if not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
+        local enabled = not c.isEnabled or c.isEnabled() ~= false
+        local f = enabled and c.getFrame and c.getFrame()
+        if enabled and not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
         local m = movers[k]
         if m then
             if f then

@@ -164,4 +164,7 @@ ExportPublic("MSUF_EllesmereEditMode_ClearMoveState", function()
     return External.ClearMoveState(PROVIDER_ID)
 end)
 
-External.Initialize(PROVIDER_ID)
+local function Activate()
+    return External.SetEnabled(PROVIDER_ID, true)
+end
+External.ActivateAtLogin(function() return controller:IsEnabled() end, Activate, "EllesmereUI")

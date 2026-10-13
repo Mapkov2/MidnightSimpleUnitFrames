@@ -272,7 +272,7 @@ function Quick.GetStep() return GetStep() end
 
 function Quick.San(value, fallback)
     value = tonumber(value) or fallback or 0
-    if value ~= value or value > 2000 or value < -2000 then value = fallback or 0 end
+    if value ~= value or value > 4096 or value < -4096 then value = fallback or 0 end
     return floor(value + 0.5)
 end
 
@@ -506,7 +506,12 @@ function Quick.WireStepper(minus, box, plus, cb)
     minus:SetScript("OnClick", function() commit(-1) end)
     plus:SetScript("OnClick", function() commit(1) end)
     box:SetScript("OnEnterPressed", function(s) s:ClearFocus(); commitTyped() end)
-    box:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
+    box:SetScript("OnEscapePressed", function(s)
+        discardingEdits = true
+        if s._msufShownText ~= nil then s:SetText(s._msufShownText) end
+        s:ClearFocus()
+        discardingEdits = false
+    end)
     box:SetScript("OnEditFocusLost", commitTyped)
 end
 

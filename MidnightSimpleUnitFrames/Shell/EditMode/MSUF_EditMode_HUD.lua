@@ -449,7 +449,7 @@ local function BuildExitControls()
     SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 end
 
-local function BuildPreviewCluster(advancedHUD)
+local function BuildPreviewCluster()
     local previewCluster, previewItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Preview", CLUSTER_H, true)
     previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 72, CLUSTER_BTN_H, "caption", function()
         ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
@@ -462,7 +462,6 @@ local function BuildPreviewCluster(advancedHUD)
     previewAddonSlot:SetSize(72, CLUSTER_BTN_H)
     previewItems[#previewItems+1] = previewAddonSlot
 
-    if advancedHUD then
     previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 64, CLUSTER_BTN_H, "caption", function()
         local toggle = _G.MSUF_TogglePreviewAnimation
         if type(toggle) ~= "function" then
@@ -507,8 +506,27 @@ local function BuildPreviewCluster(advancedHUD)
         end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")
-    end
+    DockUI.previewCluster = previewCluster
     FinishCluster(previewCluster, previewItems, CLUSTER_H, -7)
+end
+
+local function RefreshPreviewCluster()
+    local db = _G.MSUF_DB
+    local advanced = db and db.general and db.general.hideAdvancedMenu == false or false
+    if DockUI.advancedHUD == advanced then return end
+    DockUI.advancedHUD = advanced
+    DockUI.horizontalWidth = advanced and 1480 or DOCK_HORIZONTAL_W
+    local items = { previewBtn, previewAddonSlot }
+    for _, button in ipairs({ previewAnimBtn, auraBtn }) do
+        if advanced then
+            button:Show()
+            items[#items + 1] = button
+        else
+            button:Hide()
+        end
+    end
+    FinishCluster(DockUI.previewCluster, items, CLUSTER_H, -7)
+    ApplyDockLayout()
 end
 
 local function BuildLayoutCluster()
@@ -738,9 +756,7 @@ end
 local function EnsureHUD()
     if hudFrame then return false end
     RefreshHUDTheme()
-    local db = _G.MSUF_DB
-    local advancedHUD = db and db.general and db.general.hideAdvancedMenu == false
-    DockUI.horizontalWidth = advancedHUD and 1480 or DOCK_HORIZONTAL_W
+    DockUI.horizontalWidth = DOCK_HORIZONTAL_W
 
     BuildDockFrame()
     BuildDockHeader()
@@ -752,7 +768,7 @@ local function EnsureHUD()
     DockUI.primaryContainer:SetSize(1, CLUSTER_H)
     DockUI.row1 = {}
 
-    BuildPreviewCluster(advancedHUD)
+    BuildPreviewCluster()
     BuildLayoutCluster()
     BuildToolsCluster()
 
@@ -792,6 +808,7 @@ end
 
 function HUD.RefreshControls(force)
     if not hudFrame or (not force and not hudFrame:IsShown()) then return end
+    RefreshPreviewCluster()
     local key, component, slot = CurrentFocusSelection()
     local label, x, y, w, h = SelectionValues(key, component, slot)
     local text = DockUI.inspectorCompact and FormatSelectionSummary(label, x, y, w, h) or label

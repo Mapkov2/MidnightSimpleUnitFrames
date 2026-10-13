@@ -1,9 +1,7 @@
 -- Review F12: the public Edit Mode API session stays consistent when an owner
--- callback raises. Errors keep the client's normal Lua error path (no
--- protected calls in addon code), but
---   * a captureState that raises while a session starts leaves no half-filled
---     entry snapshot behind: the next start captures every element, so Cancel
---     All (discard) restores all of them;
+-- callback raises. The host boundary reports the error and continues:
+--   * a raising capture leaves that element out of the entry snapshot while
+--     healthy elements still capture and restore; the next session retries it;
 --   * MSUF's own session listeners (owner "MSUF.*", e.g. the Blizzard adapter's
 --     tooltip container and layout snapshot) are notified before any other
 --     addon's callback, so a raising third-party callback cannot skip them.
@@ -25,10 +23,13 @@ _G.MSUF_EM2 = {
         Get = function(key) return registry[key] end,
     },
 }
+local reports = {}
+_G.geterrorhandler = function() return function(message) reports[#reports + 1] = message end end
 local ns = {
     ExportPublic = function(name, value) _G[name] = value; return value end,
     ReportError = function() end,
 }
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua"))("MidnightSimpleUnitFrames", ns)
 local API, External = assert(_G.MSUF_EditModeAPI), assert(_G.MSUF_EM2.ExternalElements)
 
@@ -55,8 +56,10 @@ assert(API.RegisterElement("Third.Party", Element("broken", brokenState, {
 })))
 assert(API.RegisterElement("Third.Party", Element("fine", fineState)))
 local started = pcall(External.BeginSession)
-Check(not started, "the raising capture did not surface")
-Check(External.BeginSession() == true, "the session did not start after the raising capture")
+Check(started and #reports == 1, "the raising capture was not isolated and reported")
+fineState.x = 60
+Check(External.EndSession("discard") == true and fineState.x == 2, "healthy snapshot did not restore after a capture failure")
+Check(External.BeginSession() == true, "the next session did not retry the raising capture")
 brokenState.x, fineState.x = 50, 60
 Check(External.EndSession("discard") == true, "discard did not end the session")
 Check(brokenState.x == 1 and fineState.x == 2, "discard after a raising capture restored only part of the elements ("
@@ -71,7 +74,7 @@ assert(API.RegisterElement("Third.Party", Element("noisy", { x = 0, y = 0 }, {
 })))
 Check(External.BeginSession() == true, "the session did not start")
 local ended = pcall(External.EndSession, "save")
-Check(not ended, "the raising third-party callback did not surface")
+Check(ended and #reports == 2, "the raising third-party callback was not isolated and reported")
 local last = msufHeard[#msufHeard]
 Check(last and last[1] == false and last[2] == "save",
     "a raising third-party session callback kept MSUF's own adapter from hearing the session end")
@@ -80,4 +83,4 @@ Check(External.BeginSession() == true, "a new session did not start after the ra
 if #failures > 0 then
     error("editmode_public_api_session_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
-print("editmode_public_api_session_smoke: ok (complete entry snapshot, own listeners first)")
+print("editmode_public_api_session_smoke: ok (isolated callback failures, own listeners first)")

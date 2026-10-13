@@ -1326,7 +1326,7 @@ end
 
 local function San(v, d)
   v = tonumber(v) or d or 0
-  if v ~= v or v > 2000 or v < -2000 then v = d or 0 end
+  if v ~= v or v > 4096 or v < -4096 then v = d or 0 end
   return floor(v + 0.5)
 end
 
@@ -1512,8 +1512,12 @@ function GroupPopup.Sync(popup)
   local mode = popup._msufGFMode
   local conf = GetConf(mode)
   if not conf then return end
+  -- SetBoxText records the shown text so Escape restores it and a blur on an
+  -- unedited box does not commit.
+  local setBoxText = GroupPopup.QuickPopup().SetBoxText
   local function S(box, value)
-    if box and box.SetText then box:SetText(tostring(value or 0)) end
+    if setBoxText then setBoxText(box, value)
+    elseif box and box.SetText then box:SetText(tostring(value or 0)) end
   end
 
   local x, y = FramePositionValues(SyncContainer(mode))

@@ -79,7 +79,7 @@ local function NotifyListeners()
     for i = 1, #t do
         local fn = t[i]
         if type(fn) == "function" then
-            fn(previewActive)
+            MSUF.RunHostAPIStep("EditMode.Listener", fn, previewActive)
         end
     end
 end
@@ -278,6 +278,20 @@ local function ExternalEditModeAPI()
     return type(api) == "table" and api or nil
 end
 
+-- External entry notifications wait until profile and owner snapshots are
+-- ready. Without Options the local copy precedes every third-party callback.
+local function StartEditSession(requestedProvider)
+    local history = SharedHistoryService()
+    local hasHistory = history and type(history.StartHistorySession) == "function"
+    _snapshot, _snapshotProfile = nil, nil
+    if not hasHistory then SnapshotDB() end
+    local api = requestedProvider == "msuf" and ExternalEditModeAPI()
+    if api and type(api._BeginSession) == "function" then api._BeginSession(true) end
+    local historyStarted = hasHistory and history.StartHistorySession("edit_mode") == true
+    if hasHistory and not historyStarted then SnapshotDB() end
+    if api then api._NotifySessionStarted() end
+end
+
 --- ENTER Edit Mode
 function State.Enter(key, opts)
     if IsConfigCombatLocked() then
@@ -300,20 +314,7 @@ function State.Enter(key, opts)
     end
     if not EnsureDB() then return end
 
-    -- Cancel All is a transactional guarantee. Capture the pre-entry database
-    -- before exposing the active state so an immediate menu action cannot
-    -- mutate settings ahead of the old deferred snapshot.
-    SnapshotDB()
-
-    if requestedProvider == "msuf" then
-        local api = ExternalEditModeAPI()
-        if api and type(api._BeginSession) == "function" then api._BeginSession() end
-    end
-
-    local history = SharedHistoryService()
-    if history and type(history.StartHistorySession) == "function" then
-        history.StartHistorySession("edit_mode")
-    end
+    StartEditSession(requestedProvider)
 
     active  = true
     unitKey = key or "player"

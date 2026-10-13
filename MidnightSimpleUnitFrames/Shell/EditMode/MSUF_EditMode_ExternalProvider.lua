@@ -674,14 +674,24 @@ end
 --- loads the SavedVariables after every file ran, so a read while the adapter
 --- loads saw no profile and turned on an integration the player had turned
 --- off. Profile changes arrive through the adapter's SetEnabled
---- (State/MSUF_ProfileRuntime.lua).
-function External.ActivateAtLogin(Enabled, Activate)
+--- (State/MSUF_ProfileRuntime.lua). With watchedAddon, an Activate that
+--- reports false (the addon is not loaded yet) is retried when that addon
+--- loads; once an activation happened the watcher is released.
+function External.ActivateAtLogin(Enabled, Activate, watchedAddon)
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LOGIN")
-    frame:SetScript("OnEvent", function(self)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        self:SetScript("OnEvent", nil)
-        if Enabled() then Activate() end
+    frame:SetScript("OnEvent", function(self, event, addon)
+        local atLogin = event == "PLAYER_LOGIN"
+        if atLogin then self:UnregisterEvent("PLAYER_LOGIN")
+        elseif addon ~= watchedAddon then return end
+        local activated = Enabled() and Activate() ~= false
+        if not watchedAddon then
+            self:SetScript("OnEvent", nil)
+        elseif atLogin and not activated then
+            self:RegisterEvent("ADDON_LOADED")
+        elseif activated then
+            self:UnregisterEvent("ADDON_LOADED")
+        end
     end)
 end
 

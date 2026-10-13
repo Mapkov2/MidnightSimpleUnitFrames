@@ -264,7 +264,8 @@ end
 local function ScopeUnlocked(df, scope)
     local session = SessionMover()
     if session then return session:IsUnlocked() == true end
-    local mover = scope == "party" and df.moverFrame or df.raidMoverFrame
+    local mover
+    if scope == "party" then mover = df.moverFrame else mover = df.raidMoverFrame end
     return type(mover) == "table" and mover.IsShown and mover:IsShown() == true
 end
 
@@ -314,7 +315,8 @@ local function UnlockScope(scope)
         if not SessionMover() then EnsurePreview(df, scope) end
         return
     end
-    local unlock = scope == "party" and df.UnlockFrames or df.UnlockRaidFrames
+    local unlock
+    if scope == "party" then unlock = df.UnlockFrames else unlock = df.UnlockRaidFrames end
     if type(unlock) ~= "function" then return end
     unlock(df)
     if ScopeUnlocked(df, scope) then
