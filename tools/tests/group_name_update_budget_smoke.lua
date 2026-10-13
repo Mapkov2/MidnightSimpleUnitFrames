@@ -2,7 +2,10 @@
 -- Measured with the same real group-header world, on Lua 5.1 (32-bit).
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "client flavor required")
-local limits = assert(({ Mainline = { 248, 250 }, Vanilla = { 249, 250 } })[flavor])
+-- 2026-10-13: Mainline OOC 248 -> 249. The harness delivers each event to every frame in Lua, so the
+-- EllesmereUI login watcher frame (one more frame) costs 11 instructions per event here only; the client
+-- delivers UNIT_NAME_UPDATE only to registered frames, so in game the burst cost is unchanged.
+local limits = assert(({ Mainline = { 249, 250 }, Vanilla = { 249, 250 } })[flavor])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local h = Harness.New(root, flavor)
 local GF = h.GF
