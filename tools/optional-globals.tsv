@@ -27,8 +27,6 @@ MSUF_RefreshStatusIconPacks	load-order	MidnightSimpleUnitFrames/GroupFrames/MSUF
 MSUF_RequestFontRecovery	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_RequestStatusIconsRefreshForCurrent	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua	media registered while the core loads refreshes at once in combat
 MSUF_ResolveStatusbarTextureKey	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a defaults pass during the core load validates through LibSharedMedia instead
-MSUF_RoundedUF_OnApplyAll	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	exported only while the rounded frames module is enabled
-MSUF_RoundedUF_OnDispelOverlayChanged	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	exported only while the rounded frames module is enabled
 MSUF_ScheduleCooldownWidthRefresh	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_SetGlobalUiScale	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua	MSUF_InstallGlobalScaleGate reports whether the scale owner has loaded
 MSUF_TryCloseExternalEditMode	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the EllesmereUI bridge loads on the Mainline TOC only; without it Edit Mode closes its own mode

@@ -16,6 +16,8 @@ local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local UF = MSUF.UF
+local Surface = UF.Surface
 
 local CreateFrame = CreateFrame
 local CreateColor = _G.CreateColor
@@ -302,17 +304,12 @@ local function ResolveClassRGB(unitKey)
 end
 
 --- The regen/retarget driver exists only while some applied layer needs it.
-local driver
-local driverEvents = {}
-local driverUnitFilters = {}
 local wantRegenEvents = false
 local wantTargetEvents = false
 local wantFocusEvents = false
 local wantUnitTargetTarget = false
 local wantUnitTargetFocus = false
 local wantUnitTargetPet = false
-local petTargetDriver
-local petTargetEventRegistered = false
 local wantBossEvents = false
 local wantArenaEvents = false
 local RefreshUnitTextureLayers
@@ -371,63 +368,17 @@ local function DriverOnEvent(_, event, unit)
   end
 end
 
-local function SetDriverUnitEvent(event, wantTarget, wantFocus)
-  local wanted = wantTarget or wantFocus
-  local filter = wantTarget and (wantFocus and "target,focus" or "target") or (wantFocus and "focus" or nil)
-  if (driverEvents[event] == true) == (wanted == true) and driverUnitFilters[event] == filter then return end
-  if wanted and not driver then
-    driver = CreateFrame("Frame")
-    driver:SetScript("OnEvent", DriverOnEvent)
-  end
-  if not driver then return end
-  driverEvents[event] = wanted or nil
-  driverUnitFilters[event] = filter
-  driver:UnregisterEvent(event)
-  if wantTarget and wantFocus then
-    driver:RegisterUnitEvent(event, "target", "focus")
-  elseif wantTarget then
-    driver:RegisterUnitEvent(event, "target")
-  elseif wantFocus then
-    driver:RegisterUnitEvent(event, "focus")
-  end
-end
-
-local function SetPetTargetEvent(wanted)
-  if petTargetEventRegistered == (wanted == true) then return end
-  if wanted and not petTargetDriver then
-    petTargetDriver = CreateFrame("Frame")
-    petTargetDriver:SetScript("OnEvent", DriverOnEvent)
-  end
-  if not petTargetDriver then return end
-  petTargetEventRegistered = wanted == true
-  if wanted then
-    petTargetDriver:RegisterUnitEvent("UNIT_TARGET", "pet")
-  else
-    petTargetDriver:UnregisterEvent("UNIT_TARGET")
-  end
-end
-
-local function SetDriverEvent(event, wanted)
-  if (driverEvents[event] == true) == (wanted == true) then return end
-  if wanted and not driver then
-    driver = CreateFrame("Frame")
-    driver:SetScript("OnEvent", DriverOnEvent)
-  end
-  if not driver then return end
-  driverEvents[event] = wanted or nil
-  if wanted then driver:RegisterEvent(event) else driver:UnregisterEvent(event) end
-end
-
 local function SyncDriverEvents()
-  SetDriverEvent("PLAYER_REGEN_DISABLED", wantRegenEvents)
-  SetDriverEvent("PLAYER_REGEN_ENABLED", wantRegenEvents)
-  SetDriverEvent("PLAYER_TARGET_CHANGED", wantTargetEvents)
-  SetDriverEvent("PLAYER_FOCUS_CHANGED", wantFocusEvents)
-  SetDriverUnitEvent("UNIT_TARGET", wantUnitTargetTarget, wantUnitTargetFocus)
-  SetPetTargetEvent(wantUnitTargetPet)
-  SetDriverEvent("UNIT_PET", wantUnitTargetPet)
-  SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
-  SetDriverEvent("ARENA_OPPONENT_UPDATE", wantArenaEvents)
+  Surface.SetEvent("TextureLayer", "identity", "PLAYER_REGEN_DISABLED", wantRegenEvents)
+  Surface.SetEvent("TextureLayer", "identity", "PLAYER_REGEN_ENABLED", wantRegenEvents)
+  Surface.SetEvent("TextureLayer", "identity", "PLAYER_TARGET_CHANGED", wantTargetEvents)
+  Surface.SetEvent("TextureLayer", "identity", "PLAYER_FOCUS_CHANGED", wantFocusEvents)
+  Surface.SetEvent("TextureLayer", "identity", "UNIT_TARGET", wantUnitTargetTarget or wantUnitTargetFocus,
+    wantUnitTargetTarget and "target" or "focus", wantUnitTargetTarget and wantUnitTargetFocus and "focus" or nil)
+  Surface.SetEvent("TextureLayer", "pet", "UNIT_TARGET", wantUnitTargetPet, "pet")
+  Surface.SetEvent("TextureLayer", "identity", "UNIT_PET", wantUnitTargetPet)
+  Surface.SetEvent("TextureLayer", "identity", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
+  Surface.SetEvent("TextureLayer", "identity", "ARENA_OPPONENT_UPDATE", wantArenaEvents)
 end
 
 local function AddMaskBit(mask, bit)
@@ -549,6 +500,8 @@ local function CompileDynamicMasks(frame, unitKey, conf)
   frame._msufTexLayerHealthColorMask = healthColorMask > 0 and healthColorMask or nil
   frame._msufTexLayerHealthDirectGradientMask = healthDirectGradientMask > 0 and healthDirectGradientMask or nil
   frame._msufTexLayerHealthUpdate = healthMask > 0 and ApplyHealthStateFrame or nil
+  frame._msufSurfaceHealthUpdate = frame._msufTexLayerHealthUpdate
+  frame._msufSurfaceHealthColor = frame._msufTexLayerHealthColorMask
   if regenMask > 0 then wantRegenEvents = true end
   if targetMask > 0 or targetColorMask > 0 then wantTargetEvents = true end
   if focusMask > 0 or focusColorMask > 0 then wantFocusEvents = true end
@@ -588,8 +541,7 @@ end
 --- RoundedFrames exports the hook only while its module is active.
 local function WantsRoundedClip(conf, prefix, keys)
   return conf[keys and keys.RoundedClip or (prefix .. "RoundedClip")] == true
-    and _G.MSUF_RoundedUF_Active == true
-    and MSUF.Optional("MSUF_RoundedUF_OnDispelOverlayChanged") ~= nil
+    and Surface.IsDecoratorActive("RoundedFrames")
 end
 
 local function NewLayerTexture(holder, sublevel)
@@ -717,7 +669,7 @@ end
 
 local function ApplyClip(frame, holder, tex, clipWanted)
   if clipWanted or tex._msufTextureLayerRoundedClip then
-    _G.MSUF_RoundedUF_OnDispelOverlayChanged(frame, tex, clipWanted == true)
+    Surface.OnVisualChanged(frame, "MSUF_RoundedUF_OnDispelOverlayChanged", tex, clipWanted == true)
     tex._msufTextureLayerRoundedClip = clipWanted == true or nil
   end
 end
@@ -1324,6 +1276,8 @@ local function RecomputeDriverNeeds(frames)
         frame._msufTexLayerHealthColorMask = nil
         frame._msufTexLayerHealthDirectGradientMask = nil
         frame._msufTexLayerHealthUpdate = nil
+        frame._msufSurfaceHealthUpdate = nil
+        frame._msufSurfaceHealthColor = nil
       end
     end
   end
@@ -1380,11 +1334,22 @@ RefreshUnitTextureLayers = function(unit)
 end
 TextureLayer.Refresh = RefreshUnitTextureLayers
 
-do
-  local UF = MSUF and MSUF.UF
-  if UF and type(UF.RegisterVisualRefreshCallback) == "function" then
-    UF.RegisterVisualRefreshCallback("TextureLayer", RefreshUnitTextureLayers)
-  end
+ExportPublic("MSUF_RefreshUnitTextureLayers", RefreshUnitTextureLayers)
+
+-- Preserve the factory and explicit visual-refresh triggers. Element-only
+-- transactions and OnShow do not restamp these decorative surfaces.
+local function ApplyDecorator(frame)
+  if not frame or frame._msufIsGroupFrame == true then return end
+  return ApplyToUnitFrame(frame)
 end
 
-ExportPublic("MSUF_RefreshUnitTextureLayers", RefreshUnitTextureLayers)
+UF.RegisterDecorator("TextureLayer", {
+  Apply = ApplyDecorator,
+  OnEvent = DriverOnEvent,
+  OnVisualChanged = function(frame, event, unit)
+    if event == "commit" then return RefreshUnitTextureLayers(unit) end
+    if event == "layout" then return ApplyDecorator(frame) end
+    return false
+  end,
+})
+UF.RegisterVisualRefreshCallback("TextureLayer", RefreshUnitTextureLayers)

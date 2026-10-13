@@ -238,6 +238,8 @@ local CORE_FILES = {
     "Libs/MSUFUnitFrames/MSUF_UF_Apply.lua", "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua",
     "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua",
     "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua",
+    "UnitFrames/Engine/MSUF_UF_Shared.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua",
 }
 
 local function Boot(options)
@@ -296,6 +298,13 @@ end
 -- real element of that name declares.
 local function StandIn(UF, name, def, traits)
     local element = { calls = {} }
+    if name == "EliteIndicator" or name == "LevelIndicator" then
+        element.Routes = { events = true, identity = true }
+    elseif name == "StanceIndicator" or name == "RestingIndicator" then
+        element.Routes = { events = true, reshow = true }
+    elseif name == "Health" or name == "Power" then
+        element.Routes = { basic = true, identityBar = true }
+    end
     element.events = def.events
     element.unitlessEvents = def.unitlessEvents
     function element.Update(frame, event)
@@ -362,7 +371,7 @@ end)
 Scenario("F4 stance and resting replay once on OnShow", function()
     local client, UF = Boot()
     client.units.player = "Player-1"
-    -- Registered exactly like MSUF_UF_Elements_Status.lua registers them: no traits.
+    -- Match the Routes declared by MSUF_UF_Elements_Status.lua.
     local stance = StandIn(UF, "StanceIndicator", {
         unitlessEvents = { "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD" } })
     local resting = StandIn(UF, "RestingIndicator", { unitlessEvents = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" } })

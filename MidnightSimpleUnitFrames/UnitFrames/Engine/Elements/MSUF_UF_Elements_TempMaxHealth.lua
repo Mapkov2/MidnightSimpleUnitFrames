@@ -172,4 +172,5 @@ end
 
 TempMaxHealth.UpdateOnApply = true
 
+TempMaxHealth.Routes = { events = true, identity = true }
 UF.RegisterElement("TempMaxHealth", TempMaxHealth)

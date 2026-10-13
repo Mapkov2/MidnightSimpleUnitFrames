@@ -68,8 +68,8 @@ end
 Observe(world.core.Highlight, "Refresh", "highlight")
 Observe(UF, "DisableBlizzardFrames", "blizzard")
 Observe(UF, "FlushDeferredRefreshes", "refreshes")
--- Audit all four Factory.Apply tail effects on the complete spawn path.
-Observe(env, "MSUF_RefreshUnitTextureLayers", "textures", true)
+-- Audit the surface demand commit and remaining Factory.Apply tail effects.
+Observe(UF.Surface, "EndBatch", "textures", true)
 Observe(env, "MSUF_ArenaTrinkets_RefreshLayout", "trinkets", true)
 Observe(env, "MSUF_FocusKickDriver_ForceUpdate", "focusKick")
 Observe(env, "MSUF_KickReady_RefreshAll", "kickReady")

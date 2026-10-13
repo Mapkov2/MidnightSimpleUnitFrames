@@ -298,6 +298,7 @@ function World.New(root, flavor, options)
     general.barBgFillMode = "missing"
     general.barBgColorMode = "health_gradient"
     env.MSUF_RoundedUF_Active = true
+    h.world.core.UF.RegisterDecorator("BudgetRoundedSurface", { OwnsMask = function() return true end })
     local raid = GF.GetConf("raid")
     raid.enabled = true
     raid.deadBgEnabled = true

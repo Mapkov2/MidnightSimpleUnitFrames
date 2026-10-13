@@ -656,3 +656,6 @@ clients+Forever	lua	tools/tests/group_frame_overlay_shared_spec_smoke.lua	{root/
 -	lua	tools/tests/auras3_signature_read_coverage_smoke.lua	{root} Mainline	Auras3 initializeFrame config signature coverage: Mainline
 -	lua	tools/tests/auras3_signature_read_coverage_smoke.lua	{root} Forever	Auras3 initializeFrame config signature coverage: Forever
 -	python	tools/tests/auras3_module_export_boundary_smoke.py	{root}	Auras3 named runtime module exports
+clients+Forever	lua	tools/tests/uf_route_registry_smoke.lua	{root} {flavor}	Unit-frame declared route registry: {flavor}
+clients+Forever	lua	tools/tests/uf_surface_decorators_smoke.lua	{root} {flavor}	Unit-frame surface decorator lifecycle: {flavor}
+clients+Forever	lua	tools/tests/uf_surface_lifecycle_budget_smoke.lua	{root} {flavor}	Unit-frame original surface lifecycle budgets: {flavor}

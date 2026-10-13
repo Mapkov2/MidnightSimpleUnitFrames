@@ -55,6 +55,7 @@ local MSUF = {
 }
 _G.MSUF_DB = { bars = { roundedFramesEnabled = true }, target = {}, general = {} }
 
+assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(ROOT .. "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(ROOT .. "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredModule, "module not registered")

@@ -2444,6 +2444,7 @@ local function RegisterStatusIndicator(def)
     HideField(frame, hide)
   end
 
+  element.Routes = def.routes
   UF.RegisterElement(name, element)
 end
 
@@ -2456,24 +2457,37 @@ end
 --   update / hide         updater (frame, status[, event, seedHP]) and the
 --                         region field(s) hidden on Disable
 --   noGroup / playerOnly  IsEnabled gates
+--   routes                declared engine event and lifecycle participation
 --   updateWithEvent       forward (event, seedHP) into the updater
 local STATUS_INDICATOR_DEFS = {
-  { name = "RaidMarkerIndicator", key = "raidMarker", unitlessEvents = Runtime.RAID_MARKER_EVENTS, update = Runtime.UpdateRaidMarker, hide = "raidTargetIcon", noGroup = true },
-  { name = "LeaderIndicator", key = "leader", unitlessEvents = Runtime.LEADER_EVENTS, update = Runtime.UpdateLeaderPair, hide = { "LeaderIndicator", "leaderIcon", "assistIcon" }, noGroup = true },
-  { name = "LevelIndicator", key = "identityText", update = Runtime.UpdateIdentityTexts, hide = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }, getEvents = Runtime.IdentityTextEvents, getUnitlessEvents = Runtime.IdentityTextUnitlessEvents },
+  { name = "RaidMarkerIndicator", routes = { events = true, identity = true }, key = "raidMarker", unitlessEvents = Runtime.RAID_MARKER_EVENTS,
+    update = Runtime.UpdateRaidMarker, hide = "raidTargetIcon", noGroup = true },
+  { name = "LeaderIndicator", routes = { events = true, identity = true }, key = "leader", unitlessEvents = Runtime.LEADER_EVENTS,
+    update = Runtime.UpdateLeaderPair, hide = { "LeaderIndicator", "leaderIcon", "assistIcon" }, noGroup = true },
+  { name = "LevelIndicator", routes = { events = true, identity = true }, key = "identityText", update = Runtime.UpdateIdentityTexts,
+    hide = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }, getEvents = Runtime.IdentityTextEvents,
+    getUnitlessEvents = Runtime.IdentityTextUnitlessEvents },
   { name = "BossNumberIndicator", key = "bossNumber", update = Runtime.UpdateBossNumber, hide = "bossNumberText", noGroup = true },
-  { name = "RaidGroupIndicator", key = "raidGroup", unitlessEvents = Runtime.RAID_GROUP_EVENTS, update = Runtime.UpdateRaidGroup, hide = "raidGroupNameText", noGroup = true },
-  { name = "EliteIndicator", key = "elite", events = Runtime.ELITE_EVENTS, update = Runtime.UpdateElite, hide = "eliteIcon" },
-  { name = "StatusTextIndicator", key = "statusText", update = Runtime.UpdateStatusText, hide = "statusIndicatorText", noGroup = true, getEvents = Runtime.StatusTextEvents, getUnitlessEvents = Runtime.StatusTextUnitlessEvents, updateWithEvent = true },
-  { name = "CombatIndicator", key = "combat", update = Runtime.UpdateCombat, hide = "combatStateIndicatorIcon", getEvents = Runtime.CombatEvents, playerUnitlessEvents = Runtime.COMBAT_PLAYER_EVENTS },
-  { name = "RestingIndicator", key = "resting", unitlessEvents = Runtime.RESTING_PLAYER_EVENTS, update = Runtime.UpdateResting, hide = "restingIndicatorIcon", playerOnly = true },
-  { name = "IncomingResIndicator", key = "incomingRes", events = Runtime.INCOMING_RES_EVENTS, update = Runtime.UpdateIncomingRes, hide = "incomingResIndicatorIcon", noGroup = true },
-  { name = "PVPIndicator", key = "pvp", update = Runtime.UpdatePVP, hide = "pvpIndicatorIcon", noGroup = true, getEvents = Runtime.PVPEvents },
+  { name = "RaidGroupIndicator", routes = { events = true, identity = true }, key = "raidGroup", unitlessEvents = Runtime.RAID_GROUP_EVENTS,
+    update = Runtime.UpdateRaidGroup, hide = "raidGroupNameText", noGroup = true },
+  { name = "EliteIndicator", routes = { events = true, identity = true }, key = "elite", events = Runtime.ELITE_EVENTS,
+    update = Runtime.UpdateElite, hide = "eliteIcon" },
+  { name = "StatusTextIndicator", routes = { events = true, identity = true }, key = "statusText", update = Runtime.UpdateStatusText,
+    hide = "statusIndicatorText", noGroup = true, getEvents = Runtime.StatusTextEvents, getUnitlessEvents = Runtime.StatusTextUnitlessEvents,
+    updateWithEvent = true },
+  { name = "CombatIndicator", routes = { events = true, identity = true }, key = "combat", update = Runtime.UpdateCombat,
+    hide = "combatStateIndicatorIcon", getEvents = Runtime.CombatEvents, playerUnitlessEvents = Runtime.COMBAT_PLAYER_EVENTS },
+  { name = "RestingIndicator", routes = { events = true, reshow = true }, key = "resting", unitlessEvents = Runtime.RESTING_PLAYER_EVENTS,
+    update = Runtime.UpdateResting, hide = "restingIndicatorIcon", playerOnly = true },
+  { name = "IncomingResIndicator", routes = { events = true, identity = true }, key = "incomingRes", events = Runtime.INCOMING_RES_EVENTS,
+    update = Runtime.UpdateIncomingRes, hide = "incomingResIndicatorIcon", noGroup = true },
+  { name = "PVPIndicator", routes = { events = true, identity = true }, key = "pvp", update = Runtime.UpdatePVP, hide = "pvpIndicatorIcon",
+    noGroup = true, getEvents = Runtime.PVPEvents },
   -- Stance text events fire only on user action or a stance-bar rebuild
   -- (talents, level-up, loading screen). Never add
   -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and
   -- would turn this indicator into a hot path.
-  { name = "StanceIndicator", key = "stance",
+  { name = "StanceIndicator", routes = { events = true, reshow = true }, key = "stance",
     unitlessEvents = { "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD" },
     update = Status.UpdateStanceText, hide = "stanceIndicatorText", noGroup = true, playerOnly = true },
 }

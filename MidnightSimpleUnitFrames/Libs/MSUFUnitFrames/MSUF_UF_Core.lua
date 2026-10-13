@@ -45,125 +45,63 @@ UF.initialized = UF.initialized or false
 -- menu, preview and kernel modules write.
 local HOST_VALUES = _G
 
-local BASIC_ELEMENTS = {
-  LoadConditions = true,
-  Health = true,
-  Power = true,
-  Text = true,
-  NameText = true,
-  HealthText = true,
-  PowerText = true,
-  InlineToT = true,
-}
+local BASIC_ELEMENTS, EVENT_ELEMENTS = {}, {}
+local FORCE_UPDATE_ELEMENTS, IDENTITY_ELEMENTS, RESHOW_ELEMENTS = {}, {}, {}
+local IDENTITY_BAR_ELEMENTS = {}
 UF.basicElements = BASIC_ELEMENTS
-local FORCE_UPDATE_ELEMENTS = UF.forceUpdateElements or {}
 UF.forceUpdateElements = FORCE_UPDATE_ELEMENTS
-for name in pairs(BASIC_ELEMENTS) do FORCE_UPDATE_ELEMENTS[name] = true end
-
-local EVENT_ELEMENTS = {
-  -- Native AuraContainer owns steady-state UNIT_AURA deltas, but party aura
-  -- access can change without a catch-up delta on range/connection edges.
-  -- Auras declares only those rare, unit-filtered recovery events.
-  Auras = true,
-  Portrait = true,
-  TempMaxHealth = true,
-  Prediction = true,
-  -- These elements own live state that is not covered by the basic bar/text
-  -- routes or by a separate shared driver. Keep them frame-routed so their
-  -- option-gated GetEvents/GetUnitlessEvents declarations actually run.
-  Borders = true,
-  GroupCornerIndicators = true,
-  GroupStatusRuntime = true,
-  GroupVisuals = true,
-  -- Group range events must stay unit-filtered per frame, because a shared
-  -- subscription cannot safely dispatch a secret UNIT_IN_RANGE_UPDATE unit
-  -- payload. Note this is the only reason: RegisterUnitEvent itself takes a
-  -- variadic unit-token list and reports refusal by returning false (12.1
-  -- SimpleFrameAPIDocumentation), so there is no four-token ceiling to respect.
-  GroupRangeFade = true,
-}
-
--- Status regions are structural, but their child elements own the smallest
--- possible live event routes. Keep this explicit instead of widening the hot
--- event gate to every cold-path/apply element.
-local STATUS_EVENT_ELEMENTS = {
-  RaidMarkerIndicator = true,
-  LeaderIndicator = true,
-  LevelIndicator = true,
-  RaidGroupIndicator = true,
-  EliteIndicator = true,
-  StatusTextIndicator = true,
-  CombatIndicator = true,
-  RestingIndicator = true,
-  IncomingResIndicator = true,
-  PVPIndicator = true,
-  StanceIndicator = true,
-}
-
-local IDENTITY_ELEMENTS = {
-  NameText = true,
-  HealthText = true,
-  PowerText = true,
-  InlineToT = true,
-  Portrait = true,
-  TempMaxHealth = true,
-  Prediction = true,
-  Borders = true,
-  -- These values belong to the bound unit and must be reseeded when target,
-  -- focus, dependent, pet, or boss identity changes. Resting is player-only
-  -- and owns PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD directly.
-  RaidMarkerIndicator = true,
-  LeaderIndicator = true,
-  LevelIndicator = true,
-  RaidGroupIndicator = true,
-  EliteIndicator = true,
-  StatusTextIndicator = true,
-  CombatIndicator = true,
-  IncomingResIndicator = true,
-  PVPIndicator = true,
-}
 UF.identityElements = IDENTITY_ELEMENTS
-
--- Elements that only their own events keep current: neither the identity plan
--- nor the forced runtime plan reseeds them. A hidden frame's events are
--- suspended (SuspendHiddenFrameEvents), so FrameOnShow replays these once;
--- resting and a stance or form can change while a mount, Alt+Z or a load
--- condition hides the player frame. An element opts in with the reshow trait.
-local RESHOW_ELEMENTS = UF.reshowElements or {
-  RestingIndicator = true,
-  StanceIndicator = true,
-}
 UF.reshowElements = RESHOW_ELEMENTS
+UF.elementRoutes = {}
+local Compiler = { plugins = {}, eventPlugins = {}, selectors = {}, needs = {} }
+UF.RouteCompiler = Compiler
 
-local IDENTITY_BAR_ELEMENTS = {
-  Health = true,
-  Power = true,
-}
+local function InsertRoute(plugins, plugin)
+  local index = #plugins + 1
+  while index > 1 and plugins[index - 1].priority > plugin.priority do
+    plugins[index] = plugins[index - 1]
+    index = index - 1
+  end
+  plugins[index] = plugin
+end
 
-local HEALTH_EVENTS = {
-  UNIT_HEALTH = true,
-  UNIT_MAXHEALTH = true,
-  UNIT_CONNECTION = true,
-  PARTY_MEMBER_ENABLE = true,
-  PARTY_MEMBER_DISABLE = true,
-}
+function UF.RegisterRoute(name, compile, priority, events)
+  local plugin = { name = name, compile = compile, priority = priority or 20 }
+  if events then
+    for event in pairs(events) do
+      local plugins = Compiler.eventPlugins[event]
+      if not plugins then
+        plugins = {}
+        Compiler.eventPlugins[event] = plugins
+        for i = 1, #Compiler.plugins do plugins[i] = Compiler.plugins[i] end
+      end
+      InsertRoute(plugins, plugin)
+    end
+  else
+    InsertRoute(Compiler.plugins, plugin)
+    for _, plugins in pairs(Compiler.eventPlugins) do InsertRoute(plugins, plugin) end
+  end
+  return true
+end
 
-local POWER_EVENTS = {
-  UNIT_POWER_UPDATE = true,
-  UNIT_POWER_FREQUENT = true,
-  UNIT_MAXPOWER = true,
-  UNIT_DISPLAYPOWER = true,
-}
+local function DeclareRoutes(name, element, traits)
+  local routes = element.Routes or UF.elementRoutes[name] or traits or {}
+  element.Routes = routes
+  if routes.basic then BASIC_ELEMENTS[name] = true end
+  if routes.events then EVENT_ELEMENTS[name] = true end
+  if routes.forceUpdate or routes.basic then FORCE_UPDATE_ELEMENTS[name] = true end
+  if routes.identity then IDENTITY_ELEMENTS[name] = true end
+  if routes.identityBar then IDENTITY_BAR_ELEMENTS[name] = true end
+  if routes.reshow then RESHOW_ELEMENTS[name] = true end
+  if routes.CompileNeeds then Compiler.needs[#Compiler.needs + 1] = routes.CompileNeeds end
+  if routes.SelectNeeds then Compiler.selectors[#Compiler.selectors + 1] = routes.SelectNeeds end
+end
 
 local GROUP_LIFECYCLE_EVENTS = {
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
 }
 
-local GROUP_THREAT_EVENTS = {
-  UNIT_THREAT_SITUATION_UPDATE = true,
-  UNIT_THREAT_LIST_UPDATE = true,
-}
 
 local function IsUnitToken(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
@@ -402,7 +340,6 @@ local function EventElementAllowed(name)
   return (traits and traits.events == true)
     or HotElementAllowed(name) == true
     or EVENT_ELEMENTS[name] == true
-    or STATUS_EVENT_ELEMENTS[name] == true
 end
 UF.EventElementAllowed = EventElementAllowed
 
@@ -428,6 +365,7 @@ function UF.RegisterElement(name, element, traits)
   end
   UF.elements[name] = element
   Elements[name] = element
+  DeclareRoutes(name, element, traits)
   if type(traits) == "table" then
     UF.elementTraits[name] = traits
     if traits.defaultApply == true and type(Metadata.defaultApplyMask) == "table" then
@@ -902,13 +840,8 @@ local RouteCache = {
   elementFunctions = {},
   nonElementFunctions = setmetatable({}, { __mode = "k" }),
   noDispatchFunctions = {},
-  directHealth = {},
-  directGroupHealth = {},
-  directPower = {},
-  directGroupThreat = {},
   single = {},
   sharedRoutes = {},
-  healthVisibility = {},
 }
 -- Intern pools of immutable route data shared by identical frame archetypes.
 local Intern = {
@@ -977,264 +910,6 @@ local function RouteCacheLeaf(root, fn1, fn2, fn3, fn4, mode, target)
   return nextNode, target or NIL_ROUTE_KEY
 end
 
--- Route-closure contract for BuildHealthRoute and BuildGroupHealthRoute.
--- `self._msufTextDirtyMask` is the deferred text drain's pending mask owned by
--- MSUF_UF_Text_Runtime: bit 1 (value 1) = a HealthText repaint is already
--- queued, bit 2 (value 2) = a PowerText repaint is queued, 3 = both. The test
--- `dirty ~= 1 and dirty ~= 3` means "health bit clear" (mask nil or 2) spelled
--- without a bit library, so the queued drain, not this tick, repaints text.
--- `self._msufPredictionHealthVisualActive` is the flag Prediction publishes
--- while a health-dependent absorb visual exists; false skips that follower.
--- The ten near-identical closures below are intentional unrolling: every
--- archetype (target-bound vs unit-bound, gated vs plain prediction, gated vs
--- plain text, with or without visuals, dispatch-free vs Begin/EndFrameEvent)
--- is one straight-line function whose captured nils were decided once at
--- compile time, so the dominant UNIT_HEALTH tick pays no per-event branching.
--- Do not fold them into a generic closure or a shared helper.
-local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
-    predictionGated, textDirtyGated)
-  -- UNIT_HEALTH can compile two followers whose common state is already known
-  -- on the frame: the prediction owner publishes whether a health-dependent
-  -- absorb visual exists, while the text coalescer publishes its pending bit.
-  -- Keep those gates in this route so the overwhelmingly common no-op tick
-  -- never crosses either follower function boundary.
-  if predictionGated == true and textDirtyGated == true
-    and predictionFn and textFn and not visualsFn then
-    -- This exact UNIT_HEALTH archetype has no shared state consumer: Health
-    -- owns the bar payload, Prediction is a frame-local gate/follower, and the
-    -- deferred text marker retains no event payload. Group UNIT_HEALTH already
-    -- uses the same dispatch-free contract; single frames can avoid the token
-    -- churn too while connection/max/visual routes keep coherent dispatch.
-    if target then
-      return function(self, ev, _unit)
-        local hp, hpMax, percentReady
-        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-        if self._msufPredictionHealthVisualActive == true then
-          if percentReady == true then
-            predictionFn(self, ev, target)
-          else
-            predictionFn(self, ev, target, hp, hpMax)
-          end
-        end
-        local dirty = self._msufTextDirtyMask
-        if dirty ~= 1 and dirty ~= 3 then
-          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-        end
-      end
-    end
-    return function(self, ev, unit)
-      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if self._msufPredictionHealthVisualActive == true then
-        if percentReady == true then
-          predictionFn(self, ev, u)
-        else
-          predictionFn(self, ev, u, hp, hpMax)
-        end
-      end
-      local dirty = self._msufTextDirtyMask
-      if dirty ~= 1 and dirty ~= 3 then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-    end
-  end
-  if predictionGated == true and textDirtyGated == true and predictionFn and textFn then
-    if target then
-      return function(self, ev, _unit)
-        BeginFrameEvent(self, ev)
-        local hp, hpMax, percentReady
-        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-        if self._msufPredictionHealthVisualActive == true then
-          if percentReady == true then
-            predictionFn(self, ev, target)
-          else
-            predictionFn(self, ev, target, hp, hpMax)
-          end
-        end
-        local dirty = self._msufTextDirtyMask
-        if dirty ~= 1 and dirty ~= 3 then
-          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-        end
-        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
-        EndFrameEvent(self)
-      end
-    end
-    return function(self, ev, unit)
-      BeginFrameEvent(self, ev)
-      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if self._msufPredictionHealthVisualActive == true then
-        if percentReady == true then
-          predictionFn(self, ev, u)
-        else
-          predictionFn(self, ev, u, hp, hpMax)
-        end
-      end
-      local dirty = self._msufTextDirtyMask
-      if dirty ~= 1 and dirty ~= 3 then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-      EndFrameEvent(self)
-    end
-  end
-  if predictionGated == true and predictionFn then
-    if target then
-      return function(self, ev, _unit)
-        BeginFrameEvent(self, ev)
-        local hp, hpMax, percentReady
-        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-        if self._msufPredictionHealthVisualActive == true then
-          if percentReady == true then
-            predictionFn(self, ev, target)
-          else
-            predictionFn(self, ev, target, hp, hpMax)
-          end
-        end
-        if textFn then
-          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-        end
-        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
-        EndFrameEvent(self)
-      end
-    end
-    return function(self, ev, unit)
-      BeginFrameEvent(self, ev)
-      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if self._msufPredictionHealthVisualActive == true then
-        if percentReady == true then
-          predictionFn(self, ev, u)
-        else
-          predictionFn(self, ev, u, hp, hpMax)
-        end
-      end
-      if textFn then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-      EndFrameEvent(self)
-    end
-  end
-  if textDirtyGated == true and textFn then
-    if target then
-      return function(self, ev, _unit)
-        BeginFrameEvent(self, ev)
-        local hp, hpMax, percentReady
-        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-        if predictionFn then
-          if percentReady == true then predictionFn(self, ev, target) else predictionFn(self, ev, target, hp, hpMax) end
-        end
-        local dirty = self._msufTextDirtyMask
-        if dirty ~= 1 and dirty ~= 3 then
-          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-        end
-        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
-        EndFrameEvent(self)
-      end
-    end
-    return function(self, ev, unit)
-      BeginFrameEvent(self, ev)
-      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if predictionFn then
-        if percentReady == true then predictionFn(self, ev, u) else predictionFn(self, ev, u, hp, hpMax) end
-      end
-      local dirty = self._msufTextDirtyMask
-      if dirty ~= 1 and dirty ~= 3 then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-      EndFrameEvent(self)
-    end
-  end
-  if target then
-    if not predictionFn then
-      return function(self, ev, _unit)
-        BeginFrameEvent(self, ev)
-        local hp, hpMax, percentReady
-        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-        if textFn then
-          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-        end
-        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
-        EndFrameEvent(self)
-      end
-    end
-    return function(self, ev, _unit)
-      BeginFrameEvent(self, ev)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
-      if percentReady == true then
-        predictionFn(self, ev, target)
-      else
-        predictionFn(self, ev, target, hp, hpMax)
-      end
-      if textFn then
-        if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
-      end
-      if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
-      EndFrameEvent(self)
-    end
-  end
-  if not predictionFn then
-    return function(self, ev, unit)
-      BeginFrameEvent(self, ev)
-      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if textFn then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-      EndFrameEvent(self)
-    end
-  end
-  return function(self, ev, unit)
-    BeginFrameEvent(self, ev)
-    local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-    local hp, hpMax, percentReady
-    if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-    if percentReady == true then
-      predictionFn(self, ev, u)
-    else
-      predictionFn(self, ev, u, hp, hpMax)
-    end
-    if textFn then
-      if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-    end
-    if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-    EndFrameEvent(self)
-  end
-end
-
--- The bar flags a tick for a resource it does not display (COMBO_POINTS on an
--- energy bar) in its sixth return. The text shows that same resource, so such
--- a tick cannot change it: skip the text's own power read and native format.
-local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
-  if target then
-    return function(self, ev, _unit, eventPowerToken)
-      local power, powerMax, powerType, powerToken, metaChanged, foreign
-      if barFn then
-        power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, target, eventPowerToken)
-      end
-      if textFn and foreign ~= true then
-        textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged)
-      end
-    end
-  end
-  return function(self, ev, unit, eventPowerToken)
-    local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-    local power, powerMax, powerType, powerToken, metaChanged, foreign
-    if barFn then power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, u, eventPowerToken) end
-    if textFn and foreign ~= true then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged) end
-  end
-end
-
 local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitless, target,
     predictionGated, textDirtyGated)
   if (fn1 and not IsRegisteredElementFunction(fn1))
@@ -1252,135 +927,6 @@ local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitle
   if not route then
     route = builder(fn1, fn2, fn3, fn4, routeUnitless, target,
       predictionGated, textDirtyGated)
-    leaf[key] = route
-  end
-  RouteCache.sharedRoutes[route] = true
-  return route
-end
-
--- UNIT_HEALTH is the dominant group-frame event. Health passes every value
--- needed by its text/prediction/visual followers, so the steady route has no
--- shared unit-state consumer and must not enter the generic dispatch protocol.
--- Rare connection/max-health/lifecycle paths retain BuildHealthRoute and its
--- coherent state snapshot.
-local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated,
-    textDirtyGated)
-  -- Bar-only gated archetype (group percent bar, no text, no extra visuals):
-  -- the steady no-absorb UNIT_HEALTH tick is exactly one updater call.
-  if predictionGated == true and barFn and not textFn and not visualsFn then
-    return function(self, ev, unit)
-      local u = unit or self.MSUFUnitKey
-      local hp, hpMax, percentReady = barFn(self, ev, u)
-      if self._msufPredictionHealthVisualActive == true then
-        if percentReady == true then
-          predictionFn(self, ev, u)
-        else
-          predictionFn(self, ev, u, hp, hpMax)
-        end
-      end
-    end
-  end
-  if not predictionFn then
-    return function(self, ev, unit)
-      local u = unit or self.MSUFUnitKey
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      if textFn then
-        local dirty = self._msufTextDirtyMask
-        if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
-          if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-        end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-    end
-  end
-
-  if predictionGated == true then
-    return function(self, ev, unit)
-      local u = unit or self.MSUFUnitKey
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-      -- Absorb-data events own this plain gate. The common no-absorb member
-      -- therefore pays no Prediction call at all on UNIT_HEALTH.
-      if self._msufPredictionHealthVisualActive == true then
-        if percentReady == true then
-          predictionFn(self, ev, u)
-        else
-          predictionFn(self, ev, u, hp, hpMax)
-        end
-      end
-      if textFn then
-        local dirty = self._msufTextDirtyMask
-        if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
-          if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-        end
-      end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-    end
-  end
-
-  return function(self, ev, unit)
-    local u = unit or self.MSUFUnitKey
-    local hp, hpMax, percentReady
-    if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
-    if percentReady == true then
-      predictionFn(self, ev, u)
-    else
-      predictionFn(self, ev, u, hp, hpMax)
-    end
-    if textFn then
-      local dirty = self._msufTextDirtyMask
-      if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
-      end
-    end
-    if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
-  end
-end
-
-local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated,
-    textDirtyGated)
-  if (barFn and not IsRegisteredElementFunction(barFn))
-    or (textFn and not IsRegisteredElementFunction(textFn))
-    or (predictionFn and not IsRegisteredElementFunction(predictionFn))
-    or (visualsFn and not IsRegisteredElementFunction(visualsFn)) then
-    return BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn,
-      predictionGated, textDirtyGated)
-  end
-  local mode = predictionGated == true and "prediction-gated" or "direct"
-  if textDirtyGated == true then mode = mode .. ":text-dirty-gated" end
-  local leaf, key = RouteCacheLeaf(RouteCache.directGroupHealth,
-    barFn, textFn, predictionFn, visualsFn, mode, nil)
-  local route = leaf[key]
-  if not route then
-    route = BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn,
-      predictionGated, textDirtyGated)
-    leaf[key] = route
-  end
-  RouteCache.sharedRoutes[route] = true
-  return route
-end
-
-local function BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
-  return function(self, ev, unit)
-    local u = unit or self.MSUFUnitKey
-    local borderThreat, cornerThreat = resolvePair(
-      self,
-      u,
-      borderFn and self._msufBorderRuntimeAggroMode or nil,
-      cornerFn and self._msufGFCornerPreparedCfg
-        and self._msufGFCornerPreparedCfg.runtimeAggroMode or nil)
-    if borderFn then borderFn(self, ev, u, borderThreat) end
-    if cornerFn then cornerFn(self, ev, u, cornerThreat) end
-  end
-end
-
-local function SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
-  local leaf, key = RouteCacheLeaf(RouteCache.directGroupThreat,
-    borderFn, cornerFn, resolvePair, nil, "unit", nil)
-  local route = leaf[key]
-  if not route then
-    route = BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
     leaf[key] = route
   end
   RouteCache.sharedRoutes[route] = true
@@ -1444,135 +990,12 @@ local function SharedSingleRoute(update, unitless, target)
 end
 
 local function CompileFrameEventPath(frame, event, list)
-  -- Strip the optional rendering gate before compiling the existing optimized
-  -- health route. No extra dispatch context or option check when disabled.
-  local loadConditions = UF.elements.LoadConditions
-  local gate = HEALTH_EVENTS[event] and loadConditions and loadConditions.UpdateHealthVisibility
-  if gate then
-    for i = 1, #list, 2 do
-      if list[i] == gate then
-        local remaining = {}
-        for j = 1, #list, 2 do
-          if j ~= i then
-            remaining[#remaining + 1] = list[j]
-            remaining[#remaining + 1] = list[j + 1]
-          end
-        end
-        if #remaining == 0 then return SharedSingleRoute(gate, false, nil) end
-        local base = CompileFrameEventPath(frame, event, remaining)
-        local route = RouteCache.healthVisibility[base]
-        if not route then
-          route = function(self, ev, unit, ...)
-            base(self, ev, unit, ...)
-            gate(self)
-          end
-          if RouteCache.sharedRoutes[base] then RouteCache.healthVisibility[base] = route end
-        end
-        if RouteCache.sharedRoutes[base] then RouteCache.sharedRoutes[route] = true end
-        return route
-      end
-    end
-  end
   local target = frame._msufFrameUnitEventTargets and frame._msufFrameUnitEventTargets[event]
   local count = #list
-  if frame._msufCoreScope == "group" and GROUP_THREAT_EVENTS[event] == true then
-    local borders = UF.elements.Borders
-    local corners = UF.elements.GroupCornerIndicators
-    local borderUpdate = borders and borders.UpdateGroupThreat
-    local cornerUpdate = corners and corners.UpdateGroupThreat
-    local visuals = MSUF.UFVisuals
-    local resolvePair = visuals and visuals.ResolveGroupAggroPair
-    local borderFn, cornerFn
-    local direct = target == nil and type(resolvePair) == "function"
-    for i = 1, count, 2 do
-      local update = list[i]
-      if list[i + 1] == true then
-        direct = false
-        break
-      end
-      if update == borderUpdate then
-        borderFn = update
-      elseif update == cornerUpdate then
-        cornerFn = update
-      else
-        direct = false
-        break
-      end
-    end
-    if direct == true and (borderFn or cornerFn) then
-      return SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
-    end
-  end
-  local healthEvent = HEALTH_EVENTS[event] == true
-  local powerEvent = POWER_EVENTS[event] == true
-  if healthEvent or powerEvent then
-    local barElement = healthEvent and UF.elements.Health or UF.elements.Power
-    local barBase = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
-    local barUpdate = healthEvent and barBase
-      and SelectElementEventUpdate(barElement, frame, event, barBase) or barBase
-    local textElement = healthEvent and UF.elements.HealthText or UF.elements.PowerText
-    local textBase = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
-    local textUpdate = textBase and SelectElementEventUpdate(textElement, frame, event, textBase) or nil
-    local predictionUpdate
-    local visualsUpdate
-    if healthEvent then
-      local predictionBase = frame[GetUpdateKey("Prediction")]
-      if predictionBase then
-        predictionUpdate = SelectElementEventUpdate(UF.elements.Prediction, frame, event, predictionBase)
-      end
-      local visualsBase = frame[GetUpdateKey("GroupVisuals")]
-      if visualsBase then
-        visualsUpdate = SelectElementEventUpdate(UF.elements.GroupVisuals, frame, event, visualsBase)
-      end
-    end
-    local barFn, textFn, predictionFn, visualsFn
-    local routeUnitless
-    local direct = true
-    for i = 1, count, 2 do
-      local update = list[i]
-      local unitless = list[i + 1] == true
-      if routeUnitless == nil then
-        routeUnitless = unitless
-      elseif routeUnitless ~= unitless then
-        direct = false
-        break
-      end
-      if update == barUpdate then
-        barFn = update
-      elseif update == textUpdate then
-        textFn = update
-      elseif predictionUpdate and update == predictionUpdate then
-        predictionFn = update
-      elseif visualsUpdate and update == visualsUpdate then
-        visualsFn = update
-      else
-        direct = false
-        break
-      end
-    end
-    if direct == true and (barFn or textFn or predictionFn or visualsFn) then
-      if healthEvent then
-        local prediction = event == "UNIT_HEALTH" and UF.elements.Prediction or nil
-        local predictionGated = predictionFn and prediction
-          and prediction.HealthVisualGateUpdates
-          and prediction.HealthVisualGateUpdates[predictionFn] == true
-        local healthText = event == "UNIT_HEALTH" and UF.elements.HealthText or nil
-        local textDirtyGated = textFn and healthText
-          and healthText.DirtyGateUpdates
-          and healthText.DirtyGateUpdates[textFn] == true
-        if frame._msufCoreScope == "group" and event == "UNIT_HEALTH"
-          and target == nil and routeUnitless ~= true then
-          return SharedGroupHealthRoute(
-            barFn, textFn, predictionFn, visualsFn,
-            predictionGated == true, textDirtyGated == true)
-        end
-        return SharedDirectRoute(RouteCache.directHealth, BuildHealthRoute,
-          barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
-          predictionGated == true, textDirtyGated == true)
-      end
-      return SharedDirectRoute(RouteCache.directPower, BuildPowerRoute,
-        barFn, textFn, nil, nil, routeUnitless, target)
-    end
+  local plugins = Compiler.eventPlugins[event] or Compiler.plugins
+  for i = 1, #plugins do
+    local path = plugins[i].compile(frame, event, list, target)
+    if path then return path end
   end
   if count == 2 then
     local update = list[1]
@@ -1600,170 +1023,6 @@ local function CompileFrameEventPath(frame, event, list)
   end
 end
 
-
-local function LifecycleCachedHealth(frame, unit)
-  local hpBar = frame.hpBar
-  local hp = hpBar and hpBar._msufHealthValueUnit == unit and hpBar._msufHealthValue or nil
-  local hpMax = hpBar and hpBar._msufHealthMaxUnit == unit and hpBar._msufHealthMax or nil
-  if issecretvalue(hp) == true then hp = nil end
-  if issecretvalue(hpMax) == true then hpMax = nil end
-  return hp, hpMax
-end
-
-local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
-    nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
-    bordersUpdate, cornerUpdate)
-  return function(frame, event)
-    local unit = frame.MSUFUnitKey
-    frame._msufGroupStateRefresh = true
-    -- Keep open only the dispatch this refresh starts (the health route or the
-    -- Begin below takes the next token), so every follower shares its snapshot.
-    frame._msufDeferDispatchEnd = (frame._msufDispatchToken or 0) + 1
-    if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame, event) end
-
-    local power, powerMax, powerType, powerToken, powerMetaChanged
-    if powerUpdate then
-      power, powerMax, powerType, powerToken, powerMetaChanged = powerUpdate(frame, event, unit)
-    end
-    if powerTextUpdate then
-      powerTextUpdate(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-    end
-    if nameUpdate then nameUpdate(frame, event, unit) end
-    if portraitUpdate then portraitUpdate(frame, event, unit) end
-
-    local hp, hpMax = LifecycleCachedHealth(frame, unit)
-    if statusUpdate then statusUpdate(frame, event, unit, hp) end
-    if rangeUpdate then rangeUpdate(frame, event, unit) end
-    if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
-    if bordersUpdate then bordersUpdate(frame, event, unit) end
-    if cornerUpdate then cornerUpdate(frame, event, unit) end
-
-    frame._msufDeferDispatchEnd = nil
-    EndFrameEvent(frame)
-    frame._msufGroupStateRefresh = nil
-  end
-end
-
-local function BuildLifecycleGlobalPath(powerUpdate, powerTextUpdate,
-    namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate)
-  return function(frame, event)
-    local unit = frame.MSUFUnitKey
-    BeginFrameEvent(frame, event)
-
-    -- Blizzard treats PARTY_MEMBER_ENABLE/DISABLE as a group-wide alternate
-    -- power and presence invalidation. These are the intentionally global
-    -- followers; name/portrait and health stay target-only. If the lifecycle
-    -- unit cannot be resolved safely, the driver selects fullPath for every
-    -- frame instead of entering this minimal path.
-    local power, powerMax, powerType, powerToken, powerMetaChanged
-    if powerUpdate then
-      power, powerMax, powerType, powerToken, powerMetaChanged = powerUpdate(frame, event, unit)
-    end
-    if powerTextUpdate then
-      powerTextUpdate(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-    end
-    if namePresenceUpdate then namePresenceUpdate(frame, event, unit) end
-
-    local hp, hpMax = LifecycleCachedHealth(frame, unit)
-    if statusUpdate then statusUpdate(frame, event, unit, hp) end
-    if rangeUpdate then rangeUpdate(frame, event, unit) end
-    if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
-
-    EndFrameEvent(frame)
-  end
-end
-
-local function NewGroupLifecyclePlan(healthPath, powerUpdate,
-    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
-    rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
-  return {
-    fullPath = BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
-      nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
-      bordersUpdate, cornerUpdate),
-    globalPath = BuildLifecycleGlobalPath(powerUpdate,
-      powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate),
-  }
-end
-
-local function InternLifecycleNode(node, value)
-  local key = value or NIL_ROUTE_KEY
-  local nextNode = node[key]
-  if not nextNode then nextNode = {}; node[key] = nextNode end
-  return nextNode
-end
-
-local function InternGroupLifecyclePlan(healthPath, powerUpdate,
-    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
-    rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
-  local shared = (not healthPath or RouteCache.sharedRoutes[healthPath] == true)
-  shared = shared
-    and (not powerUpdate or IsRegisteredElementFunction(powerUpdate))
-    and (not powerTextUpdate or IsRegisteredElementFunction(powerTextUpdate))
-    and (not nameUpdate or IsRegisteredElementFunction(nameUpdate))
-    and (not namePresenceUpdate or IsRegisteredElementFunction(namePresenceUpdate))
-    and (not portraitUpdate or IsRegisteredElementFunction(portraitUpdate))
-    and (not statusUpdate or IsRegisteredElementFunction(statusUpdate))
-    and (not rangeUpdate or IsRegisteredElementFunction(rangeUpdate))
-    and (not visualsUpdate or IsRegisteredElementFunction(visualsUpdate))
-    and (not bordersUpdate or IsRegisteredElementFunction(bordersUpdate))
-    and (not cornerUpdate or IsRegisteredElementFunction(cornerUpdate))
-  if not shared then
-    return NewGroupLifecyclePlan(healthPath, powerUpdate,
-      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
-      rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
-  end
-
-  local node = InternLifecycleNode(Intern.groupLifecyclePlans, healthPath)
-  node = InternLifecycleNode(node, powerUpdate)
-  node = InternLifecycleNode(node, powerTextUpdate)
-  node = InternLifecycleNode(node, nameUpdate)
-  node = InternLifecycleNode(node, namePresenceUpdate)
-  node = InternLifecycleNode(node, portraitUpdate)
-  node = InternLifecycleNode(node, statusUpdate)
-  node = InternLifecycleNode(node, rangeUpdate)
-  node = InternLifecycleNode(node, visualsUpdate)
-  node = InternLifecycleNode(node, bordersUpdate)
-  node = InternLifecycleNode(node, cornerUpdate)
-  if not node.plan then
-    node.plan = NewGroupLifecyclePlan(healthPath, powerUpdate,
-      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
-      rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
-  end
-  return node.plan
-end
-
-local function ActiveLifecycleUpdate(frame, name)
-  local active = frame and frame._msufActiveElements
-  if not (active and active[name] == true) then return nil end
-  local key = GetUpdateKey(name)
-  return key and frame[key] or nil
-end
-
-CompileGroupLifecyclePlan = function(frame)
-  if not (frame and frame._msufCoreScope == "group") then
-    if frame then frame._msufGroupLifecyclePlan = nil end
-    return nil
-  end
-  local healthPath = frame.PARTY_MEMBER_ENABLE
-  local nameUpdate = ActiveLifecycleUpdate(frame, "NameText")
-  local text = frame.MSUFSpec and frame.MSUFSpec.text
-  local namePresenceUpdate = text and text.hideNameOnDeadOffline == true and nameUpdate or nil
-  local plan = InternGroupLifecyclePlan(
-    healthPath,
-    ActiveLifecycleUpdate(frame, "Power"),
-    ActiveLifecycleUpdate(frame, "PowerText"),
-    nameUpdate,
-    namePresenceUpdate,
-    ActiveLifecycleUpdate(frame, "Portrait"),
-    ActiveLifecycleUpdate(frame, "GroupStatusRuntime"),
-    ActiveLifecycleUpdate(frame, "GroupRangeFade"),
-    ActiveLifecycleUpdate(frame, "GroupVisuals"),
-    ActiveLifecycleUpdate(frame, "Borders"),
-    ActiveLifecycleUpdate(frame, "GroupCornerIndicators")
-  )
-  frame._msufGroupLifecyclePlan = plan
-  return plan
-end
 
 RegisterFrameEvent = function(frame, event, unitless)
   if not (frame and frame.RegisterEvent) then return end
@@ -1839,15 +1098,6 @@ local function SelectElementUpdate(element, frame)
   return update
 end
 
-local function RefreshIdentityHealthBackground(frame)
-  local active = frame and frame._msufActiveElements
-  if not (active and active.Health == true) then return false end
-  local health = UF.elements and UF.elements.Health
-  local refresh = health and health.UpdateIdentityBackground
-  if type(refresh) ~= "function" then return false end
-  return refresh(frame) == true
-end
-
 SelectElementEventUpdate = function(element, frame, event, update)
   local selector = element and element.SelectEventUpdate
   if type(selector) == "function" then
@@ -1862,7 +1112,7 @@ local function IdentityEventUpdate(frame, event)
   local unit = frame.MSUFUnitKey
   if ConsumeOnShowIdentityFollowup(frame, event, unit) then return end
   if not IdentityUnitExists(frame, unit) then
-    RefreshIdentityHealthBackground(frame)
+    Compiler.RefreshIdentitySurface(frame)
     return
   end
   local barPath = frame._msufIdentityBarPath
@@ -1872,7 +1122,7 @@ local function IdentityEventUpdate(frame, event)
     hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
-  RefreshIdentityHealthBackground(frame)
+  Compiler.RefreshIdentitySurface(frame)
   local path = frame._msufIdentityPath
   if path then
     return path(frame, event, unit,
@@ -2054,75 +1304,6 @@ local function CompileRuntimePath(list, count)
   return nil
 end
 
-local IDENTITY_STEP_NORMAL = 0
-local IDENTITY_STEP_HEALTH_TEXT = 1
-local IDENTITY_STEP_POWER_TEXT = 2
-local IDENTITY_STEP_PREDICTION = 3
-
--- Identity bars run before the element sequence. Forward their ephemeral
--- values to the matching text elements so restricted/secret payloads do not
--- need a second native read. The values stay on the Lua stack and are never
--- retained on the frame. Every other element keeps its original three-arg
--- contract and the compiled elementOrder remains unchanged.
-local function CompileIdentityRuntimePath(list, labels, count)
-  if not count or count <= 0 then return nil end
-  local kinds = {}
-  local inlineToTScheduled = false
-  for i = 1, count do
-    local label = labels[i]
-    if label == "HealthText" then
-      kinds[i] = IDENTITY_STEP_HEALTH_TEXT
-    elseif label == "PowerText" then
-      kinds[i] = IDENTITY_STEP_POWER_TEXT
-    elseif label == "Prediction" then
-      kinds[i] = IDENTITY_STEP_PREDICTION
-    else
-      kinds[i] = IDENTITY_STEP_NORMAL
-    end
-    if label == "InlineToT" then
-      inlineToTScheduled = true
-    end
-  end
-
-  return function(frame, event, unit,
-      hp, hpMax, healthPercentReady,
-      power, powerMax, powerType, powerToken, powerMetaChanged)
-    -- NameText color updates normally keep InlineToT in sync. Identity plans
-    -- already contain InlineToT as their own step, so mark the batch and let
-    -- that one authoritative step do the work instead of updating it twice.
-    if inlineToTScheduled then
-      frame._msufIdentityInlineToTScheduled = true
-    end
-    for i = 1, count do
-      local update = list[i]
-      local kind = kinds[i]
-      if kind == IDENTITY_STEP_HEALTH_TEXT then
-        if healthPercentReady == true then
-          -- Match BuildHealthRoute: the Health element already seeded the
-          -- dispatch-percent slot consumed by HealthText.
-          update(frame, event, unit, nil, nil)
-        else
-          update(frame, event, unit, hp, hpMax)
-        end
-      elseif kind == IDENTITY_STEP_POWER_TEXT then
-        update(frame, event, unit,
-          power, powerMax, powerType, powerToken, powerMetaChanged)
-      elseif kind == IDENTITY_STEP_PREDICTION then
-        if healthPercentReady == true then
-          update(frame, event, unit)
-        else
-          update(frame, event, unit, hp, hpMax)
-        end
-      else
-        update(frame, event, unit)
-      end
-    end
-    if inlineToTScheduled then
-      frame._msufIdentityInlineToTScheduled = nil
-    end
-  end
-end
-
 -- Identity and full-runtime paths are archetype data, not frame state. Intern
 -- immutable function/label sequences so identical raid children retain only
 -- references to one plan instead of four private arrays and two closures each.
@@ -2144,7 +1325,7 @@ local function NewRuntimeSequencePlan(functions, labels, count, identity)
     labels = planLabels,
     count = count,
     path = identity == true
-      and CompileIdentityRuntimePath(planFns, planLabels, count)
+      and Compiler.CompileIdentityPath(planFns, planLabels, count)
       or CompileRuntimePath(planFns, count),
   }
 end
@@ -2208,44 +1389,6 @@ local function AssignRuntimeSequencePlan(frame, plan, listKey, countKey, labelKe
   frame[pathKey] = plan.path
 end
 
-local function CompileIdentityBarPath(frame)
-  local active = frame and frame._msufActiveElements
-  if not active then return nil end
-  local health = active.Health == true and ElementUpdateFunction(frame, "Health") or nil
-  local power = active.Power == true and ElementUpdateFunction(frame, "Power") or nil
-  if not (health or power) then return nil end
-
-  local shared = (not health or IsRegisteredElementFunction(health))
-    and (not power or IsRegisteredElementFunction(power))
-  local byPower, key
-  if shared then
-    local healthKey = health or NIL_ROUTE_KEY
-    byPower = Intern.identityBarPaths[healthKey]
-    if not byPower then byPower = {}; Intern.identityBarPaths[healthKey] = byPower end
-    key = power or NIL_ROUTE_KEY
-    local path = byPower[key]
-    if path then return path end
-  end
-
-  -- Always wrap, including health-only and power-only plans, so every
-  -- archetype returns the same fixed tuple:
-  -- hp, hpMax, healthPercentReady, power, powerMax, type, token, metaChanged.
-  local path = function(self, event, unit)
-    local hp, hpMax, healthPercentReady
-    if health then
-      hp, hpMax, healthPercentReady = health(self, event, unit)
-    end
-    local powerValue, powerMax, powerType, powerToken, powerMetaChanged
-    if power then
-      powerValue, powerMax, powerType, powerToken, powerMetaChanged = power(self, event, unit)
-    end
-    return hp, hpMax, healthPercentReady,
-      powerValue, powerMax, powerType, powerToken, powerMetaChanged
-  end
-  if shared then byPower[key] = path end
-  return path
-end
-
 function UF.RebuildRuntimeStatusState(frame)
   if not frame then return false end
   local identityPlan = BuildRuntimeSequencePlan(frame, IDENTITY_ELEMENTS, true)
@@ -2271,7 +1414,7 @@ function UF.RebuildRuntimeStatusState(frame)
   frame._msufGroupIdentityCount = frame._msufIdentityCount
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
   frame._msufGroupIdentityPath = frame._msufIdentityPath
-  frame._msufIdentityBarPath = CompileIdentityBarPath(frame)
+  frame._msufIdentityBarPath = Compiler.CompileIdentityBars(frame)
   -- Prewarm the shared unit/read-through state while routes are compiled,
   -- never on the first target/combat event that consumes those routes.
   if (frame._msufIdentityPath or frame._msufIdentityBarPath)
@@ -2711,14 +1854,10 @@ UF.FrameIsElementEnabled = FrameIsElementEnabled
 
 function UF.OptimizeFrameHotpaths(frame)
   if not frame then return false end
-  local health = UF.elements and UF.elements.Health
-  if health and type(health.SelectGroupHealthUpdater) == "function" then
-    health.SelectGroupHealthUpdater(frame)
-  end
-  local power = UF.elements and UF.elements.Power
-  if power and type(power.SelectGroupPowerUpdater) == "function" then
-    power.SelectGroupPowerUpdater(frame)
-  end
+  local needs = Compiler.needs
+  for i = 1, #needs do needs[i](frame) end
+  local selectors = Compiler.selectors
+  for i = 1, #selectors do selectors[i](frame) end
   return true
 end
 
@@ -2839,22 +1978,11 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   if not RetargetFrameUnitEvents(frame) then RebuildFrameEvents(frame) end
   if frame._msufCoreScope == "group" then
     RefreshGroupFrameState(frame, "MSUF_GF_UNIT_IDENTITY")
-    RefreshIdentityHealthBackground(frame)
+    Compiler.RefreshIdentitySurface(frame)
   else
     UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
   end
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  local active = frame._msufActiveElements
-  if active and active.Auras == true and A3 and type(A3.OnFrameUnitChanged) == "function" then
-    -- One rebind re-registers every native owner of this frame. Batch the
-    -- identity event topology the way GF.ScanHeader does so the shared driver
-    -- and the four-token shards resync once per rebind, not once per owner.
-    local batchTopology = type(A3.BeginTopologyBatch) == "function"
-      and type(A3.EndTopologyBatch) == "function"
-    if batchTopology then A3.BeginTopologyBatch() end
-    A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
-    if batchTopology then A3.EndTopologyBatch() end
-  end
+  if Compiler.OnUnitChanged then Compiler.OnUnitChanged(frame, oldUnit, newUnit) end
   return true
 end
 
@@ -2990,18 +2118,7 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   if wasBatching ~= true then rebuilt = RefreshFrameRoutingAfterElementApply(frame) end
   UF._msufApplyingSpec = wasApplying
   if rebuilt and wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
-  -- Menu dispel-overlay preview. The stand-in tint is MSUF-drawn and therefore
-  -- outside the element/dirty-mask system, so re-stamp it here: this is the one
-  -- funnel both full spec applies (UF.ApplySpec) and targeted element refreshes
-  -- (UF.ApplyElementsToFrame, which is how unit-frame aura settings apply) pass
-  -- through. A single boolean read whenever no preview is active.
-  -- Both preview painters belong to the aura preview, which loads after the core.
-  if _G.MSUF_DispelOverlayPreviewMode == true then
-    MSUF.Require("MSUF_ApplyDispelOverlayPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
-  end
-  if _G.MSUF_DispelSymbolPreviewMode == true then
-    MSUF.Require("MSUF_ApplyDispelSymbolPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
-  end
+  if Compiler.AfterApply then Compiler.AfterApply(frame) end
   return true
 end
 
@@ -3036,3 +2153,21 @@ function UF.EndEventRegistrationBatch()
 end
 
 MSUF.UnitFrames = UF
+
+Compiler.Cache = RouteCache
+Compiler.Intern = Intern
+Compiler.NilKey = NIL_ROUTE_KEY
+Compiler.IsRegisteredFunction = IsRegisteredElementFunction
+Compiler.RouteCacheLeaf = RouteCacheLeaf
+Compiler.SharedDirectRoute = SharedDirectRoute
+Compiler.SharedSingleRoute = SharedSingleRoute
+Compiler.CompileEventPath = CompileFrameEventPath
+Compiler.SelectEventUpdate = SelectElementEventUpdate
+Compiler.GetUpdateKey = GetUpdateKey
+Compiler.ElementUpdateFunction = ElementUpdateFunction
+Compiler.BeginFrameEvent = BeginFrameEvent
+Compiler.EndFrameEvent = EndFrameEvent
+Compiler.RefreshIdentitySurface = function() return false end
+Compiler.CompileIdentityPath = function(list, labels, count) return CompileRuntimePath(list, count) end
+Compiler.CompileIdentityBars = function() return nil end
+Compiler.SetLifecycleCompiler = function(compile) CompileGroupLifecyclePlan = compile end

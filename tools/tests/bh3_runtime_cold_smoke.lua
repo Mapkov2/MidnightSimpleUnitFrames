@@ -27,7 +27,8 @@ end
 Check("CX2-06",function()
  local count=0
  local function texture() count=count+1;return {Hide=function() end,SetTexture=function() end,SetBlendMode=function() end} end
- local env={NewLayerTexture=texture,WHITE8="white",MSUF_RoundedUF_OnDispelOverlayChanged=function(_,tex,enabled) tex.masked=enabled~=false end}
+ local env={NewLayerTexture=texture,WHITE8="white",Surface={OnVisualChanged=function(_,event,tex,enabled)
+   assert(event=="MSUF_RoundedUF_OnDispelOverlayChanged");tex.masked=enabled~=false end}}
  env._G=env
  local base,overlay,clip=Compile(Slice("UnitFrames/Effects/MSUF_UF_TextureLayer.lua","local function EnsureBaseTexture", "-- `event` is").."return EnsureBaseTexture,EnsureOverlayTexture,ApplyClip",env)()
  local holder={};local b,o

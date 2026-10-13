@@ -826,9 +826,7 @@ local function UpdateAllBarGradients(unit, skipUnitFrames)
     end
   end
   -- RoundedFrames exports its apply hook only while the module is active.
-  local applyRounded = not unitScope and _G.MSUF_RoundedUF_Active == true
-    and MSUF.Optional("MSUF_RoundedUF_OnApplyAll")
-  if applyRounded then applyRounded() end
+  if not unitScope then UF.Surface.OnVisualChanged(nil, "MSUF_RoundedUF_OnApplyAll") end
   return refreshed
 end
 

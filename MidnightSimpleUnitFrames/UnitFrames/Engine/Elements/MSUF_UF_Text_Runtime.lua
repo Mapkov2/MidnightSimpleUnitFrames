@@ -1896,6 +1896,39 @@ TextStructure.GetUnitlessEvents = Text.GetUnitlessEvents
 TextStructure.Create = Text.Create
 TextStructure.Apply = Text.Apply
 TextStructure.IsEnabled = Text.IsEnabled
+local HEALTH_PLAN_PERCENT = 1
+local HEALTH_PLAN_CURRENT = 2
+local HEALTH_PLAN_ABSOLUTE = 3
+
+local function CompileHealthNeeds(frame)
+  local rt = frame._msufTextRuntime
+  local signature = frame._msufTextApplySignature
+  if frame._msufHealthNeedsReady == true and frame._msufHealthSample == rt
+    and frame._msufHealthNeedsSignature == signature then return end
+  frame._msufHealthNeedsReady = false
+  local slots = rt and (rt.healthSlotCount or 0) > 0
+  local current = rt and rt.healthNeedsCurrent == true
+  local maximum = rt and rt.healthNeedsMax == true
+  local percent = rt and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true)
+  local plan = HEALTH_PLAN_PERCENT
+  if slots and current and maximum then
+    plan = HEALTH_PLAN_ABSOLUTE
+  elseif slots and current and not percent then
+    plan = HEALTH_PLAN_CURRENT
+  end
+  frame._msufHealthValuePlan = plan
+  frame._msufHealthConsumers = slots or percent
+  frame._msufHealthSyncPercent = rt and rt.healthHotFromPercent and rt.healthUsesAbsorb ~= true
+  -- A dispatch sample is a shared handoff contract, never a retained cache.
+  frame._msufHealthSample = rt
+  frame._msufHealthPublishPercent = percent
+  frame._msufHealthDeferPercent = rt and rt.healthDefersUnitHealthText == true
+  if rt then rt._dispatchHealthPercent, rt._dispatchHealthPercentReady = nil, nil end
+  frame._msufHealthNeedsSignature = signature
+  frame._msufHealthNeedsReady = true
+end
+
+TextStructure.Routes = { basic = true, CompileNeeds = CompileHealthNeeds }
 UF.RegisterElement("Text", TextStructure)
 
 local NameText = {}
@@ -1929,6 +1962,7 @@ function NameText.Disable(frame)
   SetShownCached(frame and frame.nameText, false)
 end
 
+NameText.Routes = { basic = true, identity = true }
 UF.RegisterElement("NameText", NameText)
 
 local HealthText = {}
@@ -2063,6 +2097,7 @@ function HealthText.Disable(frame)
   SetShownCached(frame and frame.hpTextRight, false)
 end
 
+HealthText.Routes = { basic = true, identity = true }
 UF.RegisterElement("HealthText", HealthText)
 
 local PowerText = {}
@@ -2261,6 +2296,7 @@ HealthText.DirtyGateUpdates = {
 }
 PowerText.NoDispatchUpdates = { [MarkPowerTextDirty] = true }
 
+PowerText.Routes = { basic = true, identity = true }
 UF.RegisterElement("PowerText", PowerText)
 
 local InlineToT = {}
@@ -2346,4 +2382,5 @@ function InlineToT.Disable(frame)
   end
 end
 
+InlineToT.Routes = { basic = true, identity = true }
 UF.RegisterElement("InlineToT", InlineToT)

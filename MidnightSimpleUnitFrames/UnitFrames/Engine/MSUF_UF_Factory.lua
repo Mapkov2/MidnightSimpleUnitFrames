@@ -1157,6 +1157,7 @@ function Factory.SpawnAll(applyMask)
     Highlight.Refresh()
   end
   if UF.DisableBlizzardFrames then UF.DisableBlizzardFrames() end
+  UF.Surface.BeginBatch()
   for i = 1, #UF.unitOrder do
     ApplyOne(UF.unitOrder[i], config, applyMask)
   end
@@ -1164,10 +1165,7 @@ function Factory.SpawnAll(applyMask)
   UF.initialized = true
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
-  -- Decorative texture layer lives outside the element system (see
-  -- UnitFrames/Effects/MSUF_UF_TextureLayer.lua); stamp it after the spawn pass.
-  local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
-  if type(refreshTexLayer) == "function" then refreshTexLayer(nil) end
+  UF.Surface.EndBatch(nil)
   -- Optional focus-tracker modules load before the active profile is selected.
   Dep("MSUF_FocusKickDriver_ForceUpdate")()
   Dep("MSUF_KickReady_RefreshAll")()
@@ -1184,6 +1182,7 @@ function Factory.Apply(unit, applyMask)
 
   local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
   if unit and not units then return false end
+  UF.Surface.BeginBatch()
   if units then
     for i = 1, #units do ApplyOne(units[i], config, applyMask) end
   else
@@ -1194,11 +1193,7 @@ function Factory.Apply(unit, applyMask)
 
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
-  -- Decorative texture layer lives outside the element system (see
-  -- UnitFrames/Effects/MSUF_UF_TextureLayer.lua); re-stamp it after applies so
-  -- copy-to, profile swaps and size changes land without their own plumbing.
-  local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
-  if type(refreshTexLayer) == "function" then refreshTexLayer(unit) end
+  UF.Surface.EndBatch(unit)
   -- The arena PvP trinket holders sit outside the element system as well; the
   -- same applies carry their size, side, offset and layer to them.
   Dep("MSUF_ArenaTrinkets_RefreshLayout")(unit)

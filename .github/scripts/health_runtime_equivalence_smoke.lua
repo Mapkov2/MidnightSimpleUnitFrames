@@ -98,6 +98,14 @@ local function Run(sourceRoot, nativePercent)
           frame._msufStatusTextHealthRefresh=step==11
           if step==10 then frame.MSUFUnitKey="focus" end
           Record("case",updater,state,smooth,step)
+          if Element.Routes then
+            local rt = frame._msufTextRuntime
+            frame._msufSurfaceHealthUpdate = frame._msufTexLayerHealthUpdate
+            frame._msufSurfaceHealthColor = frame._msufTexLayerHealthColorMask
+            frame._msufHealthSample = rt
+            frame._msufHealthPublishPercent = rt.healthNeedsPercent
+            frame._msufHealthDeferPercent = rt.healthDefersUnitHealthText
+          end
           local hp,maxHP,ready=Element[updater](frame,event,frame.MSUFUnitKey)
           Record("return",hp,maxHP,ready)
           local rt=frame._msufTextRuntime
@@ -119,6 +127,11 @@ local function Run(sourceRoot, nativePercent)
     _msufHealthBackgroundFillMissing=true,_msufHealthBackgroundNeedsValue=true,
     _msufUpdateStatusTextIndicator=function() error("alive opaque tick notified status") end,
     _msufTextRuntime={healthSlotCount=1,healthNeedsPercent=true,healthDefersUnitHealthText=true}}
+  if Element.Routes then
+    frame._msufHealthSample = frame._msufTextRuntime
+    frame._msufHealthDeferPercent = true
+    frame._msufHealthPublishPercent = true
+  end
   opaque=true
   Element.UpdateValueSinglePercent(frame,"UNIT_HEALTH","target")
   debug.sethook(function()

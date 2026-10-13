@@ -2,6 +2,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local roundedSurfaceActive = false
+local RoundedDecorator = { Visuals = {} }
 
 -- Rounded bar mask/edge runtime.
 -- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
@@ -47,7 +49,7 @@ local ApplyStyledEdgeRings, HideStyledEdgeRings = Kit.ApplyStyledEdgeRings, Kit.
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local issecretvalue = _G.issecretvalue
 
 local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
@@ -1481,6 +1483,7 @@ local function ApplyAll()
   groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
   ApplyRoundedClassPower(enabled)
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
+    roundedSurfaceActive = false
     ExportPublic("MSUF_RoundedUF_Active", nil)
     UpdateMouseoverHotState(false)
     return
@@ -1489,6 +1492,7 @@ local function ApplyAll()
     DeferApply()
     return
   end
+  roundedSurfaceActive = enabled == true
   ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
   UpdateMouseoverHotState(enabled)
   local applyRoundedCastbars = MSUF.RoundedCastbarsApplyAll
@@ -1527,6 +1531,7 @@ local function ApplyAll()
     end
   end
   if not enabled then
+    roundedSurfaceActive = false
     ExportPublic("MSUF_RoundedUF_Active", nil)
     local eventFrame = MSUF.__msufRoundedEventFrame
     if eventFrame and eventFrame.UnregisterEvent then
@@ -1547,13 +1552,13 @@ local function ApplyVisualRefreshUnit(unit)
   if unit ~= nil and unit ~= "*" then
     local frame = MSUF.UF.GetFrame(unit) or _G["MSUF_" .. tostring(unit)]
     if frame then
-      if IsGroupFrame(frame) then ApplyToGroupFrame(frame) else ApplyToUnitFrame(frame) end
+      if not IsGroupFrame(frame) then RoundedDecorator.Apply(frame) end
     end
     return
   end
 
   ForEachUnitFrame(function(f)
-    if not IsGroupFrame(f) then ApplyToUnitFrame(f) end
+    RoundedDecorator.Apply(f)
   end)
 end
 
@@ -1666,6 +1671,7 @@ local roundedCallbackFns = {}
 
 local function SetRoundedCallbacksActive(enabled)
   local UF = MSUF and MSUF.UF
+  UF.SetDecoratorActive("RoundedFrames", enabled and IsEnabled())
   if enabled then
     HookOnce()
     for i = 1, #ROUNDED_CALLBACK_NAMES do
@@ -1673,16 +1679,16 @@ local function SetRoundedCallbacksActive(enabled)
       local fn = roundedCallbackFns[name] or _G[name]
       if type(fn) == "function" then
         roundedCallbackFns[name] = fn
+        RoundedDecorator.Visuals[name] = fn
         ExportPublic(name, fn)
       end
     end
-    UF.SetRoundedBorderVisualCallback(_G.MSUF_RoundedUF_OnBorderVisualChanged)
-    UF.SetRoundedPowerBorderCallback(_G.MSUF_RoundedUF_OnPowerBorderChanged)
+    UF.SetRoundedBorderVisualCallback(RoundedDecorator.Visuals.MSUF_RoundedUF_OnBorderVisualChanged)
+    UF.SetRoundedPowerBorderCallback(RoundedDecorator.Visuals.MSUF_RoundedUF_OnPowerBorderChanged)
     return
   end
   UF.SetRoundedBorderVisualCallback(nil)
   UF.SetRoundedPowerBorderCallback(nil)
-  UF.UnregisterVisualRefreshCallback("RoundedFrames")
   for i = 1, #ROUNDED_CALLBACK_NAMES do
     local name = ROUNDED_CALLBACK_NAMES[i]
     local fn = _G[name]
@@ -1790,3 +1796,22 @@ end
 
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
 
+
+RoundedDecorator.Apply = function(frame)
+  -- The group adapter owns its apply edge, including the combat deferral.
+  if not frame or IsGroupFrame(frame) then return end
+  if IsCombatLocked() then DeferApply() return end
+  return ApplyToUnitFrame(frame)
+end
+RoundedDecorator.OnVisualChanged = function(frame, event, ...)
+  local callback = RoundedDecorator.Visuals[event]
+  if callback then return callback(frame, ...) end
+  return false
+end
+RoundedDecorator.OwnsMask = function(frame, texture)
+  if roundedSurfaceActive or (RoundedDecorator.active and IsEnabled()) then return true end
+  local masked = frame and (FrameIsGroup(frame) and frame._msufRGF_MaskedTextures or frame._msufRUF_MaskedTextures)
+  return masked ~= nil and masked[texture] ~= nil
+end
+MSUF.UF.RegisterDecorator("RoundedFrames", RoundedDecorator)
+MSUF.UF.SetDecoratorActive("RoundedFrames", roundedSurfaceActive)

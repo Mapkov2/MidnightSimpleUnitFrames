@@ -141,13 +141,13 @@ local CLASSIC_CLIENTS = { Vanilla = true, TBC = true, Mists = true }
 local NUMBER_WITH_TABLE = "attempt to compare number with table"
 local TABLE_WITH_NUMBER = "attempt to compare table with number"
 Corpus.HARNESS_ERRORS = {
-    { "PLAYER_LOGIN", "MSUF_UF_Elements_Health.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "PLAYER_LOGIN", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "PLAYER_LOGIN", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "timer", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Elements_Health.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "MSUF_ApplyModules", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "MSUF_ApplyModules", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
@@ -155,11 +155,11 @@ Corpus.HARNESS_ERRORS = {
     { "MSUF_GF_RebuildAll", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ClassPower_Apply", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
         MIDNIGHT },
-    { "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_UF_Elements_Health.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_Castbars_OnSettingsChanged", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyAllCastbarsAndSync", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_RefreshAllUnitAlphas", "MSUF_UF_Elements_Health.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_Auras3.RefreshAll", "MSUF_UF_Elements_Health.lua", NUMBER_WITH_TABLE, CLASSIC_CLIENTS },
+    { "MSUF_RefreshAllUnitAlphas", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "MSUF_Auras3.RefreshAll", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, CLASSIC_CLIENTS },
     { "GF.Rebuild", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "GF.RefreshVisuals", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
 }

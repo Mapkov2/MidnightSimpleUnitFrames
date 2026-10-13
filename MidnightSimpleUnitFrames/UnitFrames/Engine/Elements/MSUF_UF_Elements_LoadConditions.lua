@@ -493,6 +493,7 @@ end
 
 -- Reuse Core's existing identity/OnShow plan so a target, focus, pet, or boss
 -- replacement refreshes its HP gate even without a UNIT_HEALTH notification.
+LoadConditions.Routes = { basic = true, identity = true }
 UF.RegisterElement("LoadConditions", LoadConditions, { identity = true })
 
 function UF.RefreshVisibilityDrivers(unit)
@@ -1203,3 +1204,43 @@ local function MSUF_SyncArenaUnitframePreviewWithUnitEdit()
   return UF.ApplyArenaPreviewState(active, active and "MSUF_ARENA_PREVIEW_SYNC" or "MSUF_ARENA_PREVIEW_OFF")
 end
 ExportPublic("MSUF_SyncArenaUnitframePreviewWithUnitEdit", MSUF_SyncArenaUnitframePreviewWithUnitEdit)
+
+if UF.RouteCompiler then
+  local Compiler = UF.RouteCompiler
+  local RouteCache = setmetatable({ healthVisibility = {} }, { __index = Compiler.Cache })
+  local SharedSingleRoute = Compiler.SharedSingleRoute
+  local HEALTH_EVENTS = { UNIT_HEALTH = true, UNIT_MAXHEALTH = true, UNIT_CONNECTION = true,
+    PARTY_MEMBER_ENABLE = true, PARTY_MEMBER_DISABLE = true }
+  local function Compile(frame, event, list)
+    -- Strip the optional rendering gate before compiling the existing optimized
+    -- health route. No extra dispatch context or option check when disabled.
+    local loadConditions = UF.elements.LoadConditions
+    local gate = HEALTH_EVENTS[event] and loadConditions and loadConditions.UpdateHealthVisibility
+    if gate then
+      for i = 1, #list, 2 do
+        if list[i] == gate then
+          local remaining = {}
+          for j = 1, #list, 2 do
+            if j ~= i then
+              remaining[#remaining + 1] = list[j]
+              remaining[#remaining + 1] = list[j + 1]
+            end
+          end
+          if #remaining == 0 then return SharedSingleRoute(gate, false, nil) end
+          local base = Compiler.CompileEventPath(frame, event, remaining)
+          local route = RouteCache.healthVisibility[base]
+          if not route then
+            route = function(self, ev, unit, ...)
+              base(self, ev, unit, ...)
+              gate(self)
+            end
+            if RouteCache.sharedRoutes[base] then RouteCache.healthVisibility[base] = route end
+          end
+          if RouteCache.sharedRoutes[base] then RouteCache.sharedRoutes[route] = true end
+          return route
+        end
+      end
+    end
+  end
+  UF.RegisterRoute("visibility", Compile, 10, HEALTH_EVENTS)
+end

@@ -1351,4 +1351,56 @@ function Power.SelectGroupPowerUpdater(frame)
   return update
 end
 
+Power.Routes = { basic = true, identityBar = true }
+Power.Routes.SelectNeeds = Power.SelectGroupPowerUpdater
 UF.RegisterElement("Power", Power)
+
+if UF.RouteCompiler then
+  local Compiler = UF.RouteCompiler
+  local RouteCache = setmetatable({ directPower = {} }, { __index = Compiler.Cache })
+  local SharedDirectRoute = Compiler.SharedDirectRoute
+  local GetUpdateKey = Compiler.GetUpdateKey
+  local SelectElementEventUpdate = Compiler.SelectEventUpdate
+  local POWER_EVENTS = {
+    UNIT_POWER_UPDATE = true,
+    UNIT_POWER_FREQUENT = true,
+    UNIT_MAXPOWER = true,
+    UNIT_DISPLAYPOWER = true,
+  }
+  local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
+    if target then
+      return function(self, ev, _unit, eventPowerToken)
+        local power, powerMax, powerType, powerToken, metaChanged, foreign
+        if barFn then
+          power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, target, eventPowerToken)
+        end
+        if textFn and foreign ~= true then
+          textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged)
+        end
+      end
+    end
+    return function(self, ev, unit, eventPowerToken)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local power, powerMax, powerType, powerToken, metaChanged, foreign
+      if barFn then power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, u, eventPowerToken) end
+      if textFn and foreign ~= true then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged) end
+    end
+  end
+
+  local function Compile(frame, event, list, target)
+    local barBase = frame[GetUpdateKey("Power")]
+    local textBase = frame[GetUpdateKey("PowerText")]
+    local textUpdate = textBase and SelectElementEventUpdate(UF.elements.PowerText, frame, event, textBase) or nil
+    local barFn, textFn, routeUnitless
+    for i = 1, #list, 2 do
+      local update, unitless = list[i], list[i + 1] == true
+      if routeUnitless == nil then routeUnitless = unitless elseif routeUnitless ~= unitless then return end
+      if update == barBase then barFn = update elseif update == textUpdate then textFn = update else return end
+    end
+    if barFn or textFn then
+      return SharedDirectRoute(RouteCache.directPower, BuildPowerRoute,
+        barFn, textFn, nil, nil, routeUnitless, target)
+    end
+  end
+  UF.RegisterRoute("power", Compile, 20, POWER_EVENTS)
+end

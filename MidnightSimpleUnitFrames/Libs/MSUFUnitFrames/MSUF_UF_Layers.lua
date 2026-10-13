@@ -201,3 +201,112 @@ function Layers.PreviewBoundsLevel(frameOrLevel)
   local base = type(frameOrLevel) == "number" and frameOrLevel or Layers.BaseFrameLevel(frameOrLevel)
   return base + Layers.PREVIEW_BOUNDS_OFFSET
 end
+
+-- Decorators own surfaces; the engine only consumes their public callbacks.
+local Surface = {}
+UF.Surface = Surface
+UF.Decorators = {}
+local decorators, decoratorOrder, eventOwners = UF.Decorators, {}, {}
+
+function UF.RegisterDecorator(name, descriptor)
+  if decorators[name] then return false end
+  decorators[name] = descriptor
+  descriptor.active = true
+  decoratorOrder[#decoratorOrder + 1] = descriptor
+  return true
+end
+
+function UF.SetDecoratorActive(name, active)
+  local descriptor = decorators[name]
+  if not descriptor then return false end
+  descriptor.active = active == true
+  local owner = eventOwners[name]
+  if owner then
+    for _, driver in pairs(owner) do
+      driver.frame:SetScript("OnEvent", descriptor.active and descriptor.OnEvent or nil)
+    end
+  end
+  return true
+end
+
+function Surface.IsDecoratorActive(name)
+  local descriptor = decorators[name]
+  return descriptor ~= nil and descriptor.active == true
+end
+
+local function NotifySurface(callback, frame, ...)
+  local handled = false
+  for index = 1, #decoratorOrder do
+    local descriptor = decoratorOrder[index]
+    local fn = descriptor.active and descriptor[callback]
+    if fn and fn(frame, ...) == true then handled = true end
+  end
+  return handled
+end
+
+function Surface.BeginBatch()
+  Surface.batch = true
+end
+
+function Surface.EndBatch(unit)
+  Surface.batch = false
+  return NotifySurface("OnVisualChanged", nil, "commit", unit)
+end
+
+function Surface.Apply(frame, spec)
+  return NotifySurface("Apply", frame, spec)
+end
+
+function Surface.OnIdentity(frame, event, unit)
+  return NotifySurface("OnIdentity", frame, event, unit)
+end
+
+function Surface.OnShow(frame)
+  return NotifySurface("OnShow", frame)
+end
+
+function Surface.OnVisualChanged(frame, event, ...)
+  return NotifySurface("OnVisualChanged", frame, event, ...)
+end
+
+function Surface.OwnsMask(frame, texture)
+  -- Disabling in combat can defer physical cleanup. Ownership lasts until
+  -- that cleanup finishes, even while visual callbacks are inactive.
+  for index = 1, #decoratorOrder do
+    local owns = decoratorOrder[index].OwnsMask
+    if owns and owns(frame, texture) == true then return true end
+  end
+  return false
+end
+
+-- A subscription is a native registration recipe. Decorators supply their
+-- demand and callbacks; unit filtering and change detection belong here.
+-- The named driver key permits disjoint unit filters for the same event.
+function Surface.SetEvent(name, key, event, wanted, unit1, unit2)
+  local owner = eventOwners[name]
+  if not owner then
+    if not wanted then return end
+    owner = {}
+    eventOwners[name] = owner
+  end
+  local driver = owner[key]
+  if not driver then
+    if not wanted then return end
+    local descriptor = decorators[name]
+    driver = { frame = CreateFrame("Frame"), events = {}, units = {} }
+    owner[key] = driver
+    driver.frame:SetScript("OnEvent", descriptor.active and descriptor.OnEvent or nil)
+  end
+  local filter = unit1 and (unit2 and unit1 .. "," .. unit2 or unit1) or nil
+  if (driver.events[event] == true) == (wanted == true) and driver.units[event] == filter then return end
+  driver.events[event], driver.units[event] = wanted or nil, filter
+  driver.frame:UnregisterEvent(event)
+  if not wanted then return end
+  if unit2 then
+    driver.frame:RegisterUnitEvent(event, unit1, unit2)
+  elseif unit1 then
+    driver.frame:RegisterUnitEvent(event, unit1)
+  else
+    driver.frame:RegisterEvent(event)
+  end
+end

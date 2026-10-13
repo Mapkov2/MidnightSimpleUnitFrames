@@ -566,3 +566,11 @@ local function NormalizeDetachedPowerShape(value)
 end
 Shared.NormalizeDetachedPowerShape = NormalizeDetachedPowerShape
 ExportPublic("MSUF_UF_NormalizeDetachedPowerShape", NormalizeDetachedPowerShape)
+
+-- Route adapters for owners outside the unit element layer. Their native
+-- implementations keep their own events and traits; the dispatcher sees only
+-- the same descriptor contract as every unit element.
+UF.elementRoutes = UF.elementRoutes or {}
+for name in ("Auras GroupCornerIndicators GroupStatusRuntime GroupVisuals GroupRangeFade"):gmatch("%S+") do
+  UF.elementRoutes[name] = { events = true }
+end

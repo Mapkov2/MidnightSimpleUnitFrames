@@ -19,7 +19,7 @@ end
 
 local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
 local POWER = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"
-local CORE = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
+local CORE = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"
 local power = Slice.Read(root .. "/" .. POWER)
 local core = Slice.Read(root .. "/" .. CORE)
 

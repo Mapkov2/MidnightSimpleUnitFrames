@@ -20,6 +20,7 @@ CreateFrame = function()
 end
 
 local namespace = {
+    UF = { visualRefreshCallbacks = {} },
     ExportPublic = function(name, value) _G[name] = value end,
     MSUF2 = {
         ValueTextPairs = function() return {} end,
@@ -30,6 +31,8 @@ local namespace = {
 -- combat-state source the layer visibility asks.
 for _, relative in ipairs({
     "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua",
+    "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua",
+    "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua",
 }) do

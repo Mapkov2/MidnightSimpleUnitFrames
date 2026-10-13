@@ -2898,4 +2898,5 @@ DeactivatePredictionLifecycle = function(frame)
   SyncPredictionWorldEvent()
 end
 
+Prediction.Routes = { events = true, identity = true }
 UF.RegisterElement("Prediction", Prediction)

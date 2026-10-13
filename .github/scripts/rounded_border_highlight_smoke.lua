@@ -217,6 +217,7 @@ LoadEngine("MSUF_UF_Core.lua")
 assert(loadfile(libraryRoot .. "MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
 -- The visual refresh callback registry the rounded controller hooks into.
 assert(loadfile(libraryRoot .. "MSUF_UF_Runtime.lua"))("MidnightSimpleUnitFrames", MSUF)
+LoadEngine("MSUF_UF_Shared.lua")
 LoadEngine("Elements/MSUF_UF_Visuals_Common.lua")
 LoadEngine("Elements/MSUF_UF_Elements_Borders.lua")
 LoadEngine("Elements/MSUF_UF_Elements_LoadConditions.lua")

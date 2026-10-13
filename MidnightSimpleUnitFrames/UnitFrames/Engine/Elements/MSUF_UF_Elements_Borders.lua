@@ -406,8 +406,7 @@ local function RefreshBorderTestFrames()
   -- rounded layout pass that repaints that shared edge with its base colour.
   -- Finish this explicit preview transaction in the rounded owner so the
   -- already-resolved test colour/thickness is the final visible state.
-  local refreshRounded = _G.MSUF_RoundedUF_OnApplyAll
-  if type(refreshRounded) == "function" then refreshRounded() end
+  UF.Surface.OnVisualChanged(nil, "MSUF_RoundedUF_OnApplyAll")
 end
 
 local function RefreshBorderTestModesActive()
@@ -1120,6 +1119,7 @@ Borders.NoDispatchUpdates = {
   [Borders.UpdateGroupThreat] = true,
 }
 
+Borders.Routes = { events = true, identity = true }
 UF.RegisterElement("Borders", Borders)
 
 local function RefreshUnitDispelFrame(frame)
@@ -1139,3 +1139,68 @@ ExportPublic("MSUF_RefreshUnitDispelOverlay", RefreshUnitDispelFrame)
 MSUF.Compat = MSUF.Compat or {}
 MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
 MSUF.Compat.DeprecatedAliases.MSUF_RefreshUnitDispelOverlay = "MSUF_RefreshUnitDispelOverlays"
+
+if UF.RouteCompiler then
+  local Compiler = UF.RouteCompiler
+  local RouteCache = setmetatable({ directGroupThreat = {} }, { __index = Compiler.Cache })
+  local RouteCacheLeaf = Compiler.RouteCacheLeaf
+  local GROUP_THREAT_EVENTS = { UNIT_THREAT_SITUATION_UPDATE = true, UNIT_THREAT_LIST_UPDATE = true }
+  local function BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
+    return function(self, ev, unit)
+      local u = unit or self.MSUFUnitKey
+      local borderThreat, cornerThreat = resolvePair(
+        self,
+        u,
+        borderFn and self._msufBorderRuntimeAggroMode or nil,
+        cornerFn and self._msufGFCornerPreparedCfg
+          and self._msufGFCornerPreparedCfg.runtimeAggroMode or nil)
+      if borderFn then borderFn(self, ev, u, borderThreat) end
+      if cornerFn then cornerFn(self, ev, u, cornerThreat) end
+    end
+  end
+
+  local function SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
+    local leaf, key = RouteCacheLeaf(RouteCache.directGroupThreat,
+      borderFn, cornerFn, resolvePair, nil, "unit", nil)
+    local route = leaf[key]
+    if not route then
+      route = BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
+      leaf[key] = route
+    end
+    RouteCache.sharedRoutes[route] = true
+    return route
+  end
+
+  local function Compile(frame, event, list, target)
+    local count = #list
+    if frame._msufCoreScope == "group" and GROUP_THREAT_EVENTS[event] == true then
+      local borders = UF.elements.Borders
+      local corners = UF.elements.GroupCornerIndicators
+      local borderUpdate = borders and borders.UpdateGroupThreat
+      local cornerUpdate = corners and corners.UpdateGroupThreat
+      local visuals = MSUF.UFVisuals
+      local resolvePair = visuals and visuals.ResolveGroupAggroPair
+      local borderFn, cornerFn
+      local direct = target == nil and resolvePair ~= nil
+      for i = 1, count, 2 do
+        local update = list[i]
+        if list[i + 1] == true then
+          direct = false
+          break
+        end
+        if update == borderUpdate then
+          borderFn = update
+        elseif update == cornerUpdate then
+          cornerFn = update
+        else
+          direct = false
+          break
+        end
+      end
+      if direct == true and (borderFn or cornerFn) then
+        return SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
+      end
+    end
+  end
+  UF.RegisterRoute("threat", Compile, 20, GROUP_THREAT_EVENTS)
+end

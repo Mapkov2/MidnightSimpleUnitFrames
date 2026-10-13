@@ -1936,4 +1936,5 @@ end
 --- every gameplay event, which is what keeps an art border free in combat.
 Portrait.BorderNeedsUpdate = function(event, p) return PortraitBorderNeedsUpdate(event, p) end
 
+Portrait.Routes = { events = true, identity = true }
 UF.RegisterElement("Portrait", Portrait)
