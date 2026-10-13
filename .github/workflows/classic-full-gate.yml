@@ -53,24 +53,25 @@ jobs:
           lua -v
           luac -v
 
-      # Retail is branch main of this repository. No tracked file records the
-      # main commit this tree mirrors, so the resolver derives it: the newest
-      # main commit whose addon tree matches this one under the gate's own
-      # rules. A blob-less clone holds every commit and tree the resolver reads;
-      # the checkout then fetches the blobs of that one commit.
+      # The former Retail main is frozen at the 6.22 retirement commit.
+      # The cutover merge preserves that history in main, so the clone
+      # contains it without depending on an additional published ref.
+      # Resolve the exact historical mirror base within this frozen history;
+      # new multi-client commits must never become the Retail reference.
       - name: Check out the Retail commit this tree mirrors
         shell: pwsh
         env:
           MSUF_RETAIL_REFERENCE: ${{ runner.temp }}/msuf-classic-retail-ref
           MSUF_RETAIL_REMOTE: ${{ github.server_url }}/${{ github.repository }}.git
+          MSUF_RETIRED_RETAIL_COMMIT: "84a1241710c26d0970436a02beb4e32f3a626f39"
         run: |
           git clone --filter=blob:none --no-checkout --single-branch --branch main $env:MSUF_RETAIL_REMOTE $env:MSUF_RETAIL_REFERENCE
           if ($LASTEXITCODE -ne 0) {
             throw "Could not clone Retail main from $env:MSUF_RETAIL_REMOTE."
           }
-          $resolved = & python ./.github/scripts/resolve_classic_retail_source.py --retail $env:MSUF_RETAIL_REFERENCE --retail-rev origin/main
+          $resolved = & python ./.github/scripts/resolve_classic_retail_source.py --retail $env:MSUF_RETAIL_REFERENCE --retail-rev $env:MSUF_RETIRED_RETAIL_COMMIT
           if ($LASTEXITCODE -ne 0) {
-            throw "No commit of Retail main matches this Classic tree; the resolver output above names the nearest one and its mismatching paths."
+            throw "No commit of the retired Retail history matches this Classic tree; the resolver output above names the nearest one and its mismatching paths."
           }
           # The resolver prints its report on stderr and exactly one commit id
           # on stdout. Anything else means the Retail reference is unresolved,
@@ -88,7 +89,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or ([string]$head).Trim() -cne $commit) {
             throw "Retail reference HEAD is '$head', not the resolved $commit."
           }
-          "Full Classic gate against Retail main $commit" >> $env:GITHUB_STEP_SUMMARY
+          "Full multi-client gate against retired Retail base $commit" >> $env:GITHUB_STEP_SUMMARY
 
       # The audit reads Blizzard's branch tips through git only (show, grep,
       # rev-parse), so a depth-1 clone of every branch needs no working tree.

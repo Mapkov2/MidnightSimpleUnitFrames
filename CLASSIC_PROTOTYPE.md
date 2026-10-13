@@ -1,4 +1,11 @@
-# MSUF Classic 6.5 Alpha Build
+# MSUF 6.5 multi-client codebase
+
+Since the 2026-10-13 cutover, this codebase is authoritative for Retail,
+WoW Forever and the supported Classic clients. Development and release
+freshness checks use `main`; the former Retail line is retired at
+`84a1241710c26d0970436a02beb4e32f3a626f39` under the unpublished backup label `6.22`.
+The historical Retail parity gate resolves its base within that frozen
+history. The `classic-v<version>` release tag format remains in use.
 
 This local branch was created from Retail `main` commit `7cf4e711`. Every
 Retail sync commit records the Retail commit it ported in a `Retail-Source:`
@@ -30,7 +37,7 @@ CurseForge workflows all read it, and it wins wherever this summary disagrees:
 - Classic Era: `11509`, suffix `_Vanilla.toc`
 - Mists of Pandaria Classic: `50504`, suffix `_Mists.toc`
 - The Burning Crusade Classic: `20506`, suffix `_TBC.toc`
-- Retail remains available for comparison through `_Mainline.toc`
+- Retail Midnight ships through `_Mainline.toc`
 
 Every core TOC loads `Game/Shared/Initialize.lua` before `Kernel/MSUF_Bootstrap.lua`.
 It places the client by its project ID and its `X-MSUF-Client` TOC tag and

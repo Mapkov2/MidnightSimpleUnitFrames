@@ -1,12 +1,14 @@
 name: MSUF Classic gate
 
 # Runs the Classic gate for every change to the addon folders, the tooling or
-# the workflows on the classic branch, as two jobs: the self-contained subset
+# the workflows on main and the historical classic branch, as two jobs:
+# the self-contained subset
 # and the full gate. The branch filters keep tag pushes out: path filters are
 # not evaluated for tags.
 on:
   push:
     branches:
+      - main
       - classic
     paths:
       - "MidnightSimpleUnitFrames/**"
@@ -15,6 +17,7 @@ on:
       - ".github/**"
   pull_request:
     branches:
+      - main
       - classic
     paths:
       - "MidnightSimpleUnitFrames/**"
