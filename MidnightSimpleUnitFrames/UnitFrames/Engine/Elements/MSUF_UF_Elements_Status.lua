@@ -1361,9 +1361,7 @@ local function UpdatePowerRoleVisibility(frame, status)
   -- reused healer/tank frame could keep its old Power event ownership as DPS.
   frame._msufGFPowRoleHidden = hidden
   if prev ~= nil and prev ~= hidden then
-    -- Role-driven power visibility changes alter event ownership and layout.
-    -- MarkDirty owns the combat deferral; outside combat it reapplies the exact
-    -- frame immediately, while the group runtime coalesces protected changes.
+    -- Combat overlays update visuals now; MarkDirty applies OOC and defers layout in combat.
     if gf and type(gf.MarkDirty) == "function" then
       gf.MarkDirty(frame, (gf.DIRTY_GEOMETRY or 0x01) + (gf.DIRTY_LAYOUT or 0x20))
     end
@@ -1381,6 +1379,17 @@ function Runtime.UpdateRole(frame, status)
   if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
   if issecretvalue(role) == true then role = nil end
   if role == "NONE" then role = nil end
+  if frame and frame._msufIsGroupFrame and InCombatLockdown and InCombatLockdown() then
+    local gf = MSUF and MSUF.GF
+    local refresh = gf and gf.RefreshFrameRoleOverlay
+    if refresh then
+      local oldRole = status and status.roleValue
+      if issecretvalue(oldRole) == true then oldRole = nil end
+      if gf.NormalizeGroupRole(oldRole) ~= gf.NormalizeGroupRole(role) then
+        refresh(frame)
+      end
+    end
+  end
   if status then status.roleValue = role end
   UpdatePowerRoleVisibility(frame, status)
 

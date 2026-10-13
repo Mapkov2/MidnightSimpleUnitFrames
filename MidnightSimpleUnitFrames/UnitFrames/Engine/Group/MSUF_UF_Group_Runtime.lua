@@ -609,6 +609,7 @@ function GF.DeferGroupRuntime(reason, kind, mask)
   elseif currentKind ~= kind then
     GF._pendingGroupRuntimeKind = DEFER_ALL_KINDS
   end
+  if reason == "refresh" and mask == nil then mask = GF.DIRTY_ALL end
   GF._pendingGroupRuntimeMask = MergeDirtyMask(GF._pendingGroupRuntimeMask, mask)
   return false
 end
@@ -799,6 +800,7 @@ local function RefreshAllNow()
 end
 
 function GF.RefreshVisuals(kind, mask)
+  if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
   if InCombat() then return GF.DeferGroupRuntime("refresh", kind, mask) end
   local result = RefreshVisualsNow(kind, mask)
   -- The Hide in Housing toggle applies as a visual change: the header pass
@@ -957,6 +959,21 @@ local function FlushDeferred()
   return did
 end
 
+-- Raid tokens can acquire another occupant without a secure unit-attribute write.
+-- Remember the readable identities at combat entry; only changed GUIDs need an
+-- overlay compile on GROUP_ROSTER_UPDATE, never a full lifecycle per name event.
+local function RefreshRosterRoleIdentity(frame, unit, _, rememberOnly)
+  if not IsUnitToken(unit) then return false end
+  local guid = UnitGUID(unit)
+  if issecretvalue(guid) == true then return false end
+  local oldGUID = frame._msufGFRoleOverlayGUID
+  if issecretvalue(oldGUID) == true then oldGUID = nil end
+  frame._msufGFRoleOverlayGUID = guid
+  if rememberOnly or oldGUID == guid then return false end
+  GF.RefreshFrameRoleOverlay(frame)
+  return true
+end
+
 local function RuntimeOnEvent(self, event, unit)
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
@@ -998,6 +1015,7 @@ local function RuntimeOnEvent(self, event, unit)
     if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
       SetupWantedHeaders()
     end
+    if GF.ForEachFrame then GF.ForEachFrame(RefreshRosterRoleIdentity, false, true) end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
@@ -1007,6 +1025,9 @@ local function RuntimeOnEvent(self, event, unit)
       GF.ApplyGroupBorder()
     end
     if InCombat() then
+      if event == "GROUP_ROSTER_UPDATE" and GF.ForEachFrame then
+        GF.ForEachFrame(RefreshRosterRoleIdentity, false)
+      end
       GF.DeferGroupRuntime("roster")
     else
       -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;

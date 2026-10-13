@@ -897,6 +897,7 @@ end
 --- Call after any DB mutation (EnsureDB, profile swap, options apply). Internal
 --- cache refreshes may preserve the completed DB repair with keepDBReady=true.
 function GF.InvalidateConfCache(keepDBReady)
+    if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
     if keepDBReady ~= true then
         ensureDBReady = false
     end

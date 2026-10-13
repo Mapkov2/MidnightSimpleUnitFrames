@@ -605,3 +605,10 @@ clients+Forever	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} {flavor}
 clients+Forever	lua	tools/tests/preview_layer_rail_smoke.lua	{root} {flavor}	Preview layer rail layout failed: {flavor}
 -	lua	tools/tests/color_menu_lifecycle_smoke.lua		Colors preview surfaces and hidden lifecycle regressions
 -	lua	tools/tests/resource_visibility_smoke.lua	{root}	Resource visibility isolation and secret curves failed
+clients+Forever	lua	tools/tests/group_role_overlay_identity_smoke.lua	{root} {flavor}	Group role overlay identity in combat: {flavor}
+clients+Forever	lua	tools/tests/group_role_overlay_identity_smoke.lua	{root} {flavor} icon-off	Group role overlay without role icon: {flavor}
+-	lua	tools/tests/group_text_format_cache_apply_smoke.lua	{root}	Group global text format cache apply
+clients+Forever	lua	tools/tests/group_headers_secret_subgroup_smoke.lua	{root} {flavor}	Group secret subgroup guards: {flavor}
+clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {flavor}	Group role overlay normalisation and refresh: {flavor}
+-	lua	tools/tests/group_name_update_budget_smoke.lua	{root} Mainline	Group name event instruction budget: Mainline
+-	lua	tools/tests/group_name_update_budget_smoke.lua	{root} Vanilla	Group name event instruction budget: Vanilla

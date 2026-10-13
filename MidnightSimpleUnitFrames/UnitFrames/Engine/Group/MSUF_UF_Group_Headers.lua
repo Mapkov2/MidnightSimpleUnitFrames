@@ -497,7 +497,9 @@ function GF.GetPreservedRaidGroupCount(conf, keepEmpty)
   local occupied = keepEmpty ~= true and conf.collapseEmptyGroups == true and {} or nil
   if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
     for index = 1, GetNumGroupMembers() or 0 do
-      local subgroup = tonumber((select(3, GetRaidRosterInfo(index)))) or 0
+      local _, _, subgroup = GetRaidRosterInfo(index)
+      if issecretvalue(subgroup) == true then return ResolvePreservedRaidGroupCount(conf) end
+      subgroup = tonumber(subgroup) or 0
       if subgroup > maxRosterGroup then maxRosterGroup = subgroup end
       if occupied and subgroup > 0 and RaidGroupAllowed(conf, subgroup) then occupied[subgroup] = true end
     end
@@ -712,6 +714,7 @@ local function IsPlayerUnit(unit)
 end
 
 local function AppendNameListEntry(entries, unit, index, conf, name, subgroup, classFile, role, ignoreGroupLimit)
+  if issecretvalue(subgroup) == true then return false end
   if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role, ignoreGroupLimit) then return true end
   entries[#entries + 1] = {
     name = name,

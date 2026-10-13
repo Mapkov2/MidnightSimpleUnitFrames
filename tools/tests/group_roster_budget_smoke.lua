@@ -31,6 +31,11 @@
 -- party_apply 397k -> 288k, raid_build 1863k -> 1502k, raid_apply 1383k -> 1075k;
 -- Vanilla 160k -> 135k, 413k -> 307k, 1801k -> 1455k, 1424k -> 1134k. KB and the
 -- settle/shift cases unchanged. Those four limits move to the new measurement +2%.
+-- 2026-10-13 (W1-3): same-token combat reindexing needs one UnitGUID read per
+-- visible slot on GROUP_ROSTER_UPDATE. Bound those reads separately (20 for
+-- raid_shift); keep every existing native-call and instruction limit intact.
+-- Mainline raid_shift: 106 original calls + 20 GUID reads = 126; Vanilla:
+-- 160 + 20 = 180. Combat entry seeds the identities once, outside this case.
 --
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -83,7 +88,16 @@ if arg[3] == "native" then
     end
     h.nativeCounts = {}
     h.nativeTick = function()
-        if natives[debug.getinfo(2, "f").func] then h.nativeCalls = h.nativeCalls + 1 end
+        local fn = debug.getinfo(2, "f").func
+        if natives[fn] then
+            h.nativeCalls = h.nativeCalls + 1
+            if fn == env.UnitGUID then
+                local caller = debug.getinfo(3, "S")
+                if caller and caller.source:find("MSUF_UF_Group_Runtime.lua", 1, true) then
+                    h.roleIdentityReads = h.roleIdentityReads + 1
+                end
+            end
+        end
     end
     h.nativeLimits = flavor == "Mainline" and {
         party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6151,
@@ -137,7 +151,7 @@ local function MeasureOnce(fn)
     collectgarbage("stop")
     local kb = collectgarbage("count")
     if h.nativeTick then
-        h.nativeCalls = 0
+        h.nativeCalls, h.roleIdentityReads = 0, 0
         debug.sethook(h.nativeTick, "c")
     else
         debug.sethook(Tick, "", 1000)
@@ -165,7 +179,9 @@ local function Measure(case, fn, repeatable)
     results[#results + 1] = { case = case, k = ticks, kb = kb }
     if h.nativeCounts then
         h.nativeCounts[case] = h.nativeCalls
-        Check(h.nativeCalls <= h.nativeLimits[case], case .. ": native-call budget exceeded")
+        local identityLimit = case == "raid_shift" and 20 or 0
+        Check(h.roleIdentityReads <= identityLimit, case .. ": roster identity GUID-read budget exceeded")
+        Check(h.nativeCalls - h.roleIdentityReads <= h.nativeLimits[case], case .. ": native-call budget exceeded")
     end
     local budget = (BUDGETS[flavor] or {})[case]
     if budget and not MEASURE_ONLY then

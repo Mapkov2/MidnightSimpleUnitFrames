@@ -76,16 +76,19 @@ Check(type(eventFrame and eventFrame.onEvent) == "function", "the group runtime 
 GF.RefreshHeaderLayout() -- subscribes the runtime, out of combat
 
 -- Observers (Edit Mode, extra blocks) receive the flushed kind: nil for every kind.
-local observedKinds = {}
-GF.RegisterRuntimeObserver("defer-merge-smoke", function(operation, kind)
-    if operation == "refreshVisuals" then observedKinds[#observedKinds + 1] = kind == nil and "*" or tostring(kind) end
+local observedKinds, observedMasks = {}, {}
+GF.RegisterRuntimeObserver("defer-merge-smoke", function(operation, kind, mask)
+    if operation == "refreshVisuals" then
+        observedKinds[#observedKinds + 1] = kind == nil and "*" or tostring(kind)
+        observedMasks[#observedMasks + 1] = mask
+    end
 end)
 
 local function Run(label, requests, expected)
     combat = true
     for _, request in ipairs(requests) do request() end
     combat = false
-    applied, observedKinds = {}, {}
+    applied, observedKinds, observedMasks = {}, {}, {}
     eventFrame.onEvent(eventFrame, "PLAYER_REGEN_ENABLED")
     table.sort(applied)
     local got = table.concat(applied, ",")
@@ -123,5 +126,24 @@ Run("MarkAllDirty's layout request", {
     function() GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
     function() GF.RefreshVisuals("raid", VISUAL) end,
 }, "party,raid")
+
+local invalidations = 0
+GF.InvalidateCompiledSpecs = function() invalidations = invalidations + 1 end
+GF.RefreshCompiledSpecDomains = function(_, mask)
+    return mask ~= nil and mask ~= GF.DIRTY_ALL
+end
+for _, fullFirst in ipairs({ true, false }) do
+    invalidations = 0
+    Run("full and numeric refresh masks", {
+        function()
+            if fullFirst then GF.RefreshVisuals("raid", nil) else GF.RefreshVisuals("raid", VISUAL) end
+        end,
+        function()
+            if fullFirst then GF.RefreshVisuals("raid", VISUAL) else GF.RefreshVisuals("raid", nil) end
+            Check(GF._pendingGroupRuntimeMask == GF.DIRTY_ALL, "nil refresh lost its full-recompile domain")
+        end,
+    }, "raid")
+    Check(observedMasks[1] == GF.DIRTY_ALL and invalidations == 1, "full refresh was not recompiled at regen")
+end
 
 print("group_runtime_defer_merge_smoke: ok")

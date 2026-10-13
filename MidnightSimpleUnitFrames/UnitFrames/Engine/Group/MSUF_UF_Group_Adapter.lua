@@ -741,6 +741,19 @@ function GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
   return ApplyUnitFrame(frame, kind or frame._msufGFKind or "party", unit, reason, applyMask, true)
 end
 
+local ROLE_OVERLAY_ELEMENTS = { "Health", "Power", "Text", "PowerText", "GroupVisuals" }
+
+function GF.RefreshFrameRoleOverlay(frame, withoutRoleIcon)
+  local spec = frame and frame.MSUFSpec
+  if not spec or (withoutRoleIcon and spec.status.role.enabled) then return end
+  local enabled = spec.power.enabled
+  spec = GF.CompileSpec(frame._msufGFKind, frame, frame.MSUFUnitKey)
+  if enabled == spec.power.enabled then return end
+  frame._msufTextLayoutRevision = nil
+  UF.ApplyElementsToFrame(frame, ROLE_OVERLAY_ELEMENTS, spec, UNIT_CHANGED_REASON)
+  if InCombat() then GF.MarkDirty(frame, GF.DIRTY_GEOMETRY + GF.DIRTY_LAYOUT) end
+end
+
 local function OnChildAttributeChanged(self, name, value)
   if name ~= UNIT_ATTR then return end
   BeginUnitIndexRebind()
@@ -791,6 +804,7 @@ local function OnChildAttributeChanged(self, name, value)
     if kind then appliedKind[visual] = kind end
     TrackFrame(visual, rawUnit)
     RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
+    GF.RefreshFrameRoleOverlay(visual, true)
     EndUnitIndexRebind()
     return
   end
@@ -805,6 +819,7 @@ local function OnChildAttributeChanged(self, name, value)
   self.MSUFUnitKey = rawUnit
   self.unitKey = rawUnit
   visual.MSUFUnitKey = rawUnit
+  GF.RefreshFrameRoleOverlay(visual, true)
   attrUnit[self] = rawUnit
   appliedUnit[visual] = rawUnit
   if kind then appliedKind[visual] = kind end
