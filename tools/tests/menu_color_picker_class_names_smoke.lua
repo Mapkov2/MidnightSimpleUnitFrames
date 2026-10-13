@@ -89,6 +89,16 @@ end
 function methods:GetColorRGB() return unpack(self.rgb or { 1, 1, 1 }) end
 mw.env.LOCALIZED_CLASS_NAMES_MALE = e.LOCALIZED_CLASS_NAMES_MALE
 local MM = mw.M
+local aura = mw.world.core.MSUF_Auras3
+local begins, ends, active = 0, 0, nil
+function aura.BeginNativeColorInteraction()
+    begins = begins + 1
+    active = begins
+    return active
+end
+function aura.EndNativeColorInteraction(ticket)
+    if ticket and ticket == active then ends = ends + 1; active = nil end
+end
 local normal, menuAddTooltip = {}, MM.AddTooltip
 MM.AddTooltip = function(widget, title, ...)
     if widget and widget.token then normal[widget.token] = title end
@@ -110,6 +120,16 @@ Check(opened and opened:IsShown(), "the menu colour picker did not open")
 Check(normal.WARRIOR == "Krieger" and normal.HUNTER == "J\195\164ger" and normal.DRUID == "Druide",
     "the menu colour picker's class swatches show " .. tostring(normal.WARRIOR) .. " instead of the client's class name")
 Check(normal.EVOKER == "EVOKER", "a class the client does not have lost its title: " .. tostring(normal.EVOKER))
+local previous = {owner:GetRGB()}
+for i = 1, 20 do opened:Apply(i / 100, 0.4, 0.6) end
+Check(begins == 1 and ends == 0 and active ~= nil, "context colour samples did not share one native visual transaction")
 opened:Finish(true)
+Check(ends == 1 and active == nil, "context Cancel did not end the native visual transaction")
+local r, g, b = owner:GetRGB()
+Check(r == previous[1] and g == previous[2] and b == previous[3], "context Cancel did not restore the original colour")
+opened = openMenuPicker("Smoke", {owner}, nil, owner)
+opened:Apply(0.7, 0.8, 0.9)
+opened:Finish(false)
+Check(begins == 2 and ends == 2 and active == nil, "context Done did not commit once")
 
 print("menu_color_picker_class_names_smoke: ok (class swatch tooltips use the client's class names in both pickers)")

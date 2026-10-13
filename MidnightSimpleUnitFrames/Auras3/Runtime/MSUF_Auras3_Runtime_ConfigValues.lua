@@ -85,13 +85,13 @@ local function ReadGroupDebuffTypeBorderMode(source)
     return NormalizeDebuffTypeBorderMode(mode, "OFF")
 end
 
-local function GetAuraBorderOptions(showIcon, preserveAsset)
+local function GetAuraBorderOptions(showIcon, preserveAsset, inputs)
     -- Border/BorderWithIcon let Blizzard supply its dispel border atlas, which
     -- is the intended art for the lane debuff-type border feature.
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
     AURA_BORDER_OPTIONS.style = styles and (preserveAsset == true and styles.PreserveAsset
         or (showIcon == true and styles.BorderWithIcon or styles.Border)) or nil
-    return A3.ApplyHarmfulDispelColorOptions(AURA_BORDER_OPTIONS)
+    return A3.ApplyHarmfulDispelColorOptions(AURA_BORDER_OPTIONS, inputs)
 end
 
 local function ReadNumber(primary, secondary, key, fallback, minValue, maxValue)

@@ -5,6 +5,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function SensorColorOptions(A3, options, inputs)
+    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    options.style = styles and styles.PreserveAsset or nil
+    return A3.ApplyHarmfulDispelColorOptions(options, inputs)
+end
+
 MSUF.Auras3RuntimeFactories.DispelVisuals = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local math_max = math.max
 local tonumber = tonumber
@@ -140,24 +146,20 @@ end
 -- PreserveAsset; Border/BorderWithIcon would replace the texture with the
 -- stock dispel border atlas and reset its vertex color, destroying the
 -- overlay/corner visuals.
-local function GetSensorOverlayOptions()
-    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
-    AURA_SENSOR_OVERLAY_OPTIONS.style = styles and styles.PreserveAsset or nil
-    return A3.ApplyHarmfulDispelColorOptions(AURA_SENSOR_OVERLAY_OPTIONS)
+local function GetSensorOverlayOptions(inputs)
+    return SensorColorOptions(A3, AURA_SENSOR_OVERLAY_OPTIONS, inputs)
 end
 
-local function GetSensorBorderOptions()
-    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
-    AURA_SENSOR_BORDER_OPTIONS.style = styles and styles.PreserveAsset or nil
-    return A3.ApplyHarmfulDispelColorOptions(AURA_SENSOR_BORDER_OPTIONS)
+local function GetSensorBorderOptions(inputs)
+    return SensorColorOptions(A3, AURA_SENSOR_BORDER_OPTIONS, inputs)
 end
 
 --- Symbol sensors let Blizzard pick the artwork, because only Blizzard may look
 --- at the aura's dispel type. AddDispelTypeTexture securecopies the options
 --- table at bind time, so reusing this one table across buttons is safe.
-function DS.Options(style)
+function DS.Options(style, inputs)
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
-    local assets = DS.AssetMap(style)
+    local assets = DS.AssetMap(style, inputs)
     if assets then
         DS.options.style = styles and styles.CustomAsset or nil
         DS.options.customDispelAssetMap = assets
@@ -173,7 +175,7 @@ function DS.Options(style)
     -- so Blizzard's vertex color replaces their color instead of multiplying
     -- the already-colored art into near-black. Stock Blizzard atlases remain
     -- untouched because they have no tint-neutral asset counterpart.
-    DS.options.customDispelColorMap = assets and A3.GetCustomDispelColorMap() or nil
+    DS.options.customDispelColorMap = assets and A3.GetCustomDispelColorMap(inputs) or nil
     return DS.options
 end
 
@@ -216,7 +218,8 @@ local function PrepareDispelSensorBorder(button, sensor, parentFrame, owner)
         right:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", thickness, 0)
         right:SetWidth(thickness)
     end
-    local options = sensor.visual == "purge" and A3.GetPurgeSensorTextureOptions(sensor) or GetSensorBorderOptions()
+    local options = sensor.visual == "purge" and A3.GetPurgeSensorTextureOptions(sensor)
+        or GetSensorBorderOptions(sensor._msufA3NativeVisualInputs)
     local alpha = sensor.visual == "purge" and 1 or 0.82
     for i = 1, #regions do
         regions[i]:SetAlpha(alpha)
@@ -244,6 +247,7 @@ end
 
 local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, owner)
     if not (button and sensor and parentFrame) then return false end
+    sensor._msufA3NativeVisualInputs = sensor._msufA3NativeVisualInputs or A3.GetNativeVisualInputs()
     button._msufA3DispelSensor = sensor.visual
     if button.EnableMouse then button:EnableMouse(false) end
     button:SetMouseMotionEnabled(false)
@@ -269,7 +273,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
         region:ClearAllPoints()
         region:SetAllPoints(button)
         region:SetAlpha(Clamp01(sensor.alpha, 1))
-        owner:AddDispelTypeTexture(region, DS.Options(sensor.style))
+        owner:AddDispelTypeTexture(region, DS.Options(sensor.style, sensor._msufA3NativeVisualInputs))
         return true
     end
     if sensor.visual == "corner" then
@@ -298,7 +302,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
             region:SetPoint(slot.anchor or "TOPLEFT", button, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
             region:SetTexture("Interface\\Buttons\\WHITE8X8")
             region:SetAlpha(alpha)
-            owner:AddDispelTypeTexture(region, GetSensorOverlayOptions())
+            owner:AddDispelTypeTexture(region, GetSensorOverlayOptions(sensor._msufA3NativeVisualInputs))
         end
         for i = #slots + 1, #regions do regions[i]:Hide() end
         return true
@@ -318,7 +322,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
         region:SetAlpha(1)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
         PrepareRoundedDispelOverlayRegion(parentFrame, region, button)
-        owner:AddDispelTypeTexture(region, GetSensorOverlayOptions())
+        owner:AddDispelTypeTexture(region, GetSensorOverlayOptions(sensor._msufA3NativeVisualInputs))
     end
     return true
 end

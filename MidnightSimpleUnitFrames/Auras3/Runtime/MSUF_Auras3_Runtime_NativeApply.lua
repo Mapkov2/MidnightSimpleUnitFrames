@@ -5,6 +5,50 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local tostring, type = tostring, type
+local function RebindCommittedOwners(A3, root, keys, oldUnit, unit)
+    for i = 1, #keys do
+        local container = root[keys[i]]
+        if container and container.unit == oldUnit then
+            local configs = container._msufA3NativeButtonConfigs
+            if configs then
+                for j = 1, #configs do
+                    local config = configs[j]
+                    if config.unit == oldUnit then config.unit = unit end
+                end
+            end
+            local slots = container._msufA3SpellIndicatorButtonSlots
+            if slots then
+                for j = 1, #slots do
+                    if slots[j].unit == oldUnit then slots[j].unit = unit end
+                end
+            end
+            A3._RebindNativeContainerUnit(container, unit)
+        end
+    end
+end
+
+-- Pooled identity keeps following the secure roster while only visual apply
+-- waits for colour commit. Callback configs are private copies; shared compiled
+-- cache entries and committed visual snapshots remain immutable.
+local function RebindColorInteraction(A3, frame, cfg, owners)
+    local root = frame.Auras
+    local unit = cfg.unit or frame.MSUFUnitKey
+    if root.unit == unit then return true end
+    local oldUnit = root.unit
+    A3._BeginDirectIdentityEventTopologyBatch()
+    A3._SeedGroupAuraPresenceGate(frame, unit, false)
+    RebindCommittedOwners(A3, root, owners.NORMAL_LANE_ROOT_KEYS, oldUnit, unit)
+    local plan = owners.GetNativeOwnerPlan(root._msufA3Config)
+    RebindCommittedOwners(A3, root, plan.keys, oldUnit, unit)
+    RebindCommittedOwners(A3, root, owners.EFFECT_ROOT_KEYS, oldUnit, unit)
+    root.unit, root._msufA3AppliedUnit = unit, unit
+    A3._SeedGroupAuraAssistGate(frame)
+    A3._SeedGroupAuraPresenceGate(frame, unit, true)
+    A3._EndDirectIdentityEventTopologyBatch()
+    return true
+end
+
 local function UpdatePriorityGroupFilters(container, nativeFilter)
     if container._msufA3FilterString == nativeFilter then return end
     for _, groupKey in ipairs(container._msufA3PriorityGroupKeys) do
@@ -25,8 +69,6 @@ end
 MSUF.Auras3RuntimeFactories.NativeApply = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 
-local tostring = tostring
-local type = type
 local AURA_CONTAINER_ADDON = dependencies.Platform.AURA_CONTAINER_ADDON
 local ApplyManagedAuraGroupLayout = dependencies.Containers.ApplyManagedAuraGroupLayout
 local AuraSortEnums = dependencies.Sort.AuraSortEnums
@@ -51,6 +93,7 @@ local IsLiveGroupAuraFrame = dependencies.Identity.IsLiveGroupAuraFrame
 local LaneLayoutSignature = dependencies.Signatures.LaneLayoutSignature
 local GetNativeOwnerPlan = dependencies.OwnerConfig.GetNativeOwnerPlan
 local LaneStructuralSignature = dependencies.Signatures.LaneStructuralSignature
+local NativeOwnerSignature = dependencies.NativeContract.NativeOwnerSignature
 local LaneTrackingSignature = dependencies.Signatures.LaneTrackingSignature
 
 local ManagedLaneFrameLevel = dependencies.CustomConfig.ManagedLaneFrameLevel
@@ -354,7 +397,7 @@ end
 local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreate)
     if not (root and sensorRoot and sensorRoot.enabled == true and sensorRoot.sensorRoot == true) then return nil end
     local key = sensorRoot.rootKey or "DispelSensor"
-    local structuralSignature = sensorRoot._msufA3StructuralSignature
+    local structuralSignature = NativeOwnerSignature(sensorRoot, parentFrame)
     local layoutSignature = sensorRoot._msufA3LayoutSignature
     local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
@@ -390,7 +433,7 @@ end
 local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
     if not (root and groupSlots) then return nil end
     local rootKey = groupSlots.rootKey or "GroupSlots"
-    local structuralSignature = groupSlots._msufA3StructuralSignature
+    local structuralSignature = NativeOwnerSignature(groupSlots, parentFrame)
     local current = ReviveNativeLane(root, rootKey, root[rootKey], structuralSignature, RetireGroupSlots, parentFrame, forceRecreate)
     local parked = parentFrame and parentFrame._msufA3GroupOwners
         and parentFrame._msufA3GroupOwners[rootKey]
@@ -560,6 +603,9 @@ local function ApplyConfig(frame, cfg, reason)
         HideState(frame)
         return false
     end
+    if A3._nativeColorInteraction and frame.Auras and frame.Auras._msufA3Applied then
+        return RebindColorInteraction(A3, frame, cfg, dependencies.OwnerConfig)
+    end
     local root = EnsureRoot(frame)
     if not root then return false end
     A3._SeedGroupAuraPresenceGate(frame, cfg.unit, false)
@@ -627,6 +673,7 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3VisualGen = VisualGen(cfg)
     root._msufA3AppliedUnit = cfg.unit or frame.MSUFUnitKey
     root._msufA3FrameSpec = frame.MSUFSpec
+    root._msufA3DispelFrameSignature = dependencies.NativeContract.FrameDispelSignature(frame)
     root.needFullUpdate = nil
     root:Show()
     A3._SeedGroupAuraAssistGate(frame)
@@ -657,7 +704,9 @@ local function RootCanReuseContainersForConfig(root, cfg)
         local key = groupSlots.keys[i]
         local owner, current = groupSlots.owners[key], root[key]
         if owner then
-            if not (current and current._msufA3StructuralSignature == owner._msufA3StructuralSignature) then return false end
+            if not (current and current._msufA3StructuralSignature == NativeOwnerSignature(owner, root._msufA3ParentFrame)) then
+                return false
+            end
         elseif current and current.IsShown and current:IsShown() == true then
             return false
         end

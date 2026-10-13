@@ -136,7 +136,26 @@ local function ConfigGen(cfg)
 end
 
 local function VisualGen(cfg)
-    return cfg and cfg._msufA3VisualGen or (A3._nativeVisualGen or 0)
+    return cfg and cfg._msufA3VisualGen or (A3.GetNativeVisualSignature())
+end
+
+local function FrameDispelSignature(frame)
+    local kit = MSUF.RoundedSurfaceKit
+    return kit and kit.DispelFrameSignature and kit.DispelFrameSignature(frame) or "-"
+end
+
+local function NativeOwnerSignature(owner, frame)
+    local signature = owner._msufA3StructuralSignature
+    local sensorRoot = owner.sensorRoot == true and owner or owner.sensorRoot
+    local sensors = sensorRoot and sensorRoot.sensors
+    for i = 1, sensors and #sensors or 0 do
+        local visual = sensors[i].visual
+        if visual == "overlay" or visual == "border" or visual == "purge" then
+            local frameSignature = FrameDispelSignature(frame)
+            return frameSignature == "-" and signature or signature .. "\027" .. frameSignature
+        end
+    end
+    return signature
 end
 
 local function ReasonRequiresAuraApply(reason)
@@ -155,9 +174,10 @@ local function RootAppliedConfigIsCurrent(root, frame, cfg, reason)
     if ReasonRequiresAuraApply(reason) and not (reason == nil and cfg and root._msufA3Config == cfg) then return false end
     if cfg and root._msufA3Config ~= cfg then return false end
     if root._msufA3ConfigGen ~= (cfg and ConfigGen(cfg) or (A3._runtimeConfigGen or 1)) then return false end
-    if root._msufA3VisualGen ~= (cfg and VisualGen(cfg) or (A3._nativeVisualGen or 0)) then return false end
+    if root._msufA3VisualGen ~= (cfg and VisualGen(cfg) or (A3.GetNativeVisualSignature())) then return false end
     if root._msufA3AppliedUnit ~= (cfg and cfg.unit or (frame and frame.MSUFUnitKey)) then return false end
     if root._msufA3FrameSpec ~= (frame and frame.MSUFSpec) then return false end
+    if root._msufA3DispelFrameSignature ~= FrameDispelSignature(frame) then return false end
     return true
 end
 
@@ -172,6 +192,8 @@ return {
     ConfigureNativeAuraContainer = ConfigureNativeAuraContainer,
     EnsureRoot = EnsureRoot,
     FrameAppliedConfigIsCurrent = FrameAppliedConfigIsCurrent,
+    FrameDispelSignature = FrameDispelSignature,
+    NativeOwnerSignature = NativeOwnerSignature,
     ReasonRequiresAuraApply = ReasonRequiresAuraApply,
     RootAppliedConfigIsCurrent = RootAppliedConfigIsCurrent,
     ValidateNativeAuraButtonContract = ValidateNativeAuraButtonContract,

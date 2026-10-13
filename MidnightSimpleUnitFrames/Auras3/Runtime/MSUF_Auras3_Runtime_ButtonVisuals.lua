@@ -5,6 +5,26 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function PaintDurationBarColor(A3, Clamp01, bar, lane)
+    if not bar then return end
+    local r, g, b
+    local inputs = lane and lane._msufA3NativeVisualInputs
+    if inputs then
+        r, g, b = inputs.durationColor[1], inputs.durationColor[2], inputs.durationColor[3]
+    elseif type(A3.GetDurationBarColor) == "function" then
+        r, g, b = A3.GetDurationBarColor()
+    else
+        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+        local color = general and general.aurasCooldownTextSafeColor
+        if type(color) == "table" then
+            r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
+        elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
+            r, g, b = _G.MSUF_GetConfiguredFontColor()
+        end
+    end
+    if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
+end
+
 MSUF.Auras3RuntimeFactories.ButtonVisuals = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_floor = math.floor
@@ -128,22 +148,7 @@ local function ResolveDurationBarOptions(lane)
     return _durationBarOptions
 end
 
-local function ApplyDurationBarColor(bar)
-    if not bar then return end
-    local r, g, b
-    if type(A3.GetDurationBarColor) == "function" then
-        r, g, b = A3.GetDurationBarColor()
-    else
-        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
-        local color = general and general.aurasCooldownTextSafeColor
-        if type(color) == "table" then
-            r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
-        elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
-            r, g, b = _G.MSUF_GetConfiguredFontColor()
-        end
-    end
-    if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
-end
+local function ApplyDurationBarColor(bar, lane) return PaintDurationBarColor(A3, Clamp01, bar, lane) end
 
 -- One CustomAuraContainer owns every compatible group-frame display for a unit:
 -- fixed Spell/Dispel AuraSlots, every one-icon lane as another AuraSlot, and at
@@ -497,7 +502,7 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
                 Clamp01(color[4], 1))
         else
             LayoutDurationBar(visualOwner, bar, lane)
-            ApplyDurationBarColor(bar)
+            ApplyDurationBarColor(bar, lane)
         end
         if type(bar.SetReverseFill) == "function" then
             bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
@@ -537,7 +542,7 @@ function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
             button.Text = duration
         end
         duration:Hide()
-        ApplyFont(duration, lane.cooldownSize)
+        ApplyFont(duration, lane.cooldownSize, lane)
         if type(duration.SetDrawLayer) == "function" then
             duration:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
         end
@@ -589,7 +594,7 @@ function PrepareStage.PrepareStackText(button, lane, textOverlay)
         end
         button.Count = count
         count:Hide()
-        ApplyFont(count, lane.stackSize)
+        ApplyFont(count, lane.stackSize, lane)
         if type(count.SetDrawLayer) == "function" then
             count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
         end
@@ -619,7 +624,7 @@ function PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, icon
         end
         button._msufA3AuraBorder = border
         button:ClearDispelTypeTextures()
-        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, shapedDispel ~= nil))
+        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, shapedDispel ~= nil, lane._msufA3NativeVisualInputs))
         auraBorderBound = true
     else
         button:ClearDispelTypeTextures()
@@ -664,7 +669,7 @@ function PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, aura
         symbol:SetPoint("BOTTOMRIGHT", visualOwner, "BOTTOMRIGHT", -1, 1)
         symbol:SetJustifyH("RIGHT")
         symbol:SetJustifyV("BOTTOM")
-        ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
+        ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14), lane)
         button:SetDispelTypeText(symbol, _auraSymbolOptions)
     else
         button:ClearDispelTypeText()
@@ -705,6 +710,7 @@ function PrepareStage.BindPandemicAndTooltip(button, lane)
 end
 
 local function PrepareAuraButton(button, lane, index)
+    lane._msufA3NativeVisualInputs = lane._msufA3NativeVisualInputs or A3.GetNativeVisualInputs()
     PixelLayoutRegion(button)
     PrepareStage.BindLaneIdentity(button, lane, index)
     local visualOwner = PrepareStage.ResolveVisualOwner(button, lane)

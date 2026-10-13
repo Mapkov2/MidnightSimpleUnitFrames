@@ -191,6 +191,8 @@ local function _PushVisualUpdates_Flush()
         _Call(applyAll)
     end
     _Call(_G.MSUF_ApplyRoundedUnitframes)
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.RefreshNativeVisuals then auras.RefreshNativeVisuals() end
     _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_COLOR_CHANGE")
 
     --- Repaint the mouseover highlight cache so colour/size edits apply live.
@@ -214,6 +216,8 @@ local function _PushCastbarVisuals_Flush()
 end
 
 PushVisualUpdates = function()
+    local auras = MSUF.MSUF_Auras3
+    if auras then auras.InvalidateNativeVisualInputs() end
     if InCombat() then return DeferVisualFlushUntilCombatEnds("color") end
     if _pushPending then return end
     _pushPending = true

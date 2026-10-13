@@ -4,60 +4,6 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
-local function GeneralSettings()
-    local db = _G.MSUF_DB
-    return db and db.general
-end
-
-local function ResolveAuraFontSettings(A3)
-    local readFont = _G.MSUF_GetGlobalFontSettings
-    local gen = A3._nativeVisualGen or 0
-    if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
-        A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
-        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
-        if type(readFont) == "function" then
-            local unusedSize
-            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
-        end
-    end
-end
-
--- Native children are immutable. A font edit invalidates compiled views, but
--- returning to identical resolved font settings must revive the same parked
--- container. Other visual revisions remain conservative invalidation signals.
-local function NativeVisualSignature(A3, locale)
-    ResolveAuraFontSettings(A3)
-    local gen = A3._nativeVisualGen or 0
-    local general = GeneralSettings()
-    local key = general and general.fontKey
-    if A3._nativeVisualSignatureGen ~= gen or A3._nativeVisualSignatureLocale ~= locale
-        or A3._nativeVisualSignatureKey ~= key or A3._nativeVisualSignatureReader ~= A3._auraFontCacheReader then
-        A3._nativeVisualSignatureGen = gen
-        A3._nativeVisualSignatureReader = A3._auraFontCacheReader
-        A3._nativeVisualSignatureLocale = locale
-        A3._nativeVisualSignatureKey = key
-        local style = tostring(A3._auraFontPath) .. "\030" .. tostring(A3._auraFontFlags)
-            .. "\030" .. tostring(A3._auraFontR) .. "\030" .. tostring(A3._auraFontG)
-            .. "\030" .. tostring(A3._auraFontB) .. "\030" .. tostring(A3._auraFontShadow)
-            .. "\030" .. tostring(key) .. "\030" .. tostring(locale)
-        -- Intern only resolved font styles, not every visual revision. A short
-        -- token avoids copying the full font path into each lane signature,
-        -- while returning to a previous style still revives its parked frame.
-        local styles = A3._nativeFontStyleIDs
-        if not styles then
-            styles = {}
-            A3._nativeFontStyleIDs = styles
-        end
-        local token = styles[style]
-        if not token then
-            token = (A3._nativeFontStyleCount or 0) + 1
-            A3._nativeFontStyleCount, styles[style] = token, token
-        end
-        A3._nativeVisualSignature = tostring(gen - (A3._nativeFontVisualGen or 0)) .. ":" .. token
-    end
-    return A3._nativeVisualSignature
-end
-
 MSUF.Auras3RuntimeFactories.DurationText = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local table_concat = table.concat
 local table_sort = table.sort
@@ -70,22 +16,151 @@ local FrameLayers = dependencies.Platform.FrameLayers
 local Round = dependencies.Platform.Round
 local STANDARD_TEXT_FONT = dependencies.Platform.STANDARD_TEXT_FONT
 
-function A3.GetNativeVisualSignature()
-    return NativeVisualSignature(A3, MSUF.LOCALE)
+local function GeneralSettings(lane)
+    if lane and lane._msufA3NativeVisualInputs then return lane._msufA3NativeVisualInputs.general end
+    local db = _G.MSUF_DB
+    return db and db.general
 end
 
-local function ApplyFont(fs, size)
-    if not fs then return end
+local function ResolveAuraFontSettings(A3)
+    local readFont = _G.MSUF_GetGlobalFontSettings
+    local gen = A3._nativeVisualInputRev or 0
+    if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
+        A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
+        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
+        if type(readFont) == "function" then
+            local unusedSize
+            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
+        end
+    end
+end
+
+local DISPEL_TYPES = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+local TIMER_FIELDS = { "aurasCooldownTextUseBuckets", "aurasCooldownTextUrgentSeconds",
+    "aurasCooldownTextWarningSeconds", "aurasCooldownTextSafeSeconds", "aurasCooldownTextSafeColor",
+    "aurasCooldownTextWarningColor", "aurasCooldownTextUrgentColor", "dispelTypeColorOverrides", "fontKey" }
+local SUFFIX_KEYS = { "MSUF_AURA_TIMER_MINUTE_SUFFIX", "MSUF_AURA_TIMER_HOUR_SUFFIX", "MSUF_AURA_TIMER_DAY_SUFFIX" }
+local function CopyVisualInput(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, child in pairs(value) do copy[key] = CopyVisualInput(child) end
+    return copy
+end
+local RGB_KEYS = { "r", "g", "b" }
+local function AppendVisualColor(parts, color)
+    for i, key in ipairs(RGB_KEYS) do
+        parts[#parts + 1] = tostring(type(color) == "table" and (color[i] or color[key]) or nil)
+    end
+end
+
+local function ConfiguredFontColor()
+    local readColor = _G.MSUF_GetConfiguredFontColor
+    if type(readColor) == "function" then return readColor() end
+end
+
+local function DurationBarColor(A3, general, r, g, b)
+    if A3.GetDurationBarColor then return A3.GetDurationBarColor() end
+    local color = general.aurasCooldownTextSafeColor
+    if type(color) == "table" then return color[1] or color.r, color[2] or color.g, color[3] or color.b end
+    return r, g, b
+end
+
+-- Every immutable global input contributes to one interned content token.
+-- Revisions only expire the memo: they never enter a native park signature.
+local function NativeVisualSignature(A3, MSUF)
+    if A3._nativeColorInteraction then return A3._nativeVisualSignature end
+    local rev = A3._nativeVisualInputRev or 0
+    if A3._nativeVisualSignatureRev == rev then return A3._nativeVisualSignature end
     ResolveAuraFontSettings(A3)
-    local fontPath, fontFlags = A3._auraFontPath, A3._auraFontFlags
-    local r, g, b, useShadow = A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow
+    local general = GeneralSettings()
+    local key = general and general.fontKey
+    local parts = {
+        tostring(A3._auraFontPath), tostring(A3._auraFontFlags), tostring(A3._auraFontR), tostring(A3._auraFontG),
+        tostring(A3._auraFontB), tostring(A3._auraFontShadow), tostring(key), tostring(MSUF.LOCALE),
+    }
+    general = general or {}
+    for _, name in ipairs(TIMER_FIELDS) do
+        if name == "aurasCooldownTextSafeColor" then break end
+        parts[#parts + 1] = tostring(general[name])
+    end
+    AppendVisualColor(parts, general.aurasCooldownTextSafeColor)
+    AppendVisualColor(parts, general.aurasCooldownTextWarningColor)
+    AppendVisualColor(parts, general.aurasCooldownTextUrgentColor)
+    local cr, cg, cb = ConfiguredFontColor()
+    local r, g, b = cr, cg, cb
+    parts[#parts + 1], parts[#parts + 2], parts[#parts + 3] = tostring(r), tostring(g), tostring(b)
+    r, g, b = DurationBarColor(A3, general, r, g, b)
+    parts[#parts + 1], parts[#parts + 2], parts[#parts + 3] = tostring(r), tostring(g), tostring(b)
+    for i = 1, #SUFFIX_KEYS do
+        local name = SUFFIX_KEYS[i]
+        parts[#parts + 1] = tostring(MSUF.Translate and MSUF.Translate(name) or name)
+    end
+    local overrides = general.dispelTypeColorOverrides
+    for i = 1, #DISPEL_TYPES do AppendVisualColor(parts, overrides and overrides[DISPEL_TYPES[i]]) end
+    local kit = MSUF.RoundedSurfaceKit
+    parts[#parts + 1] = kit and kit.DispelVisualSignature and kit.DispelVisualSignature() or "-"
+    local style = table.concat(parts, "\030")
+    local styles = A3._nativeVisualStyleIDs or {}
+    A3._nativeVisualStyleIDs = styles
+    local token = styles[style]
+    if not token then
+        token = tostring((A3._nativeVisualStyleCount or 0) + 1)
+        A3._nativeVisualStyleCount, styles[style] = tonumber(token), token
+        local saved = { fontKey = key }
+        for i = 1, #TIMER_FIELDS do saved[TIMER_FIELDS[i]] = CopyVisualInput(general[TIMER_FIELDS[i]]) end
+        saved.aurasCooldownTextSafeColor = saved.aurasCooldownTextSafeColor or { cr or 1, cg or 1, cb or 1 }
+        local suffixes = {}
+        for i = 1, #SUFFIX_KEYS do suffixes[SUFFIX_KEYS[i]] = MSUF.Translate and MSUF.Translate(SUFFIX_KEYS[i]) end
+        local inputs = { token = token, general = saved, suffixes = suffixes,
+            font = { A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow },
+            durationColor = { r, g, b } }
+        A3._nativeVisualInputs = A3._nativeVisualInputs or {}
+        A3._nativeVisualInputs[token] = inputs
+    end
+    A3._nativeVisualSignatureRev, A3._nativeVisualSignature = rev, token
+    return A3._nativeVisualSignature
+end
+
+local function NativeFontSettings(A3, lane)
+    local inputs = lane and lane._msufA3NativeVisualInputs
+    if inputs then
+        local font = inputs.font
+        return font[1], font[2], font[3], font[4], font[5], font[6], inputs.general.fontKey
+    end
+    ResolveAuraFontSettings(A3)
+    local general = GeneralSettings()
+    return A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow,
+        general and general.fontKey
+end
+
+local function DurationVisualToken(A3, lane)
+    local inputs = lane and lane._msufA3NativeVisualInputs
+    return inputs and inputs.token or (A3._nativeColorInteraction and A3._nativeVisualInputRev or A3.GetNativeVisualSignature())
+end
+
+local function CachedDurationStyle(lane, token)
+    if type(lane) ~= "table" then return nil end
+    local cached
+    if lane._msufA3DurationStyleToken == token then cached = lane._msufA3DurationStyle end
+    lane._msufA3DurationStyleToken = token
+    return cached
+end
+
+function A3.GetNativeVisualSignature() return NativeVisualSignature(A3, MSUF) end
+function A3.GetNativeVisualInputs()
+    local token = A3.GetNativeVisualSignature()
+    return A3._nativeVisualInputs[token]
+end
+
+local function ApplyFont(fs, size, lane)
+    if not fs then return end
+    local fontPath, fontFlags, r, g, b, useShadow, fontKey = NativeFontSettings(A3, lane)
     fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     size = ClampNumber(size, 12, 6, 40)
-    local general = GeneralSettings()
     local applyResolved = _G.MSUF_ApplyResolvedFont
     if type(applyResolved) == "function" then
-        applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
+        applyResolved(fs, fontPath, size, fontFlags, fontKey)
     else
         -- Current clients require a valid FontAsset and may raise before a
         -- boolean result is returned. Keep the load-order fallback just as
@@ -109,7 +184,7 @@ end
 -- DurationTextBinding template, both evaluated by Blizzard against the secret
 -- aura duration object. MSUF only builds/caches them when style config
 -- changes; there is no addon timer or OnUpdate work per aura.
-local _durationFormatterCache
+local _durationFormatterCache, _durationFormatterVisualToken
 
 local function NumericRuleFormatRounding(name, fallback)
     local enum = _G.Enum and _G.Enum.NumericRuleFormatRounding
@@ -127,12 +202,13 @@ local function EscapeFormatLiteral(text)
     return tostring(text or ""):gsub("%%", "%%%%")
 end
 
-local function LocalizedTimeSuffix(key, fallback)
-    local suffix
-    if type(MSUF.Translate) == "function" then
+local function LocalizedTimeSuffix(key, fallback, lane)
+    local inputs = lane and lane._msufA3NativeVisualInputs
+    local suffix = inputs and inputs.suffixes[key]
+    if not inputs and type(MSUF.Translate) == "function" then
         suffix = MSUF.Translate(key)
-        if suffix == key then suffix = nil end
     end
+    if suffix == key then suffix = nil end
     if suffix == nil or suffix == "" then suffix = fallback end
     return tostring(suffix)
 end
@@ -166,16 +242,20 @@ local function BuildAuraDurationBinding(formatter, updateInterval)
 end
 
 local function BuildAuraDurationStyle(lane)
+    local token = DurationVisualToken(A3, lane)
+    if _durationFormatterVisualToken ~= token then
+        _durationFormatterVisualToken, _durationFormatterCache = token, nil
+    end
     -- Compiled lanes are replaced on config/locale invalidation. Cache the
     -- resolved style record there so pool growth does not rebuild formatter
     -- and binding for every newly initialized AuraButton.
-    local cached = type(lane) == "table" and lane._msufA3DurationStyle
+    local cached = CachedDurationStyle(lane, token)
     if cached ~= nil then
         if cached == false then return nil end
         return cached
     end
 
-    local general = GeneralSettings()
+    local general = GeneralSettings(lane)
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
@@ -193,8 +273,8 @@ local function BuildAuraDurationStyle(lane)
     local sr, sg, sb
     if type(safe) == "table" then
         sr, sg, sb = safe[1] or safe.r, safe[2] or safe.g, safe[3] or safe.b
-    elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
-        sr, sg, sb = _G.MSUF_GetConfiguredFontColor()
+    else
+        sr, sg, sb = ConfiguredFontColor()
     end
     sr, sg, sb = Clamp01(sr, 1), Clamp01(sg, 1), Clamp01(sb, 1)
 
@@ -216,9 +296,9 @@ local function BuildAuraDurationStyle(lane)
     if warningSec < urgentSec then warningSec = urgentSec end
     if safeSec < warningSec then safeSec = warningSec end
 
-    local minuteSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_MINUTE_SUFFIX", "M")
-    local hourSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_HOUR_SUFFIX", "H")
-    local daySuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_DAY_SUFFIX", "D")
+    local minuteSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_MINUTE_SUFFIX", "M", lane)
+    local hourSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_HOUR_SUFFIX", "H", lane)
+    local daySuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_DAY_SUFFIX", "D", lane)
     local updateInterval = decimalSec > 0 and 0.1 or 0.25
     local sig = table_concat({
         "unit-suffix-binding", buckets and 1 or 0, decimalSec, minuteSuffix, hourSuffix, daySuffix,
@@ -425,6 +505,7 @@ local function ConfigureStandaloneAuraDurationText(owner, fs, lane, duration, en
 end
 if type(MSUF.RegisterLocaleCallback) == "function" then
     MSUF.RegisterLocaleCallback("MSUF_Auras3_DurationFormatter", function()
+        A3.InvalidateNativeVisualInputs()
         _durationFormatterCache = nil
         if type(A3.RequestApply) == "function" then A3.RequestApply() end
     end)

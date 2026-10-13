@@ -347,8 +347,8 @@ function A3.GetDispelColorPreviewType()
     return DS.defaultColors[A3._dispelColorPreviewType] and A3._dispelColorPreviewType or "Magic"
 end
 
-function A3.HasDispelTypeColorOverride(dispelType)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+function A3.HasDispelTypeColorOverride(dispelType, inputs)
+    local general = inputs and inputs.general or (_G.MSUF_DB and _G.MSUF_DB.general)
     local overrides = general and general.dispelTypeColorOverrides
     local color = type(overrides) == "table" and overrides[dispelType]
     return type(color) == "table"
@@ -386,16 +386,14 @@ end
 --- Blizzard secure-copies native texture options at bind time. Build and cache
 --- a map containing only actual overrides; nil means the default path is
 --- structurally identical to the pre-feature configuration.
-function A3.GetCustomDispelColorMap()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+function A3.GetCustomDispelColorMap(inputs)
+    local general = inputs and inputs.general or (_G.MSUF_DB and _G.MSUF_DB.general)
     local overrides = general and general.dispelTypeColorOverrides
-    local generation = tonumber(A3._nativeVisualGen) or 0
-    if A3._customDispelColorOverrides == overrides
-        and A3._customDispelColorMapGeneration == generation then
+    local token = inputs and inputs.token or A3.GetNativeVisualSignature()
+    if A3._customDispelColorMapGeneration == token then
         return A3._customDispelColorMap
     end
-    A3._customDispelColorOverrides = overrides
-    A3._customDispelColorMapGeneration = generation
+    A3._customDispelColorMapGeneration = token
     if type(overrides) ~= "table" or type(_G.CreateColor) ~= "function" then
         A3._customDispelColorMap = nil
         return nil
@@ -416,14 +414,14 @@ function A3.GetCustomDispelColorMap()
     return A3._customDispelColorMap
 end
 
-function A3.ApplyHarmfulDispelColorOptions(options)
-    if options then options.customDispelColorMap = A3.GetCustomDispelColorMap() end
+function A3.ApplyHarmfulDispelColorOptions(options, inputs)
+    if options then options.customDispelColorMap = A3.GetCustomDispelColorMap(inputs) end
     return options
 end
 
 --- Per-type CustomAsset map for one MSUF set, built once and memoized. Cold
 --- path: reached from the sensor prepare and from the menu preview only.
-function DS.AssetMap(style)
+function DS.AssetMap(style, inputs)
     local folder = DS.folders[style]
     if not folder then
         DS.assetCache[style] = false
@@ -431,7 +429,7 @@ function DS.AssetMap(style)
     end
     local signature = ""
     for i = 1, #DS.types do
-        signature = signature .. (A3.HasDispelTypeColorOverride(DS.types[i]) and "1" or "0")
+        signature = signature .. (A3.HasDispelTypeColorOverride(DS.types[i], inputs) and "1" or "0")
     end
     local cacheKey = style .. ":" .. signature
     local cached = DS.assetCache[cacheKey]

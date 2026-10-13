@@ -36,6 +36,16 @@ Check(not failure, "boot failed: " .. tostring(failure and failure.file) .. " " 
 local e, M = world.env, world.core.MSUF2
 local W = Check(M.Widgets, "Menu2 widgets missing")
 world.widgets:ClearTimers() -- Boot work is not this smoke's subject.
+local aura = world.core.MSUF_Auras3
+local begins, ends, active = 0, 0, nil
+function aura.BeginNativeColorInteraction()
+    begins = begins + 1
+    active = begins
+    return active
+end
+function aura.EndNativeColorInteraction(ticket)
+    if ticket and ticket == active then ends = ends + 1; active = nil end
+end
 
 -- Blizzard's shared picker, reduced to the Classic Era order of operations:
 -- OnColorSelect calls swatchFunc live, Okay/Cancel hide before their callback.
@@ -100,10 +110,13 @@ end
 button:GetScript("OnClick")(button)
 Check(picker:IsShown() and picker._msuf2ColorOwner == button, "the fallback did not open Blizzard's picker for the button")
 picker:SetColorRGB(0.9, 0.1, 0.1)
+Check(begins == 1 and ends == 0 and active == 1, "live fallback colour change was not deferred")
 picker:Okay()
+Check(active == 1, "native colour commit ran before Classic's final swatch callback")
 Check(ButtonIs(0.9, 0.1, 0.1), "Okay did not apply the picked color")
 Check(commits == 1, "the picker's hide did not commit the color change exactly once")
 world.widgets:RunTimers()
+Check(ends == 1 and active == nil, "Okay did not commit native visuals once")
 CheckForeignUntouched("an Okay")
 Check(picker._msuf2ColorOwner == nil, "the picker kept its MSUF owner after an Okay")
 
@@ -112,8 +125,10 @@ button:GetScript("OnClick")(button)
 picker:SetColorRGB(0.0, 1.0, 0.0)
 Check(ButtonIs(0.0, 1.0, 0.0), "the live color did not reach the button")
 picker:Cancel()
+Check(active ~= nil and ends == 1, "Cancel committed before restoring the previous colour")
 Check(ButtonIs(0.9, 0.1, 0.1), "Cancel did not restore the previous color")
 world.widgets:RunTimers()
+Check(ends == 2 and active == nil, "Cancel did not release its native visual transaction")
 CheckForeignUntouched("a Cancel")
 Check(picker._msuf2ColorOwner == nil, "the picker kept its MSUF owner after a Cancel")
 
@@ -123,6 +138,7 @@ picker:Okay()
 button:GetScript("OnClick")(button)
 world.widgets:RunTimers()
 Check(picker._msuf2ColorOwner == button and picker:IsShown(), "a reopened picker lost its MSUF owner")
+Check(active == begins, "an old hide callback committed a reopened native visual transaction")
 Check(W.CloseMenuOwnedColorPicker() == true and not picker:IsShown(), "closing the menu left its own picker open")
 world.widgets:RunTimers()
 Check(picker._msuf2ColorOwner == nil, "the menu's close kept the MSUF owner")

@@ -135,7 +135,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- independent scopes can have equal sums when a pooled frame changes kind.
     local gen = (A3._runtimeConfigGen or 1)
         + (groupConfigRevisions[groupKind or false] or groupConfigRevisions[false])
-    local visualGen = A3._nativeVisualGen or 0
+    local visualGen = A3.GetNativeVisualSignature()
     local cached = frame._msufA3NativeGroupConfig
     if cached and frame._msufA3NativeGroupSpec == spec
         and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource

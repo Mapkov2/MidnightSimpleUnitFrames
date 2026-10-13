@@ -163,7 +163,7 @@ assert(drainBatch() == true, "topology recovery did not drain an interrupted bat
 assert(endBatch() == false and drainBatch() == false,
     "topology recovery left a stale batch depth")
 local publicRefreshStart = assert(runtime:find("function A3.RefreshAll()", refreshAllStop, true))
-local publicRefreshStop = assert(runtime:find("function A3.RefreshRoundedDispelOverlayMasks()", publicRefreshStart, true))
+local publicRefreshStop = assert(runtime:find("function A3.RequestScope", publicRefreshStart, true))
 local publicRefreshBody = runtime:sub(publicRefreshStart, publicRefreshStop - 1)
 local scheduleUnlock = publicRefreshBody:find("RunNextFrame(A3._FlushCoalescedRefreshAll)", 1, true)
 local runRefresh = publicRefreshBody:find("A3._DoRefreshAll()", 1, true)

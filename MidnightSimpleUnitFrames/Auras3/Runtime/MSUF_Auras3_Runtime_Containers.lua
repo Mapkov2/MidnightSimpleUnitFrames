@@ -5,17 +5,44 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local pairs = pairs
+local tostring = tostring
+local tonumber = tonumber
 local function ManagedAuraKey(config)
     return "msuf_" .. tostring(config and config.kind or "auras")
+end
+
+local function CopyNativeConfig(container, config, inputs)
+    local configs = container._msufA3NativeButtonConfigs or {}
+    container._msufA3NativeButtonConfigs = configs
+    local copy = configs[config]
+    if copy then return copy end
+    copy = {}
+    for key, value in pairs(config) do copy[key] = value end
+    copy._msufA3NativeVisualInputs = inputs
+    configs[config] = copy
+    configs[#configs + 1] = copy
+    return copy
+end
+
+local function CaptureNativeInputs(A3, container, config, visuals)
+    local inputs = A3.GetNativeVisualInputs()
+    local copy = CopyNativeConfig(container, config, inputs)
+    local copiedVisuals
+    if visuals then
+        copiedVisuals = {}
+        for i = 1, #visuals do
+            local visual = visuals[i]
+            copiedVisuals[i] = { sensor = CopyNativeConfig(container, visual.sensor, inputs), sensorIndex = visual.sensorIndex }
+        end
+    end
+    return copy, copiedVisuals
 end
 
 MSUF.Auras3RuntimeFactories.Containers = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
 local math_min = math.min
-local pairs = pairs
-local tonumber = tonumber
-local tostring = tostring
 local type = type
 local AURA_CONTAINER_ADDON = dependencies.Platform.AURA_CONTAINER_ADDON
 local ApplyAuraTooltipStyle = dependencies.Platform.ApplyAuraTooltipStyle
@@ -42,6 +69,7 @@ local ValidateNativeAuraContainerContract = dependencies.NativeContract.Validate
 local ConfigureContainer, SyncDispelSensorGeometry
 
 local function BuildManagedAuraGroupOptions(container, lane)
+    lane = CaptureNativeInputs(A3, container, lane)
     local nextIndex = 0
     local sortMethod, sortDirection = AuraSortEnums(lane)
     local _, candidateFilters = EffectiveLaneFilters(lane)
@@ -141,6 +169,7 @@ local function PriorityAuraGroupKey(lane, index)
 end
 
 local function BuildManagedPriorityAuraGroupOptions(container, lane, index, spellID)
+    lane = CaptureNativeInputs(A3, container, lane)
     local sortMethod, sortDirection = AuraSortEnums(lane)
     return {
         maxFrameCount = 1,
@@ -223,12 +252,13 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     -- so the normal initializeFrame styling pipeline applies unchanged.
     -- weaponEnchants is part of the structural signature -> toggling recreates.
     if lane.weaponEnchants == true and type(container.AddItemEnchantment) == "function" then
+        local enchantLane = CaptureNativeInputs(A3, container, lane)
         local slots = _G.AuraContainerItemEnchantmentSlot
         local enchantOptions = {
             initializeFrame = function(button)
                 button._msufA3ManagedAuraButton = true
                 button._msufA3ParentFrame = container._msufA3ParentFrame
-                PrepareAuraButton(button, lane, 1)
+                PrepareAuraButton(button, enchantLane, 1)
             end,
         }
         container:AddItemEnchantment(slots and slots.MainHand or 0, enchantOptions)
@@ -256,6 +286,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
 end
 
 local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex, visuals)
+    sensor, visuals = CaptureNativeInputs(A3, container, sensor, visuals)
     return {
         maxFrameCount = 1,
         initializeFrame = function(button)
@@ -271,6 +302,7 @@ local function GroupLaneSlotKey(lane)
 end
 
 local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex)
+    lane = CaptureNativeInputs(A3, container, lane)
     local sortMethod, sortDirection = AuraSortEnums(lane)
     local _, candidateFilters = EffectiveLaneFilters(lane)
     return {

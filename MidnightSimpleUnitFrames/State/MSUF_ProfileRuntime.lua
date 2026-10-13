@@ -27,6 +27,8 @@ local function MSUF_ProfileIO_BeforeActiveProfileMutation()
     local menu = MSUF.MSUF2
     if menu and menu.CloseColorPickerForProfileChange then menu.CloseColorPickerForProfileChange() end
     profileGeneration = profileGeneration + 1
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.BumpRuntimeConfig then auras.BumpRuntimeConfig() end
     local em2 = _G.MSUF_EM2
     local state = type(em2) == "table" and em2.State or nil
     if type(state) == "table" and type(state.ExitForProfileChange) == "function" then

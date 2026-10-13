@@ -503,7 +503,12 @@ end
 
 function A3.BumpRuntimeConfig()
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 0) + 1
+    A3.InvalidateNativeVisualInputs()
     return A3._runtimeConfigGen
+end
+
+function A3.InvalidateNativeVisualInputs()
+    A3._nativeVisualInputRev = (A3._nativeVisualInputRev or 0) + 1
 end
 
 function A3.UnitFrameAuraEnabled()
@@ -595,7 +600,6 @@ function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
     A3._deferredAuraRuntime = true
     A3._deferredAuraRuntimeReason = reason or A3._deferredAuraRuntimeReason
         or A3._deferredAuraDefaultReason or "AURAS3_DEFERRED"
-    if visuals == true then A3._deferredAuraRuntimeVisuals = true end
     if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
         A3._deferredAuraRuntimeAll = true
         A3._deferredAuraRuntimeScopes = nil

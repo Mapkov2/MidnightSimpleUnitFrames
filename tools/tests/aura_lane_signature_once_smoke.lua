@@ -106,7 +106,7 @@ function Reference.Button(lane, A3)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
         .. "\030" .. tostring(lane.portraitLevelOffset)
         .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
-        .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or (A3._nativeVisualGen or 0))
+        .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or "0")
 end
 function Reference.Structural(lane, A3)
     local standalone = ReferenceStandalone(lane)

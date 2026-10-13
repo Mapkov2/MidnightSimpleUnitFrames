@@ -7,20 +7,76 @@ MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local function TakeDeferredRuntime(A3)
     local all = A3._deferredAuraRuntimeAll == true
     local scopes = A3._deferredAuraRuntimeScopes
-    local visuals = A3._deferredAuraRuntimeVisuals == true
-    local fonts = A3._deferredAuraRuntimeFonts == true
     local reason = A3._deferredAuraRuntimeReason or "AURAS3_DEFERRED"
     A3._deferredAuraRuntime = nil
     A3._deferredAuraRuntimeAll = nil
     A3._deferredAuraRuntimeScopes = nil
-    A3._deferredAuraRuntimeVisuals = nil
-    A3._deferredAuraRuntimeFonts = nil
     A3._deferredAuraRuntimeReason = nil
-    if visuals or fonts then
-        A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
-        if fonts and not visuals then A3._nativeFontVisualGen = (A3._nativeFontVisualGen or 0) + 1 end
-    end
+    A3.InvalidateNativeVisualInputs()
     return all, scopes, reason
+end
+
+local function RefreshFrameDispelMasks(A3, MSUF, AuraRuntimeCombatBlocked, FrameDispelSignature)
+    local changed = false
+    local function RefreshFrame(frame)
+        local root = frame and frame.Auras
+        if not (root and root._msufA3Applied == true) then return end
+        if root._msufA3DispelFrameSignature == FrameDispelSignature(frame) then return end
+        changed = true
+        if AuraRuntimeCombatBlocked() then
+            A3._QueueDeferredAuraRuntime(frame.MSUFUnitKey, "AURAS3_ROUNDED_DISPEL_MASKS")
+        else
+            A3.RenderFrame(frame, "AURAS3_ROUNDED_DISPEL_MASKS")
+        end
+    end
+    for _, frame in pairs(A3._runtimeFrames or {}) do RefreshFrame(frame) end
+    local gf = MSUF.GF
+    if gf and gf.ForEachFrame then gf.ForEachFrame(RefreshFrame, true) end
+    return changed
+end
+
+local function InstallVisualInteractions(A3, MSUF, AuraRuntimeCombatBlocked, FrameDispelSignature)
+    function A3.BeginNativeColorInteraction()
+        if A3._nativeColorInteraction then A3.EndNativeColorInteraction(A3._nativeColorInteraction) end
+        A3.InvalidateNativeVisualInputs()
+        A3.GetNativeVisualSignature()
+        A3._nativeColorInteractionSerial = (A3._nativeColorInteractionSerial or 0) + 1
+        A3._nativeColorInteraction = A3._nativeColorInteractionSerial
+        return A3._nativeColorInteraction
+    end
+
+    function A3.EndNativeColorInteraction(ticket)
+        if not ticket or ticket ~= A3._nativeColorInteraction then return false end
+        A3._nativeColorInteraction = nil
+        A3.InvalidateNativeVisualInputs()
+        return A3.RefreshAll()
+    end
+
+    function A3.RefreshNativeVisuals()
+        A3.InvalidateNativeVisualInputs()
+        if A3._nativeColorInteraction then return false end
+        local token = A3.GetNativeVisualSignature()
+        if A3._nativeVisualRefreshToken == token then return false end
+        A3._nativeVisualRefreshToken = token
+        return A3.ApplyFontsFromGlobal()
+    end
+
+    -- Native dispel regions are immutable. Re-fold their content before deciding
+    -- whether a rounded apply actually needs to refresh the aura owners.
+    function A3.RefreshRoundedDispelOverlayMasks()
+        A3.InvalidateNativeVisualInputs()
+        if A3._nativeColorInteraction then return false end
+        local kit = MSUF.RoundedSurfaceKit
+        local signature = kit and kit.DispelVisualSignature and kit.DispelVisualSignature() or "-"
+        if A3._roundedDispelVisualSignature == signature then
+            return RefreshFrameDispelMasks(A3, MSUF, AuraRuntimeCombatBlocked, FrameDispelSignature)
+        end
+        A3._roundedDispelVisualSignature = signature
+        if AuraRuntimeCombatBlocked() then
+            return A3._QueueDeferredAuraRuntime("shared", "AURAS3_ROUNDED_DISPEL_MASKS", true)
+        end
+        return A3.RefreshAll()
+    end
 end
 
 MSUF.Auras3RuntimeFactories.Facade = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
@@ -51,6 +107,7 @@ local ResolveGroupFrameConfig = dependencies.GroupConfig.ResolveGroupFrameConfig
 local RootAppliedConfigIsCurrent = dependencies.NativeContract.RootAppliedConfigIsCurrent
 local RootCanReuseContainersForConfig = dependencies.NativeApply.RootCanReuseContainersForConfig
 local RunNextFrame = dependencies.Platform.RunNextFrame
+InstallVisualInteractions(A3, MSUF, AuraRuntimeCombatBlocked, dependencies.NativeContract.FrameDispelSignature)
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
@@ -315,6 +372,7 @@ A3._DoRefreshAll = function()
     A3._BeginDirectIdentityEventTopologyBatch()
     A3._RequestUnitNow("*")
     A3._EndDirectIdentityEventTopologyBatch()
+    A3._nativeVisualRefreshToken = A3._nativeVisualSignature
     return true
 end
 
@@ -352,6 +410,8 @@ function A3._FlushDeferredAuraRuntime()
 end
 
 function A3.RefreshAll()
+    A3.InvalidateNativeVisualInputs()
+    if A3._nativeColorInteraction then return true end
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime("shared", "AURAS3_REFRESH_ALL") end
     if A3._refreshAllCoalescing == true then
         A3._refreshAllPending = true
@@ -376,22 +436,12 @@ function A3.RefreshAll()
     return true
 end
 
--- Rounded masks and border rings on native Dispel regions are immutable after
--- Blizzard accepts them. A rounded setting change therefore advances the
--- existing visual generation and recreates the affected native containers on
--- this cold configuration path; aura events never call this function.
-function A3.RefreshRoundedDispelOverlayMasks()
-    if AuraRuntimeCombatBlocked() then
-        return A3._QueueDeferredAuraRuntime("shared", "AURAS3_ROUNDED_DISPEL_MASKS", true)
-    end
-    A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
-    return A3.RefreshAll()
-end
-
 -- A3.RequestApply is the core's (Auras3/MSUF_Auras3_Core.lua): it routes a
 -- scope to this file's RequestScope and anything else to its RefreshAll.
 
 function A3.RequestScope(scope, reason)
+    A3.InvalidateNativeVisualInputs()
+    if A3._nativeColorInteraction then return true end
     scope = tostring(scope or "shared"):lower()
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope, reason or "AURAS3_SCOPE_APPLY") end
     if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
@@ -421,12 +471,11 @@ function A3.RefreshUnit(unit)
 end
 
 function A3.ApplyFontsFromGlobal(scope, reason)
+    A3.InvalidateNativeVisualInputs()
+    if A3._nativeColorInteraction then return true end
     if AuraRuntimeCombatBlocked() then
-        A3._deferredAuraRuntimeFonts = true
         return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_FONT_VISUALS")
     end
-    A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
-    A3._nativeFontVisualGen = (A3._nativeFontVisualGen or 0) + 1
     if scope ~= nil then
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
     end
@@ -458,6 +507,7 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     if type(A3.RefreshEditPreview) == "function" then
         didWork = A3.RefreshEditPreview() == true or didWork
     end
+    A3._nativeVisualRefreshToken = A3._nativeVisualSignature
     return didWork
 end
 

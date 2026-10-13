@@ -179,6 +179,18 @@ local function PrepareButton(button, slot, parentFrame, forceGeometry)
     return true
 end
 
+local function CaptureSlotInputs(slot, container)
+    local copy = {}
+    for key, value in pairs(slot) do copy[key] = value end
+    if A3.GetNativeVisualInputs then copy._msufA3NativeVisualInputs = A3.GetNativeVisualInputs() end
+    if container then
+        local configs = container._msufA3NativeButtonConfigs or {}
+        container._msufA3NativeButtonConfigs = configs
+        configs[#configs + 1] = copy
+    end
+    return copy
+end
+
 local function SlotOptions(container, slot, buttonIndex)
     return {
         maxFrameCount = 1,
@@ -302,7 +314,7 @@ function Runtime.AttachSlots(container, slotRoot)
     container._msufA3SpellIndicatorSlotFilterStrings = {}
     container._msufA3SpellIndicatorSlotCandidateFilterSignatures = {}
     for i = 1, #slotRoot.slots do
-        local slot = slotRoot.slots[i]
+        local slot = CaptureSlotInputs(slotRoot.slots[i], container)
         -- The index mapping stays dense either way: container[i] simply
         -- remains nil for an enchant slot, which is exactly what makes the
         -- geometry pass treat it as a placeholder-only surface.
@@ -349,8 +361,14 @@ local function UpdateSlots(container, slotRoot)
     container._msufA3SpellIndicatorSlotFilterStrings = container._msufA3SpellIndicatorSlotFilterStrings or {}
     container._msufA3SpellIndicatorSlotCandidateFilterSignatures = container._msufA3SpellIndicatorSlotCandidateFilterSignatures or {}
     for i = 1, #slotRoot.slots do
-        local slot = slotRoot.slots[i]
-        container._msufA3SpellIndicatorButtonSlots[i] = slot
+        local source = slotRoot.slots[i]
+        local slot = container._msufA3SpellIndicatorButtonSlots[i]
+        for key in pairs(slot) do
+            if key ~= "_msufA3NativeVisualInputs" and source[key] == nil then slot[key] = nil end
+        end
+        for key, value in pairs(source) do
+            if key ~= "_msufA3NativeVisualInputs" then slot[key] = value end
+        end
         -- Nothing native backs an enchant slot, so neither setter may be
         -- reached with its key: Blizzard asserts on an unknown aura slot.
         -- Its placeholder is the whole surface and the geometry pass owns it.

@@ -88,6 +88,9 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- coalescing measured TBC 14,785,456 and Mainline 16,902,728; the remaining
         -- wave-1 packages draw on the rest). Wave 2 removes dead code and must bring
         -- both selections back under the 6.50 values above; no catalog was added.
+        -- W1-2 uses 11,946 LF bytes of this shared allowance on Mainline/Forever
+        -- and 1,988 on Classic; measured totals are Mainline/koKR 16,914,674 and
+        -- TBC/enUS 14,787,444. No additional package budget increase is needed.
         assert(bytes < (suffix == "Mainline" and 16925000 or 14805000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2

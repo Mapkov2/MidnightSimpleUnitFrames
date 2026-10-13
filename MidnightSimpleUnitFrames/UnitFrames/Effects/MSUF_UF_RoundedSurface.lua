@@ -258,6 +258,42 @@ local function SurfaceEdgePath(f)
   return f and ResolveFrameStyle(f, conf) == "SLANTED" and SLANTED_EDGE_PATHS[SlantedDirection(nil, conf)] or roundedEdgePath
 end
 
+local function PowerIsEmbedded(f)
+  local power = f and f.MSUFSpec and f.MSUFSpec.power
+  return power and power.enabled == true and power.detached ~= true and power.embed ~= false
+end
+
+local dispelSignatureFrame = {}
+local function AppendDispelScope(parts, key, group)
+  local conf = FrameConfig(key)
+  local frame = dispelSignatureFrame
+  frame._msufIsGroupFrame, frame.configKey = group, key
+  frame._msufGFKind = group and key:sub(4) or nil
+  local style = forceDisabled and "SQUARE" or ResolveFrameStyle(frame, conf)
+  if style == "SQUARE" then return false end
+  parts[#parts + 1] = key .. ":" .. style .. ":" .. tostring(RoundedPowerBarsEnabled(frame))
+    .. ":" .. (style == "SLANTED" and SlantedDirection(nil, conf) or tostring(roundedMediaStrength))
+  return true
+end
+
+local function DispelVisualSignature()
+  UpdateSlantedBarState()
+  UpdateRoundedMediaState()
+  local parts, active = {}, false
+  for i = 1, #UNIT_SHAPE_KEYS do active = AppendDispelScope(parts, UNIT_SHAPE_KEYS[i], false) or active end
+  for i = 1, #GROUP_SHAPE_KEYS do active = AppendDispelScope(parts, GROUP_SHAPE_KEYS[i], true) or active end
+  table.sort(parts)
+  return active and table.concat(parts, "\030") or "-"
+end
+
+-- Live geometry belongs to this frame's frozen mask, never to global content.
+local function DispelFrameSignature(frame)
+  local style = forceDisabled and "SQUARE" or ResolveFrameStyle(frame)
+  if style == "SQUARE" then return "-" end
+  local embedded = RoundedPowerBarsEnabled(frame) and PowerIsEmbedded(frame) == true
+  return style .. ":" .. tostring(embedded) .. ":" .. SurfaceMaskPath(frame)
+end
+
 local function MouseoverHighlightEnabled()
   local gen = _G.MSUF_DB and _G.MSUF_DB.general
   if gen and gen.highlightEnabled == nil and gen.enableHighlightOnHover ~= nil then
@@ -1008,6 +1044,9 @@ local function SetForceDisabled(disabled)
 end
 
 MSUF.RoundedSurfaceKit = {
+  DispelVisualSignature = DispelVisualSignature,
+  DispelFrameSignature = DispelFrameSignature,
+  PowerIsEmbedded = PowerIsEmbedded,
   MASK_PATH_1X = MASK_PATH_1X,
   SLANTED_MASK_PATHS = SLANTED_MASK_PATHS,
   SLANTED_EDGE_PATHS = SLANTED_EDGE_PATHS,

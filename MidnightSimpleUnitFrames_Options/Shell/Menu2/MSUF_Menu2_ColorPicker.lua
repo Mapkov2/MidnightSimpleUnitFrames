@@ -13,6 +13,14 @@ local Tr = M.TranslateText
 local NextRow = W.NextRow
 local RegisterSearchObject = W.RegisterSearchObject
 local SetSearchText = W._Shared.SetSearchText
+function W.BeginNativeColorInteraction()
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.BeginNativeColorInteraction then return auras.BeginNativeColorInteraction() end
+end
+function W.EndNativeColorInteraction(ticket)
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.EndNativeColorInteraction then return auras.EndNativeColorInteraction(ticket) end
+end
 local function ColorSetRGB(self, r, g, b)
     self._msuf2R = tonumber(r) or 1
     self._msuf2G = tonumber(g) or 1
@@ -332,6 +340,8 @@ local function EnsureColorPickerHideHook()
     colorPickerHideHooked = true
     ColorPickerFrame:HookScript("OnHide", function(self)
         local btn = self and self._msuf2ColorOwner
+        local ticket = self._msuf2NativeColorTicket
+        self._msuf2NativeColorTicket = nil
         if btn and not self._msuf2ColorCancelled then
             local r, g, b = btn:GetRGB()
             AddRecentColor(ColorHex(r, g, b))
@@ -349,10 +359,13 @@ local function EnsureColorPickerHideHook()
         local timer = _G.C_Timer
         if btn and timer and timer.After then
             timer.After(0, function()
+                W.EndNativeColorInteraction(ticket)
                 if self._msuf2ColorOwner == btn and not (self.IsShown and self:IsShown()) then
                     self._msuf2ColorOwner = nil
                 end
             end)
+        else
+            W.EndNativeColorInteraction(ticket)
         end
     end)
 end
@@ -382,6 +395,7 @@ local function ColorButtonOnClick(self)
         picker._msuf2ColorOwner:_msuf2CommitColorInteraction()
     end
     picker._msuf2ColorOwner = self
+    picker._msuf2NativeColorTicket = W.BeginNativeColorInteraction()
     picker._msuf2ColorCancelled = nil
     if type(self._msuf2BeginColorInteraction) == "function" then self:_msuf2BeginColorInteraction() end
     self._msuf2PrevR, self._msuf2PrevG, self._msuf2PrevB = r, g, b

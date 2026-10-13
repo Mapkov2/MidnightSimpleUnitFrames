@@ -176,7 +176,7 @@ end
 local function BumpAuraNativeVisuals()
     local a3 = MSUF and MSUF.MSUF_Auras3
     if not a3 then return false end
-    a3._nativeVisualGen = (a3._nativeVisualGen or 0) + 1
+    a3.InvalidateNativeVisualInputs()
     return true
 end
 

@@ -16,9 +16,9 @@ local body = Slice.Function(source, "function A3.ApplyFontsFromGlobal", path)
 local executable = body:gsub("%-%-[^\r\n]*", "")
 Check(body:find('_QueueDeferredAuraRuntime%(scope or "shared", reason or "AURAS3_FONT_VISUALS"%)') ~= nil,
     "global aura font fanout no longer defers visual work during combat")
-Check(body:find("A3%._deferredAuraRuntimeFonts%s*=%s*true") ~= nil,
-    "combat deferral must retain the font-specific revision flag")
-Check(body:find("A3%._nativeVisualGen%s*=") ~= nil,
+Check(not body:find("_deferredAuraRuntimeFonts", 1, true),
+    "global aura font fanout retained the unused font deferral flag")
+Check(body:find("A3%.InvalidateNativeVisualInputs%(%)") ~= nil,
     "global aura font fanout no longer invalidates native visual state")
 Check(body:find("return A3%.RequestScope%(scope, reason or \"AURAS3_FONT_VISUALS\"%)") ~= nil,
     "scoped aura font updates no longer use RequestScope")

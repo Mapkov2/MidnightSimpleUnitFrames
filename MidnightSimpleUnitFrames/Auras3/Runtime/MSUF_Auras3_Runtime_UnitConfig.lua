@@ -153,7 +153,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         targetDotEffectsHostile = targetDotEffectsHostile,
         group = false,
         _msufA3ConfigGen = A3._runtimeConfigGen or 1,
-        _msufA3VisualGen = A3._nativeVisualGen or 0,
+        _msufA3VisualGen = A3.GetNativeVisualSignature(),
     }
 end
 
@@ -161,7 +161,7 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local gen = A3._runtimeConfigGen or 1
-    local visualGen = A3._nativeVisualGen or 0
+    local visualGen = A3.GetNativeVisualSignature()
     if frameSpec ~= nil then
         -- Frame-spec configs also consume UnitFrame border/overlay settings.
         -- Cache them on the compiled spec so runtime events do not re-walk DB

@@ -1163,6 +1163,7 @@ function Picker.DefineSession(panel)
         r, g, b = Clamp01(r), Clamp01(g), Clamp01(b)
         local currentR, currentG, currentB = self.owner:GetRGB()
         if abs(r - currentR) < 0.000001 and abs(g - currentG) < 0.000001 and abs(b - currentB) < 0.000001 then return end
+        if not self.nativeColorTicket then self.nativeColorTicket = W.BeginNativeColorInteraction() end
         if not self.historyOwner then
             self.historyOwner = self.owner
             if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
@@ -1184,6 +1185,7 @@ function Picker.DefineSession(panel)
             self:RefreshOpacity(current)
             return
         end
+        if not self.nativeColorTicket then self.nativeColorTicket = W.BeginNativeColorInteraction() end
         if not self.historyOwner then
             self.historyOwner = self.owner
             if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
@@ -1219,6 +1221,8 @@ function Picker.DefineSession(panel)
         if current and self.historyOwner and type(self.historyOwner._msuf2CommitColorInteraction) == "function" then
             self.historyOwner:_msuf2CommitColorInteraction()
         end
+        W.EndNativeColorInteraction(self.nativeColorTicket)
+        self.nativeColorTicket = nil
         self:SetContextListShown(false)
         HidePickerInfo(self.infoButton)
         self._ownerDropdownValues = nil

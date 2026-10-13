@@ -333,7 +333,6 @@ function A3._FlushDeferredAuraRuntime()
     A3._deferredAuraRuntime = nil
     A3._deferredAuraRuntimeAll = nil
     A3._deferredAuraRuntimeScopes = nil
-    A3._deferredAuraRuntimeVisuals = nil
     A3._deferredAuraRuntimeReason = nil
     if driver then driver:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     A3._NotifyAuraColdpathPreview(reason, previewScope)

@@ -50,6 +50,8 @@ local runtimeSource = Read("Auras3/MSUF_Auras3_UnitFrames.lua")
 -- Reason: the slot-option builder plus the three functions it calls; each is
 -- cut at its own `end` instead of at whatever is declared next.
 local initializerSource = Slice.Declarations(runtimeSource, {
+    "local function CopyNativeConfig",
+    "local function CaptureNativeInputs",
     "local function BuildGroupLaneSlotOptions",
     "local function CreateManagedNativeSlotLane",
     "local function UpdateAuraGroupEffectiveFilters",
@@ -57,7 +59,9 @@ local initializerSource = Slice.Declarations(runtimeSource, {
 }, RUNTIME)
 
 local prepared = {}
+local visualInputs = { token = "slot-layer-smoke" }
 local environment = setmetatable({
+    A3 = { GetNativeVisualInputs = function() return visualInputs end },
     AuraSortEnums = function() return "DEFAULT", "NORMAL" end,
     EffectiveLaneFilters = function(lane)
         return lane.nativeFilter, lane.candidateFilters, lane.candidateFilterSignature
@@ -147,6 +151,10 @@ for i = 1, #lanes do
         lane.kind .. " level was not final before PrepareAuraButton")
     Equal(prepared[button].frameStrata, button.frameStrata,
         lane.kind .. " strata was not final before PrepareAuraButton")
+    Equal(prepared[button].lane._msufA3NativeVisualInputs, visualInputs,
+        lane.kind .. " initializer lost its committed visual inputs")
+    Equal(lane._msufA3NativeVisualInputs, nil,
+        lane.kind .. " initializer mutated the shared compiled lane")
 end
 
 Equal(container.frameLevel, flowLevel,

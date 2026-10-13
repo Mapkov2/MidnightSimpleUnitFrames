@@ -292,10 +292,7 @@ local function ResolvePowerBar(f)
   return f and (f.targetPowerBar or f.powerBar or f.power) or nil
 end
 
-local function PowerIsEmbedded(f)
-  local power = f and f.MSUFSpec and f.MSUFSpec.power
-  return power and power.enabled == true and power.detached ~= true and power.embed ~= false
-end
+local PowerIsEmbedded = Kit.PowerIsEmbedded
 
 local function SetModernPowerBorderSuppressed(f, suppressed)
   local bar = ResolvePowerBar(f)

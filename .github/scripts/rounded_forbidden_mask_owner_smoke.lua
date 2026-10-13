@@ -80,6 +80,10 @@ assert(not pcall(mask.ClearAllPoints),
     "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
 local dispel = Read(DISPEL)
+local nilSensorPrepare = assert(compile("local A3={}\n"
+    .. Slice.Function(dispel, "local function PrepareDispelSensorVisual", DISPEL)
+    .. "\nreturn PrepareDispelSensorVisual"))()
+assert(nilSensorPrepare(nil, nil, nil) == false, "nil dispel inputs did not return before capturing visuals")
 local preview = Read(PREVIEW)
 local facade = Read(FACADE)
 local initializerStart = assert(dispel:find("local function PrepareDispelSensorVisual", 1, true))
@@ -90,7 +94,7 @@ local prepareCall = assert(overlayBranch:find(
     "PrepareRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
     "native dispel overlay is not prepared with its explicit owner")
 local blizzardHandoff = assert(overlayBranch:find(
-    "owner:AddDispelTypeTexture(region, GetSensorOverlayOptions())", 1, true),
+    "owner:AddDispelTypeTexture(region, GetSensorOverlayOptions(sensor._msufA3NativeVisualInputs))", 1, true),
     "native dispel overlay Blizzard handoff missing")
 assert(prepareCall < blizzardHandoff,
     "native dispel overlay is masked after Blizzard makes it forbidden")
@@ -100,8 +104,10 @@ assert(preview:find("RegisterRoundedDispelOverlayPreviewRegion(frame, region)", 
     "MSUF-owned dispel overlay preview lost its mutable rounded registration")
 assert(facade:find("function A3.RefreshRoundedDispelOverlayMasks()", 1, true),
     "rounded setting changes cannot recreate frozen native dispel masks")
-assert(facade:find("A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1", 1, true),
-    "native dispel-mask recreation does not advance the Auras3 visual generation")
+assert(facade:find("A3.InvalidateNativeVisualInputs()", 1, true),
+    "native dispel-mask recreation does not invalidate the content memo")
+assert(facade:find("A3._roundedDispelVisualSignature == signature", 1, true),
+    "unchanged rounded signatures still recreate native dispel masks")
 -- Reason: the module-apply callback and the settings apply function are one
 -- function each.
 local modulesApplied = Slice.Function(rounded,
@@ -111,5 +117,82 @@ assert(modulesApplied:find("RefreshFrozenDispelOverlayMasks()", 1, true),
 local applyRounded = Slice.Function(rounded, "local function ApplyRoundedUnitframes", ROUNDED)
 assert(applyRounded:find("RefreshFrozenDispelOverlayMasks()", 1, true),
     "direct rounded setting changes do not recreate frozen native dispel masks")
+
+-- Per-frame content and native mask preparation agree on live inputs, while
+-- the settings signature stays unchanged. Use the real refresh bridge.
+do
+    local unitHealth,groupHealth,groupBars={},{},{}
+    local unit={MSUFUnitKey="target",MSUFSpec={power={enabled=true,embed=true}},hpBar=unitHealth}
+    local group={_msufIsGroupFrame=true,_msufGFKind="party",health=groupHealth,barGroup=groupBars,
+        MSUFSpec={scope="group",power={enabled=true,embed=true}}}
+    local msuf={UF={ForEachFrame=function(fn)fn(unit)end},GF={ForEachFrame=function(fn)fn(group)end},
+        ExportPublic=function()end}
+    _G.MSUF_DB={bars={roundedFramesEnabled=true,roundedPowerBars=true}}
+    assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedSurface.lua"))("MSUF",msuf)
+    local kit=msuf.RoundedSurfaceKit
+    local powerEmbedded=kit.PowerIsEmbedded
+    if not powerEmbedded then
+        powerEmbedded=assert(compile(Slice.Function(rounded,"local function PowerIsEmbedded",ROUNDED)
+            .."\nreturn PowerIsEmbedded"))()
+    end
+    local nativePrepare=assert(compile([[
+        local kit,PowerIsEmbedded=...
+        local FrameIsGroup,RoundedFrameEnabled=kit.FrameIsGroup,kit.RoundedFrameEnabled
+        local RoundedPowerBarsEnabled,SurfaceMaskPath=kit.RoundedPowerBarsEnabled,kit.SurfaceMaskPath
+        local IsCombatLocked,DeferApply=kit.IsCombatLocked,kit.DeferApply
+        local CanCreateRoundedRegion,UpdateRoundedMediaState=kit.CanCreateRoundedRegion,kit.UpdateRoundedMediaState
+        local SE_SnapOff,ApplyRoundedMediaSlice=function()end,function()end
+    ]]..prepareSource.."\nreturn PrepareFrozenDispelOverlayMask"))(kit,powerEmbedded)
+    local builds=0
+    local owner={CreateMaskTexture=function()
+        return {SetTexture=function()end,SetAllPoints=function(self,target)self.anchor=target end}
+    end}
+    local latest={}
+    local function BuildMask(frame)
+        builds=builds+1
+        latest[frame]=nil
+        local region={AddMaskTexture=function(_,mask)latest[frame]=mask end}
+        nativePrepare(frame,region,owner)
+        frame.Auras={_msufA3Applied=true,_msufA3DispelFrameSignature=kit.DispelFrameSignature(frame)}
+    end
+    local function BuildMasks()
+        for _,frame in ipairs({unit,group}) do
+            BuildMask(frame)
+        end
+        return true
+    end
+    local auras={_runtimeFrames={target=unit},InvalidateNativeVisualInputs=function()end,
+        RenderFrame=BuildMask,RefreshAll=BuildMasks}
+    local install=assert(compile("local A3,MSUF=...\n"
+        ..Slice.Function(facade,"local function RefreshFrameDispelMasks",FACADE).."\n"
+        ..Slice.Function(facade,"local function InstallVisualInteractions",FACADE)
+        .."\nreturn InstallVisualInteractions"))(auras,msuf)
+    install(auras,msuf,function()return false end,kit.DispelFrameSignature)
+    msuf.MSUF_Auras3=auras
+    local refresh=assert(compile("local Kit,MSUF=...\n"
+        ..Slice.Function(rounded,"local function RefreshFrozenDispelOverlayMasks",ROUNDED)
+        .."\nreturn RefreshFrozenDispelOverlayMasks"))(kit,msuf)
+    refresh()
+    local global=kit.DispelVisualSignature()
+    assert(latest[unit].anchor==unit and latest[group].anchor==groupBars,"embedded rounded masks missed shared anchors")
+    unit.MSUFSpec.power.detached=true
+    group.MSUFSpec.power.embed=false
+    refresh()
+    assert(builds==4,"embed/detach changes were missing from the per-frame content gate")
+    assert(latest[unit].anchor==unitHealth and latest[group].anchor==groupHealth,"detached masks kept embedded anchors")
+    unit.MSUFSpec.power.detached=false
+    group.MSUFSpec.power.embed=true
+    refresh()
+    assert(builds==6 and latest[unit].anchor==unit and latest[group].anchor==groupBars,"embedded mask restore kept detached anchors")
+    unit._msufRUFForcedStyle="SQUARE"
+    refresh()
+    assert(builds==7 and latest[unit]==nil,"forced frame style was missing from the per-frame content gate")
+    unit._msufRUFForcedStyle="ROUNDED"
+    refresh()
+    assert(builds==8 and latest[unit].anchor==unit,"forced rounded style did not restore its mask")
+    refresh()
+    assert(builds==8,"unchanged live frame inputs rebuilt rounded masks")
+    assert(kit.DispelVisualSignature()==global,"live frame inputs changed global rounded settings content")
+end
 
 io.write("rounded_forbidden_mask_owner_smoke: ok\n")

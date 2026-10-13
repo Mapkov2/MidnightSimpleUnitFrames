@@ -49,7 +49,7 @@ local function EmptyUnitFrameConfig(unit)
         sensors = {},
         group = false,
         _msufA3ConfigGen = A3._runtimeConfigGen or 1,
-        _msufA3VisualGen = A3._nativeVisualGen or 0,
+        _msufA3VisualGen = A3.GetNativeVisualSignature(),
     }
 end
 
