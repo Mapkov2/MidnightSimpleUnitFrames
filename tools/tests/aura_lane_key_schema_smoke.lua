@@ -136,7 +136,7 @@ local function RunPath(pathName, arenaSlots, loadRuntime)
     local Model = {}
     A3.MenuModel = Model
     local Schema = Factories.Schema(A3)
-    local Common = Factories.Common(Schema)
+    local Common = Factories.Common(Schema, A3)
     Factories.Storage(A3, Model, Schema, Common, namespace.ExportPublic)
     local menuTables = {}
     for key, value in pairs(Schema) do menuTables[key] = value end

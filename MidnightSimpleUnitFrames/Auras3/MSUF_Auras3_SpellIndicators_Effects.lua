@@ -643,7 +643,7 @@ end
 
 --- Retire every addon-owned surface belonging to one Spell Indicator root:
 --- the reminder placeholders (keyed by their owning container) and the
---- click-to-cast buttons (keyed by root). A3._HideLane alone cannot reach
+--- click-to-cast buttons (keyed by root). A3.Runtime.NativeApply.HideLane alone cannot reach
 --- either -- both are UnitFrame siblings, not container children -- so a
 --- root that stops existing while the frame stays visible would otherwise
 --- leave a dimmed icon and an invisible click target behind.

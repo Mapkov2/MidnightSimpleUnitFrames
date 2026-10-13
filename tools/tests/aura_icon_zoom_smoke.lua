@@ -7,6 +7,7 @@ local function Load(path)
 end
 Load("Auras3/MSUF_Auras3_IconShape.lua")
 local A3 = namespace.MSUF_Auras3
+A3.Runtime = { ConfigValues = {} }
 local function Clamp(value, fallback, low, high)
     return math.max(low, math.min(high, tonumber(value) or fallback))
 end

@@ -25,7 +25,8 @@ local rawtype = type
 
 local RUNTIME = root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/"
 local FILES = { "MSUF_Auras3_Runtime_Identity.lua", "MSUF_Auras3_Runtime_Presence.lua",
-    "MSUF_Auras3_Runtime_IdentityEvents.lua" }
+    "MSUF_Auras3_Runtime_WorldTransition.lua", "MSUF_Auras3_Runtime_IdentityRefresh.lua",
+    "MSUF_Auras3_Runtime_IdentityTopology.lua", "MSUF_Auras3_Runtime_IdentityEvents.lua" }
 
 local Region = {}
 Region.__index = Region
@@ -91,6 +92,7 @@ local function Run(watchedFile)
     local function IsGroupFrame(frame) return rawtype(frame) == "table" and frame._msufIsGroupFrame == true end
     local factories = MSUF.Auras3RuntimeFactories
     local function Export(_, value) return value end
+dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
     local Identity = factories.Identity("MidnightSimpleUnitFrames", MSUF, A3, {}, Export, {
         ConfigValues = {
             IsGroupFrame = IsGroupFrame,

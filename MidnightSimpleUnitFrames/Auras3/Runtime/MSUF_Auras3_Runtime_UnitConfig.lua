@@ -1,10 +1,13 @@
 -- Auras3 runtime: UnitConfig.
--- Unit configuration cache, explicit invalidation and diagnostic projection. Cache identity and generation checks must remain equivalent for live and preview consumers.
+-- Unit configuration cache, explicit invalidation and diagnostic projection. Cache identity and generation checks must remain equivalent for live and
+-- preview consumers.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.UnitConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local CustomConfig = Runtime.CustomConfig
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local pairs = pairs
 local tonumber = tonumber
@@ -86,7 +89,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
             local defensiveLane = customLanes and (customLanes.custom4 or customLanes.defensivePortrait)
             local tracked = defensiveLane and defensiveLane.candidateFilters
                 and defensiveLane.candidateFilters.includeSpellIDs
-            buffCandidates, buffCandidateSignature = A3._AddPlayerDefensiveAutoBlacklist(
+            buffCandidates, buffCandidateSignature = CustomConfig.AddPlayerDefensiveAutoBlacklist(
                 buffCandidates, buffCandidateSignature,
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         elseif UnitSupportsTargetDots(unit) then
@@ -97,7 +100,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
             local targetDotLane = customLanes and (customLanes.custom4 or customLanes.targetDotPortrait)
             local tracked = targetDotLane and targetDotLane.candidateFilters
                 and targetDotLane.candidateFilters.includeSpellIDs
-            debuffCandidates, debuffCandidateSignature = A3._AddTargetDotAutoBlacklist(
+            debuffCandidates, debuffCandidateSignature = CustomConfig.AddTargetDotAutoBlacklist(
                 debuffCandidates, debuffCandidateSignature,
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         end

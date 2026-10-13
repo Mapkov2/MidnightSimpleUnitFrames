@@ -31,6 +31,7 @@ local MSUF = {
 }
 local A3 = {}
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
+dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
 local factory = assert(MSUF.Auras3RuntimeFactories.IdentityEvents, "IdentityEvents factory did not register")
 factory("MidnightSimpleUnitFrames", MSUF, A3, {}, function(_, value) return value end, {
     Platform = {

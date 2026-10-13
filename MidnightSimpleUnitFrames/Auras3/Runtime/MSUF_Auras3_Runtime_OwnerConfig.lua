@@ -5,6 +5,8 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.OwnerConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local OwnerConfig = Runtime.OwnerConfig
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
 local pairs = pairs
@@ -209,7 +211,7 @@ local function GetGroupSlotsRootConfig(cfg)
     return primary
 end
 
-A3._GetGroupSlotsRootConfig = GetGroupSlotsRootConfig
+OwnerConfig.GetGroupSlotsRootConfig = GetGroupSlotsRootConfig
 
 -- Unit sensors already need a native owner. Share its cache with compatible
 -- normal lanes, preserving the historical sensor root and each visual's layer.
@@ -270,7 +272,7 @@ local function GetNativeOwnerPlan(cfg)
     return plan
 end
 
-return {
+local exports = {
     EFFECT_ROOT_FIELDS = EFFECT_ROOT_FIELDS,
     EFFECT_ROOT_KEYS = EFFECT_ROOT_KEYS,
     GetDispelSensorRootConfig = GetDispelSensorRootConfig,
@@ -279,4 +281,6 @@ return {
     GetNativeOwnerPlan = GetNativeOwnerPlan,
     NORMAL_LANE_ROOT_KEYS = NORMAL_LANE_ROOT_KEYS,
 }
+for name, value in pairs(exports) do OwnerConfig[name] = value end
+return OwnerConfig
 end

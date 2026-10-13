@@ -510,7 +510,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     stack:SetText("2")
     local A3 = MSUF and MSUF.MSUF_Auras3
     local r, g, b
-    if A3 and type(A3._StackCountColor) == "function" then r, g, b = A3._StackCountColor() end
+    if A3 and type(A3.GetStackCountColor) == "function" then r, g, b = A3.GetStackCountColor() end
     stack:SetTextColor(r or 1, g or 1, b or 1, 1)
     PlacePreviewText(stack, visual, lane.stackAnchor or "BOTTOMRIGHT", lane.stackX or 0, lane.stackY or 0)
     stack:Show()
@@ -872,7 +872,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
       SetPreviewFont(stack, slot.stackSize or 10)
       stack:SetText("2")
       local sr, sg, sb
-      if A3 and type(A3._StackCountColor) == "function" then sr, sg, sb = A3._StackCountColor() end
+      if A3 and type(A3.GetStackCountColor) == "function" then sr, sg, sb = A3.GetStackCountColor() end
       stack:SetTextColor(sr or 1, sg or 1, sb or 1, 1)
       PlacePreviewText(stack, visual, slot.stackAnchor or "BOTTOMRIGHT", slot.stackX or 0, slot.stackY or 0)
       stack:Show()

@@ -198,12 +198,10 @@ local function SlotOptions(container, slot, buttonIndex)
         initializeFrame = function(button)
             container[buttonIndex] = button
             button._msufA3SpellIndicatorContainer = container
-            -- This closure lives for the container's whole lifetime, but the
-            -- native container re-runs it every time it recreates the slot's
-            -- button (every aura reapplication). Config edits replace the slot
-            -- tables in _msufA3SpellIndicatorButtonSlots; re-installing the
-            -- table captured at creation resurrected pre-edit geometry, so
-            -- always prepare with the container's current slot instead.
+            -- Blizzard runs initializeFrame once when the pool creates this
+            -- native button. Aura reassignment reuses that sealed instance.
+            -- Configuration edits recreate the owner; use its final slot table
+            -- so cold setup always captures the descriptor installed for it.
             local slots = container._msufA3SpellIndicatorButtonSlots
             local currentSlot = (slots and slots[buttonIndex]) or slot
             if slots then slots[buttonIndex] = currentSlot end

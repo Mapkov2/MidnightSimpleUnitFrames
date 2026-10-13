@@ -88,6 +88,7 @@ local function LoadContainers(client)
     local A3 = { SpellIndicators = AutoTable() }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua"))(
         "MidnightSimpleUnitFrames", MSUF)
+    dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
     local factory = MSUF.Auras3RuntimeFactories and MSUF.Auras3RuntimeFactories.Containers
     Check(type(factory) == "function", "Containers factory was not registered")
     local Containers = factory("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, dependencies)

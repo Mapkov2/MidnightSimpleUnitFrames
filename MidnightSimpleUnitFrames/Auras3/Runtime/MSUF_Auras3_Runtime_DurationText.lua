@@ -58,13 +58,6 @@ local function ConfiguredFontColor()
     if type(readColor) == "function" then return readColor() end
 end
 
-local function DurationBarColor(A3, general, r, g, b)
-    if A3.GetDurationBarColor then return A3.GetDurationBarColor() end
-    local color = general.aurasCooldownTextSafeColor
-    if type(color) == "table" then return color[1] or color.r, color[2] or color.g, color[3] or color.b end
-    return r, g, b
-end
-
 -- Every immutable global input contributes to one interned content token.
 -- Revisions only expire the memo: they never enter a native park signature.
 local function NativeVisualSignature(A3, MSUF)
@@ -89,7 +82,7 @@ local function NativeVisualSignature(A3, MSUF)
     local cr, cg, cb = ConfiguredFontColor()
     local r, g, b = cr, cg, cb
     parts[#parts + 1], parts[#parts + 2], parts[#parts + 3] = tostring(r), tostring(g), tostring(b)
-    r, g, b = DurationBarColor(A3, general, r, g, b)
+    r, g, b = A3.GetDurationBarColor()
     parts[#parts + 1], parts[#parts + 2], parts[#parts + 3] = tostring(r), tostring(g), tostring(b)
     for i = 1, #SUFFIX_KEYS do
         local name = SUFFIX_KEYS[i]

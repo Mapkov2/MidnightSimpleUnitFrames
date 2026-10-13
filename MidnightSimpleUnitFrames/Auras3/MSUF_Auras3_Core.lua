@@ -430,6 +430,17 @@ local function BuildLaneKeySchema()
     for index = 1, math.max(3, tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents) or 3) do
         unitFlag["arena" .. index] = "showArena"
     end
+    schema.RUNTIME_UNITS = { "player", "pet", "target", "focus" }
+    schema.UNIT_FAMILIES = { boss = {}, arena = {} }
+    for _, family in ipairs({ "boss", "arena" }) do
+        local index = 1
+        while unitFlag[family .. index] do
+            local unit = family .. index
+            schema.UNIT_FAMILIES[family][index] = unit
+            schema.RUNTIME_UNITS[#schema.RUNTIME_UNITS + 1] = unit
+            index = index + 1
+        end
+    end
     schema.UNIT_FLAG, schema.MANAGED_UNITS = unitFlag, {}
     for unit in pairs(unitFlag) do schema.MANAGED_UNITS[unit] = true end
 
@@ -446,13 +457,47 @@ local function BuildLaneKeySchema()
 end
 A3.LaneKeySchema = BuildLaneKeySchema()
 
+-- One ordered, allocation-free iterator for menu applies and runtime refreshes.
+-- The callback's true results are combined; context is passed without a closure.
+function A3.ForEachRuntimeUnit(scope, callback, context)
+    local schema = A3.LaneKeySchema
+    local units = schema.UNIT_FAMILIES[scope]
+    if scope == nil or scope == "shared" or scope == "*" or scope == "" then units = schema.RUNTIME_UNITS end
+    if not units then return callback(scope, context) == true end
+    local any = false
+    for index = 1, #units do any = callback(units[index], context) == true or any end
+    return any
+end
+
+local function RootDB()
+    return _G.MSUF_DB
+end
+
 local function EnsureRootDB()
-    local db = _G.MSUF_DB
+    local db = RootDB()
     if type(db) ~= "table" then
         db = {}
         ExportPublic("MSUF_DB", db)
     end
     return db
+end
+
+-- Runtime-owned color source shared by native duration bars and both previews.
+local function DurationColorComponent(value)
+    return math.min(1, math.max(0, tonumber(value) or 1))
+end
+
+function A3.GetDurationBarColor()
+    local db = RootDB()
+    local general = type(db) == "table" and db.general or nil
+    local color = general and general.aurasCooldownTextSafeColor
+    local r, g, b
+    if type(color) == "table" then
+        r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
+    elseif MSUF.MSUF_GetConfiguredFontColor then
+        r, g, b = MSUF.MSUF_GetConfiguredFontColor()
+    end
+    return DurationColorComponent(r), DurationColorComponent(g), DurationColorComponent(b)
 end
 
 function A3.NormalizeProfileDB(db)
@@ -511,6 +556,32 @@ function A3.InvalidateNativeVisualInputs()
     A3._nativeVisualInputRev = (A3._nativeVisualInputRev or 0) + 1
 end
 
+-- Host contract shared by both backends. Topology nesting and preview delivery
+-- are backend-owned; hosts never inspect their state or dispatch private helpers.
+function A3.BeginTopologyBatch()
+    if A3._BeginDirectIdentityEventTopologyBatch then return A3._BeginDirectIdentityEventTopologyBatch() end
+    return false
+end
+
+function A3.EndTopologyBatch()
+    if A3._EndDirectIdentityEventTopologyBatch then return A3._EndDirectIdentityEventTopologyBatch() end
+    return false
+end
+
+function A3.EnsureDeferredRuntimeDriver()
+    return A3._EnsureDeferredAuraRuntimeDriver()
+end
+
+function A3.NotifyPreview(reason, scope)
+    if A3._NotifyAuraColdpathPreview then return A3._NotifyAuraColdpathPreview(reason, scope) end
+    return false
+end
+
+function A3.GetStackCountColor()
+    -- Native count text and the existing group previews default to white.
+    return 1, 1, 1
+end
+
 function A3.UnitFrameAuraEnabled()
     return false
 end
@@ -540,10 +611,6 @@ function A3.DisableFrame(frame)
 end
 
 function A3.RenderFrame()
-    return false
-end
-
-function A3.ForceUpdateFrame()
     return false
 end
 
@@ -607,7 +674,7 @@ function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
         A3._deferredAuraRuntimeScopes = A3._deferredAuraRuntimeScopes or {}
         A3._deferredAuraRuntimeScopes[scope] = true
     end
-    local frame = A3._EnsureDeferredAuraRuntimeDriver()
+    local frame = A3.EnsureDeferredRuntimeDriver()
     if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     return false
 end

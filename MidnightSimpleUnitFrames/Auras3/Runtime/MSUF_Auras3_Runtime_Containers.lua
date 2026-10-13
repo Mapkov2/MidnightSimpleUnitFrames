@@ -40,6 +40,8 @@ local function CaptureNativeInputs(A3, container, config, visuals)
 end
 
 MSUF.Auras3RuntimeFactories.Containers = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local Containers = Runtime.Containers
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
 local math_min = math.min
@@ -841,7 +843,7 @@ end
 -- desired geometry. Keep the dispatch here so every managed Auras3 container
 -- gets one cache-bypassing repair without adding live GetPoint work to normal
 -- UNIT_AURA updates.
-A3._ManagedAuraContainerSupportsGeometryRepair = function(container)
+Containers.ManagedAuraContainerSupportsGeometryRepair = function(container)
     if not container then return false end
     if container._msufA3SpellIndicatorRoot == true then
         return true
@@ -849,8 +851,8 @@ A3._ManagedAuraContainerSupportsGeometryRepair = function(container)
     return type(container._msufA3NativeLaneConfig) == "table"
 end
 
-A3._SyncManagedAuraContainerGeometry = function(container, forceGeometry)
-    if not A3._ManagedAuraContainerSupportsGeometryRepair(container) then return false end
+Containers.SyncManagedAuraContainerGeometry = function(container, forceGeometry)
+    if not Containers.ManagedAuraContainerSupportsGeometryRepair(container) then return false end
     forceGeometry = forceGeometry == true
         or container._msufA3ForceManagedAuraGeometry == true
         or container._msufA3ForceSpellIndicatorGeometry == true
@@ -888,7 +890,7 @@ ConfigureContainer = function(container, lane, parentFrame)
     SyncContainerGeometry(container, lane, parentFrame)
 end
 
-A3._NativeContainerVisible = function(container)
+Containers.NativeContainerVisible = function(container)
     if not container then return false end
     -- Native AuraContainers are Frames: IsVisible already includes both their
     -- own shown state and inherited parent visibility. Fall back to IsShown
@@ -902,7 +904,7 @@ A3._NativeContainerVisible = function(container)
     return true
 end
 
-return {
+local exports = {
     ApplyManagedAuraGroupLayout = ApplyManagedAuraGroupLayout,
     CreateManagedNativeLane = CreateManagedNativeLane,
     CreateManagedNativeSlotLane = CreateManagedNativeSlotLane,
@@ -926,4 +928,6 @@ return {
         RegisterNativeContainer = dependencies.RegisterNativeContainer
     end,
 }
+for name, value in pairs(exports) do Containers[name] = value end
+return Containers
 end

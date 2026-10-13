@@ -87,15 +87,13 @@ else
     end
     Check(type(shared.lanes) == "table" and type(shared.spellIndicators) == "table",
         "the shared config carries no lanes or spell-indicator slots")
-    -- The per-row answer the preview used to paint from: compile row 7 from its
-    -- own spec with every cache out of the way (a row spec copied after its base
-    -- gained the shared cache table holds the same table reference).
+    -- Force a cold answer with a temporary independent base identity. The
+    -- Auras3-owned weak cache is deliberately absent from every group spec.
     local row = frames[7]
-    local rowSpec = row.MSUFSpec
-    local savedCache, savedConfig = rowSpec._msufA3NativeGroupConfigCache, row._msufA3NativeGroupConfig
-    rowSpec._msufA3NativeGroupConfigCache, row._msufA3NativeGroupConfig = nil, nil
+    local savedBase, savedConfig = row._msufGFSpecBase, row._msufA3NativeGroupConfig
+    row._msufGFSpecBase, row._msufA3NativeGroupConfig = {}, nil
     local perRow = A3.ResolveAuraPreviewConfig(row, row.MSUFUnitKey)
-    rowSpec._msufA3NativeGroupConfigCache, row._msufA3NativeGroupConfig = savedCache, savedConfig
+    row._msufGFSpecBase, row._msufA3NativeGroupConfig = savedBase, savedConfig
     Check(type(perRow) == "table" and perRow ~= shared, "fixture premise: the per-row resolve should compile its own table")
     Same(shared.lanes, perRow.lanes, "lanes", 0)
     Same(shared.spellIndicators, perRow.spellIndicators, "spellIndicators", 0)

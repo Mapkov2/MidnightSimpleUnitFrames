@@ -6,6 +6,9 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.NativeContract = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local Identity = Runtime.Identity
+local Presence = Runtime.Presence
 local tostring = tostring
 local type = type
 local COLD_APPLY_REASONS = dependencies.Schema.COLD_APPLY_REASONS
@@ -119,11 +122,11 @@ local function EnsureRoot(frame)
         -- Hidden secure-header children register their native owners only now.
         -- Seed after registration so a newly visible group frame cannot spend
         -- one frame fail-open while waiting for an unrelated identity event.
-        if type(A3._SeedGroupAuraAssistGate) == "function" then
-            A3._SeedGroupAuraAssistGate(self._msufA3ParentFrame or self:GetParent(), self.unit)
+        if type(Identity.SeedGroupAuraAssistGate) == "function" then
+            Identity.SeedGroupAuraAssistGate(self._msufA3ParentFrame or self:GetParent(), self.unit)
         end
-        if type(A3._SeedGroupAuraPresenceGate) == "function" then
-            A3._SeedGroupAuraPresenceGate(self._msufA3ParentFrame or self:GetParent(), self.unit)
+        if type(Presence.SeedGroupAuraPresenceGate) == "function" then
+            Presence.SeedGroupAuraPresenceGate(self._msufA3ParentFrame or self:GetParent(), self.unit)
         end
     end)
     root:Hide()

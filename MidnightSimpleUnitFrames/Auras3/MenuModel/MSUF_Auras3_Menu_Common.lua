@@ -31,7 +31,7 @@ local function CountBlacklistSpells(spells)
     end
     return count
 end
-function Factories.Common(Schema)
+function Factories.Common(Schema, A3)
     local type = type
     local tonumber = tonumber
     local tostring = tostring
@@ -117,14 +117,7 @@ function Factories.Common(Schema)
     end
 
     local function EachRuntimeUnit(unit, fn)
-        unit = NormalizeUnit(unit)
-        if unit == "boss" then
-            for i = 1, #BOSS_UNITS do fn(BOSS_UNITS[i]) end
-        elseif unit == "arena" then
-            for i = 1, #ARENA_UNITS do fn(ARENA_UNITS[i]) end
-        else
-            fn(unit)
-        end
+        return A3.ForEachRuntimeUnit(NormalizeUnit(unit), fn)
     end
 
     local function NormalizeScope(scope)

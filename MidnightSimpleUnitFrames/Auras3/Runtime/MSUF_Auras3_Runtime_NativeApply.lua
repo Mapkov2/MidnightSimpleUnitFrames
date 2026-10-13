@@ -1,12 +1,14 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: NativeApply.
--- Container retirement/reuse and configuration application. Keep ownership changes atomic and preserve native handoff, geometry and protected-click retirement contracts.
+-- Container retirement/reuse and configuration application. Keep ownership changes atomic and preserve native handoff, geometry and protected-click
+-- retirement contracts.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local tostring, type = tostring, type
 local function RebindCommittedOwners(A3, root, keys, oldUnit, unit)
+    local NativeApply = A3.Runtime.NativeApply
     for i = 1, #keys do
         local container = root[keys[i]]
         if container and container.unit == oldUnit then
@@ -23,7 +25,7 @@ local function RebindCommittedOwners(A3, root, keys, oldUnit, unit)
                     if slots[j].unit == oldUnit then slots[j].unit = unit end
                 end
             end
-            A3._RebindNativeContainerUnit(container, unit)
+            NativeApply.RebindNativeContainerUnit(container, unit)
         end
     end
 end
@@ -32,20 +34,21 @@ end
 -- waits for colour commit. Callback configs are private copies; shared compiled
 -- cache entries and committed visual snapshots remain immutable.
 local function RebindColorInteraction(A3, frame, cfg, owners)
+    local IdentityTopology, Identity, Presence = A3.Runtime.IdentityTopology, A3.Runtime.Identity, A3.Runtime.Presence
     local root = frame.Auras
     local unit = cfg.unit or frame.MSUFUnitKey
     if root.unit == unit then return true end
     local oldUnit = root.unit
-    A3._BeginDirectIdentityEventTopologyBatch()
-    A3._SeedGroupAuraPresenceGate(frame, unit, false)
+    IdentityTopology.BeginDirectIdentityEventTopologyBatch()
+    Presence.SeedGroupAuraPresenceGate(frame, unit, false)
     RebindCommittedOwners(A3, root, owners.NORMAL_LANE_ROOT_KEYS, oldUnit, unit)
     local plan = owners.GetNativeOwnerPlan(root._msufA3Config)
     RebindCommittedOwners(A3, root, plan.keys, oldUnit, unit)
     RebindCommittedOwners(A3, root, owners.EFFECT_ROOT_KEYS, oldUnit, unit)
     root.unit, root._msufA3AppliedUnit = unit, unit
-    A3._SeedGroupAuraAssistGate(frame)
-    A3._SeedGroupAuraPresenceGate(frame, unit, true)
-    A3._EndDirectIdentityEventTopologyBatch()
+    Identity.SeedGroupAuraAssistGate(frame)
+    Presence.SeedGroupAuraPresenceGate(frame, unit, true)
+    IdentityTopology.EndDirectIdentityEventTopologyBatch()
     return true
 end
 
@@ -67,6 +70,12 @@ local function UpdateNativeUnit(container, unit)
 end
 
 MSUF.Auras3RuntimeFactories.NativeApply = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local Containers = Runtime.Containers
+local Identity = Runtime.Identity
+local IdentityTopology = Runtime.IdentityTopology
+local NativeApply = Runtime.NativeApply
+local Presence = Runtime.Presence
 local SpellIndicatorsRuntime = A3.SpellIndicators
 
 local AURA_CONTAINER_ADDON = dependencies.Platform.AURA_CONTAINER_ADDON
@@ -120,7 +129,7 @@ local UsesStandaloneAuraSlot = dependencies.Signatures.UsesStandaloneAuraSlot
 local ValidateNativeAuraButtonContract = dependencies.NativeContract.ValidateNativeAuraButtonContract
 local VisualGen = dependencies.NativeContract.VisualGen
 
-local ApplyLane, EnsureNativeAuraRefreshDriver, RecreateGroupSlots, RefreshAppliedNativeRoot, RegisterNativeContainer
+local ApplyLane, RecreateGroupSlots, RefreshAppliedNativeRoot, RegisterNativeContainer
 
 RegisterNativeContainer = function(container, forceRefresh)
     if not container then return false end
@@ -129,7 +138,7 @@ RegisterNativeContainer = function(container, forceRefresh)
         -- configured alpha. Re-seed only registered exact-ID Unit owners here
         -- so that cold layout/config work cannot expose the wrong polarity.
         if container._msufA3DirectIdentityUnitGated == true then
-            A3._SeedUnitAuraIdentityOwner(container, container.unit)
+            Identity.SeedUnitAuraIdentityOwner(container, container.unit)
         elseif type(container.IsEnabled) == "function" and container:IsEnabled() == false
             and type(container.SetEnabled) == "function"
             and not IsLiveGroupAuraFrame(container._msufA3ParentFrame) then
@@ -139,7 +148,7 @@ RegisterNativeContainer = function(container, forceRefresh)
         end
         return true
     end
-    if not A3._NativeContainerVisible(container) then
+    if not Containers.NativeContainerVisible(container) then
         container._msufA3NativeRegistrationPending = true
         return true
     end
@@ -157,28 +166,28 @@ RegisterNativeContainer = function(container, forceRefresh)
     -- ineligible exact-ID owner. Mark lifecycle ownership first so that initial
     -- seed uses the same SetEnabled gate as every later identity refresh.
     container._msufA3NativeRegistered = true
-    A3._RegisterDirectIdentityRefreshContainer(container)
+    IdentityTopology.RegisterDirectIdentityRefreshContainer(container)
     container._msufA3NativeRegistrationPending = nil
     return true
 end
 
-A3._UnregisterNativeContainer = function(container)
+NativeApply.UnregisterNativeContainer = function(container)
     if not container then return true end
-    A3._UnregisterDirectIdentityRefreshContainer(container)
+    IdentityTopology.UnregisterDirectIdentityRefreshContainer(container)
     container:SetEnabled(false)
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
     return true
 end
 
-A3._RebindNativeContainerUnit = function(container, unit)
+NativeApply.RebindNativeContainerUnit = function(container, unit)
     if not (container and type(unit) == "string" and unit ~= "") then return false end
     local changed = UpdateNativeUnit(container, unit)
-    A3._RegisterDirectIdentityRefreshContainer(container)
+    IdentityTopology.RegisterDirectIdentityRefreshContainer(container)
     return changed
 end
 
-A3._CreateNativeLane = function(root, lane, parentFrame)
+NativeApply.CreateNativeLane = function(root, lane, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
         A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
@@ -222,9 +231,9 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     return CreateManagedNativeLane(container, lane, parentFrame)
 end
 
-A3._HideLane = function(lane)
+NativeApply.HideLane = function(lane)
     if lane then
-        A3._UnregisterNativeContainer(lane)
+        NativeApply.UnregisterNativeContainer(lane)
         lane:Hide()
         if lane._msufA3LayoutHost and lane._msufA3LayoutHost.Hide then
             lane._msufA3LayoutHost:Hide()
@@ -241,7 +250,7 @@ A3._HideLane = function(lane)
     end
 end
 
-A3._NormalLaneForRootKey = function(lanes, rootKey)
+NativeApply.NormalLaneForRootKey = function(lanes, rootKey)
     if type(lanes) ~= "table" or rootKey == nil then return nil end
     local order = A3._normalAuraLaneOrder
     for i = 1, #order do
@@ -278,7 +287,7 @@ end
 
 -- `discard` drops the container instead of parking it (a forced recreate).
 local function RetireNativeLane(root, key, container, _, discard)
-    A3._HideLane(container)
+    NativeApply.HideLane(container)
     if discard ~= true then ParkNativeLane(root, key, container) end
     root[key] = nil
 end
@@ -300,19 +309,19 @@ local function ReviveNativeLane(root, key, current, signature, retire, parentFra
     return parked
 end
 
-A3._HideNormalLaneContainers = function(root, lanes, groupSlots)
+NativeApply.HideNormalLaneContainers = function(root, lanes, groupSlots)
     if not root then return end
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
-        local lane = A3._NormalLaneForRootKey(lanes, key)
+        local lane = NativeApply.NormalLaneForRootKey(lanes, key)
         if GroupSlotsOwnsLane(groupSlots, lane) or not (lane and lane.enabled == true) then
             RetireNativeLane(root, key, root[key])
         end
     end
 end
 
-A3._ApplyNormalLaneContainers = function(root, lanes, parentFrame, forceRecreate, groupSlots)
-    A3._HideNormalLaneContainers(root, lanes, groupSlots)
+NativeApply.ApplyNormalLaneContainers = function(root, lanes, parentFrame, forceRecreate, groupSlots)
+    NativeApply.HideNormalLaneContainers(root, lanes, groupSlots)
     if type(lanes) ~= "table" then return true, false end
     local ok, any = true, false
     local order = A3._normalAuraLaneOrder
@@ -335,7 +344,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        A3._RebindNativeContainerUnit(current, lane.unit)
+        NativeApply.RebindNativeContainerUnit(current, lane.unit)
         if current._msufA3StandaloneAuraSlot == true then
             UpdateGroupLaneSlot(current, lane)
             SyncContainerGeometry(current, lane, parentFrame)
@@ -381,7 +390,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         return current
     end
     RetireNativeLane(root, key, current, parentFrame, forceRecreate == true)
-    current = A3._CreateNativeLane(root, lane, parentFrame)
+    current = NativeApply.CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
@@ -401,7 +410,7 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
     local layoutSignature = sensorRoot._msufA3LayoutSignature
     local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        A3._RebindNativeContainerUnit(current, sensorRoot.unit)
+        NativeApply.RebindNativeContainerUnit(current, sensorRoot.unit)
         UpdateDispelSensorRootSlots(current, sensorRoot)
         SyncDispelSensorRootGeometry(current, sensorRoot, parentFrame)
         current:Show()
@@ -453,7 +462,7 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
         root[rootKey] = current
     end
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        A3._RebindNativeContainerUnit(current, groupSlots.unit)
+        NativeApply.RebindNativeContainerUnit(current, groupSlots.unit)
         local spellRoot = groupSlots.spellIndicatorRoot
         if spellRoot then SpellIndicatorsRuntime.UpdateSlots(current, spellRoot) end
         local sensorRoot = groupSlots.sensorRoot
@@ -497,7 +506,7 @@ RecreateGroupSlots = function(container)
     return replacement
 end
 
-A3._ApplyGroupSlots = ApplyGroupSlots
+NativeApply.ApplyGroupSlots = ApplyGroupSlots
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
     lane = lane or (container and container._msufA3NativeLaneConfig)
@@ -507,9 +516,9 @@ local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame
     end
     local forceGeometry = container and (container._msufA3ForceManagedAuraGeometry == true
         or container._msufA3ForceSpellIndicatorGeometry == true)
-    if not A3._SyncManagedAuraContainerGeometry(container, forceGeometry) then return false end
+    if not Containers.SyncManagedAuraContainerGeometry(container, forceGeometry) then return false end
     if not RegisterNativeContainer(container, forceRefresh == true) then return false end
-    if not A3._NativeContainerVisible(container) then return true end
+    if not Containers.NativeContainerVisible(container) then return true end
     if forceRefresh == true and type(container.UpdateAllAuras) == "function" then
         container:UpdateAllAuras()
     end
@@ -553,15 +562,10 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
     return ok and any
 end
 
-A3._RefreshAppliedNativeAuras = function(frame, forceRefresh)
+NativeApply.RefreshAppliedNativeAuras = function(frame, forceRefresh)
     return RefreshAppliedNativeRoot(frame and frame.Auras, forceRefresh)
 end
 
-EnsureNativeAuraRefreshDriver = function()
-    if A3._nativeAuraRefreshDriver then return A3._nativeAuraRefreshDriver end
-    A3._nativeAuraRefreshDriver = true
-    return true
-end
 
 local MANAGED_ROOT_KEYS = {
     "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1",
@@ -608,11 +612,11 @@ local function ApplyConfig(frame, cfg, reason)
     end
     local root = EnsureRoot(frame)
     if not root then return false end
-    A3._SeedGroupAuraPresenceGate(frame, cfg.unit, false)
+    Presence.SeedGroupAuraPresenceGate(frame, cfg.unit, false)
     if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then
         RefreshAppliedNativeRoot(root, false)
-        A3._SeedGroupAuraAssistGate(frame)
-        A3._SeedGroupAuraPresenceGate(frame, cfg.unit, true)
+        Identity.SeedGroupAuraAssistGate(frame)
+        Presence.SeedGroupAuraPresenceGate(frame, cfg.unit, true)
         return true
     end
     root.unit = cfg.unit or frame.MSUFUnitKey
@@ -624,7 +628,7 @@ local function ApplyConfig(frame, cfg, reason)
     local forceRecreate = false
     local ok = true
     local lanesOk = true
-    lanesOk = A3._ApplyNormalLaneContainers(root, lanes, frame, forceRecreate, groupSlots)
+    lanesOk = NativeApply.ApplyNormalLaneContainers(root, lanes, frame, forceRecreate, groupSlots)
     ok = lanesOk and ok
     local firstEffectRoot = group and 4 or 1
     local anyEffectRoot = false
@@ -664,9 +668,9 @@ local function ApplyConfig(frame, cfg, reason)
         -- Click-to-cast buttons are protected; combat defers their retirement.
         A3._QueueDeferredAuraRuntime(cfg.unit, "AURAS3_REMINDER_CLICK_CAST")
     end
-    A3._HideLane(root.DispelBorderSensor)
-    A3._HideLane(root.DispelOverlaySensor)
-    A3._HideLane(root.DispelCornerSensor)
+    NativeApply.HideLane(root.DispelBorderSensor)
+    NativeApply.HideLane(root.DispelOverlaySensor)
+    NativeApply.HideLane(root.DispelCornerSensor)
     root._msufA3Config = cfg
     root._msufA3Applied = ok == true
     root._msufA3ConfigGen = ConfigGen(cfg)
@@ -676,8 +680,8 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3DispelFrameSignature = dependencies.NativeContract.FrameDispelSignature(frame)
     root.needFullUpdate = nil
     root:Show()
-    A3._SeedGroupAuraAssistGate(frame)
-    A3._SeedGroupAuraPresenceGate(frame, cfg.unit, true)
+    Identity.SeedGroupAuraAssistGate(frame)
+    Presence.SeedGroupAuraPresenceGate(frame, cfg.unit, true)
     return ok == true
 end
 
@@ -690,7 +694,7 @@ local function RootCanReuseContainersForConfig(root, cfg)
     local groupSlots = GetNativeOwnerPlan(cfg)
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
-        local lane = A3._NormalLaneForRootKey(lanes, key)
+        local lane = NativeApply.NormalLaneForRootKey(lanes, key)
         local current = root[key]
         if lane and lane.enabled == true and not GroupSlotsOwnsLane(groupSlots, lane) then
             if not (current and current._msufA3StructuralSignature == (lane._msufA3StructuralSignature or LaneStructuralSignature(lane))) then
@@ -751,11 +755,10 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
     return container
 end
 
-return {
+local exports = {
     ApplyConfig = ApplyConfig,
     ApplyLane = ApplyLane,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
-    EnsureNativeAuraRefreshDriver = EnsureNativeAuraRefreshDriver,
     HideState = HideState,
     RecreateGroupSlots = RecreateGroupSlots,
     RefreshAppliedNativeRoot = RefreshAppliedNativeRoot,
@@ -768,9 +771,9 @@ return {
             CreateContainer = CreateNativeAuraContainer,
             ConfigureContainer = ConfigureNativeAuraContainer,
             RegisterContainer = RegisterNativeContainer,
-            RebindUnit = A3._RebindNativeContainerUnit,
-            IsVisible = A3._NativeContainerVisible,
-            HideContainer = A3._HideLane,
+            RebindUnit = NativeApply.RebindNativeContainerUnit,
+            IsVisible = Containers.NativeContainerVisible,
+            HideContainer = NativeApply.HideLane,
             RetireContainer = RetireNativeLane,
             ReviveContainer = ReviveNativeLane,
             RecreateGroupSlots = RecreateGroupSlots,
@@ -784,4 +787,6 @@ return {
         })
     end,
 }
+for name, value in pairs(exports) do NativeApply[name] = value end
+return NativeApply
 end

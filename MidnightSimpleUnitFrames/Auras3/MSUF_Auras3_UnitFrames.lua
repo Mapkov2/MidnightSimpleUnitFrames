@@ -30,6 +30,22 @@ A3.__unitFrameBackendLoaded = true
 -- looked up on live paths. Resolve the four forward callbacks before publishing
 -- the UF element. Deliberately dynamic A3 identity routes remain dynamic.
 local factories = assert(MSUF.Auras3RuntimeFactories, "Auras3 runtime modules were not loaded")
+local Runtime = A3.Runtime or {}
+A3.Runtime = Runtime
+Runtime.ButtonVisuals = Runtime.ButtonVisuals or {}
+Runtime.ConfigValues = Runtime.ConfigValues or {}
+Runtime.Containers = Runtime.Containers or {}
+Runtime.CustomConfig = Runtime.CustomConfig or {}
+Runtime.EffectPreview = Runtime.EffectPreview or {}
+Runtime.Facade = Runtime.Facade or {}
+Runtime.Identity = Runtime.Identity or {}
+Runtime.IdentityRefresh = Runtime.IdentityRefresh or {}
+Runtime.IdentityTopology = Runtime.IdentityTopology or {}
+Runtime.NativeApply = Runtime.NativeApply or {}
+Runtime.OwnerConfig = Runtime.OwnerConfig or {}
+Runtime.Presence = Runtime.Presence or {}
+Runtime.WorldTransition = Runtime.WorldTransition or {}
+
 local Platform = factories.Platform(addonName, MSUF, A3, UF, ExportPublic)
 local Schema = factories.Schema(addonName, MSUF, A3, UF, ExportPublic)
 local Appearance = factories.Appearance(addonName, MSUF, A3, UF, ExportPublic, {
@@ -133,11 +149,15 @@ local Presence = factories.Presence(addonName, MSUF, A3, UF, ExportPublic, {
     Identity = Identity,
     Containers = Containers,
 })
-local IdentityEvents = factories.IdentityEvents(addonName, MSUF, A3, UF, ExportPublic, {
-    Platform = Platform,
-    Identity = Identity,
-    Presence = Presence,
-})
+local identityDependencies = { Platform = Platform, Identity = Identity, Presence = Presence }
+local WorldTransition = factories.WorldTransition(addonName, MSUF, A3, UF, ExportPublic, identityDependencies)
+identityDependencies.WorldTransition = WorldTransition
+local IdentityRefresh = factories.IdentityRefresh(addonName, MSUF, A3, UF, ExportPublic, identityDependencies)
+local IdentityTopology = factories.IdentityTopology(addonName, MSUF, A3, UF, ExportPublic, identityDependencies)
+identityDependencies.IdentityTopology = IdentityTopology
+local IdentityEvents = factories.IdentityEvents(addonName, MSUF, A3, UF, ExportPublic, identityDependencies)
+IdentityTopology.Bind({ OnEvent = IdentityEvents.OnEvent })
+IdentityTopology.Bind = nil
 local NativeApply = factories.NativeApply(addonName, MSUF, A3, UF, ExportPublic, {
     Platform = Platform,
     Containers = Containers,
@@ -162,11 +182,11 @@ Containers.Bind({
     RegisterNativeContainer = NativeApply.RegisterNativeContainer,
 })
 Containers.Bind = nil
-IdentityEvents.Bind({
+WorldTransition.Bind({
     ApplyLane = NativeApply.ApplyLane,
     RecreateGroupSlots = NativeApply.RecreateGroupSlots,
 })
-IdentityEvents.Bind = nil
+WorldTransition.Bind = nil
 NativeApply.Initialize()
 NativeApply.Initialize = nil
 
@@ -174,7 +194,7 @@ NativeApply.Initialize = nil
 factories.Facade(addonName, MSUF, A3, UF, ExportPublic, {
     Platform = Platform,
     NativeApply = NativeApply,
-    IdentityEvents = IdentityEvents,
+    IdentityTopology = IdentityTopology,
     NativeContract = NativeContract,
     GroupConfig = GroupConfig,
     Schema = Schema,

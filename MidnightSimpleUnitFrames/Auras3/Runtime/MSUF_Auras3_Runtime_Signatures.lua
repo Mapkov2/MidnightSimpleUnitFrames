@@ -10,17 +10,104 @@ local tostring = tostring
 local LaneButtonSignature, LaneLayoutSignature, LaneStructuralSignature, LaneTrackingSignature
 local SensorLayoutSignature, SensorStructuralSignature
 
+-- Field order is the persisted native park contract. Nested colors keep the
+-- historical array/RGB fallback and false/nil encoding; global inputs use the
+-- content token. Derivations declare fields represented by finalized outputs.
+local BUTTON_FIELDS = {
+    "size", "iconZoom", "spacing", "iconShape", "requestedIconShape", "buttonWidth", "buttonHeight",
+    "step", "stepX", "stepY", "perRow", "cols", "rows", "width", "height", "layer", "strata", "xSign",
+    "ySign", "verticalGrowth", "initialAnchor", "showCooldownText", "showCooldownSwipe", "cooldownSwipeReverse",
+    "cooldownSize", "cooldownAnchor", "cooldownX", "cooldownY", "cooldownDecimalSeconds", "showDurationBar",
+    "durationBarHeight", "durationBarDisplay", "durationBarPosition", "durationBarDirection", "showStacks",
+    "stackAnchor", "stackSize", "stackX", "stackY", "showTooltip", "auraTooltipAnchor", "showAuraBorder",
+    "showAuraSymbol", "showStealableMarker", "stealableStyle", "pandemicEnabled", "pandemicVisualEnabled",
+    "pandemicStyle", { path = { "pandemicColor", 1 }, fallback = "r" }, { path = { "pandemicColor", 2 }, fallback = "g" },
+    { path = { "pandemicColor", 3 }, fallback = "b" }, "pandemicThickness", "pandemicPadding", "pandemicBorderAlpha",
+    "pandemicTintAlpha", "pandemicBlend", { path = { "pandemicFrameEffect", "type" } }, { path = { "pandemicFrameEffect", "priority" } },
+    { path = { "pandemicFrameEffect", "thickness" } }, { path = { "pandemicFrameEffect", "layer" } },
+    { path = { "pandemicFrameEffect", "tintAlpha" } }, { path = { "pandemicFrameEffect", "strata" } },
+    { path = { "pandemicFrameEffect", "color", 1 } }, { path = { "pandemicFrameEffect", "color", 2 } },
+    { path = { "pandemicFrameEffect", "color", 3 } }, { path = { "pandemicFrameEffect", "color", 4 } },
+    "padding", "portraitPositionWhenDisabled", "portraitLevelOffset", { path = { "iconStyle", "signature" } },
+}
+local TRACKING_FIELDS = {
+    "unit", "kind", "nativeFilter", "max", "candidateFilterSignature",
+    "initialAnchor", "layer", "strata", "weaponEnchants",
+}
+local LAYOUT_FIELDS = { "anchor", "x", "y", "alpha" }
+-- Current compilers leave smoothing absent. Preserve their historical bytes;
+-- an explicit optional value must still distinguish immutable timer binding.
+local OPTIONAL_BUTTON_FIELDS = { "durationBarSmooth" }
+local SIGNATURE_SCHEMA = {
+    Fields = { Button = BUTTON_FIELDS, Tracking = TRACKING_FIELDS, Layout = LAYOUT_FIELDS, Optional = OPTIONAL_BUTTON_FIELDS },
+    EncodedBy = {
+        -- CompilePortraitAuraLane assigns a distinct kind to every portrait lane.
+        portraitOverlay = "kind",
+        -- FinalizeLane resolves the appearance kind to the complete iconStyle signature.
+        appearanceKind = "iconStyle",
+    },
+}
+local buttonParts, trackingParts, layoutParts = {}, {}, {}
+local table_concat = table.concat
+local function CompileFields(fields)
+    local keys, positions, nested = {}, {}, {}
+    for index = 1, #fields do
+        local field = fields[index]
+        if type(field) == "string" then
+            keys[#keys + 1], positions[#positions + 1] = field, index
+        else
+            field.position = index
+            nested[#nested + 1] = field
+        end
+    end
+    return { keys = keys, positions = positions, nested = nested, count = #fields, scalar = #nested == 0 }
+end
+local buttonFields = CompileFields(BUTTON_FIELDS)
+local trackingFields = CompileFields(TRACKING_FIELDS)
+local layoutFields = CompileFields(LAYOUT_FIELDS)
+
+local function ReadField(lane, field)
+    local path = field.path
+    local value = lane[path[1]]
+    if not value then return value end
+    local child = value[path[2]]
+    if #path == 2 then
+        if field.fallback then return child or value[field.fallback] end
+        return child
+    end
+    if #path == 3 then return child and child[path[3]] end
+    for index = 2, #path do
+        if not value then return value end
+        if index == #path and field.fallback then
+            value = value[path[index]] or value[field.fallback]
+        else
+            value = value[path[index]]
+        end
+    end
+    return value
+end
+
+local function FieldsSignature(lane, fields, parts)
+    local keys, positions, nested = fields.keys, fields.positions, fields.nested
+    if fields.scalar then
+        for index = 1, #keys do parts[index] = tostring(lane[keys[index]]) end
+        return table_concat(parts, "\030", 1, fields.count)
+    end
+    for index = 1, #keys do parts[positions[index]] = tostring(lane[keys[index]]) end
+    for index = 1, #nested do
+        local field = nested[index]
+        parts[field.position] = tostring(ReadField(lane, field))
+    end
+    return table_concat(parts, "\030", 1, fields.count)
+end
+
 LaneTrackingSignature = function(lane)
     -- initialAnchor, layer, and strata are tracking-level on purpose: the
     -- container is anchored once and born at its final level/strata as a child
     -- of the MSUF-owned host (it is sealed after AddAuraGroup), so growth,
     -- layer, or strata changes must recreate the container rather than mutate
     -- a live sealed one. Recreate is the only path PTR 7 guarantees.
-    return tostring(lane.unit) .. "\030" .. tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
-        .. "\030" .. tostring(lane.max) .. "\030" .. tostring(lane.candidateFilterSignature)
-        .. "\030" .. tostring(lane.initialAnchor)
-        .. "\030" .. tostring(lane.layer) .. "\030" .. tostring(lane.strata)
-        .. "\030" .. tostring(lane.weaponEnchants)
+    return FieldsSignature(lane, trackingFields, trackingParts)
 end
 
 local function UsesStandaloneAuraSlot(lane)
@@ -61,64 +148,29 @@ LaneStructuralSignature = function(lane, buttonSignature)
 end
 
 LaneLayoutSignature = function(lane, buttonSignature)
-    return (buttonSignature or LaneButtonSignature(lane)) .. "\030" .. tostring(lane.anchor) .. "\030" .. tostring(lane.x)
-        .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.alpha)
+    return (buttonSignature or LaneButtonSignature(lane)) .. "\030"
+        .. FieldsSignature(lane, layoutFields, layoutParts)
 end
 
-LaneButtonSignature = function(lane)
-    return tostring(lane.size) .. "\030" .. tostring(lane.iconZoom) .. "\030" .. tostring(lane.spacing)
-        .. "\030" .. tostring(lane.iconShape) .. "\030" .. tostring(lane.requestedIconShape)
-        .. "\030" .. tostring(lane.buttonWidth) .. "\030" .. tostring(lane.buttonHeight)
-        .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.stepX) .. "\030" .. tostring(lane.stepY)
-        .. "\030" .. tostring(lane.perRow)
-        .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
-        .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
-        .. "\030" .. tostring(lane.layer)
-        .. "\030" .. tostring(lane.strata)
-        .. "\030" .. tostring(lane.xSign) .. "\030" .. tostring(lane.ySign)
-        .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
-        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
-        .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.cooldownSize)
-        .. "\030" .. tostring(lane.cooldownAnchor) .. "\030" .. tostring(lane.cooldownX)
-        .. "\030" .. tostring(lane.cooldownY) .. "\030" .. tostring(lane.cooldownDecimalSeconds)
-        .. "\030" .. tostring(lane.showDurationBar) .. "\030" .. tostring(lane.durationBarHeight)
-        .. "\030" .. tostring(lane.durationBarDisplay) .. "\030" .. tostring(lane.durationBarPosition)
-        .. "\030" .. tostring(lane.durationBarDirection)
-        .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
-        .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
-        .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
-        .. "\030" .. tostring(lane.auraTooltipAnchor)
-        .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
-        .. "\030" .. tostring(lane.showStealableMarker) .. "\030" .. tostring(lane.stealableStyle)
-        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicVisualEnabled)
-        .. "\030" .. tostring(lane.pandemicStyle)
-        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[1] or lane.pandemicColor.r))
-        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[2] or lane.pandemicColor.g))
-        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[3] or lane.pandemicColor.b))
-        .. "\030" .. tostring(lane.pandemicThickness) .. "\030" .. tostring(lane.pandemicPadding)
-        .. "\030" .. tostring(lane.pandemicBorderAlpha) .. "\030" .. tostring(lane.pandemicTintAlpha)
-        .. "\030" .. tostring(lane.pandemicBlend)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.type)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.priority)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.thickness)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.layer)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.tintAlpha)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.strata)
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[1])
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[2])
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[3])
-        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[4])
-        .. "\030" .. tostring(lane.padding)
-        .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
-        .. "\030" .. tostring(lane.portraitLevelOffset)
-        .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
+LaneButtonSignature = function(lane, sharedSignatures)
+    local shared = sharedSignatures and sharedSignatures[lane.kind]
+    if shared then return shared end
+    local optional = ""
+    for index = 1, #OPTIONAL_BUTTON_FIELDS do
+        local field = OPTIONAL_BUTTON_FIELDS[index]
+        if lane[field] ~= nil then optional = optional .. "\030" .. field .. ":" .. tostring(lane[field]) end
+    end
+    local signature = FieldsSignature(lane, buttonFields, buttonParts)
         .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or "0")
+        .. optional
+    if sharedSignatures then sharedSignatures[lane.kind] = signature end
+    return signature
 end
 
 -- FinalizeLane: both signatures embed the button signature; build it once
 -- (2026-10-11 raid trace: 96 lanes, 192 builds, 2.73 ms). Same strings.
-local function LaneShapeSignatures(lane)
-    local buttonSignature = LaneButtonSignature(lane)
+local function LaneShapeSignatures(lane, sharedSignatures)
+    local buttonSignature = LaneButtonSignature(lane, sharedSignatures)
     return LaneStructuralSignature(lane, buttonSignature), LaneLayoutSignature(lane, buttonSignature)
 end
 
@@ -143,6 +195,7 @@ SensorLayoutSignature = function(sensor)
 end
 
 return {
+    LaneSignatureSchema = SIGNATURE_SCHEMA,
     LaneLayoutSignature = LaneLayoutSignature,
     LaneShapeSignatures = LaneShapeSignatures,
     LaneStructuralSignature = LaneStructuralSignature,

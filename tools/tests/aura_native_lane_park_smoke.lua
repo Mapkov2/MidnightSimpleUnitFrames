@@ -60,6 +60,7 @@ local A3 = {}
 _G.MSUF_NS = MSUF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
+dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
 local exports = MSUF.Auras3RuntimeFactories.NativeApply("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, dependencies)
 local ApplyLane = assert(exports.ApplyLane, "NativeApply exports no ApplyLane")
 A3._RegisterDirectIdentityRefreshContainer = function() end

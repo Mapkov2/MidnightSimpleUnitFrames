@@ -24,11 +24,7 @@ Check(body:find("return A3%.RequestScope%(scope, reason or \"AURAS3_FONT_VISUALS
     "scoped aura font updates no longer use RequestScope")
 Check(body:find("RuntimeFrame%(runtimeUnit%)") ~= nil,
     "global aura font fanout does not target existing runtime frames directly")
-Check(body:find('RefreshRuntimeUnit%("player"%)') ~= nil
-        and body:find('RefreshRuntimeUnit%("target"%)') ~= nil
-        and body:find('RefreshRuntimeUnit%("focus"%)') ~= nil
-        and body:find("for i = 1, 5 do RefreshRuntimeUnit%(\"boss\" %.%. i%) end") ~= nil
-        and body:find("for i = 1, 3 do RefreshRuntimeUnit%(\"arena\" %.%. i%) end") ~= nil,
+Check(body:find('A3%.ForEachRuntimeUnit%("shared", RefreshRuntimeUnit%)') ~= nil,
     "global aura font fanout no longer covers the bounded standalone unit families")
 Check(body:find("gf%.ForEachFrame") ~= nil,
     "global aura font fanout does not cover existing group frames")
@@ -40,7 +36,7 @@ Check(executable:find("RefreshVisuals", 1, true) == nil,
     "global aura font fanout still enters GroupFrame structural refresh")
 Check(executable:find("ApplyElementToFrame", 1, true) == nil,
     "global aura font fanout still rebuilds UnitFrame element routes")
-Check(body:find('A3%._NotifyAuraColdpathPreview%(visualReason, "shared"%)') ~= nil,
+Check(body:find('Facade%.NotifyAuraColdpathPreview%(visualReason, "shared"%)') ~= nil,
     "global aura font fanout no longer refreshes the coldpath preview")
 Check(body:find("A3%.RefreshEditPreview%(%)") ~= nil,
     "global aura font fanout no longer refreshes the Edit Mode preview")

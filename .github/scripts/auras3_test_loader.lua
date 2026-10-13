@@ -220,11 +220,13 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("MSUF.MSUF_Auras3.GetDurationBarColor") then
         namespace.MSUF_Auras3 = namespace.MSUF_Auras3 or {}
         if not namespace.MSUF_Auras3.GetDurationBarColor then
-            local common = Read(SourcePath("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))
-            local clamp = Slice.Function(common, "local function Clamp01", "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua")
-            local text = Read(SourcePath("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Storage.lua"))
-            local body = Slice.Function(text, "function Model.GetDurationBarColor", "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Storage.lua")
-            assert(compileSource("local Model = ...\n" .. clamp .. "\n" .. body))(namespace.MSUF_Auras3)
+            local owner = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
+            local text = Read(SourcePath(owner))
+            local rootDB = Slice.Function(text, "local function RootDB", owner)
+            local clamp = Slice.Function(text, "local function DurationColorComponent", owner)
+            local body = Slice.Function(text, "function A3.GetDurationBarColor", owner)
+            local preamble = "local A3, MSUF = ...\n" .. rootDB .. "\n" .. clamp .. "\n"
+            assert(compileSource(preamble .. body))(namespace.MSUF_Auras3, namespace)
         end
     end
     if Uses("Layers.BorderOffset") then
@@ -535,7 +537,13 @@ local function DependencyChunk(path, ...)
         PrepareSharedDependencies(path, dependencyNamespace)
         if direct then PrepareDirectContracts(source, dependencyNamespace) end
         if setfenv and getfenv then setfenv(chunk, getfenv(1)) end
-        return chunk(addon, namespace, ...)
+        local result = chunk(addon, namespace, ...)
+        if path:match("MSUF_Auras3_Core%.lua$") and namespace and namespace.MSUF_Auras3 then
+            local root = assert(Normalize(path):match("^(.-)MidnightSimpleUnitFrames/Auras3/")):gsub("/$", "")
+            local fixture = assert(originalLoadfile(root .. "/tools/tests/auras3_runtime_fixture.lua"))()
+            fixture.Attach(root, namespace.MSUF_Auras3)
+        end
+        return result
     end
 end
 
@@ -587,6 +595,12 @@ function Loader.LoadFile(path, ...)
             end
         end
         for i = 1, #chunks - 1 do chunks[i](...) end
+        if path:match("MSUF_Auras3_UnitFrames%.lua$") then
+            local _, namespace = ...
+            local root = assert(Normalize(path):match("^(.-)MidnightSimpleUnitFrames/Auras3/")):gsub("/$", "")
+            local fixture = assert(originalLoadfile(root .. "/tools/tests/auras3_runtime_fixture.lua"))()
+            fixture.Attach(root, namespace.MSUF_Auras3)
+        end
         return chunks[#chunks](...)
     end
 end

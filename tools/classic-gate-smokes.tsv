@@ -644,3 +644,8 @@ clients+Forever	lua	tools/tests/group_frame_overlay_shared_spec_smoke.lua	{root/
 -	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} mapko	MapkoSkin menu skin read the profile before login or ignored the bound profile
 -	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} analytics	Analytics read the account settings before login
 -	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} anchors	A cooldown anchor provider was acquired before login
+-	python	tools/tests/auras3_host_boundary_smoke.py	{root}	Auras3 public host boundary
+-	lua	tools/tests/auras3_group_cache_ownership_smoke.lua	{root}	Auras3 group cache ownership and weak lifetime
+-	lua	tools/tests/auras3_signature_read_coverage_smoke.lua	{root} Mainline	Auras3 initializeFrame config signature coverage: Mainline
+-	lua	tools/tests/auras3_signature_read_coverage_smoke.lua	{root} Forever	Auras3 initializeFrame config signature coverage: Forever
+-	python	tools/tests/auras3_module_export_boundary_smoke.py	{root}	Auras3 named runtime module exports

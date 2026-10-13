@@ -26,6 +26,7 @@ local SharedIconStyle = dependencies.ConfigValues.SharedIconStyle
 -- A group edit must not evict UnitFrame configs or the global Appearance cache.
 -- These three revisions advance only on configuration writes, never aura events.
 -- The fallback also covers synthetic/legacy frames without a declared group kind.
+local sharedConfigBySpec = setmetatable({}, { __mode = "k" })
 local groupConfigRevisions = { party = 0, raid = 0, mythicraid = 0, [false] = 0 }
 
 function A3.InvalidateGroupRuntimeConfig(scope)
@@ -114,6 +115,17 @@ local function CompileGroupSpellIndicatorStyle(spellSource, groupKind, portraitS
     }
 end
 
+-- Group button inputs depend on the immutable source, shape, scope and visual
+-- revision. Unit identity contributes only to tracking, never button setup.
+local function SharedGroupButtonSignatures(cache, source, kind, shape, gen, visual)
+    local record = cache.buttonSignatures
+    if record and record.source == source and record.kind == kind and record.shape == shape
+        and record.gen == gen and record.visual == visual then return record.signatures end
+    local signatures = {}
+    cache.buttonSignatures = { source = source, kind = kind, shape = shape, gen = gen, visual = visual, signatures = signatures }
+    return signatures
+end
+
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
     unit = unit or frame.MSUFUnitKey
@@ -149,9 +161,10 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- Compiled group specs are immutable for their revision. Preview frames all
     -- use the same spec and the synthetic player unit, so compiling aura lanes,
     -- dispel sensors, and spell-indicator slots once per frame only duplicates
-    -- tables without changing the result. Share that cold-path config on the spec;
+    -- tables without changing the result. Share in an Auras3-owned weak base-spec cache;
     -- live frames with distinct unit tokens still receive distinct entries.
-    local sharedCache = spec and spec._msufA3NativeGroupConfigCache
+    local baseSpec = frame._msufGFSpecBase or spec
+    local sharedCache = baseSpec and sharedConfigBySpec[baseSpec]
     local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (groupAssistGate and "\031group" or "\031shared")
     local shared = sharedCache and sharedCache[sharedKey]
     if shared and shared.source == source and shared.spellSource == spellSource
@@ -183,8 +196,11 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3Source = source,
     }
     local portraitShape = spec and spec.portrait and spec.portrait.shape
+    sharedCache = sharedCache or {}
+    local buttonSignatures = SharedGroupButtonSignatures(sharedCache, source, groupKind, portraitShape, gen, visualGen)
     local _, sharedAuraStyle = EnsureDB()
-    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff", groupKind, portraitShape, sharedAuraStyle) or nil
+    local buff = type(source) == "table"
+        and CompileGroupLane(unit, source, "buff", groupKind, portraitShape, sharedAuraStyle, buttonSignatures) or nil
     local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     local spellIndicatorRoot
     if combinedSpellSource and type(unit) == "string" and unit ~= "" then
@@ -194,9 +210,9 @@ local function ResolveGroupFrameConfig(frame, unit)
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
-        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff", groupKind, portraitShape, sharedAuraStyle)
-        local debuff = CompileGroupLane(unit, source, "debuff", groupKind, portraitShape, sharedAuraStyle)
-        local external = CompileGroupLane(unit, source, "external", groupKind, portraitShape, sharedAuraStyle)
+        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff", groupKind, portraitShape, sharedAuraStyle, buttonSignatures)
+        local debuff = CompileGroupLane(unit, source, "debuff", groupKind, portraitShape, sharedAuraStyle, buttonSignatures)
+        local external = CompileGroupLane(unit, source, "external", groupKind, portraitShape, sharedAuraStyle, buttonSignatures)
         cfg.lanes.buff = buff
         cfg.lanes.trackedBuff = trackedBuff
         cfg.lanes.debuff = debuff
@@ -235,9 +251,9 @@ local function ResolveGroupFrameConfig(frame, unit)
     frame._msufA3NativeGroupGen = gen
     frame._msufA3NativeGroupVisualGen = visualGen
     frame._msufA3NativeGroupConfig = cfg
-    if spec then
+    if baseSpec then
         sharedCache = sharedCache or {}
-        spec._msufA3NativeGroupConfigCache = sharedCache
+        sharedConfigBySpec[baseSpec] = sharedCache
         sharedCache[sharedKey] = {
             source = source,
             spellSource = spellSource,

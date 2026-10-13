@@ -100,9 +100,9 @@ Check("C14-A1", function()
     env.A3.RefreshEditPreview("boss");assert(hidden==1,"combat left preview visible")
 end)
 Check("C13-A2", function()
-    local state={};local env={A3={_EnsureGroupAuraPresenceState=function()return state end,_CommitGroupAuraPresenceState=function()return true end},_G={UnitIsConnected=function()return false end},issecretvalue=function()return false end}
-    Compile(Slice("Auras3/Runtime/MSUF_Auras3_Runtime_Presence.lua","A3._UpdateGroupAuraPresenceConnectionState = function(","A3._UpdateGroupAuraPresenceState = function("),env)()
-    env.A3._UpdateGroupAuraPresenceConnectionState("party1");assert(state.offline==true)
+    local state={};local env={Presence={EnsureGroupAuraPresenceState=function()return state end,CommitGroupAuraPresenceState=function()return true end},_G={UnitIsConnected=function()return false end},issecretvalue=function()return false end}
+    Compile(Slice("Auras3/Runtime/MSUF_Auras3_Runtime_Presence.lua","Presence.UpdateGroupAuraPresenceConnectionState = function(","Presence.UpdateGroupAuraPresenceState = function("),env)()
+    env.Presence.UpdateGroupAuraPresenceConnectionState("party1");assert(state.offline==true)
 end)
 assert(failed==0,tostring(failed).." regression cases failed ("..passed.." passed)")
 print("bh3 runtime state: "..passed.." passed")

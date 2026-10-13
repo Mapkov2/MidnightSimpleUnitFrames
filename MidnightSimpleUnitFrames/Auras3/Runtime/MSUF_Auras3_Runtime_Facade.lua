@@ -80,6 +80,11 @@ local function InstallVisualInteractions(A3, MSUF, AuraRuntimeCombatBlocked, Fra
 end
 
 MSUF.Auras3RuntimeFactories.Facade = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local EffectPreview = Runtime.EffectPreview
+local Facade = Runtime.Facade
+local IdentityTopology = Runtime.IdentityTopology
+local NativeApply = Runtime.NativeApply
 local pairs = pairs
 local tostring = tostring
 local type = type
@@ -89,9 +94,8 @@ local AuraRuntimeCombatBlocked = dependencies.Platform.AuraRuntimeCombatBlocked
 local C_Timer = dependencies.Platform.C_Timer
 local CreateClassPowerAuraSensor = dependencies.NativeApply.CreateClassPowerAuraSensor
 local CreateFrame = dependencies.Platform.CreateFrame
-local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityEvents.DrainDirectIdentityEventTopologyBatch
+local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityTopology.DrainDirectIdentityEventTopologyBatch
 local EMPTY_EVENTS = dependencies.Platform.EMPTY_EVENTS
-local EnsureNativeAuraRefreshDriver = dependencies.NativeApply.EnsureNativeAuraRefreshDriver
 local EnsureRoot = dependencies.NativeContract.EnsureRoot
 local FrameAppliedConfigIsCurrent = dependencies.NativeContract.FrameAppliedConfigIsCurrent
 local FrameAuraConfig = dependencies.GroupConfig.FrameAuraConfig
@@ -121,7 +125,6 @@ end
 
 function A3.EnableFrame(frame)
     if not (frame and frame.MSUFUnitKey and MANAGED_UNITS[frame.MSUFUnitKey]) then return false end
-    if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
     local cfg = A3.ResolveUnitFrameConfig(frame.MSUFUnitKey, frame.MSUFSpec)
     if not (cfg and cfg.enabled) then
         HideState(frame)
@@ -137,7 +140,7 @@ end
 function A3.DisableFrame(frame)
     if not frame then return true end
     HideState(frame)
-    A3._HideDispelOverlayPreview(frame)
+    EffectPreview.HideDispelOverlayPreview(frame)
     local unit = frame.MSUFUnitKey
     if unit and A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
         A3._runtimeFrames[unit] = nil
@@ -163,14 +166,14 @@ function A3.RenderFrame(frame, reason)
             return false
         end
         if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
-            and A3._RefreshAppliedNativeAuras(frame, false) then
+            and NativeApply.RefreshAppliedNativeAuras(frame, false) then
             return true
         end
         if AuraRuntimeCombatBlocked() then return false end
     end
     if not cfgReady then cfg = FrameAuraConfig(frame, frame.MSUFUnitKey) end
     if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
-        A3._RefreshAppliedNativeAuras(frame, false)
+        NativeApply.RefreshAppliedNativeAuras(frame, false)
         return true
     end
     return ApplyConfig(frame, cfg, reason)
@@ -178,10 +181,6 @@ end
 
 A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
     if not frame then return false end
-    if type(newUnit) == "string" and newUnit ~= "" then
-        frame.MSUFUnitKey = newUnit
-        frame.unitKey = newUnit
-    end
     local cfg = FrameAuraConfig(frame, frame.MSUFUnitKey)
     if not (cfg and cfg.enabled == true) then
         HideState(frame)
@@ -197,20 +196,19 @@ end
 
 A3.OnFrameUnitChanged = A3.RenderUnitChangedFrame
 
-A3.ForceUpdateFrame = A3.RenderFrame
 
 function A3.RuntimeOwnsUnit(unit)
     unit = NormalizeRuntimeUnit(unit)
     return unit and A3._runtimeFrames and A3._runtimeFrames[unit] ~= nil or false
 end
 
-function A3._EnsureDeferredAuraRuntimeDriver()
+function Facade.EnsureDeferredAuraRuntimeDriver()
     if A3._deferredAuraRuntimeFrame then return A3._deferredAuraRuntimeFrame end
     local frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", function(self, event)
         if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        if type(A3._FlushDeferredAuraRuntime) == "function" then A3._FlushDeferredAuraRuntime() end
+        if type(Facade.FlushDeferredAuraRuntime) == "function" then Facade.FlushDeferredAuraRuntime() end
     end)
     A3._deferredAuraRuntimeFrame = frame
     return frame
@@ -220,7 +218,7 @@ end
 -- Classic backend in Auras3/MSUF_Auras3_Core.lua.
 A3._deferredAuraDefaultReason = "AURAS3_DEFERRED"
 
-function A3._NotifyAuraColdpathPreview(reason, scope)
+function Facade.NotifyAuraColdpathPreview(reason, scope)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_PREVIEW") end
     local did = false
     reason = reason or "AURAS3_PREVIEW"
@@ -228,7 +226,7 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
         _G.MSUF_UFPreview_RequestRefresh(reason)
         did = true
     end
-    local gf = A3._GroupAPI and A3._GroupAPI() or nil
+    local gf = Facade.GroupAPI and Facade.GroupAPI() or nil
     local kind, touchesGroup = A3._AuraPreviewGroupKind(scope)
     if touchesGroup and gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind)
@@ -247,7 +245,7 @@ local function RuntimeFrame(runtimeUnit)
         or _G["MSUF_" .. runtimeUnit]
 end
 
-A3._ApplyRuntimeUnit = function(runtimeUnit)
+Facade.ApplyRuntimeUnit = function(runtimeUnit)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
     local frame = RuntimeFrame(runtimeUnit)
     if not frame then return false end
@@ -259,15 +257,14 @@ A3._ApplyRuntimeUnit = function(runtimeUnit)
     return true
 end
 
-function A3._GroupAPI()
+function Facade.GroupAPI()
     local ns = MSUF or _G.MSUF_NS or _G.MSUF
     return ns and ns.GF or nil
 end
 
-function A3._ApplyGroupAuraFrame(frame, unit, kind)
+function Facade.ApplyGroupAuraFrame(frame, unit, kind)
     if not (frame and type(unit) == "string" and unit ~= "") then return false end
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_FRAME") end
-    if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
     frame._msufIsGroupFrame = true
     if kind then frame._msufGFKind = kind end
     if UF.ApplyElementToFrame then
@@ -278,8 +275,8 @@ function A3._ApplyGroupAuraFrame(frame, unit, kind)
     return true
 end
 
-function A3._RequestGroupKindNow(kind)
-    local gf = A3._GroupAPI()
+function Facade.RequestGroupKindNow(kind)
+    local gf = Facade.GroupAPI()
     if not gf then return false end
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(kind or "group", "AURAS3_GROUP_KIND") end
     if type(gf.RefreshVisuals) == "function" then
@@ -289,7 +286,7 @@ function A3._RequestGroupKindNow(kind)
     if type(gf.ForEachFrame) == "function" then
         didWork = gf.ForEachFrame(function(frame, frameUnit, frameKind)
             if kind == nil or frameKind == kind then
-                return A3._ApplyGroupAuraFrame(frame, frameUnit, frameKind)
+                return Facade.ApplyGroupAuraFrame(frame, frameUnit, frameKind)
             end
             return false
         end, true) == true
@@ -305,11 +302,11 @@ local function ApplyRequestedGroupUnitFrame(frame, unit, gf)
     if type(gf.MarkDirty) == "function" then
         return gf.MarkDirty(frame, gf.DIRTY_AURAS) == true
     end
-    return A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) == true
+    return Facade.ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) == true
 end
 
-function A3._RequestGroupUnitNow(unit)
-    local gf = A3._GroupAPI()
+function Facade.RequestGroupUnitNow(unit)
+    local gf = Facade.GroupAPI()
     if not (gf and type(unit) == "string" and unit ~= "") then return false end
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_UNIT") end
     if type(gf.ForEachFrameForUnit) == "function" then
@@ -319,49 +316,37 @@ function A3._RequestGroupUnitNow(unit)
     if frame and type(gf.MarkDirty) == "function" then
         return gf.MarkDirty(frame, gf.DIRTY_AURAS) == true
     end
-    return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
+    return frame and Facade.ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
 end
 
-A3._RequestUnitNow = function(unit)
+Facade.RequestUnitNow = function(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
-        local didWork = A3._ApplyRuntimeUnit("player")
-        didWork = A3._ApplyRuntimeUnit("pet") or didWork
-        didWork = A3._ApplyRuntimeUnit("target") or didWork
-        didWork = A3._ApplyRuntimeUnit("focus") or didWork
-        for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
-        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
-        didWork = A3._RequestGroupKindNow(nil) or didWork
+        local didWork = A3.ForEachRuntimeUnit("shared", Facade.ApplyRuntimeUnit)
+        didWork = Facade.RequestGroupKindNow(nil) or didWork
         return didWork
     end
-    if unit == "boss" then
-        local didWork = false
-        for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
-        return didWork
+    if unit == "boss" or unit == "arena" then
+        return A3.ForEachRuntimeUnit(unit, Facade.ApplyRuntimeUnit)
     end
-    if unit == "arena" then
-        local didWork = false
-        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
-        return didWork
-    end
-    if unit == "group" or unit == "groups" then return A3._RequestGroupKindNow(nil) end
-    if unit == "party" or unit == "gf_party" then return A3._RequestGroupKindNow("party") end
+    if unit == "group" or unit == "groups" then return Facade.RequestGroupKindNow(nil) end
+    if unit == "party" or unit == "gf_party" then return Facade.RequestGroupKindNow("party") end
     if unit == "raid" or unit == "gf_raid" then
-        local didWork = A3._RequestGroupKindNow("raid")
-        return A3._RequestGroupKindNow("mythicraid") or didWork
+        local didWork = Facade.RequestGroupKindNow("raid")
+        return Facade.RequestGroupKindNow("mythicraid") or didWork
     end
-    if unit == "mythicraid" or unit == "gf_mythicraid" then return A3._RequestGroupKindNow("mythicraid") end
-    if unit:match("^party%d+$") or unit:match("^raid%d+$") then return A3._RequestGroupUnitNow(unit) end
+    if unit == "mythicraid" or unit == "gf_mythicraid" then return Facade.RequestGroupKindNow("mythicraid") end
+    if unit:match("^party%d+$") or unit:match("^raid%d+$") then return Facade.RequestGroupUnitNow(unit) end
     unit = NormalizeRuntimeUnit(unit)
-    return unit and A3._ApplyRuntimeUnit(unit) or false
+    return unit and Facade.ApplyRuntimeUnit(unit) or false
 end
 
 function A3.RequestUnit(unit)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REQUEST_UNIT") end
-    return A3._RequestUnitNow(unit)
+    return Facade.RequestUnitNow(unit)
 end
 
-A3._DoRefreshAll = function()
+Facade.DoRefreshAll = function()
     ApplyAuraTooltipStyle()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
@@ -369,14 +354,14 @@ A3._DoRefreshAll = function()
     -- shared identity-event topology batched across that complete cold pass;
     -- the inner UF/GF batches then remain cheap nested scopes and the shard
     -- registrations are reconciled exactly once at the outer boundary.
-    A3._BeginDirectIdentityEventTopologyBatch()
-    A3._RequestUnitNow("*")
-    A3._EndDirectIdentityEventTopologyBatch()
+    IdentityTopology.BeginDirectIdentityEventTopologyBatch()
+    Facade.RequestUnitNow("*")
+    IdentityTopology.EndDirectIdentityEventTopologyBatch()
     A3._nativeVisualRefreshToken = A3._nativeVisualSignature
     return true
 end
 
-A3._FlushCoalescedRefreshAll = function()
+Facade.FlushCoalescedRefreshAll = function()
     -- A hard Lua-budget abort skips the normal batch epilogue. These scopes
     -- are synchronous by contract, so any depth surviving to the next frame is
     -- stale and must be drained before a merged retry rebuilds the topology.
@@ -391,7 +376,7 @@ A3._FlushCoalescedRefreshAll = function()
     return true
 end
 
-function A3._FlushDeferredAuraRuntime()
+function Facade.FlushDeferredAuraRuntime()
     if InCombat() or A3._deferredAuraRuntime ~= true then return false end
     local all, scopes, reason = TakeDeferredRuntime(A3)
     local previewScope = all and "shared" or nil
@@ -405,7 +390,7 @@ function A3._FlushDeferredAuraRuntime()
             A3.RefreshUnit(scope)
         end
     end
-    A3._NotifyAuraColdpathPreview(reason, previewScope)
+    Facade.NotifyAuraColdpathPreview(reason, previewScope)
     return true
 end
 
@@ -423,12 +408,12 @@ function A3.RefreshAll()
     -- still clear the latch (and service a merged retry) instead of leaving all
     -- later Aura refreshes permanently stuck as pending.
     if RunNextFrame then
-        RunNextFrame(A3._FlushCoalescedRefreshAll)
+        RunNextFrame(Facade.FlushCoalescedRefreshAll)
     elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, A3._FlushCoalescedRefreshAll)
+        C_Timer.After(0, Facade.FlushCoalescedRefreshAll)
     end
     A3._refreshAllIncomplete = true
-    A3._DoRefreshAll()
+    Facade.DoRefreshAll()
     A3._refreshAllIncomplete = nil
     if not RunNextFrame and not (C_Timer and C_Timer.After) then
         A3._refreshAllCoalescing = nil
@@ -448,19 +433,15 @@ function A3.RequestScope(scope, reason)
         return A3.RefreshAll()
     end
     local result = A3.RefreshUnit(scope)
-    A3._NotifyAuraColdpathPreview(reason or "AURAS3_SCOPE_APPLY", scope)
+    Facade.NotifyAuraColdpathPreview(reason or "AURAS3_SCOPE_APPLY", scope)
     return result
 end
 
 function A3.RefreshUnit(unit)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REFRESH_UNIT") end
-    if unit == "boss" then
-        for i = 1, 5 do InvalidateUnitRuntimeConfig("boss" .. i) end
-        return A3.RequestUnit("boss")
-    end
-    if unit == "arena" then
-        for i = 1, 3 do InvalidateUnitRuntimeConfig("arena" .. i) end
-        return A3.RequestUnit("arena")
+    if unit == "boss" or unit == "arena" then
+        A3.ForEachRuntimeUnit(unit, InvalidateUnitRuntimeConfig)
+        return A3.RequestUnit(unit)
     end
     local runtimeUnit = InvalidateUnitRuntimeConfig(unit)
     if runtimeUnit then return A3.RequestUnit(runtimeUnit) end
@@ -490,20 +471,15 @@ function A3.ApplyFontsFromGlobal(scope, reason)
         if frame then didWork = A3.RenderFrame(frame, visualReason) == true or didWork end
     end
 
-    RefreshRuntimeUnit("player")
-    RefreshRuntimeUnit("pet")
-    RefreshRuntimeUnit("target")
-    RefreshRuntimeUnit("focus")
-    for i = 1, 5 do RefreshRuntimeUnit("boss" .. i) end
-    for i = 1, 3 do RefreshRuntimeUnit("arena" .. i) end
+    A3.ForEachRuntimeUnit("shared", RefreshRuntimeUnit)
 
-    local gf = A3._GroupAPI()
+    local gf = Facade.GroupAPI()
     if gf and type(gf.ForEachFrame) == "function" then
         didWork = gf.ForEachFrame(function(frame)
             return A3.RenderFrame(frame, visualReason) == true
         end, true) == true or didWork
     end
-    A3._NotifyAuraColdpathPreview(visualReason, "shared")
+    Facade.NotifyAuraColdpathPreview(visualReason, "shared")
     if type(A3.RefreshEditPreview) == "function" then
         didWork = A3.RefreshEditPreview() == true or didWork
     end
@@ -578,7 +554,7 @@ function AurasElement.Update(frame, event)
     if event ~= nil and not ReasonRequiresAuraApply(event) then
         local root = frame and frame.Auras
         if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
-            A3._RefreshAppliedNativeAuras(frame, false)
+            NativeApply.RefreshAppliedNativeAuras(frame, false)
             return true
         end
         return false
@@ -588,9 +564,12 @@ end
 
 UF.RegisterElement("Auras", AurasElement)
 
-MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
-MSUF.AuraCore.Auras3 = A3
 
-return {
+A3.NotifyPreview = Facade.NotifyAuraColdpathPreview
+A3.EnsureDeferredRuntimeDriver = Facade.EnsureDeferredAuraRuntimeDriver
+
+local exports = {
 }
+for name, value in pairs(exports) do Facade[name] = value end
+return Facade
 end

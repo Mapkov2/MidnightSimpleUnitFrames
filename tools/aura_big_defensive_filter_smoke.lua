@@ -112,8 +112,8 @@ assert(has(runtime, "local installCandidatesFirst = filterChanged and candidates
     "exact-ID transition is not fail-closed")
 assert(not has(runtime, "container:UnregisterEvent(\"AURA_DATA_PROVIDER_SWITCH\")"),
     "CustomAuraContainer event registrations must remain Blizzard-owned")
-assert(has(runtime, "A3._DirectIdentityRefreshUnitWithUnitAuraGate")
-    and has(runtime, "A3._DirectIdentityRefreshUnit = A3._DirectIdentityRefreshUnitBase"),
+assert(has(runtime, "IdentityRefresh.DirectIdentityRefreshUnitWithUnitAuraGate")
+    and has(runtime, "IdentityRefresh.DirectIdentityRefreshUnit = IdentityRefresh.DirectIdentityRefreshUnitBase"),
     "ordinary Unit exact-ID owners do not topology-switch the direct identity route")
 assert(has(runtime, 'identityCandidateMode = helpful and "assist" or "hostile"'),
     "ordinary Unit custom exact-ID lanes lack compiled polarity metadata")
@@ -122,15 +122,15 @@ assert(has(runtime, 'type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function"'
 assert(has(runtime, 'return unitCanAssist("player", unit, true, true)')
     and has(runtime, 'return unitCanAssist("player", unit)'),
     "identity candidate checks do not select the Retail/Classic UnitCanAssist contract")
-local refreshAllStart = assert(runtime:find("A3._DoRefreshAll = function()", 1, true))
-local refreshAllStop = assert(runtime:find("A3._FlushCoalescedRefreshAll = function()", refreshAllStart, true))
+local refreshAllStart = assert(runtime:find("Facade.DoRefreshAll = function()", 1, true))
+local refreshAllStop = assert(runtime:find("Facade.FlushCoalescedRefreshAll = function()", refreshAllStart, true))
 local refreshAllBody = runtime:sub(refreshAllStart, refreshAllStop - 1)
-local beginTopology = assert(refreshAllBody:find("A3._BeginDirectIdentityEventTopologyBatch()", 1, true))
-local applyAll = assert(refreshAllBody:find('A3._RequestUnitNow("*")', 1, true))
-local endTopology = assert(refreshAllBody:find("A3._EndDirectIdentityEventTopologyBatch()", 1, true))
+local beginTopology = assert(refreshAllBody:find("IdentityTopology.BeginDirectIdentityEventTopologyBatch()", 1, true))
+local applyAll = assert(refreshAllBody:find('Facade.RequestUnitNow("*")', 1, true))
+local endTopology = assert(refreshAllBody:find("IdentityTopology.EndDirectIdentityEventTopologyBatch()", 1, true))
 assert(beginTopology < applyAll and applyAll < endTopology,
     "full Aura refresh does not batch identity-event topology")
-local flushStop = assert(runtime:find("function A3._FlushDeferredAuraRuntime()", refreshAllStop, true))
+local flushStop = assert(runtime:find("function Facade.FlushDeferredAuraRuntime()", refreshAllStop, true))
 local flushBody = runtime:sub(refreshAllStop, flushStop - 1)
 assert(has(flushBody, "DrainDirectIdentityEventTopologyBatch()")
     and has(flushBody, "A3._refreshAllIncomplete == true")
@@ -140,7 +140,7 @@ assert(not has(flushBody, "directIdentityEventTopologyBatchDepth"),
     "refresh recovery reads the NativeRuntime-private topology depth")
 assert(has(runtime, "DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch"),
     "NativeRuntime does not export its topology recovery helper")
-assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityEvents.DrainDirectIdentityEventTopologyBatch"),
+assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityTopology.DrainDirectIdentityEventTopologyBatch"),
     "public Aura orchestration does not retain the topology recovery helper")
 local topologyStart = assert(runtime:find("local directIdentityRefreshEventFrame", 1, true))
 local topologyStop = assert(runtime:find("local function DirectIdentityRefreshEventsAlreadyCover", topologyStart, true))
@@ -148,15 +148,16 @@ local topologyBlock = runtime:sub(topologyStart, topologyStop - 1)
 local topologyLoader = loadstring or load
 local topologyChunk, topologyLoadError = topologyLoader([[
 local A3 = {}
+local IdentityTopology = {}
 local MSUF = ...
 ]] .. topologyBlock .. [[
-return A3._BeginDirectIdentityEventTopologyBatch,
-    A3._EndDirectIdentityEventTopologyBatch,
+return IdentityTopology.BeginDirectIdentityEventTopologyBatch,
+    IdentityTopology.EndDirectIdentityEventTopologyBatch,
     DrainDirectIdentityEventTopologyBatch
 ]], "@aura_topology_recovery")
 assert(topologyChunk, topologyLoadError)
 local topologyNamespace = {}
-_G.MSUF_Auras3TestLoader.PrepareDependencies("MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua", topologyNamespace)
+_G.MSUF_Auras3TestLoader.PrepareDependencies("MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityTopology.lua", topologyNamespace)
 local beginBatch, endBatch, drainBatch = topologyChunk(topologyNamespace)
 assert(beginBatch() == 1 and beginBatch() == 2, "topology batch depth did not increment")
 assert(drainBatch() == true, "topology recovery did not drain an interrupted batch")
@@ -165,8 +166,8 @@ assert(endBatch() == false and drainBatch() == false,
 local publicRefreshStart = assert(runtime:find("function A3.RefreshAll()", refreshAllStop, true))
 local publicRefreshStop = assert(runtime:find("function A3.RequestScope", publicRefreshStart, true))
 local publicRefreshBody = runtime:sub(publicRefreshStart, publicRefreshStop - 1)
-local scheduleUnlock = publicRefreshBody:find("RunNextFrame(A3._FlushCoalescedRefreshAll)", 1, true)
-local runRefresh = publicRefreshBody:find("A3._DoRefreshAll()", 1, true)
+local scheduleUnlock = publicRefreshBody:find("RunNextFrame(Facade.FlushCoalescedRefreshAll)", 1, true)
+local runRefresh = publicRefreshBody:find("Facade.DoRefreshAll()", 1, true)
 assert(scheduleUnlock and runRefresh and scheduleUnlock < runRefresh,
     "Aura RefreshAll does not arm its coalescing unlock before synchronous work")
 assert(has(publicRefreshBody, "A3._refreshAllIncomplete = true")
@@ -200,6 +201,7 @@ local block = runtime:sub(blockStart, blockStop - 1)
 local loader = loadstring or load
 local chunk, loadError = loader([[
 local A3, NormalizeNativeFilterString, issecretvalue = ...
+local ConfigValues = {}
 local table_concat = table.concat
 ]] .. block .. [[
 return ConfigureCuratedBigDefensiveLane, EffectiveLaneFilters

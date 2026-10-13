@@ -24,6 +24,9 @@
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_Containers.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_Identity.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_Presence.lua"/>
+  <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_WorldTransition.lua"/>
+  <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityRefresh.lua"/>
+  <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityTopology.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityEvents.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_NativeApply.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_Facade.lua"/>

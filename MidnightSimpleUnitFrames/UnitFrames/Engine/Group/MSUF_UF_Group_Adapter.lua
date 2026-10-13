@@ -887,9 +887,9 @@ function GF.ScanHeader(key, kind)
   local found = false
   local auras = MSUF.MSUF_Auras3
   local batchAuraTopology = auras
-    and type(auras._BeginDirectIdentityEventTopologyBatch) == "function"
-    and type(auras._EndDirectIdentityEventTopologyBatch) == "function"
-  if batchAuraTopology then auras._BeginDirectIdentityEventTopologyBatch() end
+    and type(auras.BeginTopologyBatch) == "function"
+    and type(auras.EndTopologyBatch) == "function"
+  if batchAuraTopology then auras.BeginTopologyBatch() end
   if UF.BeginEventRegistrationBatch then UF.BeginEventRegistrationBatch() end
 
   local function ScanPhysicalHeader(header)
@@ -903,7 +903,7 @@ function GF.ScanHeader(key, kind)
     ScanPhysicalHeader(GF.headers and GF.headers[key])
   end
 
-  if batchAuraTopology then auras._EndDirectIdentityEventTopologyBatch() end
+  if batchAuraTopology then auras.EndTopologyBatch() end
   if UF.EndEventRegistrationBatch then UF.EndEventRegistrationBatch() end
   return found
 end

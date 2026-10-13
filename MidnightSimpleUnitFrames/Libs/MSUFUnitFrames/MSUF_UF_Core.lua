@@ -2849,11 +2849,11 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
     -- One rebind re-registers every native owner of this frame. Batch the
     -- identity event topology the way GF.ScanHeader does so the shared driver
     -- and the four-token shards resync once per rebind, not once per owner.
-    local batchTopology = type(A3._BeginDirectIdentityEventTopologyBatch) == "function"
-      and type(A3._EndDirectIdentityEventTopologyBatch) == "function"
-    if batchTopology then A3._BeginDirectIdentityEventTopologyBatch() end
+    local batchTopology = type(A3.BeginTopologyBatch) == "function"
+      and type(A3.EndTopologyBatch) == "function"
+    if batchTopology then A3.BeginTopologyBatch() end
     A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
-    if batchTopology then A3._EndDirectIdentityEventTopologyBatch() end
+    if batchTopology then A3.EndTopologyBatch() end
   end
   return true
 end

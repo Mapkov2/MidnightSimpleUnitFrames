@@ -289,8 +289,9 @@ function Stage.BindSelection(st)
         elseif gf and gf.MarkAllDirty then
             gf.MarkAllDirty(gf.DIRTY_VISUAL or 0x02)
         end
-        if auraGroupMove and (not (a3 and type(a3.RequestScope) == "function")) and a3 and type(a3._NotifyAuraColdpathPreview) == "function" then
-            a3._NotifyAuraColdpathPreview("MSUF2_GROUP_PREVIEW_AURA_MOVE", refreshKind)
+        if auraGroupMove and not (a3 and type(a3.RequestScope) == "function")
+            and a3 and type(a3.NotifyPreview) == "function" then
+            a3.NotifyPreview("MSUF2_GROUP_PREVIEW_AURA_MOVE", refreshKind)
         end
         if not skipPreviewRefresh then
             if box.RequestRefresh then

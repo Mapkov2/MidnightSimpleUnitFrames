@@ -1,6 +1,7 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: ButtonVisuals.
--- One-time icon, text and duration-bar setup plus desired geometry. Native AuraButtons become restricted after initializeFrame; later changes use owner recreation.
+-- One-time icon, text and duration-bar setup plus desired geometry. Native AuraButtons become restricted after initializeFrame; later changes use owner
+-- recreation.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -11,21 +12,15 @@ local function PaintDurationBarColor(A3, Clamp01, bar, lane)
     local inputs = lane and lane._msufA3NativeVisualInputs
     if inputs then
         r, g, b = inputs.durationColor[1], inputs.durationColor[2], inputs.durationColor[3]
-    elseif type(A3.GetDurationBarColor) == "function" then
-        r, g, b = A3.GetDurationBarColor()
     else
-        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
-        local color = general and general.aurasCooldownTextSafeColor
-        if type(color) == "table" then
-            r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
-        elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
-            r, g, b = _G.MSUF_GetConfiguredFontColor()
-        end
+        r, g, b = A3.GetDurationBarColor()
     end
     if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
 end
 
 MSUF.Auras3RuntimeFactories.ButtonVisuals = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local ButtonVisuals = Runtime.ButtonVisuals
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_floor = math.floor
 local math_max = math.max
@@ -192,7 +187,7 @@ local function EnsureAuraTextOverlay(button, lane)
     return overlay
 end
 
-function A3._AuraCooldownAnchorAndLevel(button, lane)
+function ButtonVisuals.AuraCooldownAnchorAndLevel(button, lane)
     local anchor = button and (button._msufA3SpellIndicatorVisualHost or button)
     local level = anchor and anchor.GetFrameLevel and (anchor:GetFrameLevel() or 0) or 0
     if lane and lane.portraitOverlay == true then
@@ -433,7 +428,7 @@ end
 -- and reused.
 function PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
     if lane.showCooldownSwipe == true and not barOnly then
-        local cooldownAnchor, cooldownLevel = A3._AuraCooldownAnchorAndLevel(button, lane)
+        local cooldownAnchor, cooldownLevel = ButtonVisuals.AuraCooldownAnchorAndLevel(button, lane)
         local cooldown = button._msufA3Cooldown
         if not cooldown then
             local cd = PixelLayoutRegion(CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate"))
@@ -729,8 +724,10 @@ local function PrepareAuraButton(button, lane, index)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 
-return {
+local exports = {
     PrepareAuraButton = PrepareAuraButton,
     SyncContainerGeometry = SyncContainerGeometry,
 }
+for name, value in pairs(exports) do ButtonVisuals[name] = value end
+return ButtonVisuals
 end

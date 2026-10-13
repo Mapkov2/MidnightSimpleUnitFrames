@@ -5,6 +5,9 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Presence = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local Identity = Runtime.Identity
+local Presence = Runtime.Presence
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local pairs = pairs
 local type = type
@@ -22,7 +25,7 @@ local issecretvalue = dependencies.Platform.issecretvalue
 -- distance-independent negatives hide the output.  Native AuraContainers stay
 -- shown and enabled so Blizzard can continue delivering incremental UNIT_AURA
 -- updates while another party member is in a different instance.
-A3._ReadGroupAuraPresenceMapID = function(unit)
+Presence.ReadGroupAuraPresenceMapID = function(unit)
     local unitPosition = _G.UnitPosition
     if type(unitPosition) ~= "function" then return nil, false end
     local _, _, _, mapID = unitPosition(unit)
@@ -32,7 +35,7 @@ A3._ReadGroupAuraPresenceMapID = function(unit)
     return mapID, true
 end
 
-A3._ApplyGroupAuraPresenceFrame = function(frame, present, unit, revision)
+Presence.ApplyGroupAuraPresenceFrame = function(frame, present, unit, revision)
     if not IsLiveGroupAuraFrame(frame) or type(present) ~= "boolean" then return false end
     frame._msufA3GroupAuraPresenceVisible = present
     frame._msufA3GroupAuraPresenceUnit = unit
@@ -50,13 +53,13 @@ A3._ApplyGroupAuraPresenceFrame = function(frame, present, unit, revision)
     return any
 end
 
-A3._ApplyGroupAuraPresenceContainer = function(container, present, assistState)
+Presence.ApplyGroupAuraPresenceContainer = function(container, present, assistState)
     if not container or type(present) ~= "boolean" then return false end
     local outputVisible = present
-    if outputVisible and A3._ContainerOwnsGroupAuraAssistGate(container) then
+    if outputVisible and Identity.ContainerOwnsGroupAuraAssistGate(container) then
         outputVisible = assistState ~= nil and assistState.assistKnown == true
             and assistState.dirty ~= true
-            and A3._GroupAuraAssistOwnerVisible(container, assistState.canAssist)
+            and Identity.GroupAuraAssistOwnerVisible(container, assistState.canAssist)
     end
     local config = container._msufA3NativeLaneConfig
     local trueAlpha = container._msufA3GroupSlotsRoot == true
@@ -64,7 +67,7 @@ A3._ApplyGroupAuraPresenceContainer = function(container, present, assistState)
     return SetAssistAlpha(container, outputVisible == true, trueAlpha)
 end
 
-A3._ApplyGroupAuraPresenceStateToUnit = function(unit, present, revision)
+Presence.ApplyGroupAuraPresenceStateToUnit = function(unit, present, revision)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers or type(present) ~= "boolean" then return false end
@@ -75,25 +78,25 @@ A3._ApplyGroupAuraPresenceStateToUnit = function(unit, present, revision)
         if IsLiveGroupAuraFrame(parentFrame) then
             if parents[parentFrame] ~= true then
                 parents[parentFrame] = true
-                any = A3._ApplyGroupAuraPresenceFrame(
+                any = Presence.ApplyGroupAuraPresenceFrame(
                     parentFrame, present, unit, revision) or any
             end
-            any = A3._ApplyGroupAuraPresenceContainer(
+            any = Presence.ApplyGroupAuraPresenceContainer(
                 container, present, assistState) or any
         end
     end
     return any
 end
 
-A3._GroupAuraPresenceUnitHasOwners = function(unit)
+Presence.GroupAuraPresenceUnitHasOwners = function(unit)
     local counts = A3._directIdentityGroupOwnerCounts
     return counts ~= nil and (counts[unit] or 0) > 0
 end
 
-A3._EnsureGroupAuraPresenceState = function(unit, allowUnregistered)
+Presence.EnsureGroupAuraPresenceState = function(unit, allowUnregistered)
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return nil end
-    if unit ~= "player" and not A3._IsGroupUnitToken(unit) then return nil end
-    if allowUnregistered ~= true and not A3._GroupAuraPresenceUnitHasOwners(unit) then
+    if unit ~= "player" and not Identity.IsGroupUnitToken(unit) then return nil end
+    if allowUnregistered ~= true and not Presence.GroupAuraPresenceUnitHasOwners(unit) then
         local states = A3._groupAuraPresenceState
         if states then states[unit] = nil end
         return nil
@@ -117,7 +120,7 @@ local function GroupAuraPresenceDerivedValue(state)
         or state.otherParty == true or state.offline == true)
 end
 
-A3._CommitGroupAuraPresenceState = function(unit, state, forceApply)
+Presence.CommitGroupAuraPresenceState = function(unit, state, forceApply)
     if not state then return false end
     local hadState = state.initialized == true
     local previous = state.present ~= false
@@ -127,7 +130,7 @@ A3._CommitGroupAuraPresenceState = function(unit, state, forceApply)
     local changed = hadState ~= true or previous ~= present
     if changed then state.revision = (state.revision or 0) + 1 end
     if changed or forceApply == true then
-        return A3._ApplyGroupAuraPresenceStateToUnit(unit, present, state.revision)
+        return Presence.ApplyGroupAuraPresenceStateToUnit(unit, present, state.revision)
     end
     return true
 end
@@ -135,20 +138,20 @@ end
 -- Token generations must remain live in combat so a reused raidN/partyN slot
 -- can never inherit the previous member's absence latches.  This path reads no
 -- map, phase, other-party, or connection state.
-A3._UpdateGroupAuraPresenceIdentityState = function(unit, forceApply, allowUnregistered)
-    local state = A3._EnsureGroupAuraPresenceState(unit, allowUnregistered)
+Presence.UpdateGroupAuraPresenceIdentityState = function(unit, forceApply, allowUnregistered)
+    local state = Presence.EnsureGroupAuraPresenceState(unit, allowUnregistered)
     if not state then return false end
     if unit == "player" then
         state.guid = nil
         state.guidKnown = true
         state.awaitingFullPresence = nil
-        return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+        return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
     end
     local unitGUID = _G.UnitGUID
-    if type(unitGUID) ~= "function" then return A3._CommitGroupAuraPresenceState(unit, state, forceApply) end
+    if type(unitGUID) ~= "function" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     local guid = unitGUID(unit)
     if issecretvalue(guid) == true or type(guid) ~= "string" then
-        return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+        return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
     end
     local hadIdentity = state.guidKnown == true
     local identityChanged = state.initialized == true
@@ -166,14 +169,14 @@ A3._UpdateGroupAuraPresenceIdentityState = function(unit, forceApply, allowUnreg
         -- validation is merged separately and runs only OOC.
         state.awaitingFullPresence = nil
     end
-    return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+    return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
 end
 
-A3._UpdateAllGroupAuraPresenceIdentityStates = function()
+Presence.UpdateAllGroupAuraPresenceIdentityStates = function()
     local any = false
     for unit, count in pairs(A3._directIdentityGroupOwnerCounts or {}) do
         if count > 0 then
-            any = A3._UpdateGroupAuraPresenceIdentityState(unit, false) or any
+            any = Presence.UpdateGroupAuraPresenceIdentityState(unit, false) or any
         end
     end
     return any
@@ -182,10 +185,10 @@ end
 -- Phase and connection are combat-relevant hard states.  Their narrow readers
 -- intentionally do not consult UnitPosition or UnitInOtherParty; those 6.07
 -- presence checks are owned exclusively by the OOC full reconciliation below.
-A3._UpdateGroupAuraPresencePhaseState = function(unit, forceApply, allowUnregistered)
-    local state = A3._EnsureGroupAuraPresenceState(unit, allowUnregistered)
+Presence.UpdateGroupAuraPresencePhaseState = function(unit, forceApply, allowUnregistered)
+    local state = Presence.EnsureGroupAuraPresenceState(unit, allowUnregistered)
     if not state then return false end
-    if unit == "player" then return A3._CommitGroupAuraPresenceState(unit, state, forceApply) end
+    if unit == "player" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     -- UnitPhaseReason is SecretWhenUnitIdentityRestricted: assign its result
     -- first, and test it only after issecretvalue says it is plain.
     local unitPhaseReason = _G.UnitPhaseReason
@@ -194,24 +197,24 @@ A3._UpdateGroupAuraPresencePhaseState = function(unit, forceApply, allowUnregist
     if issecretvalue(phaseReason) ~= true then
         state.phaseAbsent = phaseReason ~= nil or nil
     end
-    return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+    return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
 end
 
-A3._UpdateAllGroupAuraPresencePhaseStates = function()
+Presence.UpdateAllGroupAuraPresencePhaseStates = function()
     local any = false
     for unit, count in pairs(A3._directIdentityGroupOwnerCounts or {}) do
         if count > 0 then
-            any = A3._UpdateGroupAuraPresencePhaseState(unit, false) or any
+            any = Presence.UpdateGroupAuraPresencePhaseState(unit, false) or any
         end
     end
     return any
 end
 
-A3._UpdateGroupAuraPresenceConnectionState = function(
+Presence.UpdateGroupAuraPresenceConnectionState = function(
     unit, connectedPayload, forceApply, allowUnregistered)
-    local state = A3._EnsureGroupAuraPresenceState(unit, allowUnregistered)
+    local state = Presence.EnsureGroupAuraPresenceState(unit, allowUnregistered)
     if not state then return false end
-    if unit == "player" then return A3._CommitGroupAuraPresenceState(unit, state, forceApply) end
+    if unit == "player" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     local connected = connectedPayload
     if issecretvalue(connected) == true or type(connected) ~= "boolean" then
         local unitIsConnected = _G.UnitIsConnected
@@ -220,12 +223,12 @@ A3._UpdateGroupAuraPresenceConnectionState = function(
     if issecretvalue(connected) ~= true and type(connected) == "boolean" then
         state.offline = connected == false or nil
     end
-    return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+    return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
 end
 
-A3._UpdateGroupAuraPresenceState = function(
+Presence.UpdateGroupAuraPresenceState = function(
     unit, checkIdentity, forceApply, playerMapID, playerMapKnown, allowUnregistered)
-    local state = A3._EnsureGroupAuraPresenceState(unit, allowUnregistered)
+    local state = Presence.EnsureGroupAuraPresenceState(unit, allowUnregistered)
     if not state then return false end
     -- Full presence is a cold OOC operation.  Seed/rebind/world callbacks can
     -- reach this function during combat; retain/apply the cached gate, update
@@ -233,20 +236,20 @@ A3._UpdateGroupAuraPresenceState = function(
     if InCombat() then
         local needsInitialFullPresence = state.initialized ~= true
         if checkIdentity == true or needsInitialFullPresence then
-            A3._UpdateGroupAuraPresenceIdentityState(unit, false, allowUnregistered)
+            Presence.UpdateGroupAuraPresenceIdentityState(unit, false, allowUnregistered)
             state = A3._groupAuraPresenceState and A3._groupAuraPresenceState[unit] or state
         end
         if forceApply == true then
-            A3._ApplyGroupAuraPresenceStateToUnit(unit, state.present ~= false, state.revision or 0)
+            Presence.ApplyGroupAuraPresenceStateToUnit(unit, state.present ~= false, state.revision or 0)
         end
-        if type(A3._ScheduleGroupAuraPresenceRefreshAll) == "function" then
-            A3._ScheduleGroupAuraPresenceRefreshAll(checkIdentity, false)
+        if type(Presence.ScheduleGroupAuraPresenceRefreshAll) == "function" then
+            Presence.ScheduleGroupAuraPresenceRefreshAll(checkIdentity, false)
         end
         return true
     end
 
     if checkIdentity == true or state.initialized ~= true then
-        A3._UpdateGroupAuraPresenceIdentityState(unit, false, allowUnregistered)
+        Presence.UpdateGroupAuraPresenceIdentityState(unit, false, allowUnregistered)
         state = A3._groupAuraPresenceState and A3._groupAuraPresenceState[unit] or state
     end
     if unit == "player" then
@@ -258,9 +261,9 @@ A3._UpdateGroupAuraPresenceState = function(
         state.awaitingFullPresence = nil
     else
         if playerMapKnown == nil then
-            playerMapID, playerMapKnown = A3._ReadGroupAuraPresenceMapID("player")
+            playerMapID, playerMapKnown = Presence.ReadGroupAuraPresenceMapID("player")
         end
-        local unitMapID, unitMapKnown = A3._ReadGroupAuraPresenceMapID(unit)
+        local unitMapID, unitMapKnown = Presence.ReadGroupAuraPresenceMapID(unit)
         state.mapMismatch = playerMapKnown == true and unitMapKnown == true
             and playerMapID ~= unitMapID or nil
 
@@ -285,17 +288,17 @@ A3._UpdateGroupAuraPresenceState = function(
             and type(connected) == "boolean" and connected == false or nil
         state.awaitingFullPresence = nil
     end
-    return A3._CommitGroupAuraPresenceState(unit, state, forceApply)
+    return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
 end
 
-A3._SetGroupAuraPresenceDisabled = function(unit, disabled, deferReveal)
-    if issecretvalue(unit) == true or not A3._IsGroupUnitToken(unit)
-        or (not A3._GroupAuraPresenceUnitHasOwners(unit)
+Presence.SetGroupAuraPresenceDisabled = function(unit, disabled, deferReveal)
+    if issecretvalue(unit) == true or not Identity.IsGroupUnitToken(unit)
+        or (not Presence.GroupAuraPresenceUnitHasOwners(unit)
             and (A3._directIdentityGroupOwnerCount or 0) <= 0) then return false end
     -- PARTY_MEMBER_DISABLE can precede the secure child's final registration.
     -- Keep one bounded token hint without invoking the cold presence reader;
     -- the later owner seed consumes this state immediately.
-    local state = A3._EnsureGroupAuraPresenceState(unit, true)
+    local state = Presence.EnsureGroupAuraPresenceState(unit, true)
     if not state then return false end
     state.memberEventRevision = (state.memberEventRevision or 0) + 1
     local wasDisabled = state.disabled == true
@@ -308,21 +311,21 @@ A3._SetGroupAuraPresenceDisabled = function(unit, disabled, deferReveal)
         -- this instance. Keep the previous fail-closed output until the
         -- coalesced reader has refreshed map, phase and connection state.
         state.awaitingFullPresence = true
-        A3._CommitGroupAuraPresenceState(unit, state, false)
+        Presence.CommitGroupAuraPresenceState(unit, state, false)
         return true
     end
-    A3._CommitGroupAuraPresenceState(unit, state, false)
+    Presence.CommitGroupAuraPresenceState(unit, state, false)
     -- A valid directional hint may precede the owner's secure-header
     -- registration, so retaining state counts as success without an alpha sink.
     return true
 end
 
-A3._InvalidateSingleGroupAuraPresenceDisabled = function()
+Presence.InvalidateSingleGroupAuraPresenceDisabled = function()
     local states = A3._groupAuraPresenceState
     if not states then return false end
     local candidate
     for unit, state in pairs(states) do
-        if state and state.disabled == true and A3._GroupAuraPresenceUnitHasOwners(unit) then
+        if state and state.disabled == true and Presence.GroupAuraPresenceUnitHasOwners(unit) then
             if candidate ~= nil then
                 -- A restricted ENABLE payload cannot identify which of several
                 -- absent members returned. Keep all fail-closed rather than
@@ -337,11 +340,11 @@ A3._InvalidateSingleGroupAuraPresenceDisabled = function()
     return true
 end
 
-A3._CaptureSingleGroupAuraPresenceDisabled = function()
+Presence.CaptureSingleGroupAuraPresenceDisabled = function()
     local states = A3._groupAuraPresenceState
     local candidate, revision, candidateState
     for unit, state in pairs(states or {}) do
-        if state and state.disabled == true and A3._GroupAuraPresenceUnitHasOwners(unit) then
+        if state and state.disabled == true and Presence.GroupAuraPresenceUnitHasOwners(unit) then
             if candidate ~= nil then
                 candidate = nil
                 break
@@ -357,7 +360,7 @@ A3._CaptureSingleGroupAuraPresenceDisabled = function()
     return candidate ~= nil
 end
 
-A3._InvalidateCapturedGroupAuraPresenceDisabled = function()
+Presence.InvalidateCapturedGroupAuraPresenceDisabled = function()
     local unit = A3._groupAuraPresenceRefreshAllEnableCandidate
     local revision = A3._groupAuraPresenceRefreshAllEnableCandidateRevision
     local capturedState = A3._groupAuraPresenceRefreshAllEnableCandidateState
@@ -374,7 +377,7 @@ A3._InvalidateCapturedGroupAuraPresenceDisabled = function()
     return true
 end
 
-A3._FlushScheduledGroupAuraPresenceRefreshAll = function()
+Presence.FlushScheduledGroupAuraPresenceRefreshAll = function()
     A3._groupAuraPresenceRefreshAllTimerPending = nil
     if A3._groupAuraPresenceRefreshAllPending ~= true then return false end
     -- A timer queued just before the pull must not leak cold map/instance reads
@@ -388,68 +391,68 @@ A3._FlushScheduledGroupAuraPresenceRefreshAll = function()
     A3._groupAuraPresenceRefreshAllCheckIdentity = nil
     A3._groupAuraPresenceRefreshAllCheckAssist = nil
     if invalidateSingleDisabled then
-        A3._InvalidateCapturedGroupAuraPresenceDisabled()
+        Presence.InvalidateCapturedGroupAuraPresenceDisabled()
     end
-    local playerMapID, playerMapKnown = A3._ReadGroupAuraPresenceMapID("player")
+    local playerMapID, playerMapKnown = Presence.ReadGroupAuraPresenceMapID("player")
     local any = false
     for unit, count in pairs(A3._directIdentityGroupOwnerCounts or {}) do
         if count > 0 then
-            any = A3._UpdateGroupAuraPresenceState(
+            any = Presence.UpdateGroupAuraPresenceState(
                 unit, checkIdentity, false, playerMapID, playerMapKnown) or any
         end
     end
     if checkAssist then
-        any = A3._UpdateAllGroupAuraAssistStates(checkIdentity, false) or any
+        any = Identity.UpdateAllGroupAuraAssistStates(checkIdentity, false) or any
     end
     return any
 end
 
-A3._QueueGroupAuraPresenceRefreshAllFlush = function()
+Presence.QueueGroupAuraPresenceRefreshAllFlush = function()
     if A3._groupAuraPresenceRefreshAllPending ~= true
         or A3._groupAuraPresenceRefreshAllTimerPending == true
         or InCombat() then return false end
     A3._groupAuraPresenceRefreshAllTimerPending = true
     if RunNextFrame then
-        RunNextFrame(A3._FlushScheduledGroupAuraPresenceRefreshAll)
+        RunNextFrame(Presence.FlushScheduledGroupAuraPresenceRefreshAll)
     elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, A3._FlushScheduledGroupAuraPresenceRefreshAll)
+        C_Timer.After(0, Presence.FlushScheduledGroupAuraPresenceRefreshAll)
     else
-        A3._FlushScheduledGroupAuraPresenceRefreshAll()
+        Presence.FlushScheduledGroupAuraPresenceRefreshAll()
     end
     return true
 end
 
-A3._ScheduleGroupAuraPresenceRefreshAll = function(checkIdentity, checkAssist)
+Presence.ScheduleGroupAuraPresenceRefreshAll = function(checkIdentity, checkAssist)
     if (A3._directIdentityGroupOwnerCount or 0) <= 0 then return false end
     if checkIdentity == true then A3._groupAuraPresenceRefreshAllCheckIdentity = true end
     if checkAssist == true then A3._groupAuraPresenceRefreshAllCheckAssist = true end
     A3._groupAuraPresenceRefreshAllPending = true
-    A3._QueueGroupAuraPresenceRefreshAllFlush()
+    Presence.QueueGroupAuraPresenceRefreshAllFlush()
     return true
 end
 
-A3._SeedGroupAuraPresenceGate = function(frame, fallbackUnit, cachedOnly)
+Presence.SeedGroupAuraPresenceGate = function(frame, fallbackUnit, cachedOnly)
     if not IsLiveGroupAuraFrame(frame) then return false end
     local unit = frame.MSUFUnitKey
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then
         unit = fallbackUnit
     end
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return false end
-    if unit ~= "player" and not A3._IsGroupUnitToken(unit) then return false end
+    if unit ~= "player" and not Identity.IsGroupUnitToken(unit) then return false end
     local state = A3._groupAuraPresenceState and A3._groupAuraPresenceState[unit]
     if cachedOnly ~= true or not (state and state.initialized == true) then
-        A3._UpdateGroupAuraPresenceState(unit, true, false, nil, nil, true)
+        Presence.UpdateGroupAuraPresenceState(unit, true, false, nil, nil, true)
         state = A3._groupAuraPresenceState and A3._groupAuraPresenceState[unit]
     end
     local present = not state or state.present ~= false
     local revision = state and state.revision or 0
-    local any = A3._ApplyGroupAuraPresenceFrame(frame, present, unit, revision)
+    local any = Presence.ApplyGroupAuraPresenceFrame(frame, present, unit, revision)
     -- The primary SecureGroupHeader AuraContainer can be a direct child of the
     -- member frame instead of frame.Auras. Re-apply the cached state to every
     -- registered owner after config/rebind so that container cannot bypass the
     -- root gate during its first visible frame.
-    if A3._GroupAuraPresenceUnitHasOwners(unit) then
-        any = A3._ApplyGroupAuraPresenceStateToUnit(unit, present, revision) or any
+    if Presence.GroupAuraPresenceUnitHasOwners(unit) then
+        any = Presence.ApplyGroupAuraPresenceStateToUnit(unit, present, revision) or any
     end
     return any
 end
@@ -479,9 +482,11 @@ local function SyncCuratedBigDefensiveContainer(container)
     end
     return changed
 end
-A3._SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer
+Presence.SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer
 
-return {
+local exports = {
     SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer,
 }
+for name, value in pairs(exports) do Presence[name] = value end
+return Presence
 end

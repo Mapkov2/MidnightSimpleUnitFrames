@@ -5,15 +5,12 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.ConfigValues = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
-local math_floor = math.floor
-local math_max = math.max
-local math_min = math.min
-local next = next
-local pairs = pairs
-local table_concat = table.concat
+local ConfigValues = A3.Runtime.ConfigValues
+local math_floor, math_max = math.floor, math.max
+local math_min, next = math.min, next
+local pairs, table_concat = pairs, table.concat
 local table_sort = table.sort
-local tonumber = tonumber
-local tostring = tostring
+local tonumber, tostring = tonumber, tostring
 local type = type
 local AURA_BORDER_OPTIONS = dependencies.Appearance.AURA_BORDER_OPTIONS
 local AURA_ICON_BASE_OFFSET = dependencies.Platform.AURA_ICON_BASE_OFFSET
@@ -612,9 +609,9 @@ local function EffectiveLaneFilters(lane)
         lane and lane.candidateFilters,
         lane and lane.candidateFilterSignature
 end
-A3._EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
+ConfigValues.EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
 
-local function FinalizeLane(lane, appearanceKind)
+local function FinalizeLane(lane, appearanceKind, sharedSignatures)
     if lane then
         ConfigureCuratedBigDefensiveLane(lane)
         lane.appearanceKind = NormalizeAppearanceKind(appearanceKind or lane.appearanceKind or lane.kind)
@@ -627,7 +624,7 @@ local function FinalizeLane(lane, appearanceKind)
         lane.auraTooltipAnchor = (general and general.unitTooltipAnchor == "CURSOR")
             and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
-        lane._msufA3StructuralSignature, lane._msufA3LayoutSignature = LaneShapeSignatures(lane)
+        lane._msufA3StructuralSignature, lane._msufA3LayoutSignature = LaneShapeSignatures(lane, sharedSignatures)
     end
     return lane
 end
@@ -694,7 +691,7 @@ local function DispelSensorNativeFilter(trigger)
     return "HARMFUL|RAID", 1
 end
 
-return {
+local exports = {
     AddHidePermanentCandidateFilter = AddHidePermanentCandidateFilter,
     AddMaxDurationCandidateFilter = AddMaxDurationCandidateFilter,
     AddNonPlayerCandidateFilter = AddNonPlayerCandidateFilter,
@@ -741,4 +738,6 @@ return {
     UnitAuraIconsEnabled = UnitAuraIconsEnabled,
     UnitCanAssistForAuraIdentity = UnitCanAssistForAuraIdentity,
 }
+for name, value in pairs(exports) do ConfigValues[name] = value end
+return ConfigValues
 end

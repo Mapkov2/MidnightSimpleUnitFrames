@@ -5,6 +5,8 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.CustomConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+local Runtime = A3.Runtime
+local CustomConfig = Runtime.CustomConfig
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_floor = math.floor
 local math_max = math.max
@@ -109,7 +111,7 @@ local function CustomSpellIDHash(value)
     return count > 0 and out or nil
 end
 
-function A3._CustomPrioritySpellIDs(value, allowed)
+function CustomConfig.CustomPrioritySpellIDs(value, allowed)
     if type(allowed) ~= "table" then return nil end
     local ordered, seen = {}, {}
     local function Add(raw)
@@ -139,11 +141,11 @@ function A3._CustomPrioritySpellIDs(value, allowed)
     return #ordered > 0 and ordered or nil
 end
 
-A3._PlayerDefensiveTrackedSpellIDHash = function(entry)
+CustomConfig.PlayerDefensiveTrackedSpellIDHash = function(entry)
     if type(entry) ~= "table" then return nil end
     local disabled = CustomSpellIDHash(entry.disabledPredefinedSpellIDs)
     local combined, count = {}, 0
-    for spellID in pairs(A3._PlayerDefensiveSpellIDHash()) do
+    for spellID in pairs(CustomConfig.PlayerDefensiveSpellIDHash()) do
         if not (disabled and disabled[spellID] == true) then
             combined[spellID] = true
             count = count + 1
@@ -159,13 +161,13 @@ A3._PlayerDefensiveTrackedSpellIDHash = function(entry)
     return count > 0 and combined or nil
 end
 
-A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
+CustomConfig.AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
     if type(entry) ~= "table" or entry.autoBlacklistPlayerBuffs == false
         or entry.enabled ~= true
     then
         return candidateFilters, candidateFilterSignature
     end
-    tracked = tracked or A3._PlayerDefensiveTrackedSpellIDHash(entry)
+    tracked = tracked or CustomConfig.PlayerDefensiveTrackedSpellIDHash(entry)
     if not tracked then return candidateFilters, candidateFilterSignature end
     candidateFilters = candidateFilters or {}
     local excluded = candidateFilters.excludeSpellIDs
@@ -194,7 +196,7 @@ A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilter
     return candidateFilters, candidateFilterSignature
 end
 
-A3._AddTargetDotAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
+CustomConfig.AddTargetDotAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
     if type(entry) ~= "table" or entry.autoBlacklistDebuffs == false
         or entry.enabled ~= true or type(tracked) ~= "table"
     then
@@ -270,7 +272,7 @@ local function ResolveLaneParentFrame(parentFrame, lane)
     return parentFrame
 end
 
-A3._PlayerDefensiveSpellIDHash = function()
+CustomConfig.PlayerDefensiveSpellIDHash = function()
     local playerClass
     if type(UnitClass) == "function" then
         local _
@@ -345,7 +347,7 @@ end
 
 -- Shared portrait-lane compilation is kept on the established A3 bridge
 -- so player-defensive and target-dot callers retain the same contract.
-function A3._CompilePortraitAuraLane(lane, frameSpec, entry, kind, rootKey, scope, exactPortraitRect)
+function CustomConfig.CompilePortraitAuraLane(lane, frameSpec, entry, kind, rootKey, scope, exactPortraitRect)
     local portrait = frameSpec and frameSpec.portrait
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
@@ -427,14 +429,14 @@ function A3._CompilePortraitAuraLane(lane, frameSpec, entry, kind, rootKey, scop
     return FinalizeLane(out, lane.appearanceKind)
 end
 
-A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
-    return A3._CompilePortraitAuraLane(
+CustomConfig.CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
+    return CustomConfig.CompilePortraitAuraLane(
         lane, frameSpec, entry, "defensivePortrait", "DefensivePortrait", "player", false)
 end
 
-A3._CompileTargetDotPortraitLane = function(lane, frameSpec, entry, unit)
+CustomConfig.CompileTargetDotPortraitLane = function(lane, frameSpec, entry, unit)
     if not UnitSupportsTargetDots(unit) then return nil end
-    return A3._CompilePortraitAuraLane(
+    return CustomConfig.CompilePortraitAuraLane(
         lane, frameSpec, entry, "targetDotPortrait", "TargetDotPortrait", unit, true)
 end
 
@@ -461,7 +463,7 @@ local function CopySpecialStyleValue(value)
     for key, child in pairs(value) do out[key] = CopySpecialStyleValue(child) end
     return out
 end
-A3._ResolveSpecialCustomStyle = function(auras, unit, index, entry)
+CustomConfig.ResolveSpecialCustomStyle = function(auras, unit, index, entry)
     local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
     local frame = type(entry) == "table" and type(entry.frame) == "table" and entry.frame or nil
     if index ~= A3.PRESET_CUSTOM_CONTAINER_INDEX or type(entry) ~= "table" or entry._msufA3LocalStyleFromShared_v1 == true then
@@ -491,7 +493,7 @@ end
 --- restriction, which is exactly why the placeholder can be drawn at all.
 --- Item art for a Buff Reminder placeholder. Like spell art this is plain
 --- catalog data, so it stays readable under every secret restriction.
-function A3._ReminderItemIcon(itemID)
+function CustomConfig.ReminderItemIcon(itemID)
     itemID = tonumber(itemID)
     if not itemID then return nil end
     local CI = _G.C_Item
@@ -501,7 +503,7 @@ function A3._ReminderItemIcon(itemID)
     return nil
 end
 
-function A3._ReminderSpellIcon(spellID)
+function CustomConfig.ReminderSpellIcon(spellID)
     spellID = tonumber(spellID)
     if not spellID then return nil end
     local CS = _G.C_Spell
@@ -521,7 +523,7 @@ end
 --- a Mage sees Arcane Intellect, a Rogue sees the poisons, from the same
 --- profile. Evaluated on the compile path only; the watcher below re-runs it
 --- when the set of known spells actually changes.
-function A3._ReminderSpellIsSelfCastable(spellID)
+function CustomConfig.ReminderSpellIsSelfCastable(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
     local book = _G.C_SpellBook
@@ -538,7 +540,7 @@ A3._reminderSelfCastState = A3._reminderSelfCastState or {}
 --- spellbook cannot change during combat, so an in-combat event is never a
 --- real change: the entire in-combat cost of this feature is the lockdown
 --- check below, and the recheck is handed to PLAYER_REGEN_ENABLED.
-function A3._EnsureReminderSelfCastWatch()
+function CustomConfig.EnsureReminderSelfCastWatch()
     if A3._reminderSelfCastWatch then return A3._reminderSelfCastWatch end
     local frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", function(self)
@@ -550,7 +552,7 @@ function A3._EnsureReminderSelfCastWatch()
         local state = A3._reminderSelfCastState
         local changed = false
         for spellID, known in pairs(state) do
-            local now = A3._ReminderSpellIsSelfCastable(spellID)
+            local now = CustomConfig.ReminderSpellIsSelfCastable(spellID)
             if now ~= known then
                 state[spellID] = now
                 changed = true
@@ -590,13 +592,13 @@ A3.REMINDER_ENCHANT_SLOTS = A3.REMINDER_ENCHANT_SLOTS or {
 --- active auras together, which would park a running aura on a different
 --- spell's placeholder. Slot order follows the whitelist order the user drags
 --- in the menu, independently of the container's sort method.
-function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
+function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, filters)
     if type(lane) ~= "table" or type(entry) ~= "table" or type(placed) ~= "table" then return nil end
     if placed.reminderEnabled ~= true then return nil end
     -- Aliases select the same configured spell; they never create another
     -- placeholder, click binding, self-castability test or priority position.
     local allowed = lane.sourceSpellIDs
-    local ordered = A3._CustomPrioritySpellIDs(entry.prioritySpellIDs, allowed)
+    local ordered = CustomConfig.CustomPrioritySpellIDs(entry.prioritySpellIDs, allowed)
     local count = ordered and math_min(#ordered, Round(lane.max or 0)) or 0
     -- An enchant-only reminder is legitimate: oils need no whitelisted aura.
     local hasEnchant = lane.unit == "player" and Round(lane.max or 0) > 0
@@ -644,9 +646,9 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
         -- plain spell rows are filtered by "what I can apply myself".
         local visible = true
         if selfCastOnly and not boundItemID and not (keepSpells and keepSpells[spellID] == true) then
-            visible = A3._ReminderSpellIsSelfCastable(spellID)
+            visible = CustomConfig.ReminderSpellIsSelfCastable(spellID)
             A3._reminderSelfCastState[spellID] = visible
-            A3._EnsureReminderSelfCastWatch()
+            CustomConfig.EnsureReminderSelfCastWatch()
         end
         if visible then
             placedCount = placedCount + 1
@@ -659,7 +661,7 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                 includeSpellIDs = { [spellID] = true },
                 nativeFilter = lane.nativeFilter,
                 hidePermanent = hidePermanent,
-                icon = boundItemID and A3._ReminderItemIcon(boundItemID) or A3._ReminderSpellIcon(spellID),
+                icon = boundItemID and CustomConfig.ReminderItemIcon(boundItemID) or CustomConfig.ReminderSpellIcon(spellID),
                 showWhenMissing = true,
                 reminderAlpha = alpha,
                 reminderDesaturate = desaturate,
@@ -716,7 +718,7 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                     enchantSlot = spec.token,
                     enchantInventorySlot = spec.inventorySlot,
                     enchantDurationSeconds = durationSeconds,
-                    icon = A3._ReminderItemIcon(itemID),
+                    icon = CustomConfig.ReminderItemIcon(itemID),
                     showWhenMissing = true,
                     reminderAlpha = alpha,
                     reminderDesaturate = desaturate,
@@ -771,7 +773,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local portraitRequested = (playerDefensives or (targetDots and index == A3.PRESET_CUSTOM_CONTAINER_INDEX))
         and entry.portraitIcon == true
     if playerDefensives then
-        includeSpellIDs = A3._PlayerDefensiveTrackedSpellIDHash(entry)
+        includeSpellIDs = CustomConfig.PlayerDefensiveTrackedSpellIDHash(entry)
     end
     if targetDots and includeSpellIDs then
         local allowed, customAllowed, count = TargetDotSpellIDHash(), CustomSpellIDHash(entry.customSpellIDs), 0
@@ -798,7 +800,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     A3.CompileCustomAuraAliases(sourceSpellIDs)
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
-    local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
+    local placed, styleFrame = CustomConfig.ResolveSpecialCustomStyle(auras, unit, index, entry)
     -- Player Defensive Buffs combines a curated class list with custom IDs and
     -- therefore keeps ordinary AuraKit sorting. Every exact-ID custom lane,
     -- including Dots on target, can use the same native one-group-per-spell
@@ -806,7 +808,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local customPriority = not playerDefensives
         and tostring(placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
     local customPrioritySpellIDs = customPriority
-        and A3._CustomPrioritySpellIDs(entry.prioritySpellIDs, includeSpellIDs) or nil
+        and CustomConfig.CustomPrioritySpellIDs(entry.prioritySpellIDs, includeSpellIDs) or nil
     lanePadding = ClampNumber((type(placed) == "table" and placed.stylePadding)
         or layoutPlaced.stylePadding, 0, 0, 16)
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
@@ -922,14 +924,14 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     -- (Player Defensives / Dots on target) keeps its fixed preset product.
     local reminderItems
     if not playerDefensives and not targetDots then
-        reminderItems = A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
+        reminderItems = CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, filters)
     end
     local portraitLane
     if portraitRequested then
         if playerDefensives then
-            portraitLane = A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry)
+            portraitLane = CustomConfig.CompilePlayerDefensivePortraitLane(lane, frameSpec, entry)
         elseif targetDots then
-            portraitLane = A3._CompileTargetDotPortraitLane(lane, frameSpec, entry, unit)
+            portraitLane = CustomConfig.CompileTargetDotPortraitLane(lane, frameSpec, entry, unit)
         end
     end
     -- If the visible portrait is disabled and its position-only option is also
@@ -990,7 +992,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
     end
     return lanes, effects, targetDotEffects
 end
-A3._CompileUnitCustomContainers = CompileUnitCustomContainers
+CustomConfig.CompileUnitCustomContainers = CompileUnitCustomContainers
 
 local function CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     local items = {}
@@ -1029,7 +1031,7 @@ local function CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     })
 end
 
-return {
+local exports = {
     CompileUnitCustomContainers = CompileUnitCustomContainers,
     CompileUnitCustomDisplays = CompileUnitCustomDisplays,
     CompileUnitLaneEffects = CompileUnitLaneEffects,
@@ -1039,4 +1041,6 @@ return {
     ManagedLaneFrameLevel = ManagedLaneFrameLevel,
     ResolveLaneParentFrame = ResolveLaneParentFrame,
 }
+for name, value in pairs(exports) do CustomConfig[name] = value end
+return CustomConfig
 end

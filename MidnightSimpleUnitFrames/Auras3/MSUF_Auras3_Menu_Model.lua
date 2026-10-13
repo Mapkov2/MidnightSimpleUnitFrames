@@ -24,7 +24,7 @@ end
 -- XML loads factories first; composition has no runtime loadfile/require path.
 local Factories = assert(MSUF.Auras3MenuModelFactories, "Auras3 menu factories must load before Menu_Model")
 local Schema = Factories.Schema(A3)
-local Common = Factories.Common(Schema)
+local Common = Factories.Common(Schema, A3)
 local Storage = Factories.Storage(A3, Model, Schema, Common, ExportPublic)
 local Presets = Factories.Presets(Model, Common)
 Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
@@ -239,16 +239,11 @@ function Model.Apply(unit, reason)
     elseif unit and NormalizeScope(unit) ~= "shared" then
         EachRuntimeUnit(unit, Refresh)
     else
-        Refresh("player")
-        Refresh("pet")
-        Refresh("target")
-        Refresh("focus")
-        for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end
-        for i = 1, #ARENA_UNITS do Refresh(ARENA_UNITS[i]) end
+        A3.ForEachRuntimeUnit("shared", Refresh)
         RefreshGroup("group")
     end
-    if type(A3._NotifyAuraColdpathPreview) == "function" then
-        A3._NotifyAuraColdpathPreview(reason, unit or normalizedScope)
+    if type(A3.NotifyPreview) == "function" then
+        A3.NotifyPreview(reason, unit or normalizedScope)
     elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
         _G.MSUF_UFPreview_RequestRefresh(reason)
     end

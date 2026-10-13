@@ -176,7 +176,7 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
     })
 end
 
-local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, shared)
+local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, shared, sharedSignatures)
     local spec = GROUP_LANE_SPECS[kind]
     if not (spec and type(source) == "table") then return nil end
     local candidateFilters, candidateFilterSignature
@@ -299,7 +299,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
         stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
-    }, sharedLane)
+    }, sharedLane, sharedSignatures)
 end
 
 return {

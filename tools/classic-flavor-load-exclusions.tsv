@@ -33,6 +33,8 @@ MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua	*	Retail 
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_GroupConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Identity.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityRefresh.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityTopology.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LaneConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
@@ -43,6 +45,7 @@ MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Schema.lua	*	Retail 
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Signatures.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Sort.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_UnitConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_WorldTransition.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	*	Evoker empowered-cast stages; Evokers and empowered casts exist only on Retail
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	*	Retail Astral Power prediction and eclipse colors; Mists Balance uses the SIGNED_CONTINUOUS route in Game/Mists/ClassPower.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_EbonMight.lua	*	Augmentation Evoker Ebon Might bar on the 12.1 CustomAuraContainer; no Classic client has Evokers

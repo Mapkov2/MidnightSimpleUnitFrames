@@ -251,23 +251,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         return ReadRGB(EnsureGeneralDB(), key, defaultR, defaultG, defaultB)
     end
 
-    -- One cold-path source of truth for the aura duration bar and every preview.
-    -- The Safe timer color is also the live duration-bar color; when it has not
-    -- been customized, it inherits the configured global font color just like the
-    -- cooldown formatter.
-    function Model.GetDurationBarColor()
-        local db = _G.MSUF_DB
-        local general = type(db) == "table" and db.general or nil
-        local color = general and general.aurasCooldownTextSafeColor
-        local r, g, b
-        if type(color) == "table" then
-            r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
-        elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
-            r, g, b = _G.MSUF_GetConfiguredFontColor()
-        end
-        return Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1)
-    end
-    A3.GetDurationBarColor = Model.GetDurationBarColor
+    Model.GetDurationBarColor = A3.GetDurationBarColor
 
     local function ReadKeyFromTables(layout, sharedLayout, key)
         if LAYOUT_KEYS[key] then

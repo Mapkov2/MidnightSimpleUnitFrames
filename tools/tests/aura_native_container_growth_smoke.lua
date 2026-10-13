@@ -192,6 +192,7 @@ for _, name in ipairs({ "DurationText", "Signatures", "OwnerConfig", "NativeCont
     assert(loadfile(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_" .. name .. ".lua"))("MidnightSimpleUnitFrames", MSUF)
 end
 local Factories = MSUF.Auras3RuntimeFactories
+dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
 
 local function ClampNumber(value, fallback, minValue, maxValue)
     value = tonumber(value) or fallback
@@ -500,7 +501,7 @@ do
     dependencies.Platform.InCombat=function()return combat end
     dependencies.Platform.AuraRuntimeCombatBlocked=function()return combat end
     dependencies.Platform.Round=function(n)return math.floor(n+0.5)end
-    dependencies.IdentityEvents={DrainDirectIdentityEventTopologyBatch=Noop}
+    dependencies.IdentityTopology={DrainDirectIdentityEventTopologyBatch=Noop}
     dependencies.UnitConfig={InvalidateUnitRuntimeConfig=function(unit)return unit end}
     MSUF.UF.RegisterElement=Noop
     for _,name in ipairs({"DurationText","Facade"})do

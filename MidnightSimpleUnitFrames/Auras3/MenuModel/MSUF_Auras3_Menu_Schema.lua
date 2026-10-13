@@ -16,16 +16,11 @@ function Factories.Schema(A3)
     -- The runtime schema takes the same tables on Mainline, so controls and
     -- compiled config agree on every key's scope.
     local LaneKeySchema = assert(A3.LaneKeySchema, "Auras3 core must load before the menu schema")
-    local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
-    local BOSS_LOOKUP = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-    local ARENA_UNITS = { "arena1", "arena2", "arena3" }
-    local ARENA_LOOKUP = { arena1=true, arena2=true, arena3=true }
-    -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
-    for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        local arenaUnit = "arena" .. arenaIndex
-        ARENA_UNITS[#ARENA_UNITS + 1] = arenaUnit
-        ARENA_LOOKUP[arenaUnit] = true
-    end
+    local BOSS_UNITS = LaneKeySchema.UNIT_FAMILIES.boss
+    local ARENA_UNITS = LaneKeySchema.UNIT_FAMILIES.arena
+    local BOSS_LOOKUP, ARENA_LOOKUP = {}, {}
+    for index = 1, #BOSS_UNITS do BOSS_LOOKUP[BOSS_UNITS[index]] = true end
+    for index = 1, #ARENA_UNITS do ARENA_LOOKUP[ARENA_UNITS[index]] = true end
     -- Each runtime unit's show flag (the lane-key schema in the Auras3 core),
     -- plus the menu's Boss and Arena scopes.
     local UNIT_FLAG = { boss = LaneKeySchema.UNIT_FLAG.boss1, arena = LaneKeySchema.UNIT_FLAG.arena1 }
