@@ -22,19 +22,10 @@ project is also recognized; older Mainline-project builds remain supported.
   character names option (first name, surname or both). Every file returns at
   once on any other client.
 - Mainline has no folder here. `MidnightSimpleUnitFrames_Mainline.toc` loads
-  the Retail tree plus `Shared` and `Forever`, and never loads `Classic`,
+  the shared tree plus `Shared` and `Forever`, and never loads `Classic`,
   `Vanilla`, `TBC`, or `Mists`.
 
-Client-only code that has no Retail counterpart belongs here. A Classic
-difference inside a Retail file is not copied here: the Retail-named file
-carries it as a reviewed override hunk that branches on an `MSUF.Client` fact
-resolved once when the file loads (a file-level upvalue such as
-`IS_CLASSIC_FAMILY`), never on a client check per event, so a shared hot path
-pays one upvalue test at most and Mainline never enters the Classic branch.
-The former whole-file Classic copies of Retail files (owned shadows) were
-collapsed that way, thirteen of fourteen on 2026-09-19 and the last one,
-`Classic/State/MSUF_Defaults.lua`, on 2026-09-20, so
-no whole-file copy of a Mainline file is left. Do not add one. Vanilla, TBC, and Mists include implementations from `Classic`, but
+Client-only code belongs here. A Classic difference in a shared file stays there, gated on a load-time `MSUF.Client` fact. No whole-file Classic copy exists; do not add one. Vanilla, TBC, and Mists include implementations from `Classic`, but
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
 
@@ -80,7 +71,7 @@ Game modes (`MSUF.Client.GameMode`, such as Standard or Plunderstorm) get no
 folder here. A Mainline game mode shares the Mainline build, and a folder is
 only warranted once its data really diverges. WoW Forever is that case: it
 runs the Mainline build with a Classic Era spell database, so its aura data
-lives in `Forever` while its code stays in the Retail tree. Code branches on
+lives in `Forever` while its code stays in the shared tree. Code branches on
 `MSUF.Client` facts and capabilities, never on client names.
 
 ## Forever data validation: 1.60.1.70009
