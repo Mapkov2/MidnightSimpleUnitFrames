@@ -55,8 +55,8 @@ local function PowerType(entry)
     if frame and frame._msufPowerEbonMight == true then return nil end
     local common = MSUF.UFBarTextCommon
     local resolve = common and common.ResolveDisplayedPowerIdentity
-    local power
-    if resolve then power = resolve("player") else power = UnitPowerType("player") end
+    local power = UnitPowerType("player")
+    if resolve then power = resolve("player", power) end
     if NotSecret(power) and type(power) == "number" then return power end
 end
 

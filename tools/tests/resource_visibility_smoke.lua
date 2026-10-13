@@ -3,9 +3,14 @@
 local root = assert(arg[1])
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 Secrets.Install()
+local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
+local barsPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"
+local resolver = Slice.Function(Slice.Read(barsPath), "local function ResolveDisplayedPowerIdentity", barsPath)
+local ResolvePower = assert(loadstring("local POWER_TYPE_MANA = 0\n" .. resolver .. "\nreturn ResolveDisplayedPowerIdentity"))()
 local frames, listeners = {}, {}
 local combat, affecting, power, maximum, health = false, false, 50, 100, 50
 local powerPaints, textPaints = 0, 0
+local powerType, powerTypeReads, powerReads, percentReads = 3, 0, 0, 0
 local function Frame(parent)
     local f = { parent = parent, alpha = 1, shown = true, scale = 1, events = {}, scripts = {} }
     function f:GetParent() return self.parent end
@@ -33,12 +38,13 @@ player.MSUFSpec = { enabled = true, power = { enabled = true, detached = true } 
 function CreateFrame(_, _, parent) return Frame(parent) end
 function InCombatLockdown() return combat end
 function UnitAffectingCombat() return affecting end
-function UnitPowerType() return 3 end
-function UnitPower() return power end
+function UnitPowerType() powerTypeReads = powerTypeReads + 1; return powerType end
+function UnitPower() powerReads = powerReads + 1; return power end
 function UnitPowerMax() return maximum end
 function UnitHealth() return health end
 function UnitHealthMax() return maximum end
-local ns = { UF = { GetPetBattleFrameHider = function() return hider end, elements = {
+local ns = { UFBarTextCommon = { ResolveDisplayedPowerIdentity = ResolvePower },
+    UF = { GetPetBattleFrameHider = function() return hider end, elements = {
     Power = { Update = function(_, _, _, token)
         powerPaints = powerPaints + 1
         return power, maximum, 3, token, false
@@ -106,7 +112,15 @@ assert(hp.alpha == 1 and mana.alpha == 1, "restricted fallback invented a full/e
 local alpha = Secrets.New("number")
 Enum = { LuaCurveType = { Step = 1 } }
 C_CurveUtil = { CreateCurve = function()
-    return { SetType = function() end, AddPoint = function() end }
+    return { points = {}, SetType = function(self, kind) assert(kind == Enum.LuaCurveType.Step) end,
+        AddPoint = function(self, x, y) self.points[#self.points + 1] = { x, y } end,
+        Evaluate = function(self, value)
+            local result = self.points[1][2]
+            for _, point in ipairs(self.points) do
+                if value >= point[1] then result = point[2] end
+            end
+            return result
+        end }
 end }
 function UnitHealthPercent(_, _, curve) assert(curve); return alpha end
 function UnitPowerPercent(_, _, _, curve) assert(curve); return alpha end
@@ -168,6 +182,74 @@ assert(powerPaints == 1, "health events repainted unrelated Player power")
 player.shown = true
 Fire("UNIT_POWER_UPDATE", "player", "ENERGY")
 assert(powerPaints == 1, "visible Player power was painted twice")
+-- Use the real bar/text resolver: normal Energy/Rage needs its current type,
+-- while explicit Mana and class-resource hand-offs override that same input.
+b.playerPowerHideOOC = false
+V.Unbind(hp); V.Unbind(mana)
+local nativePercent = function(unit, kind, unmodified, curve)
+    assert(unit == "player" and kind == powerType and unmodified == true)
+    percentReads = percentReads + 1
+    return curve:Evaluate(power / maximum)
+end
+for _, native in ipairs({ false, true }) do
+    UnitPowerPercent = native and nativePercent or nil
+    for _, kind in ipairs({ 3, 1 }) do
+        powerType = kind
+        for _, rule in ipairs({ { true, false }, { false, true }, { true, true } }) do
+            b.playerPowerHideWhenFull, b.playerPowerHideWhenEmpty = rule[1], rule[2]
+            power, maximum = 50, 100
+            V.ConfigurePower(player)
+            for _, value in ipairs({ 100, 99, 0, 1, 50 }) do
+                power = value
+                local typesBefore, powersBefore, percentsBefore = powerTypeReads, powerReads, percentReads
+                Fire("UNIT_POWER_UPDATE", "player", kind == 3 and "ENERGY" or "RAGE")
+                local hidden = (rule[1] and value == 100) or (rule[2] and value == 0)
+                assert(host.alpha == (hidden and 0 or 1), "Player Power full/empty transition failed")
+                assert(powerTypeReads - typesBefore == 1, "visibility repeated its native power-type query")
+                assert(powerReads - powersBefore == (native and 0 or 1), "visibility raw-value query budget changed")
+                assert(percentReads - percentsBefore == (native and 1 or 0), "visibility native curve query budget changed")
+            end
+            maximum = 50
+            Fire("UNIT_MAXPOWER", "player")
+            assert(host.alpha == (rule[1] and 0 or 1), "power maximum change missed full-state visibility")
+            Edit(true)
+            assert(host.alpha == 1, "Edit Mode did not reveal full Player Power")
+            Edit(false)
+            assert(host.alpha == (rule[1] and 0 or 1), "Edit Mode exit lost Player Power auto-hide")
+        end
+    end
+end
+UnitPowerPercent = nil
+powerType, power, maximum = 3, 100, 100
+b.playerPowerHideWhenFull, b.playerPowerHideWhenEmpty = true, false
+V.ConfigurePower(player)
+assert(host.alpha == 0, "configure did not hide already-full Player Power")
+powerType, power = 1, 0
+b.playerPowerHideWhenFull, b.playerPowerHideWhenEmpty = false, true
+Fire("UNIT_DISPLAYPOWER", "player")
+V.ConfigurePower(player)
+assert(host.alpha == 0, "configure did not hide already-empty Player Power")
+for _, flag in ipairs({ "MSUF_PlayerPowerManaOverrideActive", "MSUF_EleMaelstromActive", "MSUF_ShadowManaActive" }) do
+    _G[flag] = true
+    local savedPower = UnitPower
+    UnitPower = function(_, kind) assert(kind == 0, "auto-hide ignored displayed Mana ownership"); return power end
+    Fire("UNIT_POWER_UPDATE", "player", "MANA")
+    assert(host.alpha == 0, "empty displayed Mana remained visible")
+    power = 1; Fire("UNIT_POWER_UPDATE", "player", "MANA")
+    assert(host.alpha == 1, "displayed Mana did not return after gaining power")
+    UnitPower, _G[flag], power = savedPower, nil, 0
+end
+powerType, power = 3, Secrets.New("number")
+Fire("UNIT_POWER_UPDATE", "player", "ENERGY")
+assert(host.alpha == 1, "restricted Player Power fallback invented an empty result")
+UnitPowerPercent = function(_, kind, _, curve) assert(kind == 3 and curve); return alpha end
+Fire("UNIT_POWER_UPDATE", "player", "ENERGY")
+assert(rawequal(host.alpha, alpha), "Player Power interpreted a native secret alpha")
+UnitPowerPercent, power = nil, 50
+player._msufPowerEbonMight = true
+Fire("UNIT_POWER_UPDATE", "player", "ENERGY")
+assert(host.alpha == 1, "power rules hid the Ebon Might duration carrier")
+player._msufPowerEbonMight = nil
 player.MSUFSpec.power.detached = false
 V.ConfigurePower(player)
 assert(player.targetPowerBar.parent == visual and player.MSUFPowerTextLayer.parent == visual,
@@ -183,7 +265,6 @@ assert(#violations == 0, table.concat(violations, "\n"))
 -- independently, including when Class Resource itself is switched off.
 MSUF_RegisterAnyEditModeListener, C_CurveUtil = nil, nil
 local World = assert(loadfile(root .. "/tools/tests/classpower_world.lua"))()
-local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
 local sharedPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"
 local shared = Slice.Read(sharedPath)
 local function SharedFunction(name)
