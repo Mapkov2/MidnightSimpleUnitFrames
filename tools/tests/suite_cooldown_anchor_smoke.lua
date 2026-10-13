@@ -186,6 +186,8 @@ local function LoadProvider(options)
         if frame.events.ADDON_LOADED and frame.events.PLAYER_LOGIN then h.watcher = frame end
     end
     assert(h.watcher and h.watcher.scripts.OnEvent, "the anchor watcher was not installed")
+    -- Provider acquisition starts after the real login/profile-bind boundary.
+    if options.login ~= false then h.watcher.scripts.OnEvent(h.watcher, "PLAYER_LOGIN") end
     return h
 end
 
@@ -258,7 +260,7 @@ Case("provider list: the Suite is the first automatic provider", function()
 end)
 
 for _, modelName in ipairs(MAINLINE_MODELS) do
-    Case(modelName .. ": acquire at load, one observer set, precedence over third parties", function()
+    Case(modelName .. ": acquire at login, one observer set, precedence over third parties", function()
         local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID } })
         assert(h.registry:Count(SUITE_EVENT) == 1, "the AnchorChanged callback was not registered once")
         assert(h.ns.GetSuiteCooldownAnchor() == nil, "acquired before the retry ladder ran")
@@ -461,7 +463,7 @@ for _, edge in ipairs({ "lockdown", "regen-disabled" }) do
 end
 
 Case("consent: Suite setup finishes before choosing the CDM layout", function()
-    local h = LoadProvider({ model = "Midnight", suite = true, loaded = { SUITE_ID } })
+    local h = LoadProvider({ model = "Midnight", suite = true, loaded = { SUITE_ID }, login = false })
     local pending, open = true, true
     h.suite.Installer = { IsFirstRunPending = function() return pending end,
         IsOpen = function() return open end }
@@ -839,10 +841,18 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         assert(not failure, flavor .. ": boot failed in " .. tostring(failure and failure.file) .. ": "
             .. tostring(failure and failure.message))
         local ns = world.core
+        -- Deliver login only to the integration under test; whole-graph boot
+        -- deliberately does not simulate unrelated live frame creation.
+        for _, watcher in ipairs(world.widgets.frames) do
+            local handler = watcher:GetScript("OnEvent")
+            if handler and debug.getinfo(handler, "S").source:find("MSUF_Integration_ThirdPartyAnchors.lua", 1, true) then
+                handler(watcher, "PLAYER_LOGIN")
+            end
+        end
         assert((ns.Client.Family == "Mainline") == mainline, flavor .. ": unexpected client family")
         if mainline then
-            assert(ns.GetArcUICooldownAnchor() == arc, flavor .. ": ArcUI was not resolved at load")
-            assert(registry:Count(SUITE_EVENT) == 1, flavor .. ": the Suite callback was not registered at load")
+            assert(ns.GetArcUICooldownAnchor() == arc, flavor .. ": ArcUI was not resolved at login")
+            assert(registry:Count(SUITE_EVENT) == 1, flavor .. ": the Suite callback was not registered at login")
             registry:TriggerEvent(SUITE_EVENT)
             assert(calls >= 1 and env.MSUF_GetSuiteCooldownAnchor() == frame, flavor .. ": Suite anchor not acquired")
             assert(env.MSUF_GetActiveCooldownAnchorProvider() == SUITE_ID, flavor .. ": Suite is not the active provider")

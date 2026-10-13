@@ -119,9 +119,18 @@ local function NoteOwnLayoutWrite()
     ownSaveExpiry = Now() + OWN_SAVE_ECHO_SECONDS
 end
 
+--- The only C_EditMode.SaveLayouts call. Blizzard may answer it with
+--- EDIT_MODE_LAYOUTS_UPDATED inside the call (a synchronous event), so it runs
+--- out of combat only, and staged Micro Menu and Bags values (StagedRows) never
+--- sit in the saved table except in ReloadWithStaged, right before ReloadUI.
+--- Callers: EnsureEditableLayout (a copy of the active preset), MutateSettings
+--- and Restore (an anchor or a non-staged setting that changed),
+--- ApplyProfileSnapshot (anchors and non-staged settings) and ReloadWithStaged.
 local function SaveLayouts(api, info)
+    if InCombat() then return false end
     NoteOwnLayoutWrite()
     api.SaveLayouts(info)
+    return true
 end
 
 local function OnLayoutsUpdated()
@@ -251,6 +260,7 @@ local function EnsureEditableLayout(name)
         layoutName = name, layoutType = layoutType, systems = systems,
         interfaceStyle = interfaceStyle,
     }
+    --- Save: the user's create-layout click, out of combat; a preset copy.
     SaveLayouts(api, info)
     NoteOwnLayoutWrite()
     api.SetActiveLayout(presets + #info.layouts)
@@ -435,7 +445,61 @@ local function ApplySettingsTo(entry, changes)
     end
 end
 
+--- Micro Menu and Bags settings that only Blizzard's own layout code applies
+--- are staged in MSUF's per-character SavedVariables
+--- (MSUF_GlobalDB.char[character].blizzardEditModeStaged[layout name]), never in
+--- the layout table MSUF saves: Blizzard answers SaveLayouts with
+--- EDIT_MODE_LAYOUTS_UPDATED, a synchronous event whose handler also re-lays
+--- the action bars. Only the Reload click merges them, saves once and reloads
+--- (ReloadWithStaged); until then they stay pending, also in later sessions.
+local STAGED_KEYS = { [systemEnum.MicroMenu or -3] = "micromenu", [systemEnum.Bags or -5] = "bags" }
+
+--- A staged system's key and its live (field-free) setting; nil otherwise.
+local function StagedSystem(systemId)
+    local key = STAGED_KEYS[systemId]
+    if not key then return nil end
+    local enum = _G.Enum
+    if key == "micromenu" then return key, (enum.EditModeMicroMenuSetting or {}).EyeSize end
+    return key, (enum.EditModeBagsSetting or {}).Size or 2
+end
+
+local function Child(parent, key, create)
+    local child = parent[key]
+    if type(child) ~= "table" then
+        if not create then return nil end
+        child = {}
+        parent[key] = child
+    end
+    return child
+end
+
+--- The active layout's staged rows of a system ({ [setting] = raw }), the
+--- table holding them, the system key, the per-character root and the layout
+--- name; create builds the path.
+local function StagedRows(systemId, create)
+    local key = StagedSystem(systemId)
+    local _, layout = ActiveLayout()
+    local name = layout and layout.layoutName
+    if not key or type(name) ~= "string" then return nil end
+    local node = Child(MSUF.Require("MSUF_GlobalDB", CALLER), "char", create)
+    node = node and Child(node, MSUF.Require("MSUF_GetCharKey", CALLER)(), create)
+    node = node and Child(node, "blizzardEditModeStaged", create)
+    local layoutNode = node and Child(node, name, create)
+    local rows = layoutNode and Child(layoutNode, key, create)
+    return rows, layoutNode, key, node, name
+end
+
+--- Drops a system's rows once nothing is staged, and the layout's table after.
+local function PruneStaged(systemId)
+    local rows, layoutNode, key, root, name = StagedRows(systemId)
+    if not rows or next(rows) then return end
+    layoutNode[key] = nil
+    if not next(layoutNode) then root[name] = nil end
+end
+
 local function ReadSetting(systemId, settingId)
+    local rows = StagedRows(systemId)
+    if rows and rows[settingId] ~= nil then return rows[settingId] end
     local entry = SystemEntry(systemId)
     local list = entry and entry.settings
     if type(list) ~= "table" then return nil end
@@ -472,20 +536,11 @@ local function ApplyAnchorVisual(systemId, point, relativeTo, relativePoint, x, 
     return true
 end
 
---- Micro Menu orientation and order and the Bags orientation, direction and
---- slot padding have no Blizzard setter: the game's own system mixin assigns
---- these plain fields before Layout() reads them (EditModeSystemTemplates,
---- EditModeMicroMenuSystemMixin:UpdateSystemSettingOrientation/Order and
---- EditModeBagsSystemMixin:UpdateSystemSettingOrientation/Direction/
---- BagSlotPadding, live and forever). Calling those mixin methods from here
---- would run the same assignments with MSUF taint, so no taint-free path
---- exists. The mixin assigns only dirty settings; this does the same and
---- writes a field only when its value changes, so a size change, a repeated
---- click or an unchanged profile snapshot leaves MicroMenu and BagsBar alone.
-local function AssignLayoutField(frame, key, value)
-    if frame[key] == value then return end
-    frame[key] = value
-end
+--- Micro Menu orientation, order and size and Bags orientation, direction and
+--- padding reach Blizzard only as plain fields its Layout() reads (isHorizontal,
+--- layoutFramesGoingRight/Up, normalScale, direction, bagPadding; live and
+--- forever EditModeSystemTemplates.lua). MSUF never sets them and never hands
+--- them to Blizzard's layout pass before the Reload click (see StagedRows).
 
 --- Width and height are the Damage Meter settings MSUF applies live; the
 --- fallbacks are the live and forever EditModeDamageMeterSetting values.
@@ -496,13 +551,13 @@ end
 
 --- SaveLayouts persists the layout but applies nothing on its own, and
 --- SetActiveLayout on the unchanged index is a no-op (both field-verified).
---- Settings therefore apply visually right here, through the same plain
---- frame methods Blizzard's own system mixins run — Minimap, Chat, Micro
---- Menu and the tooltip container are non-protected HUD frames, so this
---- stays taint-safe. The Damage Meter applies only its size here (see
---- DamageMeterNeedsReload). The saved layout remains the clean source of
---- truth for the next login or layout switch.
+--- Settings therefore apply visually right here, out of combat, through the
+--- same plain frame methods Blizzard's own system mixins run — Minimap, Chat
+--- and the tooltip container are non-protected HUD frames. Micro Menu, Bags and
+--- Damage Meter apply only their field-free sizes here (see OfferReload and
+--- DamageMeterNeedsReload). The saved layout remains the clean source of truth.
 local function ApplyVisual(systemId, entry)
+    if InCombat() then return end
     local frame = SystemFrame(systemId)
     if not frame then return end
     local map = EntrySettings(entry)
@@ -538,47 +593,19 @@ local function ApplyVisual(systemId, entry)
         local setting = _G.Enum.EditModeMicroMenuSetting or {}
         local micro = _G.MicroMenu
         if type(micro) == "table" then
-            local size = map[setting.Size or 2]
-            if size ~= nil and type(micro.SetNormalScale) == "function" then
-                micro:SetNormalScale((size * 5 + 70) / 100)
-            end
             --- WoW Forever renamed the setting to DeprecatedEyeSize; the queue
             --- eye is its own Group Finder system there.
             local eye = setting.EyeSize ~= nil and map[setting.EyeSize] or nil
             if eye ~= nil and type(micro.SetQueueStatusScale) == "function" then
                 micro:SetQueueStatusScale((eye * 5 + 50) / 100)
             end
-            local orientationEnum = _G.Enum.MicroMenuOrientation or {}
-            local orientation = map[setting.Orientation or 0]
-            if orientation ~= nil then
-                AssignLayoutField(micro, "isHorizontal", orientation == (orientationEnum.Horizontal or 0))
-            end
-            local orderEnum = _G.Enum.MicroMenuOrder or {}
-            local order = map[setting.Order or 1]
-            if order ~= nil then
-                local defaultOrder = order == (orderEnum.Default or 0)
-                AssignLayoutField(micro, "layoutFramesGoingRight", defaultOrder)
-                AssignLayoutField(micro, "layoutFramesGoingUp", not defaultOrder)
-            end
         end
-        if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.Bags then
         local setting = _G.Enum.EditModeBagsSetting or {}
         local size = map[setting.Size or 2]
         if size ~= nil and type(frame.SetScale) == "function" then
             frame:SetScale((size * 5 + 75) / 100)
         end
-        local orientationEnum = _G.Enum.BagsOrientation or {}
-        local orientation = map[setting.Orientation or 0]
-        if orientation ~= nil then
-            AssignLayoutField(frame, "isHorizontal", orientation == (orientationEnum.Horizontal or 0))
-        end
-        local direction = map[setting.Direction or 1]
-        if direction ~= nil then AssignLayoutField(frame, "direction", direction) end
-        --- Stored as shown, clamped to the slider's 2..10 like Blizzard's read.
-        local padding = map[setting.BagSlotPadding or 3]
-        if padding ~= nil then AssignLayoutField(frame, "bagPadding", math.min(math.max(padding, 2), 10)) end
-        if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.DamageMeter then
         --- SetSize is the frame's widget method and stores no field; Blizzard's
         --- UpdateSystemSettingFrameWidth/Height size the meter the same way.
@@ -627,6 +654,97 @@ local function NoteReloadPending()
     MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(translate("Requires a UI reload."), "info", 4)
 end
 
+local RELOAD_PROMPT = "MSUF_BLIZZARD_EDITMODE_RELOAD"
+local reloadLabels = {}
+local StoreSnapshot
+
+--- True when a change gives the saved entry a new value.
+local function Differs(entry, changes)
+    local saved = EntrySettings(entry)
+    for settingId, raw in pairs(changes) do
+        if saved[settingId] ~= tonumber(raw) then return true end
+    end
+    return false
+end
+
+--- Moves a change's staged settings into the staging rows; a value equal to
+--- the saved layout clears its row. Returns the changes left for the layout
+--- (nil when none) and whether a staged value changed.
+local function SplitStaged(systemId, entry, changes)
+    local key, live = StagedSystem(systemId)
+    if not key or type(changes) ~= "table" then return changes, false end
+    local rows = StagedRows(systemId, true)
+    if not rows then return nil, false end
+    local saved = EntrySettings(entry)
+    local rest, changed
+    for settingId, raw in pairs(changes) do
+        if settingId == live then
+            rest = rest or {}
+            rest[settingId] = raw
+        else
+            local value = tonumber(raw)
+            local current = rows[settingId]
+            if current == nil then current = saved[settingId] end
+            if current ~= value then changed = true end
+            if saved[settingId] == value then rows[settingId] = nil else rows[settingId] = value end
+        end
+    end
+    PruneStaged(systemId)
+    return rest, changed == true
+end
+
+--- The Reload click (this offer and the profile import's), out of combat:
+--- merge the staged rows into the active layout, save it once when anything
+--- was staged, reload. False in combat.
+local function ReloadWithStaged()
+    if InCombat() then return false end
+    local api, info = Blizzard(), ActiveLayout()
+    local merged
+    if api and info then
+        for systemId in pairs(STAGED_KEYS) do
+            local rows = StagedRows(systemId)
+            local entry = rows and next(rows) and SystemEntry(systemId)
+            if entry then
+                ApplySettingsTo(entry, rows)
+                for settingId in pairs(rows) do rows[settingId] = nil end
+                PruneStaged(systemId)
+                StoreSnapshot(systemId, entry)
+                merged = true
+            end
+        end
+        if merged then SaveLayouts(api, info) end
+    end
+    local reload = _G.ReloadUI
+    if reload then reload() end
+    return true
+end
+
+--- Offers the Reload click while anything is staged (a new staged value, or
+--- the start of an Edit Mode visit) and withdraws it once nothing is.
+local function OfferReload(offer)
+    local names = {}
+    for systemId, key in pairs(STAGED_KEYS) do
+        local rows = StagedRows(systemId)
+        if rows and next(rows) then names[#names + 1] = reloadLabels[systemId] or key end
+    end
+    local ui = MSUF.UI
+    if #names == 0 then
+        if ui and ui.HidePrompt then ui.HidePrompt(RELOAD_PROMPT) end
+        return
+    end
+    if not offer then return end
+    NoteReloadPending()
+    if not (ui and ui.ShowPrompt) then return end
+    table.sort(names)
+    local translate = MSUF.Translate or tostring
+    ui.ShowPrompt(RELOAD_PROMPT, {
+        text = string.format(translate("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+            table.concat(names, ", ")),
+        accept = translate("Reload"), cancel = translate("Not now"), owned = true,
+        canAnswer = function() return not InCombat() end, onAccept = ReloadWithStaged,
+    })
+end
+
 local SNAPSHOT_KEYS = {
     [systemEnum.Minimap or -1] = "minimap",
     [systemEnum.ChatFrame or -2] = "chat",
@@ -639,8 +757,12 @@ if IS_FOREVER then SNAPSHOT_KEYS[systemEnum.MicroMenu or -3] = nil end
 
 --- Every committed anchor + raw settings row also lands in the MSUF profile
 --- (general.blizzardEditModeSnapshot), so a profile export carries the
---- Blizzard Edit Mode arrangement and a profile apply can restore it.
-local function StoreSnapshot(systemId, entry)
+--- Blizzard Edit Mode arrangement and a profile apply can restore it. It holds
+--- committed values only: staged Micro Menu and Bags values enter it when the
+--- Reload commits them, and an applied import is rewritten from the committed
+--- layout, so an export before that Reload carries the committed state and
+--- never the pending one.
+StoreSnapshot = function(systemId, entry)
     local key = SNAPSHOT_KEYS[systemId]
     local general = General()
     if not key or not general then return end
@@ -681,9 +803,14 @@ local function MutateSettings(systemId, changes)
     local api = Blizzard()
     if not api then return false end
     local reload = DamageMeterNeedsReload(systemId, entry, changes)
-    ApplySettingsTo(entry, changes)
-    SaveLayouts(api, info)
+    local rest, staged = SplitStaged(systemId, entry, changes)
+    if rest and Differs(entry, rest) then
+        ApplySettingsTo(entry, rest)
+        --- Save: a changed non-staged setting, out of combat; nothing staged.
+        SaveLayouts(api, info)
+    end
     ApplyVisual(systemId, entry)
+    OfferReload(staged)
     --- Blizzard-side relayouts (the tracker's UpdateHeight most visibly)
     --- re-anchor the frame from the manager's own cached anchor, which never
     --- learns about MSUF's data-only saves — re-assert the saved anchor after
@@ -709,14 +836,16 @@ local function SnapshotAll()
     end
 end
 
-local function CaptureSettings(entry, settingIds)
+local function CaptureSettings(entry, settingIds, staged)
     if not settingIds then return nil end
     local list = type(entry.settings) == "table" and entry.settings or nil
     local captured = {}
     for i = 1, #settingIds do
         local settingId = settingIds[i]
+        captured[settingId] = staged and staged[settingId]
         for j = 1, #(list or {}) do
             local row = list[j]
+            if captured[settingId] ~= nil then break end
             if type(row) == "table" and row.setting == settingId and tonumber(row.value) then
                 captured[settingId] = tonumber(row.value)
                 break
@@ -737,7 +866,7 @@ local function Capture(systemId, settingIds)
         relativeTo = type(anchor.relativeTo) == "string" and anchor.relativeTo or "UIParent",
         relativePoint = type(anchor.relativePoint) == "string" and anchor.relativePoint or nil,
         x = tonumber(anchor.offsetX) or 0, y = tonumber(anchor.offsetY) or 0,
-        settings = CaptureSettings(entry, settingIds),
+        settings = CaptureSettings(entry, settingIds, StagedRows(systemId)),
         width = frame and frame.GetWidth and frame:GetWidth() or nil,
         height = frame and frame.GetHeight and frame:GetHeight() or nil,
     }
@@ -755,15 +884,22 @@ local function Restore(systemId, state)
     local api = Blizzard()
     if not api then return false end
     local anchor = entry.anchorInfo
+    local moved = anchor.point ~= state.point or anchor.offsetX ~= x or anchor.offsetY ~= y
+        or (type(state.relativeTo) == "string" and anchor.relativeTo ~= state.relativeTo)
+        or (type(state.relativePoint) == "string" and anchor.relativePoint ~= state.relativePoint)
     anchor.point = state.point
     if type(state.relativeTo) == "string" then anchor.relativeTo = state.relativeTo end
     if type(state.relativePoint) == "string" then anchor.relativePoint = state.relativePoint end
     anchor.offsetX, anchor.offsetY = x, y
     local reload = DamageMeterNeedsReload(systemId, entry, state.settings)
-    if type(state.settings) == "table" then ApplySettingsTo(entry, state.settings) end
-    SaveLayouts(api, info)
+    local rest, staged = SplitStaged(systemId, entry, state.settings)
+    local changed = type(rest) == "table" and Differs(entry, rest)
+    if changed then ApplySettingsTo(entry, rest) end
+    --- Save: a moved anchor or a changed non-staged setting; nothing staged.
+    if moved or changed then SaveLayouts(api, info) end
     ApplyAnchorVisual(systemId, anchor.point, anchor.relativeTo, anchor.relativePoint, x, y)
-    if type(state.settings) == "table" then ApplyVisual(systemId, entry) end
+    if type(rest) == "table" then ApplyVisual(systemId, entry) end
+    OfferReload(staged)
     StoreSnapshot(systemId, entry)
     if reload then NoteReloadPending() end
     return true
@@ -832,7 +968,8 @@ local function ApplyProfileSnapshot()
                     if type(state.relativePoint) == "string" then anchor.relativePoint = state.relativePoint end
                     anchor.offsetX = tonumber(state.x) or 0
                     anchor.offsetY = tonumber(state.y) or 0
-                    if type(state.settings) == "table" then ApplySettingsTo(entry, state.settings) end
+                    local rest = SplitStaged(systemId, entry, state.settings)
+                    if type(rest) == "table" then ApplySettingsTo(entry, rest) end
                     applied[#applied + 1] = { systemId, entry }
                     break
                 end
@@ -840,6 +977,8 @@ local function ApplyProfileSnapshot()
         end
     end
     if #applied == 0 then return false end
+    --- Save: anchors and non-staged settings of an explicit restore/import,
+    --- out of combat (retried after it); its staged values went to StagedRows.
     SaveLayouts(api, info)
     for i = 1, #applied do
         local systemId, entry = applied[i][1], applied[i][2]
@@ -847,6 +986,7 @@ local function ApplyProfileSnapshot()
         ApplyAnchorVisual(systemId, anchor.point, anchor.relativeTo, anchor.relativePoint,
             tonumber(anchor.offsetX) or 0, tonumber(anchor.offsetY) or 0)
         ApplyVisual(systemId, entry)
+        StoreSnapshot(systemId, entry)
     end
     --- No Blizzard Edit Mode panel toggle here: opening and closing it from
     --- addon code runs Blizzard's Edit Mode enter/exit (aura provider switch,
@@ -1014,9 +1154,8 @@ local function SessionChanged(enabled)
         --- the user never has to discover why Blizzard elements refuse to
         --- move.
         InvalidateLayoutCache()
-        if Enabled() and Blizzard() and not InCombat() and not EditModeRuleBlocked()
-            and not ActiveLayout() then
-            OpenLayoutDialog()
+        if Enabled() and Blizzard() and not InCombat() and not EditModeRuleBlocked() then
+            if not ActiveLayout() then OpenLayoutDialog() else OfferReload(true) end
         end
     end
     local container = SystemFrame(systemEnum.HudTooltip)
@@ -1118,8 +1257,8 @@ local function Activate()
             "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORDER_REVERSE", "Reverse", microOrder)
         microSettingIds[#microSettingIds + 1] = microOrientation
         microSettingIds[#microSettingIds + 1] = microOrder
-        Add(Element(systemEnum.MicroMenu, "micromenu",
-            BlizzardLabel("HUD_EDIT_MODE_MICRO_MENU_LABEL", "Micro Menu"), 862,
+        reloadLabels[systemEnum.MicroMenu] = BlizzardLabel("HUD_EDIT_MODE_MICRO_MENU_LABEL", "Micro Menu")
+        Add(Element(systemEnum.MicroMenu, "micromenu", reloadLabels[systemEnum.MicroMenu], 862,
             microControls, microSettingIds))
     end
     if systemEnum.HudTooltip then
@@ -1142,8 +1281,8 @@ local function Activate()
         local bagsOrientation = bagsSetting.Orientation or 0
         local bagsDirection = bagsSetting.Direction or 1
         local bagDirections = _G.Enum.BagsOrientation or {}
-        Add(Element(systemEnum.Bags, "bags",
-            BlizzardLabel("HUD_EDIT_MODE_BAGS_LABEL", "Bags"), 864, {
+        reloadLabels[systemEnum.Bags] = BlizzardLabel("HUD_EDIT_MODE_BAGS_LABEL", "Bags")
+        Add(Element(systemEnum.Bags, "bags", reloadLabels[systemEnum.Bags], 864, {
                 SteppedSetting(systemEnum.Bags, "size", "HUD_EDIT_MODE_SETTING_BAGS_SIZE",
                     "Size", 75, 200, 5, bagsSize),
                 SteppedSetting(systemEnum.Bags, "padding", "HUD_EDIT_MODE_SETTING_BAGS_BAG_SLOT_PADDING",
@@ -1220,6 +1359,8 @@ Export("MSUF_BlizzardEditMode_SetEnabled", SetEnabled)
 --- Field probe: /run print(MSUF_BlizzardEditMode_EnsureLayout())
 Export("MSUF_BlizzardEditMode_EnsureLayout", function() return EnsureEditableLayout() end)
 Export("MSUF_BlizzardEditMode_ApplyProfileSnapshot", ApplyProfileSnapshot)
+--- The profile import's Reload (Menu2 profiles page) takes the same path.
+Export("MSUF_BlizzardEditMode_ReloadUI", ReloadWithStaged)
 --- Field probe: /run print(MSUF_BlizzardEditMode_Debug())
 Export("MSUF_BlizzardEditMode_Debug", function()
     local parts = {}

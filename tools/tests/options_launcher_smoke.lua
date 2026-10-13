@@ -10,6 +10,12 @@ local env, host = world.env, world.core
 host.ExportPublic = function(name, value) env[name], host[name] = value, value end
 env.MSUF_DB = { general = { showGameMenuButton = true } }
 env.GameMenuFrame = env.CreateFrame("Frame", "GameMenuFrame", env.UIParent)
+local create = env.CreateFrame
+env.CreateFrame = function(kind, name, parent, template)
+    local frame = create(kind, name, parent, template)
+    if name then env[name] = frame end
+    return frame
+end
 local combat, loaded, loadOK = false, false, true
 local loads, opens, locks, lastPage = 0, 0, 0, nil
 env.InCombatLockdown = function() return combat end
@@ -39,7 +45,7 @@ end
 Load("MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua")
 Load("MidnightSimpleUnitFrames/Shell/MSUF_GameMenu.lua")
 env.MSUF_SetGameMenuButtonEnabled(true)
-local button = assert(env.GameMenuFrame.MSUF, "real Game Menu button missing")
+local button = assert(env.MSUF_GameMenuButton, "real Game Menu button missing")
 local click = assert(button:GetScript("OnClick"))
 world.widgets:ClearTimers()
 assert(loads == 0 and opens == 0, "launchers eagerly loaded Options")

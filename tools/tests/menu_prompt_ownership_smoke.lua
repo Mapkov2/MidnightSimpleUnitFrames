@@ -404,6 +404,8 @@ do
         return n.GetCooldownAnchorConsentDecision("Coolinator"), e.MSUF_DB.general.anchorToCooldown
     end
     if Check(watcher, "the third-party anchor watcher is missing") then
+        loaded.Coolinator = nil
+        watcher.scripts.OnEvent(watcher, "PLAYER_LOGIN")
         local decision, anchored = Consent({ "accept", "accept" })
         Check(decision == "accepted" and anchored == true, "accepting both consent steps did not anchor the layout")
         decision, anchored = Consent({ "cancel" })

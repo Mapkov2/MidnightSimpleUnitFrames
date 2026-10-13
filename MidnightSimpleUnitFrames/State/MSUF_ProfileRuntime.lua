@@ -175,6 +175,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     --- rebuild below formats anything.
     MSUF.NumberFormat.Refresh()
     if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
+    if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
     MSUF.Tooltips.Refresh()
     MSUF.Highlight.Refresh()
     MSUF.MSUF_ApplyGameplayVisuals()

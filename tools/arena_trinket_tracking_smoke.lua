@@ -285,6 +285,23 @@ local function RunScenario(kind, startZone)
             "Retail cooldown event did not refresh after returning to the arena")
     end
 
+    -- Arena frames or the trinket display switched off: the cooldown event
+    -- goes, even inside the arena. The arena settings apply (menu, reset,
+    -- profile switch) drops and restores it; world entry keeps it dropped.
+    for _, key in ipairs({ "enabled", "showTrinket" }) do
+        _G.MSUF_DB.arena[key] = false
+        _G.MSUF_ArenaTrinkets_RefreshLayout("arena")
+        Check(callbacks.ARENA_COOLDOWNS_UPDATE == nil and holder.shown == false,
+            kind .. " kept ARENA_COOLDOWNS_UPDATE subscribed with arena." .. key .. " off")
+        callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+        Check(callbacks.ARENA_COOLDOWNS_UPDATE == nil,
+            kind .. " subscribed ARENA_COOLDOWNS_UPDATE at world entry with arena." .. key .. " off")
+        _G.MSUF_DB.arena[key] = true
+        _G.MSUF_ArenaTrinkets_RefreshLayout("arena")
+        Check(callbacks.ARENA_COOLDOWNS_UPDATE ~= nil and holder.shown == true,
+            kind .. " did not subscribe ARENA_COOLDOWNS_UPDATE again when arena." .. key .. " came back on")
+    end
+
     for index = 1, #allFrames do
         Check(allFrames[index].scripts.OnUpdate == nil,
             kind .. " installed an OnUpdate polling path")
@@ -298,6 +315,29 @@ RunScenario("tbc5")
 RunScenario("retail", "raid")
 RunScenario("classic", "raid")
 RunScenario("mists", "raid")
+
+-- Classic Era: arena units are unsupported, so nothing is wired, and the
+-- unit-frame settings apply must not subscribe the cooldown event either.
+do
+    local callbacks = {}
+    _G.MSUF_MAX_ARENA_FRAMES = 0
+    _G.MSUF_DB = { arena = { enabled = true, showTrinket = true } }
+    _G.IsInInstance = function() return true, "arena" end
+    _G.MSUF_EventBus_Register = function(event, _, callback) callbacks[event] = callback end
+    _G.MSUF_EventBus_Unregister = function(event) callbacks[event] = nil end
+    local MSUF = {
+        Client = { SupportsUnit = function() return false end },
+        ExportPublic = function(name, value)
+            _G[name] = value
+            return value
+        end,
+    }
+    assert(loadfile(modulePath))("MidnightSimpleUnitFrames", MSUF)
+    Check(next(callbacks) == nil, "Classic Era wired arena trinket events")
+    _G.MSUF_ArenaTrinkets_RefreshLayout(nil)
+    _G.MSUF_ArenaTrinkets_RefreshLayout("arena")
+    Check(next(callbacks) == nil, "a Classic Era settings apply subscribed ARENA_COOLDOWNS_UPDATE")
+end
 
 local moduleHandle = assert(io.open(modulePath, "rb"))
 local moduleSource = moduleHandle:read("*a")

@@ -67,6 +67,25 @@ local w = Boot("6.5-beta12")
 Receive(w, "V2:9000000000000:|cffff0000x|r")
 Receive(w, "V2:99999999999999999999:9.9")
 assert(not Notified(w), "a malformed V2 message prompted an update")
+-- The epoch ranks only the release its label names: any group member could
+-- otherwise send a large integer with an older or made-up label and have
+-- "A newer version (6.20) is available" printed to a 6.50 user.
+for _, payload in ipairs({
+    "V2:9007199254740991:6.20", -- below 2^53, far above any release epoch
+    "V2:999999999400000:6.20", -- the epoch of 999.999.999 with an older label
+    "V2:7000000400000:6.20", -- the 7.0 epoch carrying an older label
+    "V2:7000000400001:7.0", -- one above the 7.0 epoch
+    "V2:7000000400000:bogus", -- an unparsable label
+}) do
+    local peer = Boot("6.50")
+    Receive(peer, payload)
+    assert(not Notified(peer), "a V2 epoch that does not rank its own label prompted an update: " .. payload)
+end
+-- The highest epoch a label can carry still ranks.
+local top = Boot("6.50")
+Receive(top, "V2:999999999400000:999.999.999")
+local topLine = Notified(top)
+assert(topLine and topLine:find("999.999.999", 1, true), "the highest valid release epoch was rejected")
 
 -- Broadcast: the epoch line plus the legacy line older clients rank right.
 local sender = Boot("6.5-beta12")

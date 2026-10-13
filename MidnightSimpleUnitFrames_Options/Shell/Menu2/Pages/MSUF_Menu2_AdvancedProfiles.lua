@@ -279,6 +279,14 @@ function ProfilePrompts.ConfirmDelete(name, after)
         end,
     })
 end
+-- An import can stage Blizzard Edit Mode settings (Micro Menu, Bags) that only
+-- the Edit Mode adapter's reload merges and saves (MSUF_EditMode_Blizzard.lua).
+local function ReloadImportedUI()
+    if MSUF.Client.SupportsBlizzardEditMode then
+        return MSUF.Require("MSUF_BlizzardEditMode_ReloadUI", "Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua")()
+    end
+    ReloadUI()
+end
 local function ShowImportReloadPrompt()
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
@@ -288,7 +296,7 @@ local function ShowImportReloadPrompt()
         text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
         accept = RELOAD or M.Tr("Reload"),
         cancel = CANCEL or M.Tr("Not now"),
-        onAccept = function() ReloadUI() end,
+        onAccept = ReloadImportedUI,
     })
 end
 -- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
@@ -318,7 +326,7 @@ local function ReloadAfterNewProfileImport(profileName)
         return
     end
     if type(_G.ReloadUI) == "function" then
-        _G.ReloadUI()
+        ReloadImportedUI()
     else
         PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload the UI with /reload.", tostring(profileName))
     end

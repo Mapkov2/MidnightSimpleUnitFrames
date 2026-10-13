@@ -58,8 +58,7 @@ local type = type
 local issecretvalue = _G.issecretvalue
 --- MSUF owners that load after this file (UnitFrames/Engine/MSUF_UF_Factory.lua,
 --- ClassPower/MSUF_CP_Controller.lua). A provider that is already present
---- (the Suite loading first) is acquired while this file loads, before they
---- exist; their own first apply then covers that acquisition.
+--- (the Suite loading first) is acquired at login, when the profile exists.
 local function RunOptional(name, ...)
     local fn = MSUF.Optional(name)
     if fn then return fn(...) end
@@ -97,6 +96,7 @@ local refreshArcUIAnchor
 local registeredSkiron
 local refreshSkironAnchorProxy
 local watcher
+local loginReached = false
 local skironSourceHookPending = false
 local skironProxyRefreshAfterCombat = false
 local skironResolveGeneration = 0
@@ -1227,6 +1227,7 @@ local function RegisterSuiteCooldownAnchor()
 end
 
 local function RegisterThirdPartyAnchors()
+    if not loginReached then return false end
     local suite = RegisterSuiteCooldownAnchor()
     local arcUI = RegisterArcUIAnchor()
     local skiron = RegisterSkironAnchorProxy()
@@ -1242,6 +1243,8 @@ watcher:RegisterEvent("PLAYER_LOGIN")
 watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("ADDON_LOADED")
 watcher:SetScript("OnEvent", function(self, event, addon)
+    if event == "PLAYER_LOGIN" then loginReached = true end
+    if not loginReached then return end
     if event == "PLAYER_REGEN_ENABLED" then
         if InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -1296,6 +1299,3 @@ end)
 if cooldownAnchorClientSupported and EventRegistry then
     EventRegistry:RegisterCallback("MSUFSuite.Installer.Finished", MaybeShowCooldownConsent, "MidnightSimpleUnitFrames")
 end
-
-RefreshAutomaticCooldownProvider(false)
-RegisterThirdPartyAnchors()

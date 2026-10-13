@@ -638,3 +638,9 @@ clients	lua	tools/tests/classpower_ownership_notification_order_smoke.lua	{root}
 -	lua	tools/tests/boss_castbar_scale_and_range_alpha_use_pooled_bars_smoke.lua	{root}	Boss castbar scale and range alpha did not use the pooled bars
 clients+Forever	lua	tools/tests/group_header_attribute_sequence_smoke.lua	{root/} {flavor}	Ordered group header attributes changed: {flavor}
 clients+Forever	lua	tools/tests/group_frame_overlay_shared_spec_smoke.lua	{root/} {flavor}	Shared group frame-overlay contract failed: {flavor}
+-	lua	tools/tests/arena_prep_rematch_repaint_smoke.lua	{root}	Arena rematch after the prep room kept the synthetic opponent name or health
+-	lua	tools/tests/editmode_blizzard_layout_fields_smoke.lua	{root}	Edit Mode wrote a Micro Menu or Bags layout field, ran Blizzard's layout pass, or lost a staged setting's reload offer
+-	lua	tools/tests/game_menu_native_relayout_smoke.lua	{root}	Game menu button lost its place after a native relayout, or MSUF wrote the Game Menu in combat or a field on it
+-	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} mapko	MapkoSkin menu skin read the profile before login or ignored the bound profile
+-	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} analytics	Analytics read the account settings before login
+-	lua	tools/tests/integration_profile_reads_after_login_smoke.lua	{root} anchors	A cooldown anchor provider was acquired before login

@@ -141,7 +141,7 @@ local function BroadcastOnce()
 end
 
 local VALID_VERSION_CHANNELS = { GUILD = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
-local MAX_EPOCH = 2 ^ 53
+local MAX_EPOCH = 999999999400000 -- 999.999.999
 local function OnAddonMessage(_, prefix, payload, channel)
     if prefix ~= MSG_PREFIX or not IsEnabled() then return end
     if type(payload) ~= "string" or #payload > 64 or not VALID_VERSION_CHANNELS[channel] then return end
@@ -149,10 +149,12 @@ local function OnAddonMessage(_, prefix, payload, channel)
     local num, normalized
     local epoch, label = string_match(payload, "^V2:(%d+):([%w%.%-]+)$")
     if epoch then
-        -- The epoch ranks; the label is only shown (and stays plain text).
+        -- The epoch must rank its own label.
         num = tonumber(epoch)
-        if not num or num <= 0 or num >= MAX_EPOCH or #label > 24 then return end
-        normalized = label
+        if not num or num <= 0 or num > MAX_EPOCH or #label > 24 then return end
+        local labelEpoch
+        labelEpoch, normalized = VersionToNumber(label)
+        if labelEpoch ~= num then return end
     else
         local ver = string_match(payload, "^V:(.+)$")
         if not ver then return end

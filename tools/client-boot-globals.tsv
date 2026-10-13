@@ -11,7 +11,6 @@
 Global	Flavors	Kind	Reason
 AbbreviateLargeNumbers	*	api	Blizzard client API the harness does not model
 AbbreviateNumbers	*	api	Blizzard client API the harness does not model
-ArcUI_Public	*	thirdparty	third-party addon global MSUF probes to detect that addon
 AuraUtil	Vanilla,Mists,TBC	table	Blizzard aura helper table
 BackdropTemplateMixin	*	table	Blizzard backdrop mixin applied to template frames
 BreakUpLargeNumbers	*	api	Blizzard client API the harness does not model
@@ -35,7 +34,6 @@ C_UIFileAsset	*	namespace	Blizzard C_* namespace the harness does not model
 C_UnitAuras	*	namespace	Blizzard C_* namespace the harness does not model
 CheckInteractDistance	*	api	Blizzard client API the harness does not model
 Constants	*	table	Blizzard Constants table (power and spec ids)
-CoolinatorPrimaryGroupAnchor	*	thirdparty	third-party addon global MSUF probes to detect that addon
 CreateUnitHealPredictionCalculator	*	api	Blizzard client API the harness does not model
 CurveConstants	*	table	Blizzard CurveConstants table
 DAMAGE_TEXT_FONT	*	constant	Blizzard UI constant the harness does not model
@@ -92,7 +90,6 @@ IsTargetLoose	*	api	Blizzard client API the harness does not model
 LE_PARTY_CATEGORY_HOME	*	constant	Blizzard UI constant the harness does not model
 LE_PARTY_CATEGORY_INSTANCE	*	constant	Blizzard UI constant the harness does not model
 MAX_BOSS_FRAMES	*	constant	Blizzard UI constant the harness does not model
-MapkoSkin	*	thirdparty	third-party addon global MSUF probes to detect that addon
 MiniAurasApi	Mainline,Forever	thirdparty	third-party addon global MSUF probes to detect that addon
 PetBattleFrameHider	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
 PlaySound	*	api	Blizzard client API the harness does not model
@@ -180,7 +177,6 @@ UnitThreatSituation	*	unit	Blizzard unit-state API; the harness answers it with 
 UnitWatchRegistered	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnregisterStateDriver	*	api	Blizzard client API the harness does not model
 WOW_PROJECT_CAMELOT	*	constant	Optional Forever 1.60.1.70170 project constant from Blizzard_ProjectConstants; Initialize compares it only when present and the camelot marker places Forever
-_ECME_GetBarFrame	*	thirdparty	third-party addon global MSUF probes to detect that addon
 hasanysecretvalues	*	secret	12.x secret-value API the harness does not model
 hash_SlashCmdList	*	table	Blizzard slash-token hash; MSUF probes it before claiming /rl
 issecure	*	secret	12.x secret-value API the harness does not model

@@ -283,7 +283,7 @@ Check(namespace.Public.MSUF_Profiles_ImportIntoNewProfile == MSUF_ImportIntoNewP
     "MSUF_ImportIntoNewProfile is not exported like its siblings")
 
 -- Spies: profile create/switch and ReloadUI.
-local counts = { create = 0, switch = 0, reload = 0 }
+local counts = { create = 0, switch = 0, reload = 0, layoutReload = 0 }
 local realCreate, realSwitch = MSUF_CreateProfile, MSUF_SwitchProfile
 local createImpl, switchImpl = realCreate, realSwitch
 MSUF_CreateProfile = function(...)
@@ -295,6 +295,14 @@ MSUF_SwitchProfile = function(...)
     return switchImpl(...)
 end
 ReloadUI = function() counts.reload = counts.reload + 1 end
+-- The Blizzard Edit Mode adapter's reload (Shell/EditMode/MSUF_EditMode_Blizzard.lua):
+-- it saves the layout settings an import staged, then reloads. The page's import
+-- reload goes through it wherever the client has Blizzard's Edit Mode.
+MSUF_BlizzardEditMode_ReloadUI = function()
+    counts.layoutReload = counts.layoutReload + 1
+    ReloadUI()
+    return true
+end
 
 -- Menu2 profiles page harness ----------------------------------------------------
 
@@ -448,6 +456,7 @@ local function Capture()
         create = counts.create,
         switch = counts.switch,
         reload = counts.reload,
+        layoutReload = counts.layoutReload,
         import = Applies("PROFILE_IMPORT"),
         external = Applies("PROFILE_EXTERNAL_IMPORT"),
         switchApply = Applies("PROFILE_SWITCH"),
@@ -639,6 +648,9 @@ for _, fixture in ipairs(successes) do
         label .. ": page new-profile import did not create and switch once")
     Check(Applies("PROFILE_IMPORT") == before.import + 1, label .. ": page new-profile import did not apply once")
     Check(counts.reload == before.reload + 1, label .. ": page new-profile import did not reload once")
+    local layoutReloads = namespace.Client.SupportsBlizzardEditMode and 1 or 0
+    Check(counts.layoutReload == before.layoutReload + layoutReloads,
+        label .. ": page new-profile import did not reload through the Blizzard Edit Mode adapter")
     Check(MSUF_ActiveProfile == "Fresh" and nameText == "", label .. ": page new-profile import did not settle")
     ExpectContent(label .. " (page new)", MSUF_DB, fixture)
 end

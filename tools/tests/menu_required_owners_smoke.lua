@@ -118,6 +118,7 @@ local MAINLINE_ONLY = {
 -- before exporting anything without it.
 local CAPABILITY_GATED = {
     MSUF_BlizzardEditMode_SetEnabled = "SupportsBlizzardEditMode", -- Shell/EditMode/MSUF_EditMode_Blizzard.lua
+    MSUF_BlizzardEditMode_ReloadUI = "SupportsBlizzardEditMode", -- the profile import's reload, same file
 }
 -- Takes Enum.EditModeSystem away before anything loads, so Game/Shared/
 -- Initialize.lua reports SupportsBlizzardEditMode off; every other Enum

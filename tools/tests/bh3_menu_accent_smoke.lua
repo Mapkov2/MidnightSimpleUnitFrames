@@ -17,7 +17,8 @@ local function NewFrame()
     function f:SetScript(k, v) self[k] = v end
     return f
 end
-CreateFrame = function() return NewFrame() end
+local lastFrame
+CreateFrame = function() lastFrame = NewFrame() return lastFrame end
 InCombatLockdown = function() return false end
 IsLoggedIn = function() return true end
 UnitClass = function() return "Mage", "MAGE" end
@@ -47,6 +48,8 @@ ns.MSUF2 = {
 }
 -- core addon file (TOC Shell\UI\MSUF_MapkoSkin.lua)
 load("MidnightSimpleUnitFrames/Shell/UI/MSUF_MapkoSkin.lua", ns)
+-- The skin connects once the SavedVariables exist (PLAYER_LOGIN).
+lastFrame.OnEvent(lastFrame, "PLAYER_LOGIN")
 -- Options TOC: Theme_Forever, then Menu2.xml: ... Theme_Tokens (7), Theme (8), ... Bindings (22)
 load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua", ns)
 load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua", ns)

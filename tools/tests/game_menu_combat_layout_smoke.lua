@@ -63,6 +63,7 @@ local function Fixture(startLocked, savedEnabled)
             return register(self, event)
         end
         if name == "MSUF_GameMenuButton" then
+            env.MSUF_GameMenuButton = frame
             state.creates = state.creates + 1
             frame.IsProtected = function()
                 state.ownQueries = state.ownQueries + 1
@@ -91,7 +92,7 @@ local function Fixture(startLocked, savedEnabled)
         local _, _, _, _, macroY = macro:GetPoint(1)
         local _, _, _, _, exitY = exit:GetPoint(1)
         assert(macroY == -200 and exitY == -320, "original button offsets were not restored")
-        assert(not menu.MSUF or not menu.MSUF:IsShown(), "disabled MSUF button remained shown")
+        assert(not env.MSUF_GameMenuButton or not env.MSUF_GameMenuButton:IsShown(), "disabled MSUF button remained shown")
         assert(not menu.MSUFAdjustedHeight and not menu.MSUFAddedHeight, "stale adjusted-height bookkeeping")
     end
     return { world = world, env = env, widgets = widgets, state = state, menu = menu, trigger = trigger,
@@ -104,7 +105,7 @@ local f = Fixture()
 f.Toggle(true)
 f.widgets:RunTimers()
 local height = f.menu:GetHeight()
-assert(height == 436 and f.menu.MSUF:IsShown(), "ordinary menu layout changed")
+assert(height == 436 and f.env.MSUF_GameMenuButton:IsShown(), "ordinary menu layout changed")
 for _ = 1, 5 do f.OnShow() end
 f.widgets:RunTimers()
 assert(f.menu:GetHeight() == height, "reopening accumulated extra height")
@@ -112,12 +113,17 @@ f.Toggle(false)
 f.AssertRestored()
 assert(not f.HasReplay(), "normal layout registered a combat-end listener")
 
--- Unprotected menus keep their existing combat behavior.
+-- An unprotected menu waits for combat to end as well: MSUF writes nothing
+-- on the Blizzard menu under lockdown, protected or not.
 f = Fixture()
 f.trigger.protected = false
-f.widgets:SetCombat(true)
+f.widgets:EnterCombat()
+local unprotectedWrites = f.state.writes
 f.Position()
-assert(f.menu:GetHeight() == 436 and not f.HasReplay(), "unprotected combat layout regressed")
+assert(f.state.writes == unprotectedWrites and f.HasReplay(), "an unprotected menu was laid out during combat")
+f.widgets:LeaveCombat()
+assert(f.menu:GetHeight() == 436 and f.env.MSUF_GameMenuButton:IsShown() and not f.HasReplay(),
+    "an unprotected menu did not lay out once combat ended")
 f.Toggle(false)
 f.AssertRestored()
 
@@ -130,13 +136,27 @@ f.widgets:EnterCombat()
 local before = f.state.writes
 f.widgets:RunTimers()
 assert(f.state.writes == before and f.HasReplay(), "queued callback wrote to the locked parent")
-assert(not f.menu.MSUF:IsShown(), "safe addon button was not hidden during deferral")
+assert(not f.env.MSUF_GameMenuButton:IsShown(), "safe addon button was not hidden during deferral")
 f.widgets:LeaveCombat()
-assert(f.state.writes == before + 1 and f.menu.MSUF:IsShown(), "visible menu did not replay once")
+assert(f.state.writes == before + 1 and f.env.MSUF_GameMenuButton:IsShown(), "visible menu did not replay once")
 assert(f.menu:GetHeight() == 436 and not f.HasReplay(), "replay retained a listener or drifted height")
 before = f.state.writes
 f.widgets:FireEvent("PLAYER_REGEN_ENABLED")
 assert(f.state.writes == before, "combat-end replay repeated")
+
+-- A pass queued during combat (a native relayout or reopening) that is still
+-- waiting when combat ends adds no second layout to the combat-end replay.
+f = Fixture()
+f.Toggle(true)
+f.widgets:RunTimers()
+f.widgets:EnterCombat()
+f.Position()
+f.OnShow()
+before = f.state.writes
+f.widgets:LeaveCombat()
+f.widgets:RunTimers()
+assert(f.state.writes == before + 1 and f.menu:GetHeight() == 436 and f.env.MSUF_GameMenuButton:IsShown(),
+    "combat end laid the menu out " .. tostring(f.state.writes - before) .. " times, expected once")
 
 -- Repeated locked requests do no layout scans, timers or repeat registrations.
 f.widgets:EnterCombat()
@@ -156,9 +176,9 @@ end
 assert(minAllocated < 0.02, string.format("locked layout requests allocate per call: %.3f KB", minAllocated))
 assert(f.state.scans == scans and f.state.writes == before and f.state.registrations == registrations,
     "locked requests scanned, wrote protected geometry or repeated event registration")
-assert(f.state.combatQueries - queries == 2000 and f.state.menuQueries - menuQueries == 2000
+assert(f.state.combatQueries - queries == 2000 and f.state.menuQueries - menuQueries == 0
     and f.state.ownQueries - ownQueries == 2000 and #f.widgets.timers == 0,
-    "locked requests exceeded their three safety reads or queued timers")
+    "locked requests exceeded their two safety reads or queued timers")
 f.widgets:LeaveCombat()
 assert(not f.HasReplay())
 
@@ -186,7 +206,7 @@ f.Toggle(true)
 f.widgets:RunTimers()
 before = f.state.writes
 f.widgets:LeaveCombat()
-assert(f.state.writes == before + 1 and f.menu.MSUF:IsShown() and f.menu:GetHeight() == 436,
+assert(f.state.writes == before + 1 and f.env.MSUF_GameMenuButton:IsShown() and f.menu:GetHeight() == 436,
     "pending toggles did not resolve to the latest enabled state")
 
 -- Enabled hidden menus do no combat-end work; the next opening lays out normally.
@@ -202,7 +222,7 @@ assert(f.state.writes == before and not f.HasReplay(), "replay painted a hidden 
 f.menu.shown = true
 f.OnShow()
 f.widgets:RunTimers()
-assert(f.menu.MSUF:IsShown() and f.menu:GetHeight() == 436, "next opening failed after hidden replay")
+assert(f.env.MSUF_GameMenuButton:IsShown() and f.menu:GetHeight() == 436, "next opening failed after hidden replay")
 
 -- A saved setting changed directly while deferred still controls restoration.
 f = Fixture()
@@ -236,14 +256,14 @@ before = f.state.writes
 f.Position()
 assert(f.state.writes == before and f.HasReplay(), "no-anchor cleanup wrote during combat")
 f.widgets:LeaveCombat()
-assert(f.menu:GetHeight() == 400 and not f.menu.MSUF:IsShown() and not f.HasReplay(),
+assert(f.menu:GetHeight() == 400 and not f.env.MSUF_GameMenuButton:IsShown() and not f.HasReplay(),
     "no-anchor cleanup did not restore the menu height")
 
 -- First hooking in combat must not create/style the custom button prematurely.
 f = Fixture(true)
 assert(f.state.creates == 0 and f.state.writes == 0 and f.HasReplay(), "cold locked hook wrote UI")
 f.widgets:LeaveCombat()
-assert(f.state.creates == 1 and f.menu.MSUF:IsShown() and f.menu:GetHeight() == 436,
+assert(f.state.creates == 1 and f.env.MSUF_GameMenuButton:IsShown() and f.menu:GetHeight() == 436,
     "cold protected menu did not initialize after combat")
 assert(not f.HasReplay())
 

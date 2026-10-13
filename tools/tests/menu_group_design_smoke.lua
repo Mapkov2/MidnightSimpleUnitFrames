@@ -217,6 +217,8 @@ local api = {
 }
 mw.env.MapkoSkin = { GetAPI = function() return api end }
 assert(mw.world:LoadFile(root .. "/MidnightSimpleUnitFrames/Shell/UI/MSUF_MapkoSkin.lua", "MidnightSimpleUnitFrames", mw.core))
+local skinEvents = mw.world.widgets.frames[#mw.world.widgets.frames]
+skinEvents:GetScript("OnEvent")(skinEvents, "PLAYER_LOGIN")
 local Skin = mw.core.MenuSkin
 Skin.BindColors(T.colors)
 local group = W.ControlCard(mw.env.UIParent, "Geometry", nil, 0, 0, 360, 160, "group")

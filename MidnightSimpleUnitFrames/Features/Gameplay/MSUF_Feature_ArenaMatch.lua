@@ -274,6 +274,19 @@ local function ClearPrepFrame(frame)
     if not frame or frame._msufArenaPrepForced ~= true then return false end
     frame._msufArenaPrepForced = nil
     frame._msufUnitState = nil
+    -- Prep painted past the name and health write caches: drop them so a
+    -- rematch against the same opponent repaints.
+    frame._msufNameTextUnit = nil
+    frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
+    local name = frame.nameText
+    if name then name._aText, name._aTextPlain = nil, nil end
+    local bar = frame.hpBar or frame.Health
+    if bar then
+        bar._msufMinMax, bar._msufHealthMaxReady = nil, nil
+        bar._msufHealthMax, bar._msufHealthMaxUnit = nil, nil
+        bar._msufHealthValue, bar._msufHealthValueUnit = nil, nil
+        bar._msufHealthPercentValue, bar._msufHealthPercentUnit = nil, nil
+    end
     frame._msufAlphaLastFrame = nil
     frame._msufAlphaLastHP = nil
     frame._msufAlphaLastFG = nil

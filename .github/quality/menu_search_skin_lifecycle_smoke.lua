@@ -48,11 +48,16 @@ end }
 _G.MSUF_DB = { general = {} }
 _G.InCombatLockdown = function() return false end
 _G.hooksecurefunc = function() end
+local skinEvents
 _G.CreateFrame = function()
-    return { RegisterEvent = function() end, UnregisterEvent = function() end, SetScript = function() end }
+    local frame = { RegisterEvent = function() end, UnregisterEvent = function() end }
+    function frame:SetScript(_, callback) self.onEvent = callback end
+    skinEvents = frame
+    return frame
 end
 local MSUF = {}
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/MSUF_MapkoSkin.lua"))("MidnightSimpleUnitFrames", MSUF)
+skinEvents.onEvent(skinEvents, "PLAYER_LOGIN")
 local Skin = assert(MSUF.MenuSkin)
 local input = { _msuf2EditBg = Region(), focused = false }
 function input:HasFocus() return self.focused end

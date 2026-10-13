@@ -10,7 +10,9 @@
 -- 1, below Blizzard's minimum, which MSUF then painted as the bag padding.
 -- Every other stepper keeps its ConvertValueDefault / ConvertValueDiffFromMin
 -- conversion (identical at step 1). The Damage Meter padding is saved only:
--- MSUF never calls DamageMeterMixin:SetBarSpacing (rc1 LB-4).
+-- MSUF never calls DamageMeterMixin:SetBarSpacing (rc1 LB-4). The Bag Slot
+-- Padding is staged in MSUF's per-character SavedVariables until the Reload
+-- click merges it into the layout (editmode_blizzard_layout_fields_smoke).
 -- Real ExternalProvider.lua and MSUF_EditMode_Blizzard.lua. arg 1 = repo root.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 
@@ -66,6 +68,9 @@ local bagsBar = Frame(SYSTEM.Bags)
 local meter = Frame(SYSTEM.DamageMeter)
 EditModeManagerFrame = { registeredSystemFrames = { Frame(SYSTEM.Minimap), bagsBar, meter } }
 InCombatLockdown = function() return false end
+-- MSUF's own SavedVariables and character key (State/MSUF_Profiles.lua).
+MSUF_GlobalDB = { char = {} }
+MSUF_GetCharKey = function() return "Tester-Realm" end
 
 local function Row(setting, value) return { setting = setting, value = value } end
 local bagsEntry = {
@@ -137,6 +142,12 @@ local function Stored(entry, setting)
         if row.setting == setting then return row.value end
     end
 end
+local function StagedPadding()
+    local char = MSUF_GlobalDB.char["Tester-Realm"]
+    local staged = char and char.blizzardEditModeStaged
+    local rows = staged and staged.Mine and staged.Mine.bags
+    return rows and rows[3]
+end
 local padding = Control("bags", "padding")
 
 Check(padding.min == 2 and padding.max == 10 and padding.step == 1,
@@ -146,24 +157,27 @@ Check(padding.get() == 4,
 
 for _, value in ipairs({ 6, 9, 10, 2, 3 }) do
     Check(padding.set(value) == true, "Bag Slot Padding " .. value .. " did not commit")
-    Check(Stored(bagsEntry, 3) == value,
-        "Bag Slot Padding " .. value .. " saved raw " .. tostring(Stored(bagsEntry, 3)) .. ", Blizzard stores the shown value")
-    Check(bagsBar.bagPadding == value,
-        "Bag Slot Padding " .. value .. " painted BagsBar.bagPadding " .. tostring(bagsBar.bagPadding))
+    Check(StagedPadding() == value,
+        "Bag Slot Padding " .. value .. " staged raw " .. tostring(StagedPadding()) .. ", Blizzard stores the shown value")
+    Check(Stored(bagsEntry, 3) == 4, "Bag Slot Padding " .. value .. " reached the layout before the Reload click")
+    Check(bagsBar.bagPadding == nil,
+        "Bag Slot Padding " .. value .. " wrote Blizzard-owned BagsBar.bagPadding")
     Check(padding.get() == value, "Bag Slot Padding " .. value .. " read back as " .. tostring(padding.get()))
 end
 padding.set(1)
-Check(Stored(bagsEntry, 3) == 2, "Bag Slot Padding below the range saved " .. tostring(Stored(bagsEntry, 3)) .. ", expected 2")
+Check(StagedPadding() == 2, "Bag Slot Padding below the range staged " .. tostring(StagedPadding()) .. ", expected 2")
 padding.set(14)
-Check(Stored(bagsEntry, 3) == 10, "Bag Slot Padding above the range saved " .. tostring(Stored(bagsEntry, 3)) .. ", expected 10")
+Check(StagedPadding() == 10, "Bag Slot Padding above the range staged " .. tostring(StagedPadding()) .. ", expected 10")
+padding.set(4)
+Check(StagedPadding() == nil, "Bag Slot Padding back at the saved 4 stayed staged")
 
--- A row an older build saved below the minimum: shown and painted as
--- Blizzard's clamped 2, also when another Bags setting re-applies the row.
+-- A legacy row below the minimum still shows Blizzard's clamped 2. Safe size
+-- application leaves padding stored for the native owner, without field writes.
 bagsEntry.settings[4].value = 0
 Check(padding.get() == 2, "a stored padding 0 shows " .. tostring(padding.get()) .. ", Blizzard shows 2")
 Check(Control("bags", "size").set(100) == true, "Bags size did not commit")
-Check(bagsBar.bagPadding == 2,
-    "a stored padding 0 painted BagsBar.bagPadding " .. tostring(bagsBar.bagPadding) .. ", Blizzard paints 2")
+Check(bagsBar.bagPadding == nil, "a stored padding 0 wrote Blizzard-owned BagsBar.bagPadding")
+Check(Stored(bagsEntry, 3) == 0, "applying size changed legacy stored padding")
 
 -- The ConvertValueDefault steppers keep their conversion.
 local size = Control("bags", "size")

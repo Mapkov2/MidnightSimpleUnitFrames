@@ -316,6 +316,8 @@ local function RunDamageMeterSettings()
     }
     local general
     _G.MSUF_GetGeneralDB = function() return general end
+    -- MSUF's own SavedVariables and character key (staged Blizzard settings).
+    _G.MSUF_GlobalDB, _G.MSUF_GetCharKey = { char = {} }, function() return "Tester-Realm" end
     _G.MSUF_EM2 = { Registry = {} }
     local statuses = {}
     _G.MSUF_EM2_SetHUDStatus = function(text) statuses[#statuses + 1] = text end

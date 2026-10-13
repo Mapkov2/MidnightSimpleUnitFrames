@@ -101,6 +101,7 @@ local function EnsureEventFrame()
     eventFrame:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_LOGIN" then
             self:UnregisterEvent("PLAYER_LOGIN")
+            if not IsEnabled() then return end
             if IsInCombat() then
                 -- Login can complete during combat reloads. Defer instead of touching analytics
                 -- libraries while protected state is unstable.
@@ -394,4 +395,5 @@ ExportPublic("MSUF_Analytics_IsEnabled", function()
     return Analytics.IsEnabled()
 end)
 
-if IsEnabled() then EnsureEventFrame():RegisterEvent("PLAYER_LOGIN") end
+--- The opt-out is read at login: SavedVariables arrive after every file ran.
+EnsureEventFrame():RegisterEvent("PLAYER_LOGIN")

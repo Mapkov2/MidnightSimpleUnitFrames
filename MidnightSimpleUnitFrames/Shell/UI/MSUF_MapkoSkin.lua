@@ -4,6 +4,7 @@ local Skin = {}
 MSUF.MenuSkin = Skin
 local api, client, active
 local events
+local loginReached = false
 local appearance = {}
 local records = setmetatable({}, { __mode = "k" })
 local texts = setmetatable({}, { __mode = "k" })
@@ -257,8 +258,10 @@ function Skin.Refresh(_, domain, key)
     if events then events:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 end
 
+--- Refresh reads the profile opt-out: connect at login at the earliest;
+--- profile binds refresh again (MSUF_InitProfiles, ProfileRuntime.Apply).
 local function Connect()
-    if api then return end
+    if not loginReached or api then return end
     local provider = _G.MapkoSkin
     if provider and provider.migrationOnly then return end
     local candidate = provider and provider.GetAPI and provider.GetAPI(2, 1)
@@ -270,12 +273,16 @@ local function Connect()
     Skin.Refresh()
     Skin.BindColors(MSUF.UI and MSUF.UI.colors)
 end
-Connect()
 events = CreateFrame("Frame")
-if not api then events:RegisterEvent("ADDON_LOADED") end
-if Skin.pending then events:RegisterEvent("PLAYER_REGEN_ENABLED") end
+events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("ADDON_LOADED")
 events:SetScript("OnEvent", function(_, event, name)
-    if event == "ADDON_LOADED" and (name == "MapkoSkin" or name == "MSUF_Suite_Skin") then
+    if event == "PLAYER_LOGIN" then
+        loginReached = true
+        events:UnregisterEvent(event)
+        Connect()
+        if api then events:UnregisterEvent("ADDON_LOADED") end
+    elseif event == "ADDON_LOADED" and (name == "MapkoSkin" or name == "MSUF_Suite_Skin") then
         Connect()
         if api then events:UnregisterEvent("ADDON_LOADED") end
     elseif event == "PLAYER_REGEN_ENABLED" and Skin.pending then Skin.Refresh() end

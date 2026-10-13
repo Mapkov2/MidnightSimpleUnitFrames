@@ -252,6 +252,7 @@ function MSUF_InitProfiles()
     MSUF_ProfileIO_RunEnsureDB(false, true)
     MSUF.NumberFormat.Refresh()
     if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
+    if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
     if Variants then Variants.ResolveCurrent() end
     if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
@@ -1894,6 +1895,8 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
     if type(payload.general) == "table" then
         payload.general.blizzardEditModeSnapshot = nil
     end
+    --- The snapshot holds committed layout values only: Micro Menu and Bags
+    --- values still pending a Reload are not exported (MSUF_EditMode_Blizzard.lua).
     if kind == "all" and MSUF_ProfileIO_ExportBlizzardEM then
         local blizzSnapshot = type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table"
             and MSUF_DB.general.blizzardEditModeSnapshot or nil

@@ -450,6 +450,7 @@ end
 local function RefreshTrinketLayout(configKey)
     if configKey ~= nil and tostring(configKey):sub(1, 5) ~= "arena" then return end
     layoutSerial = layoutSerial + 1
+    SyncCooldownSubscription()
     SyncTrinketIcons(false)
 end
 
@@ -560,6 +561,7 @@ end
 
 local mistsLogWired = false
 local mistsLogLive = false
+local cooldownEventWired = false
 local cooldownEventLive = false
 local COOLDOWN_EVENT = "ARENA_COOLDOWNS_UPDATE"
 local COOLDOWN_KEY = "MSUF_ARENA_TRINKET_COOLDOWN"
@@ -587,12 +589,12 @@ end
 --- ARENA_COOLDOWNS_UPDATE refreshes only live holders, shown only in an arena
 --- match, but raids fire it too (2026-10-11 trace: 188 no-op syncs, 3.55 ms).
 --- Like Blizzard's CcRemover, listen only in arena and battleground instances,
---- re-checked at PLAYER_LOGIN and every PLAYER_ENTERING_WORLD; previews never
---- used it. A disabled display (no instance read) or a client without
---- IsInInstance keeps it, as before.
+--- while arena frames and trinkets are on; re-checked at login, world entry
+--- and arena settings applies. Previews never used it.
 SyncCooldownSubscription = function()
-    local wanted = true
-    if ArenaEnabled() and ShowTrinketEnabled() then
+    if not cooldownEventWired then return end
+    local wanted = ArenaEnabled() and ShowTrinketEnabled()
+    if wanted then
         local instanceType = InstanceType()
         wanted = instanceType == nil or instanceType == "arena" or instanceType == "pvp"
     end
@@ -615,6 +617,7 @@ local function WireEvents()
     -- COMBAT_LOG_EVENT_UNFILTERED is deliberately absent: on Mists
     -- SyncMistsCombatLog owns that subscription per arena instance.
     mistsLogWired = IS_MISTS
+    cooldownEventWired = true
 
     local register = _G.MSUF_EventBus_Register
     for index = 1, #events do

@@ -38,6 +38,10 @@ local function LoadModule(namespace, beforeLogin)
     end
 end
 
+-- MSUF's own SavedVariables and character key (State/MSUF_Profiles.lua): the
+-- adapter stages Micro Menu and Bags settings there.
+MSUF_GlobalDB, MSUF_GetCharKey = { char = {} }, function() return "Tester-Realm" end
+
 -- Older or partial Classic clients must load the shared manifest without
 -- constructing a Blizzard adapter when the native Edit Mode enum is absent.
 ClearExports()
@@ -312,6 +316,9 @@ end
 
 local function LoadAdapter(opts)
     local ctx = { registered = {}, saves = 0, normalScaleCalls = 0, queueScaleCalls = 0 }
+    ctx.statuses = {}
+    -- A staged Blizzard setting says a reload applies it (MSUF HUD status).
+    MSUF_EM2_SetHUDStatus = function(text) ctx.statuses[#ctx.statuses + 1] = text end
     local sys = { Minimap = 2, ChatFrame = 8, HudTooltip = 11, MicroMenu = 13, Bags = 14, DamageMeter = 23 }
     ctx.system = sys
     Enum = {
@@ -386,6 +393,8 @@ local function LoadAdapter(opts)
     }
     EditModePresetLayoutManager = opts.presetManager
     MSUF_DB = { general = { blizzardEditModeIntegration = true, blizzardEditModeSnapshot = opts.snapshot } }
+    -- MSUF's own SavedVariables and character key: staged Blizzard settings.
+    MSUF_GlobalDB, MSUF_GetCharKey = { char = {} }, function() return "Tester-Realm" end
     if opts.atLogin then MSUF_DB = nil end
     local clientNamespace = { Client = opts.client }
     function clientNamespace.ExportPublic(name, value)
@@ -410,7 +419,8 @@ do
         "Micro Menu offered Eye Size without the setting: " .. ControlIds(ctx.registered.micromenu))
     local sizeControl = ctx.registered.micromenu.extraControls[1]
     assert(sizeControl.id == "size" and sizeControl.set(100) == true, "Micro Menu size did not commit")
-    assert(ctx.normalScaleCalls == 1, "Micro Menu size did not apply")
+    assert(ctx.normalScaleCalls == 0, "Micro Menu size called the field-writing normal-scale setter")
+    assert(ctx.statuses[#ctx.statuses] == "Requires a UI reload.", "Micro Menu size did not say a reload applies it")
     assert(ctx.queueScaleCalls == 0, "a deprecated Eye Size row rescaled the queue eye")
 end
 
@@ -692,12 +702,10 @@ do
 end
 
 
--- Review R7 P2: MicroMenu and BagsBar have no Blizzard setter for orientation,
--- order, direction or slot padding. Blizzard's own system mixin assigns these
--- plain fields and only for dirty settings (EditModeSystemTemplates), and its
--- Layout reads them back. The adapter writes a field only when its value
--- changes: a size change, a repeated click or an unchanged profile snapshot
--- leaves both frames untouched; a real change still applies.
+-- Layout controls retain their saved values without writing Blizzard-owned
+-- fields. Native layout methods consume those fields; a reload lets the
+-- native owner apply the saved layout. Bags size and queue-eye size retain
+-- their safe public widget-method paths.
 do
     local ctx = LoadAdapter({ microSetting = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }, snapshot = {} })
     -- Only the layout fields count; the stub frame records its own calls too.
@@ -731,27 +739,29 @@ do
         for i = #writes, 1, -1 do writes[i] = nil end
     end
     assert(Control("micromenu", "vertical").set(true) == true, "Micro Menu vertical did not commit")
-    Expect("Micro Menu vertical", "MicroMenu.isHorizontal")
-    assert(MicroMenu.isHorizontal == false, "Micro Menu vertical did not apply")
+    Expect("Micro Menu vertical", "")
+    assert(Control("micromenu", "vertical").get() == true and MicroMenu.isHorizontal == true,
+        "Micro Menu vertical was not stored separately from native state")
     assert(Control("micromenu", "size").set(110) == true, "Micro Menu size did not commit")
     Expect("Micro Menu size", "")
     assert(Control("micromenu", "vertical").set(true) == true, "repeated Micro Menu vertical did not commit")
     Expect("repeated Micro Menu vertical", "")
     assert(Control("micromenu", "reverse").set(true) == true, "Micro Menu reverse did not commit")
-    Expect("Micro Menu reverse", "MicroMenu.layoutFramesGoingRight,MicroMenu.layoutFramesGoingUp")
-    assert(MicroMenu.layoutFramesGoingRight == false and MicroMenu.layoutFramesGoingUp == true,
-        "Micro Menu reverse did not apply")
+    Expect("Micro Menu reverse", "")
+    assert(Control("micromenu", "reverse").get() == true and MicroMenu.layoutFramesGoingRight == true
+        and MicroMenu.layoutFramesGoingUp == false, "Micro Menu reverse changed native fields or lost its setting")
     assert(Control("bags", "vertical").set(true) == true, "Bags vertical did not commit")
-    Expect("Bags vertical", "BagsBar.isHorizontal")
+    Expect("Bags vertical", "")
     assert(Control("bags", "padding").set(4) == true, "Bags padding did not commit")
-    Expect("Bags padding", "BagsBar.bagPadding")
+    Expect("Bags padding", "")
     -- Bag Slot Padding stores the shown value (no ConvertValue in Blizzard's display info).
-    assert(bags.bagPadding == 4 and bags.isHorizontal == false, "Bags padding or orientation did not apply")
+    assert(Control("bags", "padding").get() == 4 and Control("bags", "vertical").get() == true
+        and bags.bagPadding == nil and bags.isHorizontal == true, "Bags settings changed native fields or were lost")
     assert(Control("bags", "size").set(100) == true, "Bags size did not commit")
     Expect("Bags size", "")
     assert(Control("bags", "reversedir").set(true) == true, "Bags direction did not commit")
-    Expect("Bags direction", "BagsBar.direction")
-    assert(bags.direction == 1, "Bags direction did not apply")
+    Expect("Bags direction", "")
+    assert(Control("bags", "reversedir").get() == true and bags.direction == nil, "Bags direction changed native state")
     assert(MSUF_BlizzardEditMode_ApplyProfileSnapshot() == true, "the unchanged profile snapshot did not apply")
     Expect("unchanged profile snapshot", "")
     setmetatable(bags, nil)

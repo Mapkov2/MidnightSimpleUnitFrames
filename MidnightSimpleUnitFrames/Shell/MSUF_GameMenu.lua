@@ -33,6 +33,9 @@ local initFrame
 local pendingGameMenu
 local HookGameMenu
 local ellesmereSkin
+local menuButton, hookedGameMenu, queuedGeneration
+local menuLayout = {}
+local buttonOffsets = setmetatable({}, { __mode = "k" })
 
 local function ApplyEllesmereSkin(button)
     if not (ellesmereSkin and button) then return end
@@ -186,9 +189,9 @@ local function EnsureButton()
     local gameMenu = _G.GameMenuFrame
     if not gameMenu or not CreateFrame then return nil end
 
-    local button = gameMenu.MSUF or _G[BUTTON_NAME]
+    local button = menuButton or _G[BUTTON_NAME]
     if button then
-        gameMenu.MSUF = button
+        menuButton = button
         return button
     end
 
@@ -204,7 +207,7 @@ local function EnsureButton()
     button:SetScript("OnClick", OpenMSUFOptions)
     button:Hide()
 
-    gameMenu.MSUF = button
+    menuButton = button
     return button
 end
 
@@ -237,19 +240,20 @@ local function IsSamePointWithOffset(current, original, offsetY)
     return math.abs((current.offsetY or 0) - ((original.offsetY or 0) + offsetY)) <= 0.01
 end
 
-local function ApplyButtonOffset(button, offsetY, text)
+local function ApplyButtonOffset(button, offsetY)
     local current = GetPointSnapshot(button)
     if not current then return false end
 
-    local original = button.MSUFGameMenuOriginalPoint
-    local lastOffset = button.MSUFGameMenuLastOffsetY or 0
+    local state = buttonOffsets[button]
+    local original = state and state.point
+    local lastOffset = state and state.offsetY or 0
     if not IsSamePointWithOffset(current, original, lastOffset) then
         original = current
-        button.MSUFGameMenuOriginalPoint = original
+        state = { point = original }
+        buttonOffsets[button] = state
     end
 
-    button.MSUFGameMenuLastOffsetY = offsetY
-    button.MSUFGameMenuLastText = text
+    state.offsetY = offsetY
     button:ClearAllPoints()
     button:SetPoint(
         original.point,
@@ -268,14 +272,14 @@ local function ForEachGameMenuButton(callback)
     local pool = gameMenu.buttonPool
     if pool and type(pool.EnumerateActive) == "function" then
         for button in pool:EnumerateActive() do
-            if button and button ~= gameMenu.MSUF and type(button.GetText) == "function" then
+            if button and button ~= menuButton and type(button.GetText) == "function" then
                 callback(button)
             end
         end
         return true
     end
 
-    local customButton = gameMenu.MSUF
+    local customButton = menuButton
     local children = { gameMenu:GetChildren() }
     for i = 1, #children do
         local child = children[i]
@@ -288,8 +292,8 @@ end
 
 local function GetBaseGameMenuHeight(gameMenu)
     local height = gameMenu:GetHeight() or 0
-    local adjustedHeight = gameMenu.MSUFAdjustedHeight
-    local addedHeight = gameMenu.MSUFAddedHeight or 0
+    local adjustedHeight = menuLayout.adjustedHeight
+    local addedHeight = menuLayout.addedHeight or 0
     if adjustedHeight and math.abs(height - adjustedHeight) <= 0.01 then
         return height - addedHeight
     end
@@ -297,11 +301,12 @@ local function GetBaseGameMenuHeight(gameMenu)
 end
 
 local function RestoreButtonOffset(button)
-    local original = button and button.MSUFGameMenuOriginalPoint
+    local state = button and buttonOffsets[button]
+    local original = state and state.point
     if not original then return false end
 
     local current = GetPointSnapshot(button)
-    local lastOffset = button.MSUFGameMenuLastOffsetY or 0
+    local lastOffset = state.offsetY or 0
     if current and IsSamePointWithOffset(current, original, lastOffset) then
         button:ClearAllPoints()
         button:SetPoint(
@@ -313,17 +318,15 @@ local function RestoreButtonOffset(button)
         )
     end
 
-    button.MSUFGameMenuOriginalPoint = nil
-    button.MSUFGameMenuLastOffsetY = nil
-    button.MSUFGameMenuLastText = nil
+    buttonOffsets[button] = nil
     return true
 end
 
--- Secure children (ConsolePort's menu trigger, for example) can protect the
--- otherwise ordinary menu. Keep all geometry writes behind the live lockdown
--- check, including callbacks queued before combat, and replay only once.
+-- No MSUF write reaches the Blizzard menu during combat lockdown, protected
+-- (a secure child such as ConsolePort's trigger) or not: checked live, also
+-- for callbacks queued before combat, and replayed once afterwards.
 local function DeferLockedGameMenuLayout(gameMenu)
-    if not InCombatLockdown() or not gameMenu:IsProtected() then
+    if not InCombatLockdown() then
         if pendingGameMenu then
             pendingGameMenu = nil
             initFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -333,7 +336,7 @@ local function DeferLockedGameMenuLayout(gameMenu)
 
     if not pendingGameMenu then initFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     pendingGameMenu = gameMenu
-    local button = gameMenu.MSUF
+    local button = menuButton
     if button and not button:IsProtected() then button:Hide() end
     return true
 end
@@ -345,15 +348,15 @@ local function RestoreGameMenuLayout()
     local baseHeight = GetBaseGameMenuHeight(gameMenu)
     ForEachGameMenuButton(RestoreButtonOffset)
 
-    local button = gameMenu.MSUF
+    local button = menuButton
     if button then
         button:Hide()
     end
 
-    if gameMenu.MSUFAdjustedHeight then
+    if menuLayout.adjustedHeight then
         gameMenu:SetHeight(baseHeight)
-        gameMenu.MSUFAdjustedHeight = nil
-        gameMenu.MSUFAddedHeight = nil
+        menuLayout.adjustedHeight = nil
+        menuLayout.addedHeight = nil
     end
 end
 
@@ -378,23 +381,23 @@ local function PositionGameMenuButton()
         if type(text) ~= "string" or text == "" then return end
 
         if IsExitButtonText(text) then
-            ApplyButtonOffset(menuButton, EXIT_OFFSET_Y, text)
+            ApplyButtonOffset(menuButton, EXIT_OFFSET_Y)
         else
             if IsMacroButtonText(text) then
                 macroButton = menuButton
             end
             anchorButton = menuButton
-            ApplyButtonOffset(menuButton, BODY_OFFSET_Y, text)
+            ApplyButtonOffset(menuButton, BODY_OFFSET_Y)
         end
     end)
 
     anchorButton = macroButton or anchorButton
     if not anchorButton then
         button:Hide()
-        if gameMenu.MSUFAdjustedHeight then
+        if menuLayout.adjustedHeight then
             gameMenu:SetHeight(baseHeight)
-            gameMenu.MSUFAdjustedHeight = nil
-            gameMenu.MSUFAddedHeight = nil
+            menuLayout.adjustedHeight = nil
+            menuLayout.addedHeight = nil
         end
         return
     end
@@ -412,16 +415,18 @@ local function PositionGameMenuButton()
 
     local addedHeight = anchorHeight + HEIGHT_PADDING
     local adjustedHeight = baseHeight + addedHeight
-    gameMenu.MSUFAddedHeight = addedHeight
-    gameMenu.MSUFAdjustedHeight = adjustedHeight
+    menuLayout.addedHeight = addedHeight
+    menuLayout.adjustedHeight = adjustedHeight
     gameMenu:SetHeight(adjustedHeight)
 end
 
 local function QueuePositionGameMenuButton()
-    if not runtimeEnabled then return end
+    if not runtimeEnabled or queuedGeneration == positionGeneration then return end
     local generation = positionGeneration
     if C_Timer and type(C_Timer.After) == "function" then
+        queuedGeneration = generation
         C_Timer.After(0, function()
+            if queuedGeneration == generation then queuedGeneration = nil end
             if runtimeEnabled and generation == positionGeneration then PositionGameMenuButton() end
         end)
     else
@@ -453,13 +458,20 @@ HookGameMenu = function()
     if not runtimeEnabled then return false end
     local gameMenu = _G.GameMenuFrame
     if not gameMenu then return false end
-    if gameMenu.MSUFGameMenuHooked then return true end
+    if hookedGameMenu == gameMenu then return true end
 
     if not DeferLockedGameMenuLayout(gameMenu) then EnsureButton() end
     gameMenu:HookScript("OnShow", function()
         if runtimeEnabled then QueuePositionGameMenuButton() end
     end)
-    gameMenu.MSUFGameMenuHooked = true
+    --- InitButtons re-pools the buttons (each show, store/trial events); the
+    --- native Layout re-anchors them on a later OnUpdate: re-queue after it.
+    if gameMenu.Layout then
+        hooksecurefunc(gameMenu, "Layout", QueuePositionGameMenuButton)
+    elseif gameMenu.InitButtons then
+        hooksecurefunc(gameMenu, "InitButtons", QueuePositionGameMenuButton)
+    end
+    hookedGameMenu = gameMenu
     return true
 end
 
@@ -477,6 +489,9 @@ initFrame:SetScript("OnEvent", function(self, event)
         pendingGameMenu = nil
         self:UnregisterEvent(event)
         if gameMenu then
+            -- This replay is the one combat-end layout: drop a pass queued
+            -- during combat that has not run yet.
+            positionGeneration = positionGeneration + 1
             if runtimeEnabled and IsGameMenuButtonEnabled() then
                 if gameMenu:IsShown() then PositionGameMenuButton() end
             else
