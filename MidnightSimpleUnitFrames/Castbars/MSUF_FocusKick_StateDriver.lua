@@ -44,7 +44,6 @@ end
 
 local function SetFocusCastbarSuppressed(suppressed)
     local focusCastbar = G.MSUF_FocusCastBar or G.MSUF_FocusCastbar
-        or ((G.FocusCastBar and G.FocusCastBar._msufCastbarDriver == true) and G.FocusCastBar)
     if not (focusCastbar and focusCastbar.SetAlpha) then return end
 
     focusCastbar._msufFocusKickSuppressed = suppressed and true or nil

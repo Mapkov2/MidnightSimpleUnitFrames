@@ -41,33 +41,6 @@ if type(IsCastbarEnabledForUnit) ~= "function" then
 end
 ExportPublic("MSUF_IsCastbarEnabledForUnit", IsCastbarEnabledForUnit)
 
-local IsCastTimeEnabled = _G.MSUF_IsCastTimeEnabled
-if type(IsCastTimeEnabled) ~= "function" then
-    IsCastTimeEnabled = function(frame)
-        local general = GeneralDB()
-        local unit = frame and frame.unit
-
-        if unit == "player" then
-            return general.showPlayerCastTime ~= false
-        end
-
-        if unit == "target" then
-            return general.showTargetCastTime ~= false
-        end
-
-        if unit == "focus" then
-            return general.showFocusCastTime ~= false
-        end
-
-        if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
-            return general.showBossCastTime ~= false
-        end
-
-        return true
-    end
-end
-ExportPublic("MSUF_IsCastTimeEnabled", IsCastTimeEnabled)
-
 --- Reversible ownership for Blizzard's player castbar. PetCastingBarFrame is
 --- owned by Blizzard's PetFrame lifecycle and must stay outside this bridge;
 --- coupling it to the player backend can leave Blizzard dispatching
@@ -252,7 +225,6 @@ local function SuppressBlizzardPlayerCastbars()
     return NativeOwner:Apply()
 end
 ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
-ExportPublic("MSUF_ApplyBlizzardCastbarOwnership", SuppressBlizzardPlayerCastbars)
 
 local SyncBlizzardCastbarEvents
 eventFrame = CreateFrame("Frame")
@@ -323,9 +295,7 @@ if type(CastbarsForceHideAll) ~= "function" then
         Hide(_G.MSUF_PlayerCastBar)
         Hide(_G.MSUF_PlayerCastbar)
         Hide(_G.MSUF_TargetCastbar)
-        Hide((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)
         Hide(_G.MSUF_FocusCastbar)
-        Hide((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
 
         -- Boss and arena: every built pool (MSUF_CastbarPools.lua).
         local pools = ns.Castbars and ns.Castbars.Pools

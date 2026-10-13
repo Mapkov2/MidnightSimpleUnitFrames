@@ -1320,12 +1320,8 @@ local function RefreshAll(updateFillColor)
 
     -- Keep this traversal direct. RefreshAll is event-driven and a capturing
     -- callback here produced one short-lived closure on every refresh.
-    RefreshFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
-        or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar),
-        nil, status, general, updateFillColor)
-    RefreshFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
-        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar),
-        nil, status, general, updateFillColor)
+    RefreshFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, nil, status, general, updateFillColor)
+    RefreshFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, nil, status, general, updateFillColor)
 
     -- Boss, then arena: every built pool (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools

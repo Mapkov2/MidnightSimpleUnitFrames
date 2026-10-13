@@ -109,6 +109,9 @@ local function Load(pool, flavor, general)
     end
     env.EnsureDB = function() end
     env.MSUF_DB = { general = general }
+    -- MSUF_CastbarDriver.lua (not loaded here) publishes the cast events the pool registers.
+    ns.Castbars = ns.Castbars or {}
+    ns.Castbars.UnitCastEvents = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP" }
 
     -- Both descriptors are built by the shared pool module, which loads first.
     ok, message = world:LoadFile(CORE .. "Castbars/MSUF_CastbarPools.lua", ADDON, ns)

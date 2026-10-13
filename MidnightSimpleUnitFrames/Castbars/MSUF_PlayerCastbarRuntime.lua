@@ -673,7 +673,6 @@ local CAST_START_EVENTS = {
     UNIT_SPELLCAST_START = true,
     UNIT_SPELLCAST_INTERRUPTIBLE = true,
     UNIT_SPELLCAST_NOT_INTERRUPTIBLE = true,
-    UNIT_SPELLCAST_SENT = true,
 }
 
 local CAST_STOP_EVENTS = {
@@ -746,7 +745,6 @@ local function UnhaltedUpdate(frame, event)
     elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
         frame.isNotInterruptible = true
     elseif event == "UNIT_SPELLCAST_START"
-        or event == "UNIT_SPELLCAST_SENT"
         or event == "UNIT_SPELLCAST_CHANNEL_START" then
         frame.isNotInterruptible = false
     end
@@ -994,8 +992,7 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
         ShowPlayerInterruptFeedback(frame, select(4, ...))
         return true
     elseif event == "UNIT_SPELLCAST_STOP"
-        or event == "UNIT_SPELLCAST_FAILED"
-        or event == "UNIT_SPELLCAST_SUCCEEDED" then
+        or event == "UNIT_SPELLCAST_FAILED" then
         ClearEmpower(frame, true)
         return true
     end
@@ -1075,7 +1072,6 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
 
     if not frame.isEmpower then
         if event == "UNIT_SPELLCAST_START"
-            or event == "UNIT_SPELLCAST_SENT"
             or event == "UNIT_SPELLCAST_CHANNEL_START"
             or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
             or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
@@ -1137,6 +1133,5 @@ end
 
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)
 ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", UpdateColorForInterruptible)
-ExportPublic("MSUF_PlayerCastbar_ShowInterruptFeedback", ShowInterruptFeedback)
 ExportPublic("MSUF_PlayerCastbar_Cast", CastPlayerCastbar)
 ExportPublic("MSUF_PlayerCastbar_OnEvent", PlayerCastbarOnEvent)

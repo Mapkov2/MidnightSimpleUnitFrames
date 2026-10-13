@@ -75,7 +75,6 @@ local function FocusSourceCastbar()
     return (iconFrame and iconFrame.MSUF_sourceCastBar)
         or _G.MSUF_FocusCastBar
         or _G.MSUF_FocusCastbar
-        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
 end
 
 local function DetachTimeDriver()
@@ -370,7 +369,6 @@ local function PlayInterruptFeedback()
                 return
             end
             local source = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
-                or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
             ApplyInterruptibilityColor(
                 source and source.isNotInterruptible == true,
                 source and source._msufApiNotInterruptibleRaw
@@ -698,7 +696,6 @@ local function ApplyCastState(state)
     end
 
     iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
-        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
     iconFrame:Show()
     -- The option, font, drag and shake paths own the geometry; a cast state

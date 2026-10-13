@@ -271,20 +271,6 @@ local function AnchorDriverFrameToUnitFrame(frame, unit)
     end
 end
 
-local function HideChannelHasteMarkers(frame)
-    local fn = _G.MSUF_PlayerChannelHasteMarkers_Hide
-    if type(fn) == "function" then
-        fn(frame)
-    end
-end
-
-local function UpdateChannelHasteMarkers(frame, force)
-    local fn = _G.MSUF_PlayerChannelHasteMarkers_Update
-    if type(fn) == "function" then
-        fn(frame, force)
-    end
-end
-
 local toPlainIsSecret = _G.issecretvalue
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
@@ -637,6 +623,9 @@ end
 MSUF.Castbars = MSUF.Castbars or {}
 local Driver = MSUF.Castbars.Driver or {}
 MSUF.Castbars.Driver = Driver
+-- The spellcast events every hostile-unit bar listens to; the boss and arena
+-- pools (MSUF_CastbarPools.lua) register the same list.
+MSUF.Castbars.UnitCastEvents = CASTBAR_UNIT_EVENTS
 function Driver.ShowState(frame, state)
     ShowActiveState(frame, state or BuildState(frame))
 end
@@ -682,7 +671,6 @@ local function StopDriverFrame(frame, reason)
 
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
-    HideChannelHasteMarkers(frame)
     if frame.castTargetText then
         SetTextIfChanged(frame.castTargetText, "")
         frame.castTargetText:Hide()
@@ -1497,7 +1485,6 @@ local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, l
     end
     reverseFill = reverseFill == true
     frame._msufStripeReverseFill = reverseFill
-    UpdateChannelHasteMarkers(frame, true)
 
     if frame.UpdateColorForInterruptible then
         -- ApplyColor owns the single KickReady refresh; pass the state
@@ -1588,7 +1575,6 @@ local function InstallDriverCastMethods(frame)
     end
 
     function frame:SetInterrupted(interruptedBy)
-        HideChannelHasteMarkers(self)
         ClearFrameOnUpdate(self)
         self._msufHideToken = (self._msufHideToken or 0) + 1
         self._msufInactiveRecheckToken = nil
@@ -1655,7 +1641,6 @@ local function InstallDriverCastMethods(frame)
     end
 
     function frame:SetSucceeded()
-        HideChannelHasteMarkers(self)
         if self.interrupted then return end
 
         -- The earliest confirmation wins. Retire the remaining native signal
@@ -1722,17 +1707,9 @@ local function EnsureDriverUnit(unit)
         if frame and frame._msufCastbarDriver == true then
             return frame
         end
-        frame = _G.TargetCastBar
-        if frame and frame._msufCastbarDriver == true then
-            return frame
-        end
         return CreateCastBar("MSUF_TargetCastBar", "target")
     elseif unit == "focus" then
         local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
-        if frame and frame._msufCastbarDriver == true then
-            return frame
-        end
-        frame = _G.FocusCastBar
         if frame and frame._msufCastbarDriver == true then
             return frame
         end
@@ -1769,7 +1746,6 @@ local function HardHideDriverFrame(frame)
     frame.MSUF_castActive = false
     frame.interrupted = nil
     frame.MSUF_kickInterruptibleConfirmed = nil
-    HideChannelHasteMarkers(frame)
 
     if _G.MSUF_CB_ResetStateOnStop then
         _G.MSUF_CB_ResetStateOnStop(frame, "HARDHIDE")
@@ -1786,12 +1762,8 @@ local function GetExistingDriverFrame(unit)
     if unit == "target" then
         local frame = _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
         if frame and frame._msufCastbarDriver == true then return frame end
-        frame = _G.TargetCastBar
-        if frame and frame._msufCastbarDriver == true then return frame end
     elseif unit == "focus" then
         local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
-        if frame and frame._msufCastbarDriver == true then return frame end
-        frame = _G.FocusCastBar
         if frame and frame._msufCastbarDriver == true then return frame end
     end
     return nil

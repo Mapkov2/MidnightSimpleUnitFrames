@@ -392,40 +392,6 @@ local function GetCastbarBackgroundTexture()
 end
 ExportPublic("MSUF_GetCastbarBackgroundTexture", GetCastbarBackgroundTexture)
 
-local function GetCastbarReverseFill(isChanneled)
-    EnsureDB()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local fillDirection = general and general.castbarFillDirection or "RTL"
-    local unifiedDirection = general and general.castbarUnifiedDirection or false
-
-    if fillDirection == "LEFT" then
-        fillDirection = "RTL"
-    elseif fillDirection == "RIGHT" then
-        fillDirection = "LTR"
-    end
-    if fillDirection ~= "RTL" and fillDirection ~= "LTR" then fillDirection = "RTL" end
-
-    local cache = _G.MSUF_CastbarReverseFillCache
-    if not cache then
-        cache = {}
-        ExportPublic("MSUF_CastbarReverseFillCache", cache)
-    end
-
-    local cacheKey = (fillDirection == "RTL" and 4 or 0)
-        + (unifiedDirection and 2 or 0)
-        + (isChanneled and 1 or 0)
-    local cached = cache[cacheKey]
-    if cached ~= nil then return cached end
-
-    local normalReverse = fillDirection == "RTL"
-    -- Channels keep the cast's anchor: unified direction switches the native
-    -- timer between drain (RemainingTime) and fill (ElapsedTime) instead of
-    -- flipping the anchor, so the anchor is direction-only for every cast type.
-    local reverseFill = normalReverse
-    cache[cacheKey] = reverseFill and true or false
-    return cache[cacheKey]
-end
-
 if not _G.MSUF_CastbarStyleRevision then ExportPublic("MSUF_CastbarStyleRevision", 1) end
 
 local function BumpCastbarStyleRevision()
@@ -442,9 +408,6 @@ local function GetGlobalCastbarStyleCache()
 
     cache = cache or {}
     cache.rev = revision
-    local db = EnsureDB()
-    local general = (db and db.general) or {}
-    cache.unifiedDirection = general.castbarUnifiedDirection == true
 
     local texture = GetCastbarTexture()
     if not texture or texture == "" then texture = "Interface\\TARGETINGFRAME\\UI-StatusBar" end
@@ -453,8 +416,6 @@ local function GetGlobalCastbarStyleCache()
     local bgTexture = GetCastbarBackgroundTexture()
     if not bgTexture or bgTexture == "" then bgTexture = texture end
     cache.bgTexture = bgTexture
-    cache.reverseFillNormal = GetCastbarReverseFill(false) and true or false
-    cache.reverseFillChanneled = GetCastbarReverseFill(true) and true or false
     ExportPublic("MSUF_GlobalCastbarStyleCache", cache)
     return cache
 end
@@ -468,11 +429,8 @@ local function RefreshCastbarStyleCache(frame)
     local cache = GetGlobalCastbarStyleCache()
     frame.MSUF_castbarStyleRev = revision
     if cache then
-        frame.MSUF_cachedUnifiedDirection = cache.unifiedDirection == true
         frame.MSUF_cachedCastbarTexture = cache.texture
         frame.MSUF_cachedCastbarBackgroundTexture = cache.bgTexture or cache.texture
-        frame.MSUF_cachedReverseFillNormal = cache.reverseFillNormal == true
-        frame.MSUF_cachedReverseFillChanneled = cache.reverseFillChanneled == true
     end
 end
 ExportPublic("MSUF_RefreshCastbarStyleCache", RefreshCastbarStyleCache)
@@ -495,11 +453,6 @@ local function UpdateTextureForFrame(frame, texture, bgTexture, revision)
         if statusTexture then statusTexture:SetHorizTile(false) end
         frame.MSUF_castbarStyleRev = revision
         frame.MSUF_cachedCastbarTexture = texture
-        frame.MSUF_cachedReverseFillNormal = GetCastbarReverseFill(false) and true or false
-        frame.MSUF_cachedReverseFillChanneled = GetCastbarReverseFill(true) and true or false
-        EnsureDB()
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
-        frame.MSUF_cachedUnifiedDirection = (general and general.castbarUnifiedDirection) == true
     end
     if frame and frame.backgroundBar then
         frame.backgroundBar:SetTexture(bgTexture)
@@ -863,16 +816,14 @@ local function BumpCastbarVisualRevisions()
     if type(bumpTime) == "function" then bumpTime() end
 end
 
---- The live bars of one pool. MSUF_<kind><n>CastBar is the pre-pool frame name.
+--- The live bars of one pool.
 local function ApplyPoolRuntimeVisuals(pool, general)
     local did = false
     local kind = pool.kind
     local castbars = pool.Castbars()
     local framePrefix = pool.descriptor.framePrefix
     for index = 1, pool.maxFrames do
-        local frame = (castbars and castbars[index])
-            or _G[framePrefix .. index]
-            or _G["MSUF_" .. kind .. index .. "CastBar"]
+        local frame = (castbars and castbars[index]) or _G[framePrefix .. index]
         did = ApplyCastbarVisualFrameCold(frame, general, kind) or did
     end
     return did

@@ -29,7 +29,3 @@ local api = Pools.DefinePreview(Pools.kinds.boss, {
 ExportPublic("MSUF_BeginBossCastbarPreviewBatch", api.BeginBatch)
 ExportPublic("MSUF_EndBossCastbarPreviewBatch", api.EndBatch)
 ExportPublic("MSUF_UpdateBossCastbarPreview", api.Update)
-ExportPublic("MSUF_HideAllBossCastbarPreviews", api.HideAll)
-ExportPublic("MSUF_CreateBossCastbarPreview", api.Create)
-ExportPublic("MSUF_ApplyBossCastbarPreviewLayout", api.ApplyLayout)
-ExportPublic("MSUF_PositionBossCastbarPreview", api.Position)

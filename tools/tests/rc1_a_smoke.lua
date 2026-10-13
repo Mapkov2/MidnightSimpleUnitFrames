@@ -181,13 +181,13 @@ local function RunCastbarHandBack(label, withGamepad, releaseInCombat)
     backend = "BLIZZARD"
     if releaseInCombat then
         inCombat = true
-        Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == false, label .. ": a combat release did not defer")
+        Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == false, label .. ": a combat release did not defer")
         Check(next(playerState.events) == nil, label .. ": a combat release touched the bar before combat ended")
         inCombat = false
         Check(eventFrame.events.PLAYER_REGEN_ENABLED == true, label .. ": the deferred release waits for no combat end")
         eventFrame.onEvent(eventFrame, "PLAYER_REGEN_ENABLED")
     else
-        _G.MSUF_ApplyBlizzardCastbarOwnership()
+        _G.MSUF_SuppressBlizzardPlayerCastbars()
     end
 
     local states = { playerState, padState }

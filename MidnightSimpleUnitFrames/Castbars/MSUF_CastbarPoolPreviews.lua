@@ -369,10 +369,6 @@ function Pools.DefinePreview(pool, desc)
     -- descriptor file exports as compatibility aliases.
     preview.api = {
         Update = function() preview:Update() end,
-        HideAll = function() preview:HideAll() end,
-        Create = function(index) return preview:Create(index) end,
-        ApplyLayout = function(frame, index) preview:ApplyLayout(frame, index) end,
-        Position = function(frame, index) preview:Position(frame, index) end,
         BeginBatch = function() preview:BeginBatch() end,
         EndBatch = function() preview:EndBatch() end,
     }

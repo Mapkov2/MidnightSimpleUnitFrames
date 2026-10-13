@@ -488,9 +488,9 @@ local function NewWorld(flavor, roster)
             general.castbarPlayerPreviewEnabled = false
             general.arenaCastbarTestMode = false
         end
-        if type(_G.MSUF_HideAllArenaCastbarPreviews) == "function" then
-            _G.MSUF_HideAllArenaCastbarPreviews()
-        end
+        local pools = W.MSUF and W.MSUF.Castbars and W.MSUF.Castbars.Pools
+        local arenaPreview = pools and pools.previews and pools.previews.arena
+        if arenaPreview then arenaPreview:HideAll() end
     end
 
     -- Unit-frame engine model (Libs/MSUFUnitFrames Runtime + Factory contracts).

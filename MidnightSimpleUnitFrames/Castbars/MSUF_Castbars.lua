@@ -395,60 +395,15 @@ end
 
 ExportPublic("MSUF_BumpCastTimeRev", BumpCastTimeRev)
 
-local CastTimeUnitKey = _G.MSUF_CastTimeUnitKey
-
-local function RefreshCastTimeEnabled(frame)
-    if not (frame and frame.unit) then return true end
-
-    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
-    if runtime and runtime.RefreshWorkConfig then
-        local enabled = runtime:RefreshWorkConfig(frame, true)
-        return enabled ~= false
-    end
-
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    if not general then
-        frame._msufCastTimeEnabled = true
-        return true
-    end
-
-    local unit = frame.unit
-    local enabled = true
-    if unit == "player" then
-        enabled = general.showPlayerCastTime ~= false
-    elseif unit == "target" then
-        enabled = general.showTargetCastTime ~= false
-    elseif unit == "focus" then
-        enabled = general.showFocusCastTime ~= false
-    elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
-        enabled = general.showBossCastTime ~= false
-    elseif frame._msufIsArenaCastbar or tostring(unit or ""):match("^arena%d+$") then
-        enabled = general.showArenaCastTime ~= false
-    end
-
-    local previousFormat = frame._msufCastTimeFormat
-    local format = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        format = _G.MSUF_GetCastbarTimeFormat(CastTimeUnitKey(frame, unit), general)
-    end
-    frame._msufCastTimeFormat = format or "CURRENT"
-
-    if previousFormat ~= frame._msufCastTimeFormat then
-        frame._msufLastTimeDecimal = nil
-        frame._msufLastTimeTotalDecimal = nil
-        frame._msufLastTimeFormat = nil
-    end
-
-    frame._msufCastTimeEnabled = enabled and true or false
-    return frame._msufCastTimeEnabled
-end
-
+--- The enabled flag and the time format are compiled once per revision by
+--- Runtime:RefreshWorkConfig (Castbars/MSUF_CastbarRuntime.lua loads first).
 local function IsCastTimeEnabled(frame, force)
     if not (frame and frame.unit) then return true end
 
     local revision = _G.MSUF__castTimeGlobalRev or 1
     if force or frame._msufCastTimeRev ~= revision or frame._msufCastTimeEnabled == nil then
-        RefreshCastTimeEnabled(frame)
+        local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+        runtime:RefreshWorkConfig(frame, true)
         frame._msufCastTimeRev = revision
     end
 

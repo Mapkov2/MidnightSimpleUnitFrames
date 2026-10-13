@@ -128,6 +128,27 @@
   {
    "category": "exports",
    "items": [
+    "MSUF_ApplyArenaCastbarPreviewLayout",
+    "MSUF_ApplyBlizzardCastbarOwnership",
+    "MSUF_ApplyBossCastbarPreviewLayout",
+    "MSUF_ApplyCastbarDetailTextLayout",
+    "MSUF_CastbarReverseFillCache",
+    "MSUF_CreateArenaCastbarPreview",
+    "MSUF_CreateBossCastbarPreview",
+    "MSUF_HideAllArenaCastbarPreviews",
+    "MSUF_HideAllBossCastbarPreviews",
+    "MSUF_PlayerCastbar_ShowInterruptFeedback",
+    "MSUF_PositionArenaCastbarPreview",
+    "MSUF_PositionBossCastbarPreview"
+   ],
+   "basis": "dead",
+   "evidence": "7.0 package W2-CB (dead code in Castbars): grep of the 7.0 repo, MSUF-Suite, MapkoSkin, MidnightCooldownManager and tools/public-globals.tsv finds no reader outside smokes; those smokes now use the preview module, MSUF_SuppressBlizzardPlayerCastbars or the namespace",
+   "reason": "Unread castbar exports: the boss/arena preview hide-all, create, layout and position aliases, the aliases of MSUF_SuppressBlizzardPlayerCastbars and MSUF_ApplyCastbarDetailLayout, the player interrupt-feedback handle, and the write-only reverse-fill cache table.",
+   "date": "2026-10-13"
+  },
+  {
+   "category": "exports",
+   "items": [
     "MSUF_BossPreviewSetupHooked",
     "MSUF_SyncBossCastbarSliders"
    ],

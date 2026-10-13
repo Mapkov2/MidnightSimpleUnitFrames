@@ -25,5 +25,4 @@ MSUF_RequestStatusIconsRefreshForCurrent	dynamic	A-C4	MidnightSimpleUnitFrames/U
 MSUF_TargetCastbarPreview	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua::name = "MSUF_TargetCastbarPreview",	preview frame exported under its spec name (ExportPublic(config.name, frame))
 MSUF_UFPreview_ActiveNudgeBox	dynamic	A-C7	MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua::activeName = "MSUF_UFPreview_ActiveNudgeBox"	written through _G[activeName] by the Menu2 nudge box (MSUF_Menu2_Support.lua)
 MSUF_UIThemeProviderCandidate	external	A-C4	-	documented hand-off for a skin addon that loads before MSUF (Runtime/MSUF_UIThemeBridge.lua); MSUF never defines it
-MSUF_boss1CastBar	dead	A-C2	-	legacy boss castbar name kept as a fallback in Edit Mode and preview code; nothing creates it
 MSUF_player	dynamic	A-C4	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua::return tostring(prefix) .. "_" .. tostring(unit or "unknown")	unit frame named by UF.FrameName (MSUF_<unit>)

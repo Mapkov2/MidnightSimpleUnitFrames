@@ -182,11 +182,13 @@ for _, K in ipairs(KINDS) do
     local W = NewWorld(5)
     local preview = W.ns.Castbars.Pools.previews[kind]
     Check(preview and preview.maxFrames == K.slots, kind .. " preview does not follow the pool slot count")
-    for _, name in ipairs({ "Update", "HideAll", "Create", "Position" }) do
-        Check(type(_G["MSUF_" .. name .. cap .. "CastbarPreview" .. (name == "HideAll" and "s" or "")]) == "function",
-            kind .. " lost the documented preview global for " .. name)
+    Check(type(_G["MSUF_Update" .. cap .. "CastbarPreview"]) == "function",
+        kind .. " lost the documented preview global for Update")
+    -- Hide-all, create, position and layout are reached through the preview module only
+    -- (the unread globals for them were removed).
+    for _, name in ipairs({ "HideAll", "Create", "Position", "ApplyLayout" }) do
+        Check(type(preview[name]) == "function", kind .. " preview module lost " .. name)
     end
-    Check(type(_G["MSUF_Apply" .. cap .. "CastbarPreviewLayout"]) == "function", kind .. " lost its layout global")
     Check((type(_G["MSUF_Begin" .. cap .. "CastbarPreviewBatch"]) == "function") == K.batch
         and (type(_G["MSUF_End" .. cap .. "CastbarPreviewBatch"]) == "function") == K.batch,
         kind .. " batch globals are wrong")
@@ -220,7 +222,7 @@ for _, K in ipairs(KINDS) do
     Check(first.castTargetText.text == "" and not first.castTargetText.shown, kind .. " target name shows while off")
     _G.MSUF_DB.general["show" .. cap .. "CastTargetName"] = true
     first.MSUF_testMode = true
-    _G["MSUF_Apply" .. cap .. "CastbarPreviewLayout"](first, 1)
+    preview:ApplyLayout(first, 1)
     Check(first.statusBar.MSUF_hideFillTexture == nil and first.statusBar.fill.alpha == 1,
         kind .. " test-mode fill is not shown")
     Check(first.castTargetText.text == K.target and first.castTargetText.shown, kind .. " sample target name changed")
@@ -229,17 +231,17 @@ for _, K in ipairs(KINDS) do
     -- Anchoring: under the unit frame, detached with the layout delta, fallback.
     local general = _G.MSUF_DB.general
     general[kind .. "CastbarOffsetX"], general[kind .. "CastbarOffsetY"] = 4, -6
-    _G["MSUF_Position" .. cap .. "CastbarPreview"](second, 2)
+    preview:Position(second, 2)
     Check(second.point[1] == "TOPLEFT" and second.point[2] == W.unitFrames[kind .. "2"] and second.point[3] == "BOTTOMLEFT"
         and second.point[4] == 4 and second.point[5] == -9, kind .. " attached preview anchor changed")
     general[kind .. "CastbarDetached"] = true
-    _G["MSUF_Position" .. cap .. "CastbarPreview"](second, 2)
+    preview:Position(second, 2)
     local dx, dy = _G["MSUF_Get" .. cap .. "LayoutDelta"](2)
     Check(second.point[1] == "CENTER" and second.point[2] == _G.UIParent and second.point[4] == 4 + dx
         and second.point[5] == -6 + dy, kind .. " detached preview anchor changed")
     general[kind .. "CastbarDetached"] = false
     W.unitFrames[kind .. "2"] = nil
-    _G["MSUF_Position" .. cap .. "CastbarPreview"](second, 2)
+    preview:Position(second, 2)
     Check(second.point[1] == "TOPRIGHT" and second.point[4] == -416 and second.point[5] == K.fallbackY - 6 - 34,
         kind .. " fallback preview anchor changed")
     W.unitFrames[kind .. "2"] = W.NewFrame("UF_" .. kind .. "2b")

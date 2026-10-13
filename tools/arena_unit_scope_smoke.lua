@@ -546,6 +546,8 @@ local function ExerciseArenaCastbarPool(slots, expected)
         return frame
     end
     local namespace = ArenaNamespace()
+    -- MSUF_CastbarDriver.lua (not loaded here) publishes the cast events the pool registers.
+    namespace.Castbars = { UnitCastEvents = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP" } }
     assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua"))(
         "MidnightSimpleUnitFrames", namespace)
     assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
@@ -588,7 +590,7 @@ local function ExerciseArenaPreviewHide(slots, expected)
     }) do
         assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
     end
-    _G.MSUF_HideAllArenaCastbarPreviews()
+    namespace.Castbars.Pools.previews.arena:HideAll()
     for index = 1, 6 do
         Check((hidden[index] == true) == (index <= expected),
             "arena castbar previews for MSUF_MAX_ARENA_FRAMES=" .. tostring(slots)

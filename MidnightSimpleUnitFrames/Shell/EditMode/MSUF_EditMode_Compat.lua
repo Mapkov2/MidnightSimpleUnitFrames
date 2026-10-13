@@ -488,7 +488,6 @@ local function CastbarToggleFrameCenter(unit)
         local bossCastbars = _G.MSUF_BossCastbars
         runtime = (bossCastbars and bossCastbars[1])
             or _G.MSUF_BossCastbar1
-            or _G.MSUF_boss1CastBar
     elseif unit == "arena" then
         preview = _G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1
         local arenaCastbars = _G.MSUF_ArenaCastbars

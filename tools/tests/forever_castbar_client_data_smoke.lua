@@ -152,11 +152,11 @@ end
 do -- (a) Forever: MSUF backend suppresses both player castbars, Blizzard restores both.
     backend = "MSUF"
     LoadBridge(true)
-    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == true, "(a) ownership apply must find the castbars")
+    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(a) ownership apply must find the castbars")
     CheckSuppressed(_G.PlayerCastingBarFrame, "(a)")
     CheckSuppressed(_G.GamepadPlayerCastingBarFrame, "(a)")
     backend = "BLIZZARD"
-    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    _G.MSUF_SuppressBlizzardPlayerCastbars()
     CheckRestored(_G.PlayerCastingBarFrame, "(a)")
     CheckRestored(_G.GamepadPlayerCastingBarFrame, "(a)")
 end
@@ -164,7 +164,7 @@ end
 do -- (b) A client without the gamepad castbar keeps the single-frame path.
     backend = "MSUF"
     LoadBridge(false)
-    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == true, "(b) ownership apply must find PlayerCastingBarFrame")
+    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(b) ownership apply must find PlayerCastingBarFrame")
     CheckSuppressed(_G.PlayerCastingBarFrame, "(b)")
 end
 
@@ -172,7 +172,7 @@ do -- (c) Combat defers ownership but still hides both bars.
     backend = "MSUF"
     LoadBridge(true)
     _G.InCombatLockdown = function() return true end
-    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == false, "(c) combat apply must defer")
+    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == false, "(c) combat apply must defer")
     Check(Invisible(_G.GamepadPlayerCastingBarFrame) and Invisible(_G.PlayerCastingBarFrame),
         "(c) combat apply must make both player castbars invisible")
     Check(_G.GamepadPlayerCastingBarFrame.events.UNIT_SPELLCAST_START == true,
@@ -185,13 +185,13 @@ do -- (d) A managed bar shown at the takeover (a Blizzard cast in flight) is
     LoadBridge(false)
     local bar = _G.PlayerCastingBarFrame
     bar.shown, bar.alpha, bar.mouse = true, 0.6, true
-    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == true, "(d) ownership apply must find PlayerCastingBarFrame")
+    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(d) ownership apply must find PlayerCastingBarFrame")
     Check(bar.shown and bar.alpha == 0 and bar.mouse == false and next(bar.events) == nil,
         "(d) a shown managed bar must be concealed (alpha 0, no mouse, no cast events)")
-    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    _G.MSUF_SuppressBlizzardPlayerCastbars()
     Check(bar.alpha == 0, "(d) a second apply must keep the concealed bar's recorded alpha")
     backend = "BLIZZARD"
-    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    _G.MSUF_SuppressBlizzardPlayerCastbars()
     Check(bar.alpha == 0.6 and bar.mouse == true, "(d) the release must restore the bar's alpha and mouse")
 end
 

@@ -810,7 +810,6 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
 end
 
 ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)
-ExportPublic("MSUF_ApplyCastbarDetailTextLayout", ApplyCastbarDetailLayout)
 Visuals.ApplyDetailLayout = ApplyCastbarDetailLayout
 
 --- Refreshes one existing frame without touching cast state. This is used by the

@@ -30,7 +30,3 @@ local api = Pools.DefinePreview(Pools.kinds.arena, {
 }).api
 
 ExportPublic("MSUF_UpdateArenaCastbarPreview", api.Update)
-ExportPublic("MSUF_HideAllArenaCastbarPreviews", api.HideAll)
-ExportPublic("MSUF_CreateArenaCastbarPreview", api.Create)
-ExportPublic("MSUF_ApplyArenaCastbarPreviewLayout", api.ApplyLayout)
-ExportPublic("MSUF_PositionArenaCastbarPreview", api.Position)

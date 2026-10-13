@@ -193,7 +193,6 @@ Runtime\MSUF_TextureRuntime.lua
 # ---------------------------------------------------------------
 # CASTBARS / CLASS POWER
 # ---------------------------------------------------------------
-Castbars\MSUF_CastbarNativeTimer.lua
 Castbars\MSUF_Castbars_Core.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua

@@ -175,16 +175,14 @@ local function CastbarForUnit(unit)
       castbarCache[unit] = castbar
       return castbar
     end
-    local legacy = _G.TargetCastBar
-    return (legacy and legacy._msufCastbarDriver == true) and legacy or nil
+    return nil
   elseif unit == "focus" then
     local castbar = _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
     if castbar then
       castbarCache[unit] = castbar
       return castbar
     end
-    local legacy = _G.FocusCastBar
-    return (legacy and legacy._msufCastbarDriver == true) and legacy or nil
+    return nil
   end
 
   local index = GetBossIndexFromToken(unit)

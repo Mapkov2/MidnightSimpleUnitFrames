@@ -413,6 +413,12 @@ do
         frame._msufCastbarWorkMask = frame.testWorkMask
         return frame.testWorkMask
     end
+    -- The cast time flag and format come from the Runtime (the settings here enable every unit).
+    function managerRuntime:RefreshWorkConfig(frame)
+        frame._msufCastTimeEnabled = true
+        frame._msufCastTimeFormat = "CURRENT"
+        return true, "CURRENT", 0
+    end
     function managerRuntime:CancelNativeCompletion() end
     function managerRuntime:DeactivateNative() end
     function managerRuntime:ArmNativeCompletion() return false end

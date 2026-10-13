@@ -65,23 +65,6 @@ Pools.ROW_PITCH = ROW_PITCH
 Pools.FALLBACK_X = FALLBACK_X
 Pools.UNITFRAME_GAP = UNITFRAME_GAP
 
-local CAST_EVENTS = {
-    "UNIT_SPELLCAST_START",
-    "UNIT_SPELLCAST_STOP",
-    "UNIT_SPELLCAST_DELAYED",
-    "UNIT_SPELLCAST_CHANNEL_START",
-    "UNIT_SPELLCAST_CHANNEL_STOP",
-    "UNIT_SPELLCAST_CHANNEL_UPDATE",
-    "UNIT_SPELLCAST_EMPOWER_START",
-    "UNIT_SPELLCAST_EMPOWER_STOP",
-    "UNIT_SPELLCAST_EMPOWER_UPDATE",
-    "UNIT_SPELLCAST_INTERRUPTIBLE",
-    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
-    "UNIT_SPELLCAST_FAILED",
-    "UNIT_SPELLCAST_SUCCEEDED",
-    "UNIT_SPELLCAST_INTERRUPTED",
-}
-
 -- Regions whose castbar font caches are cleared together. Keyed by field name
 -- so the per-frame clear allocates nothing.
 local FONT_REGIONS = { "castText", "timeText", "castTargetText" }
@@ -209,8 +192,10 @@ local function SetEventsRegistered(frame, enabled)
             return
         end
 
-        for index = 1, #CAST_EVENTS do
-            frame:RegisterUnitEvent(CAST_EVENTS[index], frame.unit)
+        -- MSUF_CastbarDriver.lua owns the list (loaded before this file).
+        local castEvents = MSUF.Castbars.UnitCastEvents
+        for index = 1, #castEvents do
+            frame:RegisterUnitEvent(castEvents[index], frame.unit)
         end
         frame:RegisterUnitEvent("UNIT_FLAGS", frame.unit)
         frame._msufDriverEventsRegistered = true

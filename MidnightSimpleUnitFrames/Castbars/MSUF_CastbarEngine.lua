@@ -152,8 +152,9 @@ function Engine:SameIdentity(left, right)
     return left.generation ~= nil and left.generation == right.generation
 end
 
--- MSUF_CastbarUtils.lua loads first and owns the shared lazy DB bootstrap;
--- harnesses that load this file standalone load Utils first.
+-- MSUF_CastbarUtils.lua loads first and owns the shared lazy DB bootstrap and
+-- the fill-anchor rule (MSUF_GetCastbarReverseFillForFrame, target override
+-- included); harnesses that load this file standalone load Utils first.
 local EnsureDBLazy = _G.MSUF_EnsureDBLazy
 
 --- Profession casts are filtered out before any frame work happens. The flag is
@@ -162,21 +163,6 @@ local function HideTradeSkillCasts()
     EnsureDBLazy()
     local general = (MSUF_DB and MSUF_DB.general) or {}
     return general.castbarHideTradeSkills == true
-end
-
---- The fill anchor is independent of cast type. Casts and empower bars count
---- up from this edge; non-unified channels keep the edge and count down.
-local function ReverseFillForCastType(_, unit)
-    EnsureDBLazy()
-
-    local general = (MSUF_DB and MSUF_DB.general) or {}
-    local reverseFill = (general.castbarFillDirection == "RTL") and true or false
-
-    if unit == "target" and general.castbarOpositeDirectionTarget == true then
-        reverseFill = not reverseFill
-    end
-
-    return reverseFill
 end
 
 --- UNIT_SPELLCAST_INTERRUPTIBLE/NOT_INTERRUPTIBLE can arrive separately from
@@ -288,7 +274,7 @@ function Engine:BuildState(unit, previousState)
             state.durationObj = UnitCastingDuration(unit)
         end
 
-        state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        state.reverseFill = MSUF_GetCastbarReverseFillForFrame(state)
         ApplyIdentity(state)
         return state
     end
@@ -320,7 +306,7 @@ function Engine:BuildState(unit, previousState)
             state.durationObj = UnitChannelDuration(unit)
         end
 
-        state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        state.reverseFill = MSUF_GetCastbarReverseFillForFrame(state)
         ApplyIdentity(state)
         return state
     end
