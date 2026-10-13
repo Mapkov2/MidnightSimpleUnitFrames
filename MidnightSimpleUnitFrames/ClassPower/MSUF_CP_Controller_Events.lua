@@ -21,7 +21,7 @@ local type, pairs = type, pairs
 
 --- Bound once by CONTROLLER_EVENTS at controller load.
 local eventFrame, CP, AM, PHP, _cpDB, CPK, PT, PLAYER_CLASS, ClientCP, IS_CLASSIC
-local supportsCharged, supportsRunes, CP_GetModeEventProfile, ClassPowerUnit, GetAutoHideActive
+local supportsCharged, supportsRunes, CP_GetModeEventProfile, ClassPowerUnit
 
 local _cpStructuralEventsBound = false
 
@@ -297,7 +297,7 @@ local function CP_RefreshEventBindings()
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
     local wantDisplayPower = CP.visible or AM.visible
     local wantRegen = CP.nativeAuraPending == true
-        or (GetAutoHideActive() and CP.visible)
+        or (CP.autoHideActive and CP.visible)
         or CP.ebonSensorRetryPending == true
         or CP.ebonTextLayerRetryPending == true
         or CP.ebonStyleRetryPending == true
@@ -356,7 +356,6 @@ builders.CONTROLLER_EVENTS = function(E)
     ClientCP, IS_CLASSIC = E.ClientCP, E.IS_CLASSIC
     supportsCharged, supportsRunes = E.supportsCharged, E.supportsRunes
     CP_GetModeEventProfile, ClassPowerUnit = E.CP_GetModeEventProfile, E.ClassPowerUnit
-    GetAutoHideActive = E.GetAutoHideActive
 
     CP_SetStructuralEventsBound = IS_CLASSIC and SetStructuralEventsBoundClassic or SetStructuralEventsBoundRetail
     CP_SetEventBound = IS_CLASSIC and SetEventBoundClassic or SetEventBoundRetail

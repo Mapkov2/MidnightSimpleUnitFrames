@@ -21,7 +21,7 @@ local HASH_WIDTH = 2
 
 --- Bound by IRONFUR (Druids only, built on the first Guardian refresh): the
 --- controller's state and helpers.
-local CP, CPK, CP_CheckAutoHide, EnsureMainText, ApplyFont, GetVisual, _cpDB
+local CP, CPK, CP_CheckAutoHide, EnsureMainText, ApplyFont, _cpDB
 local GetTime, C_SpellBook = GetTime, C_SpellBook
 local tostring, type = tostring, type
 
@@ -183,7 +183,7 @@ local function Update()
         showHashes = not (_cpDB.bars and _cpDB.bars.guardianIronfurShowHashLines == false)
         baseDuration = IsKnown(URSOCS_ENDURANCE) and 9 or 7
         guardianOfEluneKnown = IsKnown(GUARDIAN_OF_ELUNE)
-        cachedVisual = GetVisual and GetVisual() or CP.visual
+        cachedVisual = CP.visual
         forceState = true
     end
 
@@ -340,7 +340,7 @@ local function InvalidateLayout()
 end
 
 local function RefreshVisual()
-    cachedVisual = GetVisual and GetVisual() or CP.visual
+    cachedVisual = CP.visual
     visualVersion = -1
     lastCount = -1
     Update()
@@ -368,7 +368,7 @@ modeBuilders.IRONFUR = function(E)
     CP, CPK, _cpDB = E.CP, E.CPK, E._cpDB
     GetTime = E.GetTime or GetTime
     CP_CheckAutoHide, EnsureMainText = E.CP_CheckAutoHide, E.EnsureMainText
-    ApplyFont, GetVisual = E.ApplyFont, E.GetVisual
+    ApplyFont = E.ApplyFont
     ResetTrackerState()
     eventFrame = CreateFrame("Frame")
     motionFrame = CreateFrame("Frame")

@@ -66,6 +66,15 @@ function Collaborators.Install(root, ns)
     for name, standin in pairs(Collaborators.STANDINS) do
         if _G[name] == nil then _G[name] = standin end
     end
+    -- Load the real Power element, which owns the ClassPower subscription in
+    -- every client before the ClassPower stack. Stand-alone CP fixtures have
+    -- no unit-frame registry or value updates to drive.
+    if not ns.ClassPowerOwnership then
+        ns.UF = ns.UF or {}
+        ns.UF.RegisterElement = ns.UF.RegisterElement or function() end
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))(
+            "MidnightSimpleUnitFrames", ns)
+    end
     ns.UFText = ns.UFText or {}
     if ns.UFText.DISPATCH_KEY == nil then ns.UFText.DISPATCH_KEY = Collaborators.DispatchKey(root) end
     return ns

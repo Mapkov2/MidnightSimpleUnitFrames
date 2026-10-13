@@ -208,8 +208,8 @@ end
 local function CurrentPowerColorPreview()
     local powerType, powerToken
     if type(_G.UnitPowerType) == "function" then powerType, powerToken = _G.UnitPowerType("player") end
-    if _G.MSUF_PlayerPowerManaOverrideActive
-        or _G.MSUF_EleMaelstromActive or _G.MSUF_ShadowManaActive then
+    local ownership = MSUF.ClassPowerOwnership
+    if ownership and ownership.displayMana then
         powerType, powerToken = 0, "MANA"
     end
     if powerType == nil and (powerToken == nil or powerToken == "") then powerType, powerToken = 0, "MANA" end

@@ -43,6 +43,8 @@ local BUDGETS = {
     ["Mainline SHAMAN maelstrom UNIT_AURA"] = { 2024, 196 },
     ["Mainline SHAMAN unchanged UNIT_AURA"] = { 553, 8 },
     ["Mainline MONK stagger tick"] = { 230, 8 },
+    -- Frozen from the pre-painter Vengeance update (2026-10-13).
+    ["Mainline DEMONHUNTER Vengeance update"] = { 712, 8 },
 }
 
 local WARMUP, INSTRUCTION_REPS, ALLOCATION_REPS = 40, 200, 2000
@@ -207,6 +209,13 @@ do
     t.S.auraStacks = stacks % 10 + 1
     local changed = CountSetters(t, Fire)
     assert(unchanged == 0 and changed > 0, "Maelstrom Weapon repaint does not follow the stack count")
+end
+
+do
+    local t = Start("Mainline", "DEMONHUNTER", 2, 17)
+    local CP = t.CP
+    assert(CP.powerType == "SOUL_FRAGMENTS_VENG", "Vengeance did not route Soul Fragments")
+    Measure("Mainline DEMONHUNTER Vengeance update", function() CP.updateFn(CP.powerType, CP.currentMax) end)
 end
 
 do

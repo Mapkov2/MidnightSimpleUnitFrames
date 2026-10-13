@@ -1375,7 +1375,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   -- duration is written by Blizzard's native duration binding. Power value slots
   -- would keep whatever the last Mana update left behind, so drop them entirely
   -- and let the native text own the bar.
-  if key == "player" and _G.MSUF_AugEvokerActive == true then
+  if key == "player" and MSUF.ClassPowerOwnership and MSUF.ClassPowerOwnership.augEvoker == true then
     text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
   end
   text.powerLeftHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")

@@ -358,7 +358,7 @@ do
         local power=env.CreateFrame("Frame",nil,box.stage);power:SetSize(220,8)
         power.fill=power:CreateTexture();power.fill:SetSize(158,8)
         local classFrame=box._msufCPPreviewAnim.classFrame
-        env.MSUF_PlayerPowerManaOverrideActive=true;player.playerPowerSource="MANA"
+        env.MSUF_NS.ClassPowerOwnership.playerManaOverride=true;player.playerPowerSource="MANA"
         env.UnitClass=function() return "Warrior","WARRIOR" end
         -- The sample reads the specialization like the live builder does
         -- (C_SpecializationInfo first). The deprecated global exists only with
@@ -464,7 +464,7 @@ do
             -- Resource marks on the power bar follow the live target: the
             -- player's real power type and its maximum for ABSOLUTE marks,
             -- drawn on OVERLAY sublevel 7 like MSUF_CP_ResourceMarks.
-            player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil
+            player.playerPowerSource="AUTO";env.MSUF_NS.ClassPowerOwnership.playerManaOverride=false
             env.UnitPowerType=function(unit) assert(unit=="player");return 1,"RAGE" end
             env.UnitPowerMax=function(unit,power) assert(unit=="player" and power==1);return 120 end
             b.resourceMarks={{target="PRIMARY",resource="RAGE",mode="PERCENT",value=50,mark=true,color={.3,.3,.3}},
@@ -482,7 +482,7 @@ do
             local layer,sublevel=rage:GetDrawLayer()
             assert(layer=="OVERLAY" and sublevel==7,flavor..": power marks are not on OVERLAY sublevel 7 ("..tostring(layer).." "..tostring(sublevel)..")")
             env.UnitPowerType,env.UnitPowerMax=nil,nil
-            player.playerPowerSource="MANA";env.MSUF_PlayerPowerManaOverrideActive=true
+            player.playerPowerSource="MANA";env.MSUF_NS.ClassPowerOwnership.playerManaOverride=true
         end
         b.manaUpcomingCost=false;b.manaRegenPause=false;b.manaGainPulse=false;b.showArcaneWindow=false;b.resourceMarks={}
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
@@ -541,7 +541,7 @@ do
         b.manaUpcomingCost=true
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
         assert(box.resourceSamples.COST==cost and cost:IsShown(),"sample was reallocated instead of reused")
-        player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil;b.manaUpcomingCost=false
+        player.playerPowerSource="AUTO";env.MSUF_NS.ClassPowerOwnership.playerManaOverride=false;b.manaUpcomingCost=false
         box:Refresh()
         assert(not box.dragFrame and not box.zoomBar and not box:GetScript("OnKeyDown"),
             flavor .. ": preview still captures movement or manual camera input")

@@ -93,17 +93,51 @@ local function SpecPower(frame)
   return frame and frame.MSUFSpec and frame.MSUFSpec.power or nil
 end
 
+-- Establish the shared ownership state before the ClassPower controller loads.
+local ownership = {
+    playerManaOverride = false, eleMaelstrom = false, shadowMana = false, augEvoker = false,
+}
+MSUF.ClassPowerOwnership = ownership
+
+function ownership:SetDisplay(playerManaOverride, eleMaelstrom, shadowMana)
+    self.playerManaOverride = playerManaOverride
+    self.eleMaelstrom = eleMaelstrom
+    self.shadowMana = shadowMana
+    self.displayMana = playerManaOverride or eleMaelstrom or shadowMana
+end
+
+function ownership:SetAug(active)
+    self.augEvoker = active
+end
+
+function ownership:Subscribe(onChanged)
+    self.onChanged = onChanged
+end
+
+--- Notification is explicit so Aug entry remains state -> Power -> sensor and
+--- exit remains state -> sensor -> Power, including the failed-sensor fallback.
+function ownership:NotifyChanged()
+    if self.onChanged then self.onChanged(self) end
+end
+
+local function OnPowerOwnershipChanged()
+  local refresh = _G.MSUF_RefreshPlayerPowerBar
+  if refresh then refresh() end
+end
+
+ownership:Subscribe(OnPowerOwnershipChanged)
+
 -- Augmentation Evoker renders Ebon Might's remaining duration on the Player
 -- Power bar itself: Essence stays the ordinary Class Resource and Mana moves to
 -- the Alternative Mana bar. Geometry, media, border and layer therefore stay the
 -- ordinary Player Power settings - only value updates, power events and power
 -- text are handed to the native AuraContainer that ClassPower mounts on this
--- bar. The global flips to false when the container cannot be created, so the
+-- bar. Ownership is released when the container cannot be created, so the
 -- bar falls back to an ordinary Mana bar instead of rendering nothing.
 local function PowerShowsEbonMight(frame)
   return frame ~= nil
     and frame.MSUFUnitKey == "player"
-    and _G.MSUF_AugEvokerActive == true
+    and ownership.augEvoker == true
 end
 
 local function ResolveDynamicPowerColor(frame, unit, powerType, token, metaKnown)

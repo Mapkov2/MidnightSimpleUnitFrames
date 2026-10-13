@@ -33,11 +33,6 @@ local function SignedPowerColor(visual, auras, value)
     return visual.solarR, visual.solarG, visual.solarB
 end
 
-local function CP_GetVisual(E)
-    local getVisual = E and E.GetVisual
-    return getVisual and getVisual() or nil
-end
-
 local function CP_StampAlpha(region, alpha)
     if not (region and alpha ~= nil) then return end
     if region._msufCPAlpha ~= alpha then
@@ -198,6 +193,30 @@ local function CP_StampVertexColor(tex, r, g, b, a)
         tex:SetVertexColor(r, g, b, a)
         tex._msufCPR, tex._msufCPG, tex._msufCPB, tex._msufCPA = r, g, b, a
     end
+end
+
+--- Paint one pip from the compiled visual, with optional mode-specific colour.
+--- Native writes keep the same colour caches and ordering as every mode runner.
+local function CP_PaintPip(bar, r, g, b, bgR, bgG, bgB, bgA)
+    if bar._msufCPR ~= r or bar._msufCPG ~= g or bar._msufCPB ~= b or bar._msufCPA ~= 1 then
+        bar:SetStatusBarColor(r, g, b, 1)
+        bar._msufCPR, bar._msufCPG, bar._msufCPB, bar._msufCPA = r, g, b, 1
+    end
+    local bg = bar._bg
+    if bg and (bg._msufCPR ~= bgR or bg._msufCPG ~= bgG or bg._msufCPB ~= bgB or bg._msufCPA ~= bgA) then
+        bg:SetVertexColor(bgR, bgG, bgB, bgA)
+        bg._msufCPR, bg._msufCPG, bg._msufCPB, bg._msufCPA = bgR, bgG, bgB, bgA
+    end
+end
+
+local function CP_PaintVisualPip(bar, visual, index, isFull)
+    local slotR = visual and visual.useSlotColors and visual.slotR and visual.slotR[index]
+    CP_PaintPip(bar, isFull and visual.fullR or (slotR or (visual and visual.baseR) or 1),
+        isFull and visual.fullG or ((slotR and visual.slotG[index]) or (visual and visual.baseG) or 1),
+        isFull and visual.fullB or ((slotR and visual.slotB[index]) or (visual and visual.baseB) or 1),
+        visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
+    bar._msufCPVisualVersion = visual and visual.version or 0
+    bar._msufCPFullColor = isFull
 end
 
 --- Plain bounds only: type() answers "number" for a secret number too, so a
@@ -498,17 +517,9 @@ do
     --- A restricted (secret) Essence count: native whole-point pips, no
     --- recharge timer. Partial recharge cannot be derived from a secret value.
     local function PaintRestrictedEssence(cur, maxPower)
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
-        local baseR = visual and visual.baseR or 1
-        local baseG = visual and visual.baseG or 1
-        local baseB = visual and visual.baseB or 1
-        local useSlotColors = visual and visual.useSlotColors == true
-        local bgR = visual and visual.bgR or 0
-        local bgG = visual and visual.bgG or 0
-        local bgB = visual and visual.bgB or 0
-        local bgA = visual and visual.bgAlpha or 0.3
-        local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+        local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
         local visualVersion = visual and visual.version or 0
 
         -- A restricted player-power value cannot be inspected in Lua, but
@@ -535,13 +546,7 @@ do
                 CP_StampAlpha(bar, filledAlpha)
                 if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
                     or bar._msufCPFullColor ~= nil then
-                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                    CP_StampStatusBarColor(bar, slotR or baseR,
-                        slotR and visual.slotG[i] or baseG,
-                        slotR and visual.slotB[i] or baseB, 1)
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                    bar._msufCPFullColor = nil
+                    CP_PaintVisualPip(bar, visual, i, nil)
                 end
             end
         end
@@ -596,7 +601,7 @@ do
         end
         _essPrevCur = cur
 
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local rechargingIdx = (cur < maxPower) and (cur + 1) or 0
         local visualVersion = visual and visual.version or 0
 
@@ -614,14 +619,9 @@ do
                 return
             end
         end
-
-        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local useSlotColors = visual and visual.useSlotColors == true
         local useFullColor = visual and visual.useFullColor == true
-        local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
-        local bgA = visual and visual.bgAlpha or 0.3
-        local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
-        local emptyAlpha  = visual and visual.emptyAlpha or E.GetEmptyAlpha()
+        local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
+        local emptyAlpha  = visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
         local isFull = useFullColor and cur >= maxPower
         local needOnUpdate = false
 
@@ -659,13 +659,7 @@ do
                     SetEssenceOnUpdate(bar, false)
                 end
                 if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
-                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
-                        isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
-                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                    bar._msufCPFullColor = isFull
+                    CP_PaintVisualPip(bar, visual, i, isFull)
                 end
             end
         end
@@ -694,9 +688,9 @@ do
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
             CP.paintedComboPoints = nil
-            local visual = CP_GetVisual(E)
+            local visual = CP.visual
             local smoothInterp = visual and visual.smoothInterp
-            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+            local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
@@ -722,10 +716,10 @@ do
         cur = tonumber(cur) or 0
         --- Read back by the runtime's borrowed-token test (Energy events).
         CP.paintedComboPoints = powerType == PT.ComboPoints and cur or nil
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local chargedMap = E.GetChargedMap()
+        local chargedMap = CP.chargedAny and CP.chargedMap or nil
         local showCharged = visual and visual.showCharged == true and powerType == PT.ComboPoints
         local chargedR, chargedG, chargedB
         if showCharged and chargedMap then chargedR, chargedG, chargedB = visual.chargedR, visual.chargedG, visual.chargedB end
@@ -733,7 +727,7 @@ do
         local isFull = visual and visual.useFullColor == true and cur >= maxPower
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
-        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
+        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1), visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
         for i = 1, maxPower do
             local bar = CP.bars[i]
             if bar then
@@ -835,9 +829,9 @@ modeBuilders.FRACTIONAL = function(E)
         local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
         local modSafe = NotSecret(mod) and mod ~= nil and mod > 0
         if not NotSecret(rawCur) then
-            local visual = CP_GetVisual(E)
+            local visual = CP.visual
             local smoothInterp = visual and visual.smoothInterp
-            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+            local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
@@ -873,16 +867,12 @@ modeBuilders.FRACTIONAL = function(E)
         rawCur = tonumber(rawCur) or 0
         if not modSafe then mod = 100 end
         local fractional = rawCur / mod
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
-        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local useSlotColors = visual and visual.useSlotColors == true
-        local bgA = visual and visual.bgAlpha or 0.3
-        local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local fullBars = math_floor(fractional)
         local partial = fractional - fullBars
         local isFull = visual and visual.useFullColor == true and fractional >= maxPower
-        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
+        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1), visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
         local visualVersion = visual and visual.version or 0
         for i = 1, maxPower do
             local bar = CP.bars[i]
@@ -899,13 +889,7 @@ modeBuilders.FRACTIONAL = function(E)
                     CP_StampAlpha(bar, emptyAlpha)
                 end
                 if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
-                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
-                        isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
-                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                    bar._msufCPFullColor = isFull
+                    CP_PaintVisualPip(bar, visual, i, isFull)
                 end
             end
         end
@@ -936,7 +920,7 @@ do
     --- Bound once by RUNE at controller load. RuneTypes (Mists only):
     --- { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
     local E, CP, _cpDB, GetTime, GetRuneCooldown, UnitHasVehicleUI, CP_CheckAutoHide
-    local CP_ApplyRuneSortOrder, GetRuneMap, GetFilledAlpha, GetEmptyAlpha
+    local CP_ApplyRuneSortOrder
     local EnsureRuneText, ApplyFont
     local RuneTypes, GetRuneType, RUNE_TYPE_COLORS
     local nativeTimer
@@ -1133,18 +1117,18 @@ do
         local b = _cpDB.bars or {}
         CP_ApplyRuneSortOrder(b.runeSortOrder)
 
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local bgA = visual and visual.bgAlpha or 0.3
         local showRuneTime = not visual or visual.runeShowTime ~= false
-        local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
-        local emptyAlpha = visual and visual.emptyAlpha or GetEmptyAlpha()
+        local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
+        local emptyAlpha = visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
 
         local hasVehicleUI = UnitHasVehicleUI and UnitHasVehicleUI("player")
         local now = hasVehicleUI and 0 or GetTime()
         local readyCount = 0
         local activeRuneOUA = 0
         local hasNativeRune = false
-        local runeMap = GetRuneMap()
+        local runeMap = CP.runeMap
         local activeBars = CP.activeRuneBars
         local visualVersion = visual and visual.version or 0
         if not activeBars then
@@ -1287,7 +1271,6 @@ do
         CP, _cpDB, GetTime = E.CP, E._cpDB, E.GetTime
         GetRuneCooldown, UnitHasVehicleUI = E.GetRuneCooldown, E.UnitHasVehicleUI
         CP_CheckAutoHide, CP_ApplyRuneSortOrder = E.CP_CheckAutoHide, E.CP_ApplyRuneSortOrder
-        GetRuneMap, GetFilledAlpha, GetEmptyAlpha = E.GetRuneMap, E.GetFilledAlpha, E.GetEmptyAlpha
         EnsureRuneText, ApplyFont = E.EnsureRuneText, E.ApplyFont
         RuneTypes = E.RuneTypes
         GetRuneType = RuneTypes and RuneTypes.Get
@@ -1455,13 +1438,13 @@ do
 
     local function UpdateSegmented(powerType, maxPower)
         if maxPower <= 0 then return end
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
-        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
+        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1), visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local rawCur
             if not IS_CLASSIC then
@@ -1480,10 +1463,9 @@ do
                     CP_SetPowerValue(bar, rawCur, smoothInterp, rawCurSecret)
                     CP_StampAlpha(bar, filledAlpha)
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
+                    CP_PaintPip(bar, isFull and visual.fullR or (slotR or baseR),
                         isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
-                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), bgR, bgG, bgB, bgA)
                 end
             end
             local txt = CP.text
@@ -1555,16 +1537,16 @@ do
                         CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                         CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
                     end
+                    local r, g, b
                     if not restrictedApplications and isFull then
-                        CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
+                        r, g, b = visual.fullR, visual.fullG, visual.fullB
                     elseif not restrictedApplications and mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
-                        CP_StampStatusBarColor(bar, abR, abG, abB, 1)
+                        r, g, b = abR, abG, abB
                     else
                         local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                        CP_StampStatusBarColor(bar, slotR or baseR,
-                            slotR and visual.slotG[i] or baseG, slotR and visual.slotB[i] or baseB, 1)
+                        r, g, b = slotR or baseR, slotR and visual.slotG[i] or baseG, slotR and visual.slotB[i] or baseB
                     end
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                    CP_PaintPip(bar, r, g, b, bgR, bgG, bgB, bgA)
                 end
             end
             local txt = CP.text
@@ -1617,14 +1599,14 @@ do
         end
         if progressMax and progressMax > 0 then cur = displayCur / progressMax end
         if cur < 0 then cur = 0 elseif cur > 1 then cur = 1 end
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
         local colorByType = not visual or visual.colorByType ~= false
         local r, g, bl
         if colorByType then r, g, bl = ResolveDHColor(inMeta) else r, g, bl = 1,1,1 end
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(inMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
-        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
+        local filledAlpha, emptyAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1), visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3)
         local bar = CP.bars[1]
         if bar then
             CP_StampMinMax(bar, 0, 1)
@@ -1685,11 +1667,10 @@ end
 modeBuilders.TIMER = function(E)
     local CP = E.CP
     local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local GetEmptyAlpha = E.GetEmptyAlpha
 
     local function Update()
         local bar = CP.bars[1]
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         if bar then
             local visualVersion = visual and visual.version or 0
             if CP._timerVisualVersion ~= visualVersion then
@@ -1713,7 +1694,7 @@ modeBuilders.TIMER = function(E)
                 CP._timerVisualVersion = visualVersion
             end
             CP_SetPowerValue(bar, 0)
-            CP_StampAlpha(bar, visual and visual.emptyAlpha or GetEmptyAlpha())
+            CP_StampAlpha(bar, visual and visual.emptyAlpha or (CP.emptyAlpha or 0.3))
         end
         if CP.text then CP_StampShown(CP.text, false) end
         if CP.container then CP.container:SetAlpha(1) end
@@ -1738,7 +1719,6 @@ modeBuilders.CONTINUOUS = function(E)
     local UnitPowerMax = E.UnitPowerMax
     local NotSecret = E.NotSecret
     local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local GetFilledAlpha = E.GetFilledAlpha
 
     local function Update(powerType, maxPower)
         local rawCur = UnitPower("player", powerType)
@@ -1759,7 +1739,7 @@ modeBuilders.CONTINUOUS = function(E)
             CP_SetSecretMinMax(bar, 0, rawMx)
             mx = nil
         end
-        local visual = CP_GetVisual(E)
+        local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
         if curSafe then
             cur = tonumber(rawCur) or 0
@@ -1769,7 +1749,7 @@ modeBuilders.CONTINUOUS = function(E)
             cur = nil
         end
 
-        CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
+        CP_StampAlpha(bar, visual and visual.filledAlpha or (CP.filledAlpha or 1))
         CP_StampShown(bar, true)
 
         local visualVersion = visual and visual.version or 0
@@ -1826,10 +1806,10 @@ modeBuilders.CONTINUOUS = function(E)
 
             CP_StampMinMax(bar, -(mx or 100), mx or 100)
 
-            local visual = CP_GetVisual(E)
+            local visual = CP.visual
             local smoothInterp = visual and visual.smoothInterp
             CP_SetPowerValue(bar, curSafe and cur or rawCur, smoothInterp)
-            CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
+            CP_StampAlpha(bar, visual and visual.filledAlpha or (CP.filledAlpha or 1))
             CP_StampShown(bar, true)
 
             local red, green, blue = SignedPowerColor(visual, E.TrackedPlayerAuras, cur)
@@ -1893,7 +1873,6 @@ modeBuilders.STAGGER = function(E)
     local UnitHealthMax = E.UnitHealthMax
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local STAGGER_CONST = E.STAGGER_CONST or {}
-    local GetFilledAlpha = E.GetFilledAlpha
 
     --- The tier colour is resolved once per tier and compiled visual: every
     --- FullRefresh, mode entry and colour edit compiles a new visual version,
@@ -1943,8 +1922,8 @@ modeBuilders.STAGGER = function(E)
             CP_SetPowerValue(bar, rawCur, nil, true)
         end
 
-        local visual = CP_GetVisual(E)
-        CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
+        local visual = CP.visual
+        CP_StampAlpha(bar, visual and visual.filledAlpha or (CP.filledAlpha or 1))
         CP_StampShown(bar, true)
         local visualVersion = visual and visual.version or 0
 

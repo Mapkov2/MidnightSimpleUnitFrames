@@ -67,7 +67,8 @@ end
 --- Native API fallback exists only for isolated/early preview loads.
 function H.PlayerManaSourceActive(player)
     if not (player and player.playerPowerSource == "MANA") then return false end
-    local published = _G.MSUF_PlayerPowerManaOverrideActive
+    local ownership = MSUF.ClassPowerOwnership
+    local published = ownership and ownership.playerManaOverride
     if type(published) == "boolean" then return published end
     local vehicle = _G.UnitHasVehicleUI and _G.UnitHasVehicleUI("player")
     if IsSecretValue(vehicle) or vehicle == true then return false end

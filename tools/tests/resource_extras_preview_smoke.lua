@@ -9,7 +9,7 @@ local example = Check(M.ResourceExtrasPreview, "effect preview missing")
 local box = ui.page.ctx.entry.classPowerPreview
 env.UnitClass = function() return "Rogue", "ROGUE" end
 env.C_SpecializationInfo = { GetSpecialization = function() return 2 end }
-env.MSUF_PlayerPowerManaOverrideActive = false
+env.MSUF_NS.ClassPowerOwnership.playerManaOverride = false
 local bars, player = env.MSUF_DB.bars, env.MSUF_DB.player
 bars.showIgnorePain, bars.showArcaneWindow, bars.manaUpcomingCost = false, false, false
 bars.manaRegenPause, bars.manaGainPulse = false, false

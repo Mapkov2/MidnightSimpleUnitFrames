@@ -42,8 +42,7 @@ local CLEARED_GLOBALS = {
     "MSUF_CP_CORE_BUILDERS", "MSUF_CP_MODE_BUILDERS", "MSUF_CP_FEATURE_BUILDERS",
     "MSUF_CP_TARGET_COMBO", "MSUF_CP_CoreUnitFrame", "MSUF_ClassPowerContainer",
     "MSUF_player", "MSUF_ScheduleOnce", "MSUF_SetRoundLayoutToNearestPixel",
-    "MSUF_BAL_RefreshRuntime", "MSUF_BAL_InvalidateColors", "MSUF_EleMaelstromActive",
-    "MSUF_ShadowManaActive", "MSUF_PlayerPowerManaOverrideActive", "MSUF_AugEvokerActive",
+    "MSUF_BAL_RefreshRuntime", "MSUF_BAL_InvalidateColors",
     "MSUF_ClassPower_Refresh", "MSUF_ClassPower_Apply", "MSUF_ClassPower_ApplyFonts",
     "MSUF_RefreshPlayerPowerBar",
 }

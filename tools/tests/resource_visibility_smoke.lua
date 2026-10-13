@@ -6,7 +6,7 @@ Secrets.Install()
 local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
 local barsPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"
 local resolver = Slice.Function(Slice.Read(barsPath), "local function ResolveDisplayedPowerIdentity", barsPath)
-local ResolvePower = assert(loadstring("local POWER_TYPE_MANA = 0\n" .. resolver .. "\nreturn ResolveDisplayedPowerIdentity"))()
+local ResolvePower
 local frames, listeners = {}, {}
 local combat, affecting, power, maximum, health = false, false, 50, 100, 50
 local powerPaints, textPaints = 0, 0
@@ -51,6 +51,11 @@ local ns = { UFBarTextCommon = { ResolveDisplayedPowerIdentity = ResolvePower },
     end },
     PowerText = { Update = function() textPaints = textPaints + 1 end },
 } } }
+ns.ExportPublic = function(name, value) _G[name] = value end
+assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
+ResolvePower = assert(loadstring("local MSUF, POWER_TYPE_MANA = ..., 0\n" .. resolver
+    .. "\nreturn ResolveDisplayedPowerIdentity"))(ns)
+ns.UFBarTextCommon.ResolveDisplayedPowerIdentity = ResolvePower
 MSUF_DB = { bars = {} }
 MSUF_PixelLayoutRegion = function(region) return region end
 assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, ns)
@@ -229,15 +234,16 @@ b.playerPowerHideWhenFull, b.playerPowerHideWhenEmpty = false, true
 Fire("UNIT_DISPLAYPOWER", "player")
 V.ConfigurePower(player)
 assert(host.alpha == 0, "configure did not hide already-empty Player Power")
-for _, flag in ipairs({ "MSUF_PlayerPowerManaOverrideActive", "MSUF_EleMaelstromActive", "MSUF_ShadowManaActive" }) do
-    _G[flag] = true
+for index = 1, 3 do
+    ns.ClassPowerOwnership:SetDisplay(index == 1, index == 2, index == 3)
     local savedPower = UnitPower
     UnitPower = function(_, kind) assert(kind == 0, "auto-hide ignored displayed Mana ownership"); return power end
     Fire("UNIT_POWER_UPDATE", "player", "MANA")
     assert(host.alpha == 0, "empty displayed Mana remained visible")
     power = 1; Fire("UNIT_POWER_UPDATE", "player", "MANA")
     assert(host.alpha == 1, "displayed Mana did not return after gaining power")
-    UnitPower, _G[flag], power = savedPower, nil, 0
+    UnitPower, power = savedPower, 0
+    ns.ClassPowerOwnership:SetDisplay(false, false, false)
 end
 powerType, power = 3, Secrets.New("number")
 Fire("UNIT_POWER_UPDATE", "player", "ENERGY")

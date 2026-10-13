@@ -24,10 +24,10 @@ end
 
 local function NeedsAltManaBar()
     --- The Player surface already represents Mana -> no duplicate alt bar.
-    if _G.MSUF_PlayerPowerManaOverrideActive then return false end
-    if _G.MSUF_EleMaelstromActive then return false end
-    if _G.MSUF_AugEvokerActive then return true end
-    if _G.MSUF_ShadowManaActive then return false end
+    if MSUF.ClassPowerOwnership.playerManaOverride then return false end
+    if MSUF.ClassPowerOwnership.eleMaelstrom then return false end
+    if MSUF.ClassPowerOwnership.augEvoker then return true end
+    if MSUF.ClassPowerOwnership.shadowMana then return false end
     local pType = UnitPowerType("player")
     if NotSecret(pType) then
         if pType == nil or pType == PT.Mana then return false end

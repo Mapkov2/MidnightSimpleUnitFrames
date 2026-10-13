@@ -4,7 +4,7 @@
 -- drives events through the controller's own OnEvent script.
 --
 -- 1. "Displayed resource: Mana" (MSUF_DB.player.playerPowerSource = "MANA").
---    The controller owns the public flag MSUF_PlayerPowerManaOverrideActive.
+--    The controller publishes the shared Player Mana ownership state.
 --    The Power element, the power text and AltMana read that flag, so it has to
 --    be published before the Player power bar is re-applied, and that re-apply
 --    has to run once per change instead of on every refresh.
@@ -22,7 +22,6 @@ local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
 -- Ids the Classic constants fall back to when Enum is absent (checked after load).
 local PT = { Mana = 0, Energy = 3, ComboPoints = 4, Runes = 5, DemonicFury = 15, Balance = 26 }
 local ARCANE_CHARGE = 36032
-local MANA_FLAG = "MSUF_PlayerPowerManaOverrideActive"
 
 local CLEARED_GLOBALS = {
     "__MSUF_ClassPower_Loaded", "MSUF_CP_CONST", "MSUF_CP_CORE_BUILDERS", "MSUF_CP_MODE_BUILDERS",
@@ -30,7 +29,6 @@ local CLEARED_GLOBALS = {
     "MSUF_ClassPowerPlayerHealthBar", "MSUF_player", "MSUF_ScheduleOnce",
     "MSUF_SetRoundLayoutToNearestPixel", "MSUF_RefreshPlayerPowerBar",
     "MSUF_UnitEditModeActive", "MSUF_ClassPower_EnsureEditModeAnchor",
-    MANA_FLAG, "MSUF_EleMaelstromActive", "MSUF_ShadowManaActive", "MSUF_AugEvokerActive",
 }
 
 -- The secret-value library plus every ClassPower file the client TOC loads, in
@@ -100,7 +98,7 @@ local function Start(spec)
     -- flag while it runs. Record what that re-apply would have seen.
     _G.MSUF_RefreshPlayerPowerBar = function()
         t.powerBarRefreshes = t.powerBarRefreshes + 1
-        t.flagSeenByPowerBar = _G[MANA_FLAG]
+        t.flagSeenByPowerBar = ns.ClassPowerOwnership.playerManaOverride
     end
 
     function UnitClass() return S.class, S.class end
@@ -177,7 +175,7 @@ local function Start(spec)
     t.AM = Upvalue(Upvalue(refresh, "Refresh").ApplyAltMana, "AM")
     t.eventFrame = Upvalue(Upvalue(refresh, "CP_RefreshEventBindings"), "eventFrame")
     t.onEvent = assert(t.eventFrame.scripts.OnEvent, "controller OnEvent script missing")
-    assert(_G[MANA_FLAG] == nil, "the flag must start unpublished, or the case below proves nothing")
+    assert(ns.ClassPowerOwnership.playerManaOverride == false, "ownership must start inactive")
     if module.IsEnabled() then module.Enable() end
     return t
 end
@@ -206,8 +204,8 @@ end
 
 -- The published flag and the number of Player power bar re-applies so far.
 local function ExpectMana(t, active, refreshes, label)
-    assert(_G[MANA_FLAG] == active, string.format("%s: %s is %s, expected %s",
-        label, MANA_FLAG, tostring(_G[MANA_FLAG]), tostring(active)))
+    assert(MSUF_NS.ClassPowerOwnership.playerManaOverride == active, string.format("%s: %s is %s, expected %s",
+        label, "playerManaOverride", tostring(MSUF_NS.ClassPowerOwnership.playerManaOverride), tostring(active)))
     assert(t.powerBarRefreshes == refreshes, string.format("%s: the Player power bar was re-applied %d time(s), expected %d",
         label, t.powerBarRefreshes, refreshes))
 end
@@ -520,7 +518,7 @@ for _, case in ipairs(CASES) do
             local t = case.run()
             if not t.tornDown then t.module.Disable() end
             t.module.Shutdown()
-            assert(_G[MANA_FLAG] == false, "the flag outlived the module: " .. tostring(_G[MANA_FLAG]))
+            assert(MSUF_NS.ClassPowerOwnership.playerManaOverride == false, "the flag outlived the module: " .. tostring(MSUF_NS.ClassPowerOwnership.playerManaOverride))
         end)
         if ok then
             passed = passed + 1

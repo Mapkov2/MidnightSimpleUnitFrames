@@ -535,6 +535,19 @@
    "evidence": "MSUF 7.0 package W1-6: Colors > Appearance > Gradient now reads 'Health strength', the label Bars > Textures & Gradient already gives the same setting (opt_colors row 'Health strength').",
    "reason": "The slider writes general.gradientStrength, the Bars shade-overlay strength; the health-gradient colouring has no strength, so the old name promised something else. Same control id and setting key, relabelled.",
    "date": "2026-10-13"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_PlayerPowerManaOverrideActive",
+    "MSUF_EleMaelstromActive",
+    "MSUF_ShadowManaActive",
+    "MSUF_AugEvokerActive"
+   ],
+   "basis": "dead",
+   "evidence": "tools/public-globals.tsv has no rows for these names; repository and Suite source searches find no external addon readers.",
+   "reason": "All internal readers use MSUF.ClassPowerOwnership; the four compatibility mirrors have no remaining consumers.",
+   "date": "2026-10-13"
   }
  ]
 }

@@ -16,7 +16,7 @@ local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 local type = type
 
 --- Bound once by CONTROLLER_TICKER at controller load.
-local CP, CPK, CreateFrame, PixelLayoutRegion
+local CP, CreateFrame, PixelLayoutRegion
 local CP_StopRuneOnUpdates, CP_StopEssenceOnUpdates
 local _runeRuntimeTick, _essenceRuntimeTick, _staggerRuntimeTick
 
@@ -67,10 +67,10 @@ CP_StopCentralTick = function()
 end
 
 local function CP_SyncRuntimeOnUpdates(timerActive)
-    local mode = CP.renderMode
+    local tick = CP.modeDescriptor.tick
 
     --- Determine active tick function based on current mode + animation state.
-    if mode == CPK.MODE.RUNE_CD then
+    if tick == "rune" then
         --- Rune mode: stop others, tick runes if any active.
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         if CP.runeOUAAny and _runeRuntimeTick then
@@ -86,7 +86,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
         CP_StopRuneOnUpdates(false)
     end
 
-    if mode == CPK.MODE.STAGGER then
+    if tick == "stagger" then
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         if timerActive and _staggerRuntimeTick then
             CP_StartCentralTick(_staggerRuntimeTick)
@@ -96,7 +96,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
         return
     end
 
-    if mode == CPK.MODE.TIMER_BAR then
+    if tick == "none" then
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
     else
@@ -112,7 +112,7 @@ end
 --- Binds the controller state and the mode runners' tick functions; returns
 --- the driver's entry points.
 builders.CONTROLLER_TICKER = function(E)
-    CP, CPK = E.CP, E.CPK
+    CP = E.CP
     CreateFrame, PixelLayoutRegion = E.CreateFrame, E.PixelLayoutRegion
     CP_StopRuneOnUpdates, CP_StopEssenceOnUpdates = E.StopRuneOnUpdates, E.StopEssenceOnUpdates
     _runeRuntimeTick = E.RuneRuntimeTick

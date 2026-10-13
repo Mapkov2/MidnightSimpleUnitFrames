@@ -187,8 +187,13 @@ use `HARMFUL|RAID_PLAYER_DISPELLABLE`.
 
 Class resources have separate providers per client. Every client runs the
 shared ClassPower core (`ClassPower/MSUF_CP_Constants.lua`,
-`MSUF_CP_Modes.lua`, `MSUF_CP_Core.lua` and `MSUF_CP_Controller.lua`). Its
-Classic behaviour sits in small hunks gated on `MSUF.Client.IsClassic`, read
+`MSUF_CP_Modes.lua`, `MSUF_CP_Core.lua` and `MSUF_CP_Controller.lua`). Mode
+traits live in the constants' descriptor registry, renderers share pip painters,
+and split builders read the controller's CP state directly. The Power element
+loads first and establishes `MSUF.ClassPowerOwnership`, then subscribes itself
+to its change notifications. ClassPower publishes state before notifying it;
+Aug entry orders Power before the sensor and exit orders the sensor before Power.
+Its Classic behaviour sits in small hunks gated on `MSUF.Client.IsClassic`, read
 once per file, so Mainline never enters them. The Classic TOCs add `Game/<Flavor>/ClassPower.lua` and
 `Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua`, which adapts the flavor
 provider's `Resolve(env)` contract to the provider seam the controller reads at

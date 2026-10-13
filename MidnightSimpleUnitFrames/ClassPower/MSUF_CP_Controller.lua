@@ -139,10 +139,6 @@ local function CP_CallBuilder(builder, env)
 end
 
 local function CP_Noop() end
-local function RefreshPlayerPowerBar()
-    local refresh = _G.MSUF_RefreshPlayerPowerBar
-    if refresh then refresh() end
-end
 --- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
 
 --- Phase 5 CP split: Balance Druid Astral Power prediction + eclipse colors now
@@ -187,8 +183,7 @@ local CPColors = CP_CallBuilder(CPCoreBuilders.CONTROLLER_COLORS, {
 --- Charged / Empowered Combo Points (Echoing Reprimand, Supercharged CP, etc.)
 --- v6.1 behavior: rebuild the reused 1-based slot map when the charged-point
 --- event or a segmented structural refresh requests it.
-local _chargedMap = {}
-local _chargedAny = false
+local CP
 
 local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
     or MSUF.Client.SupportsClassResource("CHARGED")
@@ -196,10 +191,10 @@ local supportsRunes = not (MSUF.Client and MSUF.Client.SupportsClassResource)
     or MSUF.Client.SupportsClassResource("RUNES")
 local function RefreshChargedPoints()
     if not supportsCharged then return end
-    for index in pairs(_chargedMap) do
-        _chargedMap[index] = nil
+    for index in pairs(CP.chargedMap) do
+        CP.chargedMap[index] = nil
     end
-    _chargedAny = false
+    CP.chargedAny = false
     if type(GetUnitChargedPowerPoints) ~= "function" then return end
 
     local indices = GetUnitChargedPowerPoints("player")
@@ -208,17 +203,19 @@ local function RefreshChargedPoints()
     for i = 1, #indices do
         local idx = indices[i]
         if type(idx) == "number" then
-            _chargedMap[idx] = true
-            _chargedAny = true
+            CP.chargedMap[idx] = true
+            CP.chargedAny = true
         end
     end
 end
 
 --- ClassPower visual: segmented bars (created lazily on player frame)
---- Scale-compensated width helper lives in ClassPower presentation helpers
-local CDM_GetScaledWidth
-
-local CP = {
+CP = {
+    chargedMap = {},
+    chargedAny = false,
+    filledAlpha = 1.0,
+    emptyAlpha = 0.3,
+    autoHideActive = false,
     bars      = {},      --- [i] = StatusBar
     ticks     = {},      --- [i] = Texture (separator lines)
     bgTex     = nil,     --- background texture
@@ -229,6 +226,7 @@ local CP = {
     currentMax = 0,      --- current max power (e.g. 5 combo pts)
     powerType = nil,     --- current Enum.PowerType or string token
     renderMode = CPK.MODE.NONE,  --- active render mode
+    modeDescriptor = CPConst.ModeDescriptors[CPK.MODE.NONE],
     isAuraPower = false, --- true ? driven by UNIT_AURA
     updateFn   = nil,    --- cached active mode update fn (avoids hot-path table lookups)
     modeProfile = nil,   --- cached active mode event profile for lite runtime bindings
@@ -277,10 +275,6 @@ local CPAuras = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_AURAS, {
 
 ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
---- Cached alpha values (resolved once in FullRefresh, used in hot paths)
-local _filledAlpha = 1.0
-local _emptyAlpha  = 0.3
-
 local function CP_CompileVisual(powerType, renderMode, maxP)
     local b = _cpDB.bars or {}
     local visual = CP.visual
@@ -314,8 +308,8 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.showPrediction = _cpDB.showPrediction ~= false
     visual.showCharged = _cpDB.showCharged ~= false
     visual.smoothInterp = _cpDB.classSmooth and SMOOTH_INTERP or nil
-    visual.filledAlpha = _filledAlpha
-    visual.emptyAlpha = _emptyAlpha
+    visual.filledAlpha = CP.filledAlpha
+    visual.emptyAlpha = CP.emptyAlpha
     visual.bgAlpha = _cpDB.bgAlpha or 0.3
     visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
     if IS_CLASSIC and renderMode == CPK.MODE.SIGNED_CONTINUOUS and colorByType then
@@ -328,10 +322,7 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.runeShowTime = b.runeShowTime ~= false
     visual.timerShowText = b.classPowerShowText == true
     local slotMode = CPColors.ResolveSlotColorMode(visual.powerToken)
-    local segmentedMode = renderMode == CPK.MODE.SEGMENTED
-        or renderMode == CPK.MODE.FRACTIONAL
-        or renderMode == CPK.MODE.RUNE_CD
-        or renderMode == CPK.MODE.AURA_SEGMENTED
+    local segmentedMode = CPConst.ModeDescriptors[renderMode].pipColors
     visual.useSlotColors = segmentedMode and (slotMode == "ramp" or slotMode == "custom")
     visual.useFullColor, visual.fullR, visual.fullG, visual.fullB = CPColors.ResolveFullResourceColor(
         visual.powerToken, baseR, baseG, baseB)
@@ -372,14 +363,13 @@ end
 --- builder of ClassPower/MSUF_CP_Core.lua.
 local CP_ApplyFont
 local CP_ApplyColors
---- Active-mode dispatch (assigned below MODE_UPDATE_FN); forward-declared so
+--- Active-mode dispatch (bound below); forward-declared so
 --- the presentation builder's colour refresh can reach it.
 local CP_RunActiveUpdate
 local CP_RefreshTexture
 
 --- Auto-Hide: visibility check after each update (OOC / Full / Empty)
 --- Zero overhead when all three are disabled (early-out on first check).
-local _autoHideActive = false  --- true if any auto-hide option is enabled
 
 -- Only combat, Edit Mode and Class Resource lifecycle changes can flip this
 -- flag. The Power element owns the visual surfaces; it never reads power values
@@ -398,7 +388,7 @@ end
 
 local function CP_CheckAutoHide(cur, maxP)
     if not CP.visible or not CP.container then return end
-    if not _autoHideActive then
+    if not CP.autoHideActive then
         if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         return
     end
@@ -454,13 +444,6 @@ do
             tonumber = tonumber,
             CreateFrame = CreateFrame,
             ResolveClassPowerBgColor = CPColors.ResolveClassPowerBgColor,
-            GetFilledAlpha = function() return _filledAlpha end,
-            SetFilledAlpha = function(v) _filledAlpha = v end,
-            GetEmptyAlpha = function() return _emptyAlpha end,
-            SetEmptyAlpha = function(v) _emptyAlpha = v end,
-            GetAutoHideActive = function() return _autoHideActive end,
-            SetAutoHideActive = function(v) _autoHideActive = v end,
-            GetCDMScaledWidth = function() return CDM_GetScaledWidth or _G.MSUF_CDM_GetScaledWidth end,
         })
     if layout then
         CP_Layout = layout.CP_Layout or CP_Layout
@@ -469,8 +452,8 @@ end
 
 --- Secret-safe value update + per-bar coloring (charged/empowered support)
 --- Phase 2 CP split: segmented / fractional / aura mode runners now live in
---- ClassPower/MSUF_CP_Modes.lua. The core builds them with local env closures so
---- the public runtime stays identical while the main chunk gets smaller.
+--- ClassPower/MSUF_CP_Modes.lua. The builders share CP state and bind their
+--- API collaborators once at controller load.
 local CP_UpdateValues
 local CP_UpdateValues_Fractional
 local CP_UpdateValues_AuraSegmented
@@ -508,10 +491,6 @@ do
         ResolveMWAbove5Color = CPColors.ResolveMWAbove5Color,
         CP_CheckAutoHide = CP_CheckAutoHide,
         TIP = TIP,
-        GetFilledAlpha = function() return _filledAlpha end,
-        GetEmptyAlpha = function() return _emptyAlpha end,
-        GetVisual = function() return CP.visual end,
-        GetChargedMap = function() return _chargedAny and _chargedMap or nil end,
         GetPowerRegenForPowerType = GetPowerRegenForPowerType,
         C_DurationUtil = _G.C_DurationUtil,
         C_StringUtil = _G.C_StringUtil,
@@ -558,7 +537,6 @@ do
             CP_CheckAutoHide = CP_CheckAutoHide,
             EnsureMainText = CP_EnsureMainText,
             ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
-            GetVisual = function() return CP.visual end,
         })
     end or nil
 end
@@ -578,13 +556,13 @@ do
             RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
         })
     if presentation then
-        CDM_GetScaledWidth = presentation.CDM_GetScaledWidth or CDM_GetScaledWidth
+        CP.cdmScaledWidth = presentation.CDM_GetScaledWidth or CP.cdmScaledWidth
         CP_ApplyFont = presentation.CP_ApplyFont or CP_ApplyFont
         CP_ApplyColors = presentation.CP_ApplyColors or CP_ApplyColors
         CP_RefreshTexture = presentation.CP_RefreshTexture or CP_RefreshTexture
     end
 end
-ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
+ExportPublic("MSUF_CDM_GetScaledWidth", CP.cdmScaledWidth)
 
 --- Apply-time surface helpers live in ClassPower/MSUF_CP_Controller_Surface.lua:
 --- the Ebon Might host/style on the Player Power bar, the Aug composite reset,
@@ -650,10 +628,6 @@ do
         ResolveClassPowerBgColor = CPColors.ResolveClassPowerBgColor,
         CP_CheckAutoHide = CP_CheckAutoHide,
         CP_ApplyRuneSortOrder = CPSurface.ApplyRuneSortOrder,
-        GetRuneMap = CPSurface.GetRuneMap,
-        GetFilledAlpha = function() return _filledAlpha end,
-        GetEmptyAlpha = function() return _emptyAlpha end,
-        GetVisual = function() return CP.visual end,
         EnsureRuneText = CP_EnsureRuneText,
         ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
     }
@@ -761,23 +735,19 @@ function CP.SyncNativeAuras()
     end
 end
 
---- Update function dispatch table (set in FullRefresh, called in hot path)
-local MODE_UPDATE_FN = {
-    [CPK.MODE.NATIVE_AURA]    = function() CP_CheckAutoHide(nil, nil) end,
-    [CPK.MODE.SEGMENTED]      = CP_UpdateValues,
-    [CPK.MODE.FRACTIONAL]     = CP_UpdateValues_Fractional,
-    [CPK.MODE.RUNE_CD]        = CP_UpdateValues_RuneCD,
-    [CPK.MODE.AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
-    [CPK.MODE.AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
-    [CPK.MODE.CONTINUOUS]     = CP_UpdateValues_Continuous,
-    [CPK.MODE.TIMER_BAR]      = CP_UpdateEbonHost,
-    [CPK.MODE.STAGGER]        = CP_UpdateValues_Stagger,
-    [CPK.MODE.IRONFUR]        = CP.ironfur and CP.ironfur.Update or nil,
-}
-if IS_CLASSIC then
-    --- Mists Balance: signed Eclipse power (Game/Mists/ClassPower.lua).
-    MODE_UPDATE_FN[CPK.MODE.SIGNED_CONTINUOUS] = CP.UpdateSignedContinuous
-end
+--- Bind each descriptor to its renderer once; FullRefresh caches the active one.
+local MODE_UPDATE_FN = CPConst.BindModeRunners({
+    NativeAura = function() CP_CheckAutoHide(nil, nil) end,
+    Segmented = CP_UpdateValues,
+    Fractional = CP_UpdateValues_Fractional,
+    Rune = CP_UpdateValues_RuneCD,
+    AuraSegmented = CP_UpdateValues_AuraSegmented,
+    AuraSingle = CP_UpdateValues_AuraSingle,
+    Continuous = CP_UpdateValues_Continuous,
+    Timer = CP_UpdateEbonHost,
+    Stagger = CP_UpdateValues_Stagger,
+    SignedContinuous = CP.UpdateSignedContinuous,
+})
 
 CP_RunActiveUpdate = function(powerType, maxP)
     local updateFn = CP.updateFn
@@ -918,8 +888,7 @@ function Refresh.ResolveDisplayOwnership(cpEnabled, powerType, renderMode)
     local inVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
     local playerManaEnabled = CPConfig.PlayerManaOverrideEnabled(inVehicle)
     local playerManaOverride = playerManaEnabled and not inVehicle or false
-    local wasDisplayMana = _G.MSUF_PlayerPowerManaOverrideActive == true
-        or _G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true
+    local wasDisplayMana = CPConst.PowerOwnership.displayMana == true
 
     --- Elemental: AUTO keeps the current ownership contract. When Maelstrom
     --- owns MSUF's Class Resource row, the ordinary Player surface shows Mana.
@@ -929,8 +898,7 @@ function Refresh.ResolveDisplayOwnership(cpEnabled, powerType, renderMode)
         and powerType == PT.Insanity and renderMode == CPK.MODE.CONTINUOUS) or false
     local displayManaChanged = wasDisplayMana
         ~= (playerManaOverride or isEleMaelstrom or isShadowMana)
-    ExportPublic("MSUF_EleMaelstromActive", isEleMaelstrom)
-    ExportPublic("MSUF_ShadowManaActive", isShadowMana)
+    CPConst.PowerOwnership:SetDisplay(CPConst.PowerOwnership.playerManaOverride, isEleMaelstrom, isShadowMana)
     return playerManaEnabled, playerManaOverride, displayManaChanged
 end
 
@@ -970,26 +938,26 @@ function Refresh.ApplyAugLifecycle(b, cpEnabled, powerType, playerManaOverride, 
     -- Publish only after any protected Aug/Ebon hand-off can happen. During a
     -- combat-deferred transition the old flag must continue to describe the
     -- surface that is actually still mounted.
-    ExportPublic("MSUF_PlayerPowerManaOverrideActive", playerManaOverride)
+    CPConst.PowerOwnership:SetDisplay(playerManaOverride, CPConst.PowerOwnership.eleMaelstrom, CPConst.PowerOwnership.shadowMana)
 
     --- Publish the intent before the Power element re-applies: it reads the
-    --- public flag to decide whether this bar renders Ebon Might or ordinary
+    --- ownership state to decide whether this bar renders Ebon Might or ordinary
     --- Mana, and calls back into MSUF_ClassPower_MountEbonMight once its bar is
     --- laid out - which is the first moment the host is guaranteed to exist.
     if wantsAugComposite or not wasAugComposite then
         CP.ebonSensorDesired = wantsAugComposite
     end
     local augChanged = wantsAugComposite ~= wasAugComposite
-        or wantsAugComposite ~= (_G.MSUF_AugEvokerActive == true)
+        or wantsAugComposite ~= (CPConst.PowerOwnership.augEvoker == true)
     if wantsAugComposite then
         --- Entry order is state -> Power -> sensor: the element reads the public
-        --- flag to decide whether this bar renders Ebon Might or Mana, and calls
+        --- ownership state to decide whether this bar renders Ebon Might or Mana, and calls
         --- back into MSUF_ClassPower_MountEbonMight once its bar is laid out,
         --- which is the first moment the host is guaranteed to exist.
         if augChanged then
             CP.augCompositeActive = true
-            ExportPublic("MSUF_AugEvokerActive", true)
-            RefreshPlayerPowerBar()
+            CPConst.PowerOwnership:SetAug(true)
+            CPConst.PowerOwnership:NotifyChanged()
         end
         CP.SetEbonSensorActive(true)
         if CP.ebonSensor == nil then
@@ -997,23 +965,23 @@ function Refresh.ApplyAugLifecycle(b, cpEnabled, powerType, playerManaOverride, 
             --- in combat). Fall back to an ordinary Mana bar instead of leaving
             --- an empty one behind; the event driver retries after regen.
             CP.augCompositeActive = false
-            ExportPublic("MSUF_AugEvokerActive", false)
-            RefreshPlayerPowerBar()
+            CPConst.PowerOwnership:SetAug(false)
+            CPConst.PowerOwnership:NotifyChanged()
         end
     else
         --- Exit order is state -> sensor -> Power, matching CP.DisableNow: the
-        --- flag has to be down before the element re-applies, or the bar would
+        --- ownership state has to be down before the element re-applies, or the bar would
         --- immediately re-enter Ebon mode.
         if augChanged then
             CP.augCompositeActive = false
-            ExportPublic("MSUF_AugEvokerActive", false)
+            CPConst.PowerOwnership:SetAug(false)
         end
         CP.SetEbonSensorActive(false)
-        if augChanged then RefreshPlayerPowerBar() end
+        if augChanged then CPConst.PowerOwnership:NotifyChanged() end
     end
 
     --- Aug entry/exit already reapplied the same Player surface.
-    if displayManaChanged and not augChanged then RefreshPlayerPowerBar() end
+    if displayManaChanged and not augChanged then CPConst.PowerOwnership:NotifyChanged() end
     return true
 end
 
@@ -1022,25 +990,10 @@ end
 --- fallbackMax answers a segmented resource whose maximum is secret or
 --- missing: the full refresh guesses 5, a light refresh keeps its count.
 function Refresh.ResolveMaxPower(powerType, renderMode, fallbackMax)
+    local descriptor = CPConst.ModeDescriptors[renderMode]
     local maxP
-    if renderMode == CPK.MODE.NATIVE_AURA then
-        maxP = 1 -- one native fill; separators do not need aura slots
-    elseif renderMode == CPK.MODE.RUNE_CD then
-        maxP = 6  --- DK always 6 runes
-    elseif renderMode == CPK.MODE.AURA_SINGLE then
-        --- DH Devourer mirrors Blizzard and Elemental: one continuous bar,
-        --- normalized against the real Soul Fragment maximum at runtime.
-        maxP = 1
-    elseif renderMode == CPK.MODE.CONTINUOUS then
-        maxP = 1  --- Ele Maelstrom: single continuous bar
-    elseif IS_CLASSIC and renderMode == CPK.MODE.SIGNED_CONTINUOUS then
-        maxP = 1  --- Mists Balance: one signed Eclipse bar
-    elseif renderMode == CPK.MODE.STAGGER then
-        maxP = 1  --- Brewmaster Monk: single stagger bar (max = UnitHealthMax inside update fn)
-    elseif renderMode == CPK.MODE.TIMER_BAR then
-        maxP = 1  --- Ebon Might: one host for the native duration text
-    elseif renderMode == CPK.MODE.IRONFUR then
-        maxP = 1  --- Guardian Ironfur: normalized longest remaining lifetime
+    if descriptor and descriptor.barCount then
+        maxP = descriptor.barCount
     elseif renderMode == CPK.MODE.AURA_SEGMENTED then
         if powerType == "MAELSTROM_WEAPON" then
             --- Maelstrom Weapon: max stacks from spell data
@@ -1108,7 +1061,8 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
     CP.renderMode = renderMode
     CP.isAuraPower = isAuraPower
     CP.isVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
-    CP.updateFn = MODE_UPDATE_FN[renderMode]
+    CP.modeDescriptor = CPConst.ModeDescriptors[renderMode]
+    CP.updateFn = CP.modeDescriptor.updateFn
     CP.modeProfile = CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
     CP_CompileVisual(powerType, renderMode, maxP)
 
@@ -1211,6 +1165,7 @@ function Refresh.HideClassPower(playerFrame, cpHeight)
     CP.powerType = nil
     CP.powerToken = nil
     CP.renderMode = CPK.MODE.NONE
+    CP.modeDescriptor = CPConst.ModeDescriptors[CPK.MODE.NONE]
     CP.isAuraPower = false
     CP.isVehicle = false
     CP.updateFn = nil
@@ -1392,7 +1347,6 @@ local CPEvents = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_EVENTS, {
     supportsRunes = supportsRunes,
     CP_GetModeEventProfile = CP_GetModeEventProfile,
     ClassPowerUnit = ClassPowerUnit,
-    GetAutoHideActive = function() return _autoHideActive end,
 }), "MSUF_CP_Controller_Events.lua must load first")
 CP_SetStructuralEventsBound = CPEvents.SetStructuralEventsBound
 CP_RefreshEventBindings = CPEvents.RefreshEventBindings
@@ -1563,7 +1517,7 @@ local function ClassPowerOnRareEvent(event, arg1)
         if event == "PLAYER_REGEN_ENABLED" then
             CP.CDMWidthSyncLayouts(true)
         end
-        if _autoHideActive and CP.visible and CP.container then
+        if CP.autoHideActive and CP.visible and CP.container then
             --- Re-run the current mode's update to trigger CP_CheckAutoHide
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
             if CP.renderMode == CPK.MODE.IRONFUR then CP.ironfur.RefreshVisibility() end
@@ -2107,13 +2061,9 @@ function CP.DisableNow()
     CP.augLifecycleDisablePending = false
     CP.augLifecycleTarget = nil
 
-    local augWasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
-    local displayPowerWasOverridden = _G.MSUF_EleMaelstromActive == true
-        or _G.MSUF_ShadowManaActive == true
-        or _G.MSUF_PlayerPowerManaOverrideActive == true
-    ExportPublic("MSUF_EleMaelstromActive", false)
-    ExportPublic("MSUF_ShadowManaActive", false)
-    ExportPublic("MSUF_PlayerPowerManaOverrideActive", false)
+    local augWasActive = CP.augCompositeActive == true or CPConst.PowerOwnership.augEvoker == true
+    local displayPowerWasOverridden = CPConst.PowerOwnership.displayMana == true
+    CPConst.PowerOwnership:SetDisplay(false, false, false)
 
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(false)
@@ -2127,7 +2077,7 @@ function CP.DisableNow()
     --- The second Player HP bar lives in PHP.frame plus a sibling outline host.
     if CP.PlayerHPHide then CP.PlayerHPHide() elseif PHP.frame then PHP.frame:Hide() end
     CP.visible, AM.visible, PHP.visible = false, false, false
-    if augWasActive or displayPowerWasOverridden then RefreshPlayerPowerBar() end
+    if augWasActive or displayPowerWasOverridden then CPConst.PowerOwnership:NotifyChanged() end
 end
 
 --- Phase 4: Module Registration

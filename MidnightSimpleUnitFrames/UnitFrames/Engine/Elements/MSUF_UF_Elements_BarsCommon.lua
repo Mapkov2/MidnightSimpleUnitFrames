@@ -65,16 +65,11 @@ local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local SECRET_NATIVE_CLASS_COLOR = 2
 
--- An explicit Player-source choice and the existing Elemental/Shadow class-row
--- hand-offs can all make the Player surface represent Mana instead of
--- UnitPowerType("player"). Keep this one
--- allocation-free identity resolver shared by the bar, text values, percent
--- formatting and color paths so they cannot drift apart again.
+-- Power bars, text, percentages and colours share this displayed identity.
 local function ResolveDisplayedPowerIdentity(unit, powerType, powerToken)
-  if unit == "player"
-    and (_G.MSUF_PlayerPowerManaOverrideActive == true
-      or _G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true)
-  then
+  if unit ~= "player" then return powerType, powerToken, false end
+  local displayMana = MSUF.ClassPowerOwnership.displayMana
+  if displayMana == true then
     return POWER_TYPE_MANA, "MANA", true
   end
   return powerType, powerToken, false

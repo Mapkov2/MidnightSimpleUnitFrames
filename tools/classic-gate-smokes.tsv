@@ -627,3 +627,4 @@ clients+Forever	lua	tools/tests/menu_group_copy_to_gated_smoke.lua	{root} {flavo
 clients+Forever	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} {flavor}	Colors page status text repaint, picker opacity, strength label or preview apply drifted: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_review_bugs_smoke.lua	{root} {flavor}	A menu page review fix drifted (shake default, ToT color, gated toggles, copy lists, apply modes): {flavor}
 clients+Forever	lua	tools/tests/text_decimals_legacy_migration_smoke.lua	{root} {flavor}	Legacy hpTextDecimals is not folded into healthTextDecimals: {flavor}
+clients	lua	tools/tests/classpower_ownership_notification_order_smoke.lua	{root} {flavor}	ClassPower ownership notification ordering failed

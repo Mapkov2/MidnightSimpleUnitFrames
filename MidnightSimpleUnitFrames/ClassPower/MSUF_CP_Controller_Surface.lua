@@ -43,19 +43,18 @@ local CP, _cpDB, CPConst, ResolveClassPowerColor, CP_ResolveTexture
 local CP_Create, CP_EnsureBars, CP_Layout
 
 local function CP_ClearAugCompositeState()
-    local wasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
+    local wasActive = CP.augCompositeActive == true or CPConst.PowerOwnership.augEvoker == true
     CP.augCompositeActive = false
     CP.ebonSensorDesired = false
     CP.ebonSensorRetryPending = nil
     CP.ebonTextLayerRetryPending = nil
     CP.ebonStyleRetryPending = nil
-    ExportPublic("MSUF_AugEvokerActive", false)
+    CPConst.PowerOwnership:SetAug(false)
     return wasActive
 end
 
 --- DK Rune map: [display_slot] = rune_id (1-6), sorted per sortOrder
 --- Fresh on every build.
-local _runeMap
 local _runeAppliedSortOrder
 
 local function CP_ApplyRuneSortOrder(sortOrder)
@@ -63,18 +62,14 @@ local function CP_ApplyRuneSortOrder(sortOrder)
     if _runeAppliedSortOrder == wanted then return end
 
     if wanted == "asc" then
-        table_sort(_runeMap, _runeAscSort)
+        table_sort(CP.runeMap, _runeAscSort)
     elseif wanted == "desc" then
-        table_sort(_runeMap, _runeDescSort)
+        table_sort(CP.runeMap, _runeDescSort)
     else
-        for i = 1, 6 do _runeMap[i] = i end
+        for i = 1, 6 do CP.runeMap[i] = i end
     end
 
     _runeAppliedSortOrder = wanted
-end
-
-local function CP_GetRuneMap()
-    return _runeMap
 end
 
 --- Ebon Might lives on the Player Power bar itself: Essence keeps the ordinary
@@ -319,7 +314,7 @@ builders.CONTROLLER_SURFACE = function(E)
     CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
     ResolveClassPowerColor, CP_ResolveTexture = E.ResolveClassPowerColor, E.CP_ResolveTexture
     CP_Create, CP_EnsureBars, CP_Layout = E.CP_Create, E.CP_EnsureBars, E.CP_Layout
-    _runeMap = { 1, 2, 3, 4, 5, 6 }
+    CP.runeMap = { 1, 2, 3, 4, 5, 6 }
     _runeAppliedSortOrder = "natural"
     CP.GetEbonTextLevel = GetEbonTextLevel
     ExportPublic("MSUF_ClassPower_MountEbonMight", CP_MountEbonMight)
@@ -337,7 +332,6 @@ builders.CONTROLLER_SURFACE = function(E)
     return {
         ClearAugCompositeState = CP_ClearAugCompositeState,
         ApplyRuneSortOrder = CP_ApplyRuneSortOrder,
-        GetRuneMap = CP_GetRuneMap,
         ResolveEbonHost = CP_ResolveEbonHost,
         GetEbonStyle = CP_GetEbonStyle,
         EnsureHiddenAnchorGeometry = CP_EnsureHiddenAnchorGeometry,

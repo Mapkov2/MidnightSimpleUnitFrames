@@ -1,0 +1,250 @@
+=== aug
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+login | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+spec=1 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+spec=3 | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+spec=2 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+spec=3 | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+exit-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+exit-specInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+exit-combatEnd | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+entry-combatStart | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+entry-specInCombat | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=1 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+entry-combatEnd | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+rev-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+rev-a | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=0 sensor=1
+rev-b | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=0 sensor=1
+rev-combatEnd | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+vehicleExit | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+source=AUTO | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+vehicleExit | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+veh-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+vehInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=0 sensor=1
+vehExitInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+veh-combatEnd | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+showEbonMight=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+showEbonMight=true | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+showClassPower=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+showClassPower=true | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+dis-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+disableInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=1 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+dis-combatEnd | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+reenable | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+dis2-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+disableInCombat2 | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=1 sensor=1
+reenableInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+dis2-combatEnd | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+enable | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+=== aug-sensorfail
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound PLAYER_REGEN_DISABLED)
+combatStart | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound PLAYER_REGEN_ENABLED)
+combatEnd | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+afterSensorRecovers | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+spec=1 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+spec=3 | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+enable | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+=== aug-nohost
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+combatStart | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+combatEnd | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+enable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+=== aug-mana-login
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+login | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+spec=1 | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+spec=3 | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+c-combatStart | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+autoInCombat | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=1 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+c-combatEnd | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  (unbound PLAYER_REGEN_DISABLED)
+d-combatStart | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+manaInCombat | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=1 disP=0 sensor=1
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+d-combatEnd | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+enable | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=1
+=== dev
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=3 | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=19 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+source=AUTO | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=19 vis=0 augC=0 retry=0 disP=0 sensor=1
+  NOTIFY pmo=0 ele=0 sh=0 aug=1 dm=0
+enable | pmo=0 ele=0 sh=0 aug=1 dm=0 | mode=1 pt=19 vis=1 augC=1 retry=0 disP=0 sensor=1
+=== ele
+  NOTIFY pmo=0 ele=1 sh=0 aug=0 dm=1
+login | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+spec=2 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=3 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=1 sh=0 aug=0 dm=1
+spec=1 | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+showEleMaelstrom=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=1 sh=0 aug=0 dm=1
+showEleMaelstrom=true | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+source=MANA | pmo=1 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+showEleMaelstrom=false | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+source=AUTO | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=1 sh=0 aug=0 dm=1
+showEleMaelstrom=true | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=1 sh=0 aug=0 dm=1
+vehicleExit | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound PLAYER_REGEN_DISABLED)
+combatStart | pmo=0 ele=1 sh=0 aug=0 dm=1 | mode=6 pt=11 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+specInCombat | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound PLAYER_REGEN_ENABLED)
+combatEnd | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=1 augC=0 retry=0 disP=0 sensor=0
+showClassPower=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+showClassPower=true | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=1 augC=0 retry=0 disP=0 sensor=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=0 augC=0 retry=0 disP=0 sensor=0
+enable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=MAELSTROM_WEAPON vis=1 augC=0 retry=0 disP=0 sensor=0
+=== shadow
+  NOTIFY pmo=0 ele=0 sh=1 aug=0 dm=1
+login | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+spec=1 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=1 aug=0 dm=1
+spec=3 | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+showShadowMana=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=1 aug=0 dm=1
+showShadowMana=true | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+source=MANA | pmo=1 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=1 aug=0 dm=1
+vehicleExit | pmo=1 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+source=AUTO | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+showClassPower=false | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=1 aug=0 dm=1
+showClassPower=true | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=6 pt=13 vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=1 aug=0 dm=1
+enable | pmo=0 ele=0 sh=1 aug=0 dm=1 | mode=6 pt=13 vis=1 augC=0 retry=0 disP=0 sensor=0
+=== druid
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  (unbound UNIT_DISPLAYPOWER)
+moonkin | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+cat | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound UNIT_DISPLAYPOWER)
+bear | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  (unbound UNIT_DISPLAYPOWER)
+caster | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+catMana | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound UNIT_DISPLAYPOWER)
+casterMana | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+spec=2 | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+feralCat | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=3 | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+guardBear | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=10 pt=IRONFUR vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+source=AUTO | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=10 pt=IRONFUR vis=1 augC=0 retry=0 disP=0 sensor=0
+  (unbound UNIT_DISPLAYPOWER)
+guardCaster | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+spec=4 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+vehicleExit | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+enable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+=== devourer
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=5 pt=SOUL_FRAGMENTS vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=2 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=4 pt=SOUL_FRAGMENTS_VENG vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=1 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+spec=3 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=5 pt=SOUL_FRAGMENTS vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=5 pt=SOUL_FRAGMENTS vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+source=AUTO | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=5 pt=SOUL_FRAGMENTS vis=1 augC=0 retry=0 disP=0 sensor=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=5 pt=SOUL_FRAGMENTS vis=0 augC=0 retry=0 disP=0 sensor=0
+enable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=5 pt=SOUL_FRAGMENTS vis=1 augC=0 retry=0 disP=0 sensor=0
+=== rogue
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+vehicleExit | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+enable | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+=== dk
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=3 pt=5 vis=1 augC=0 retry=0 disP=0 sensor=0
+vehicleEnter | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=4 vis=1 augC=0 retry=0 disP=0 sensor=0
+vehicleExit | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=3 pt=5 vis=1 augC=0 retry=0 disP=0 sensor=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=3 pt=5 vis=0 augC=0 retry=0 disP=0 sensor=0
+enable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=3 pt=5 vis=1 augC=0 retry=0 disP=0 sensor=0
+=== monk
+login | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=9 pt=-1 vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=3 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=1 pt=12 vis=1 augC=0 retry=0 disP=0 sensor=0
+spec=2 | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+source=MANA | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=0 ele=0 sh=0 aug=0 dm=0
+disable | pmo=0 ele=0 sh=0 aug=0 dm=0 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0
+  NOTIFY pmo=1 ele=0 sh=0 aug=0 dm=1
+enable | pmo=1 ele=0 sh=0 aug=0 dm=1 | mode=0 pt=nil vis=0 augC=0 retry=0 disP=0 sensor=0

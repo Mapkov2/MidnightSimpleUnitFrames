@@ -230,30 +230,50 @@ K.CDM_HOOK_DEFS = {
     { name = "BuffIconCooldownViewer", flag = "_bicvHooked", mode = "tracked_buffs" },
 }
 
---- Profiles (from MSUF_CP_Profiles.lua)
---- MSUF_CP_Profiles.lua
---- Phase 1 ClassPower split: data-only event profiles for active render modes.
---- Loaded before the ClassPower controller.
+--- Each mode owns its event, renderer, geometry and tick traits here.
+--- Missing event traits are false; ordinary modes permit light power updates
+--- and use only an already-active degraded Essence tick.
+K.ModeDescriptors = {
+    [K.CPK.MODE.NONE] = {},
+    [K.CPK.MODE.SEGMENTED] = {
+        updateKey = "Segmented", pipColors = true,
+        power = true, maxPower = true, pointCharge = true, warlockPred = true,
+    },
+    [K.CPK.MODE.FRACTIONAL] = {
+        updateKey = "Fractional", pipColors = true, power = true, maxPower = true, warlockPred = true,
+    },
+    [K.CPK.MODE.RUNE_CD] = {
+        updateKey = "Rune", tick = "rune", powerUpdate = false, pipColors = true, barCount = 6, rune = true,
+    },
+    [K.CPK.MODE.AURA_SEGMENTED] = { updateKey = "AuraSegmented", pipColors = true, aura = true },
+    [K.CPK.MODE.AURA_SINGLE] = { updateKey = "AuraSingle", barCount = 1, aura = true },
+    [K.CPK.MODE.CONTINUOUS] = { updateKey = "Continuous", barCount = 1, power = true },
+    [K.CPK.MODE.TIMER_BAR] = { updateKey = "Timer", tick = "none", powerUpdate = false, barCount = 1 },
+    [K.CPK.MODE.STAGGER] = {
+        updateKey = "Stagger", tick = "stagger", powerUpdate = false, barCount = 1, aura = true, health = true,
+    },
+    [K.CPK.MODE.IRONFUR] = { updateKey = "Ironfur", barCount = 1 },
+    [K.CPK.MODE.NATIVE_AURA] = { updateKey = "NativeAura", barCount = 1 },
+}
+--- Compatibility event profiles share the same records; no second trait list.
+ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", K.ModeDescriptors)
 
-local K = _G.MSUF_CP_CONST or {}
-local CPK = K.CPK or {}
-local MODE = CPK.MODE or {}
+function K.BindModeRunners(runners)
+    for _, descriptor in pairs(K.ModeDescriptors) do
+        descriptor.updateFn = runners[descriptor.updateKey]
+    end
+    --- Preserve the renderer inspection index as a view, without a second set
+    --- of mode traits or bindings. Lazy Ironfur writes through to its descriptor.
+    return setmetatable({}, {
+        __index = function(_, mode)
+            local descriptor = K.ModeDescriptors[mode]
+            return descriptor and descriptor.updateFn
+        end,
+        __newindex = function(_, mode, updateFn) K.ModeDescriptors[mode].updateFn = updateFn end,
+    })
+end
 
---- warlockPred binds the shard prediction cast events; the profile builder
---- keeps it for Warlocks only. Affliction and Demonology shards render
---- SEGMENTED and predict there too (WL_SHARD_DELTAS[1] and [2]).
-ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
-    [MODE.NONE]           = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.SEGMENTED]      = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = true,  warlockPred = true  },
-    [MODE.FRACTIONAL]     = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = false, warlockPred = true  },
-    [MODE.RUNE_CD]        = { power = false, maxPower = false, aura = false, rune = true,  health = false, pointCharge = false, warlockPred = false },
-    [MODE.AURA_SEGMENTED] = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.AURA_SINGLE]    = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.CONTINUOUS]     = { power = true,  maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.TIMER_BAR]      = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.STAGGER]        = { power = false, maxPower = false, aura = true,  rune = false, health = true,  pointCharge = false, warlockPred = false },
-    [MODE.IRONFUR]        = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-})
+local CPK, MODE = K.CPK, K.CPK.MODE
 
 --- Classic flavors (MSUF.Client.IsClassic: Vanilla, TBC and Mists) load this
 --- file as well. Their providers (Game/<Flavor>/ClassPower.lua) route the Mists
@@ -279,11 +299,21 @@ if (MSUF.Client and MSUF.Client.IsClassic) == true then
     tokens[PT.Balance]       = "BALANCE"
     tokens[PT.ShadowOrbs]    = "SHADOW_ORBS"
     tokens.MISTS_ARCANE_CHARGES = "ARCANE_CHARGES"
-    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = {
-        power = true, maxPower = false, aura = true, rune = false, health = false,
-        pointCharge = false, warlockPred = false,
+    K.ModeDescriptors[MODE.SIGNED_CONTINUOUS] = {
+        updateKey = "SignedContinuous", barCount = 1, power = true, aura = true,
     }
     --- WL_SHARD_DELTAS lists Midnight's shard generators only; Mists
     --- Affliction shards keep their event set without the cast events.
-    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SEGMENTED].warlockPred = false
+    K.ModeDescriptors[MODE.SEGMENTED].warlockPred = false
 end
+
+local eventTraits = { "power", "maxPower", "aura", "rune", "health", "pointCharge", "warlockPred" }
+for _, descriptor in pairs(K.ModeDescriptors) do
+    for _, trait in ipairs(eventTraits) do descriptor[trait] = descriptor[trait] == true end
+    descriptor.tick = descriptor.tick or "essence"
+    descriptor.pipColors = descriptor.pipColors == true
+    if descriptor.powerUpdate == nil then descriptor.powerUpdate = true end
+end
+
+--- The Power element establishes ownership before ClassPower loads.
+K.PowerOwnership = MSUF.ClassPowerOwnership

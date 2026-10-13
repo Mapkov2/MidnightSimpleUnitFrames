@@ -20,7 +20,7 @@ local UnitHasVehicleUI = UnitHasVehicleUI
 local PlayerVehicleHasComboPoints = PlayerVehicleHasComboPoints
 local GetShapeshiftFormID = GetShapeshiftFormID
 local C_SpellBook = C_SpellBook
-local CP_MODE_EVENT_PROFILE = _G.MSUF_CP_MODE_EVENT_PROFILE or {}
+local CP_MODE_EVENT_PROFILE = _G.MSUF_CP_CONST.ModeDescriptors
 local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
     or MSUF.Client.SupportsClassResource("CHARGED")
 
@@ -413,7 +413,7 @@ local function CP_ComputeStructuralSignature()
         newRenderMode = CPK.MODE.NONE
     end
     local newVehicle = (cpEnabled and UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
-    local wantAugComposite = _G.MSUF_PlayerPowerManaOverrideActive ~= true
+    local wantAugComposite = not MSUF.ClassPowerOwnership.playerManaOverride
         and cpEnabled and newPowerType == PT.Essence
         and PLAYER_CLASS == "EVOKER"
         and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG

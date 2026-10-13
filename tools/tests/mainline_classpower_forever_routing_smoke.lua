@@ -22,8 +22,7 @@ local MODE_NONE, MODE_SEGMENTED = 0, 1
 local CLEARED_GLOBALS = {
     "__MSUF_ClassPower_Loaded", "__MSUF_CP_Balance_Loaded", "MSUF_CP_CONST", "MSUF_CP_CORE_BUILDERS",
     "MSUF_CP_MODE_BUILDERS", "MSUF_CP_FEATURE_BUILDERS", "MSUF_CP_CoreUnitFrame", "MSUF_ClassPowerContainer",
-    "MSUF_player", "MSUF_BAL_RefreshRuntime", "MSUF_BAL_InvalidateColors", "MSUF_EleMaelstromActive",
-    "MSUF_ShadowManaActive", "MSUF_PlayerPowerManaOverrideActive", "MSUF_AugEvokerActive",
+    "MSUF_player", "MSUF_BAL_RefreshRuntime", "MSUF_BAL_InvalidateColors",
 }
 
 -- Same order as the ClassPower block of MidnightSimpleUnitFrames_Mainline.toc.

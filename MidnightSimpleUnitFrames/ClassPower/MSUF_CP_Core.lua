@@ -344,10 +344,9 @@ end
 
 do
     --- Bound once by LAYOUT at controller load: the shared state, the cached
-    --- config and the controller's alpha/auto-hide setters.
+    --- config and presentation collaborators.
     local CP, _cpDB, CPConst, CreateFrame
-    local ResolveClassPowerBgColor, GetCDMScaledWidth
-    local SetFilledAlpha, SetEmptyAlpha, SetAutoHideActive
+    local ResolveClassPowerBgColor
 
     --- CP_Layout runs as a fixed sequence of named stages. They share one
     --- pass-state table that is allocated once here, so a layout pass adds no
@@ -457,7 +456,7 @@ do
                 userW = cachedW
             else
                 local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
-                local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
+                local cdmWidthFn = CP.cdmScaledWidth or _G.MSUF_CDM_GetScaledWidth
                 if type(cdmWidthFn) == "function" then
                     userW = cdmWidthFn(cdmFrame, CP.container)
                 end
@@ -680,12 +679,12 @@ do
         local emptyAlpha  = tonumber(b.classPowerEmptyAlpha)  or 0.3
         if filledAlpha < 0 then filledAlpha = 0 elseif filledAlpha > 1 then filledAlpha = 1 end
         if emptyAlpha  < 0 then emptyAlpha  = 0 elseif emptyAlpha  > 1 then emptyAlpha  = 1 end
-        SetFilledAlpha(filledAlpha)
-        SetEmptyAlpha(emptyAlpha)
+        CP.filledAlpha = filledAlpha
+        CP.emptyAlpha = emptyAlpha
 
-        SetAutoHideActive((b.classPowerHideOOC == true)
+        CP.autoHideActive = (b.classPowerHideOOC == true)
                        or (b.classPowerHideWhenFull == true)
-                       or (b.classPowerHideWhenEmpty == true))
+                       or (b.classPowerHideWhenEmpty == true)
     end
 
     --- Stage 8: place the pips (shape mode) or the row segments and their
@@ -882,9 +881,7 @@ do
     builders.LAYOUT = function(E)
         CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
         CreateFrame = E.CreateFrame or _G.CreateFrame
-        ResolveClassPowerBgColor, GetCDMScaledWidth = E.ResolveClassPowerBgColor, E.GetCDMScaledWidth
-        SetFilledAlpha, SetEmptyAlpha = E.SetFilledAlpha, E.SetEmptyAlpha
-        SetAutoHideActive = E.SetAutoHideActive
+        ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
         return API
     end
 end
@@ -1290,9 +1287,7 @@ do
     local function OnPowerUpdate(powerToken)
         if not CP.visible or not CP.powerType then return end
         if CP.isAuraPower then return end
-        if CP.renderMode == CPK.MODE.RUNE_CD then return end
-        if CP.renderMode == CPK.MODE.TIMER_BAR then return end
-        if CP.renderMode == CPK.MODE.STAGGER then return end
+        if not CP.modeDescriptor.powerUpdate then return end
 
         local expectedToken = CP.powerToken or POWER_TYPE_TOKENS[CP.powerType]
         if powerToken and expectedToken and powerToken ~= expectedToken then
