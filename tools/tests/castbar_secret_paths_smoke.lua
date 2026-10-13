@@ -287,14 +287,14 @@ local function GCDLife(world)
     local env = world.env
     local driver = world:Named("MSUF_GCDBarDriver")
     if not driver then Fail("GCD bar driver missing") return end
-    env.MSUF_GCDBar_SyncRegistration()
+    env.MSUF.Castbars.GCD.GCDBar_SyncRegistration()
     for _, secret in ipairs({ false, true }) do
         world.secretCooldowns = secret
         world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
         -- The player's own instant cast: the spell ID payload is readable. The
         -- bar shows for the GCD and ends with it, readable or secret.
         world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
-        local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF_PlayerCastbar
+        local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF.Castbars.Frames.Get("player")
         if not (bar and bar._msufGCDActive == true) then Fail("GCD bar did not start (secret " .. tostring(secret) .. ")") end
         world:Advance(1.8)
         if bar and bar._msufGCDActive == true then Fail("GCD bar did not end (secret " .. tostring(secret) .. ")") end
@@ -310,7 +310,7 @@ local function GCDLife(world)
     world.secretCooldowns = true
     world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
     world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
-    local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF_PlayerCastbar
+    local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF.Castbars.Frames.Get("player")
     world:Advance(2.0)
     if bar and bar._msufGCDActive == true then Fail("secret GCD did not end on its native completion") end
     world.secretCooldowns = false
@@ -329,7 +329,7 @@ local function InterruptReadyLife(world)
     local env = world.env
     local eventFrame = world:Named("MSUF_InterruptReady_EventFrame")
     if not eventFrame then Fail("interrupt-ready event frame missing") return end
-    local target = env.MSUF_TargetCastBar
+    local target = env.MSUF.Castbars.Frames.Get("target")
     for _, secret in ipairs({ false, true }) do
         world.secretCooldowns = secret
         world:StartCast("target", "Shadow Bolt", 3, 90)
@@ -374,7 +374,7 @@ end
 local REQUIRED = {
     ["MSUF_CastbarEngine.lua"] = { "BuildState", "ResolveTargetInfo" },
     ["MSUF_CastbarDriver.lua"] = { "HandleDriverEvent", "RefreshTargetFocusChanged", "ScheduleStopConfirmation",
-        "HandleUnitDeathEvent", "UpdateCastTargetText", "ApplyCastTargetTextColor", "MSUF_Castbar_ResolveInterruptLabel",
+        "HandleUnitDeathEvent", "UpdateCastTargetText", "ApplyCastTargetTextColor", "Driver.Castbar_ResolveInterruptLabel",
         "SetInterrupted", "SetSucceeded", "Cast", "FillEmpoweredLikeCast", "UpdateColorForInterruptible" },
     ["MSUF_CastbarRuntime.lua"] = { "ApplyActive", "ApplyTimer", "SnapshotDuration", "PrepareWork",
         "ApplyNativeTimeText", "Stop", "ApplyInterruptValues" },
@@ -426,17 +426,17 @@ local function RunMainline(style)
     -- Work other modules queued at boot is not this smoke's subject.
     for index = #world.errors, 1, -1 do world.errors[index] = nil end
     local stop = world:Watch(world:CastbarPaths())
-    Scenario(world, style .. " target", function() UnitCastbarLife(world, env.MSUF_TargetCastBar, "target", 10) end)
-    Scenario(world, style .. " focus", function() UnitCastbarLife(world, env.MSUF_FocusCastBar, "focus", 20) end)
+    Scenario(world, style .. " target", function() UnitCastbarLife(world, env.MSUF.Castbars.Frames.Get("target"), "target", 10) end)
+    Scenario(world, style .. " focus", function() UnitCastbarLife(world, env.MSUF.Castbars.Frames.Get("focus"), "focus", 20) end)
     Scenario(world, style .. " target swap", function()
         world:StartCast("target", "Shadow Bolt", 2, 30)
-        world:Fire(env.MSUF_TargetCastBar, "PLAYER_TARGET_CHANGED")
+        world:Fire(env.MSUF.Castbars.Frames.Get("target"), "PLAYER_TARGET_CHANGED")
         world:StartChannel("focus", "Drain Life", 2, 31)
-        world:Fire(env.MSUF_FocusCastBar, "PLAYER_FOCUS_CHANGED")
+        world:Fire(env.MSUF.Castbars.Frames.Get("focus"), "PLAYER_FOCUS_CHANGED")
         world:Advance(0.5)
         world.casting.target, world.channeling.focus = nil, nil
-        world:Fire(env.MSUF_TargetCastBar, "PLAYER_TARGET_CHANGED")
-        world:Fire(env.MSUF_FocusCastBar, "PLAYER_FOCUS_CHANGED")
+        world:Fire(env.MSUF.Castbars.Frames.Get("target"), "PLAYER_TARGET_CHANGED")
+        world:Fire(env.MSUF.Castbars.Frames.Get("focus"), "PLAYER_FOCUS_CHANGED")
         world:Advance(0.5)
     end)
     Scenario(world, style .. " boss", function()
@@ -445,8 +445,8 @@ local function RunMainline(style)
     Scenario(world, style .. " arena", function()
         PoolLife(world, "MSUF_ArenaCastbars", "arena1", "ARENA_OPPONENT_UPDATE", "arena1")
     end)
-    Scenario(world, style .. " player", function() PlayerCastbarLife(world, env.MSUF_PlayerCastbar) end)
-    Scenario(world, style .. " player class colour", function() PlayerClassColourLife(world, env.MSUF_PlayerCastbar) end)
+    Scenario(world, style .. " player", function() PlayerCastbarLife(world, env.MSUF.Castbars.Frames.Get("player")) end)
+    Scenario(world, style .. " player class colour", function() PlayerClassColourLife(world, env.MSUF.Castbars.Frames.Get("player")) end)
     Scenario(world, style .. " interrupt ready", function() InterruptReadyLife(world) end)
     Scenario(world, style .. " GCD attached", function()
         env.MSUF_DB.general.gcdBarDetached = false
@@ -510,8 +510,8 @@ local function RunForever()
         world:Fire(driver, "CVAR_UPDATE", "showSwingTimer", "1")
         world:Advance(2.5)
     end)
-    Scenario(world, "Forever target", function() UnitCastbarLife(world, env.MSUF_TargetCastBar, "target", 10) end)
-    Scenario(world, "Forever player", function() PlayerCastbarLife(world, env.MSUF_PlayerCastbar) end)
+    Scenario(world, "Forever target", function() UnitCastbarLife(world, env.MSUF.Castbars.Frames.Get("target"), "target", 10) end)
+    Scenario(world, "Forever player", function() PlayerCastbarLife(world, env.MSUF.Castbars.Frames.Get("player")) end)
     local violations, coverage = stop()
     for index = 1, #violations do Fail("Forever: " .. violations[index]) end
     for file, names in pairs(FOREVER_REQUIRED) do

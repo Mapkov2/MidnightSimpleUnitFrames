@@ -111,7 +111,8 @@ Section("Shake on interrupt shows what the runtime does", function()
     local function Shakes(value)
         general.castbarInterruptShake = value
         local frame = env.CreateFrame("Frame", nil, env.UIParent)
-        env.MSUF_PlayCastbarShake(frame)
+        core.Castbars.Config.Compile()
+        core.Castbars.Utils.PlayCastbarShake(frame)
         return frame.MSUF_ShakeGroup ~= nil
     end
     for _, value in ipairs({ "unset", true, false }) do
@@ -122,6 +123,7 @@ Section("Shake on interrupt shows what the runtime does", function()
             .. tostring(control.command.get()) .. " while the bars " .. (shakes and "shake" or "do not shake"))
     end
     general.castbarInterruptShake = saved
+    core.Castbars.Config.Compile()
 end)
 
 ---------------------------------------------------------------------------

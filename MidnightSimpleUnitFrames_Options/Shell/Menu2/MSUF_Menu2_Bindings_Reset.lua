@@ -685,6 +685,7 @@ local function ResetPageImpl(pageKey)
     -- through their setters, ahead of the apply fanout that reads the rest.
     local setterOnly = CaptureSetterOnlySettings()
     handler(db, defaults, info)
+    MSUF.Castbars.Config.Invalidate()
     RetireLegacyUnitAliases(db)
     PurgeRuntimeCachesForReset(info)
     ResyncSetterOnlySettings(setterOnly)

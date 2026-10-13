@@ -290,24 +290,29 @@ local function RestoreState(snap)
                 db[unit] = db[unit] or {}
                 DeepRestore(db[unit], data)
             end
+            MSUF.Castbars.Config.Invalidate()
             ApplySettingsForKeySafe(unit)
             MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(unit)
         end
     elseif snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
         DeepRestore(db[snap.key], snap.data)
+        MSUF.Castbars.Config.Invalidate()
         ApplySettingsForKeySafe(snap.key)
     elseif snap.category == "castbar" then
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
+        MSUF.Castbars.Config.Invalidate()
         ApplyCastbarUndo(snap.key)
     elseif snap.category == "general" then
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
+        MSUF.Castbars.Config.Invalidate()
         ApplyAllSettingsSafe()
     elseif snap.category == "classpower" then
         db.bars = db.bars or {}
         DeepRestore(db.bars, snap.data)
+        MSUF.Castbars.Config.Invalidate()
         MSUF.Require("MSUF_ClassPower_RefreshLayout", CALLER)()
         MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)("player", true)
     elseif snap.category == "power" then
@@ -315,6 +320,7 @@ local function RestoreState(snap)
         db.bars = db.bars or {}
         DeepRestore(db[snap.key], snap.data.unit)
         DeepRestore(db.bars, snap.data.bars)
+        MSUF.Castbars.Config.Invalidate()
         ApplySettingsForKeySafe(snap.key)
         MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(snap.key, true)
     elseif snap.category == "aura" then

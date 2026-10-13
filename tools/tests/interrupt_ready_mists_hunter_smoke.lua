@@ -20,6 +20,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local COUNTER_SHOT, SILENCING_SHOT = 147362, 34490
 local SPECS = {
@@ -58,6 +59,7 @@ UIParent = CreateFrame("Frame")
 UnitClass = function() return "Hunter", "HUNTER" end
 MSUF_ShouldUseMSUFCastbar = function() return true end
 MSUF_DB = { general = { kickReadyShowTarget = true, kickReadyStyle = "box" } }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
 local known, specID, cooldowns = {}, nil, {}
 C_SpellBook = { IsSpellKnownOrInSpellBook = function(spellID) return known[spellID] == true end }

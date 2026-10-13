@@ -1,31 +1,19 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarGCD.lua - GCD bar (instant casts) on the Player castbar.
----
---- 12.1 rebuild of the 5.x GCD bar. Everything time-driven runs C-side:
---- UNIT_SPELLCAST_SUCCEEDED (player/vehicle only) resolves the active global
---- cooldown as a native duration object (C_Spell.GetSpellCooldownDuration on
---- the GCD dummy spell 61304) and binds it to the player castbar through the
---- shared castbar Runtime (StatusBar timer + DurationTextBinding). No OnUpdate
---- tick exists anywhere in this module; fill and time text advance in C, and
---- teardown is one keyed Kernel-scheduler deadline from the plain remaining
---- time. When the cooldown values are secret, a hidden Cooldown frame's native
---- OnCooldownDone ends the bar instead (a bounded deadline force-clears a stuck
---- state); a client without that frame API polls SpellCooldownInfo.isActive,
---- which is NeverSecret in the 12.1 API contract. No path creates a C_Timer
---- handle, and a readable GCD never builds the SpellCooldownInfo table.
----
---- Unlike 5.x this is haste-correct: the duration object describes the real
---- scaled GCD, so no base-GCD approximation and no GetHaste() taint hazard.
----
---- The event is unregistered while the feature is disabled - true zero cost.
----
---- DB keys (MSUF_DB.general, seeded in State/MSUF_Defaults.lua):
----   showGCDBar       - master toggle
----   showGCDBarTime   - remaining-time text on the GCD bar
----   showGCDBarSpell  - spell name + icon on the GCD bar
+--- Player/vehicle GCD: native duration fill/text; keyed or OnCooldownDone teardown.
+--- Secret fallback reads only NeverSecret isActive. Disabled feature unregisters events.
+--- Settings and lifecycle details: Castbars/README.md.
 
 local _, ns = ...
-ns = ns or _G.MSUF_NS or {}
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_CastbarGCD.lua").Castbars
+local Config = Castbars.Config
+local Bridge = Castbars.Bridge
+local Core = Castbars.Core
+local Frames = Castbars.Frames
+local GCD = Castbars.GCD
+local Manager = Castbars.Manager
+local Player = Castbars.Player
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
 
 local _G = _G
 local CreateFrame = CreateFrame
@@ -48,19 +36,16 @@ local SECRET_FINISH_CAP = POLL_INTERVAL * POLL_MAX_TICKS
 --- The finish deadline after a readable remaining time.
 local FINISH_PAD = 0.03
 
--- ============================================================
 -- Settings
--- ============================================================
 local function GeneralDB()
-    local db = _G.MSUF_DB
-    return db and db.general or nil
+    return Config.Read().general
 end
 
 local activeFrame, detachedFrame, detachedPreview, idleDuration, gcdBarSupported
 local RefreshDetached, RegisterDetachedMover, FinishGCDBar
 
-local function IsGCDBarEnabled()
-    local g = GeneralDB()
+local function IsGCDBarEnabled(g)
+    g = g or GeneralDB()
     return g ~= nil and g.showGCDBar == true
 end
 
@@ -88,11 +73,13 @@ end
 --- A client that cannot fill the bar (no Duration API, or Forever without the
 --- GCD spell) never shows the separate bar or its mover, even when an
 --- imported profile asks for it.
-local function DetachedWanted()
-    local g = GeneralDB()
+local function DetachedWantedFromGeneral(g)
     local spellAPI = _G.C_Spell
     return g ~= nil and g.gcdBarDetached == true and GCDBarSupported()
         and type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function"
+end
+local function DetachedWanted()
+    return DetachedWantedFromGeneral(GeneralDB())
 end
 local function DetachedVisible()
     local g = GeneralDB()
@@ -102,6 +89,7 @@ end
 local function EnsureDetached()
     if not detachedFrame then
         local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_DetachedGCDBar", UIParent))
+        Frames.Register("gcd", nil, frame)
         frame.unit, frame._msufDetachedGCD = "player", true
         frame:SetFrameStrata("MEDIUM")
         frame:EnableMouse(false)
@@ -137,8 +125,8 @@ local function LayoutDetached(frame, g)
     frame.icon:SetSize(height, height)
     -- The castbars' configured font; the size follows the bar height.
     -- Castbars/MSUF_Castbars_Core.lua (loads before this file) owns both.
-    local font = _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
-    local flags = _G.MSUF_GetFontFlags() or "OUTLINE"
+    local font = Core.GetFontPath() or _G.STANDARD_TEXT_FONT
+    local flags = Core.GetFontFlags() or "OUTLINE"
     local size = math.min(12, math.max(8, height - 2))
     frame.castText:SetFont(font, size, flags)
     frame.timeText:SetFont(font, size, flags)
@@ -194,11 +182,13 @@ local function DetachedPosition()
         width = g.gcdBarWidth or 180, height = g.gcdBarHeight or 12 }
 end
 local function SetDetachedPosition(position)
-    local g = GeneralDB()
+    local db = Config.Source()
+    local g = db and db.general
     if not g or InCombatLockdown() then return false end
     g.gcdBarX, g.gcdBarY = position.x, position.y
     if position.width then g.gcdBarWidth = position.width end
     if position.height then g.gcdBarHeight = position.height end
+    Config.Refresh()
     RefreshDetached(true)
     return true
 end
@@ -207,9 +197,11 @@ local function DimensionControl(id, label, key, default, min, max)
     return { id = id, label = Text(label), kind = "number", min = min, max = max, step = 1,
         get = function() local g = GeneralDB(); return g and g[key] or default end,
         set = function(value)
-            local g = GeneralDB()
+            local db = Config.Source()
+            local g = db and db.general
             if not g or InCombatLockdown() then return false end
             g[key] = math.max(min, math.min(max, value))
+            Config.Refresh()
             RefreshDetached(true)
             return true
         end }
@@ -239,9 +231,7 @@ RegisterDetachedMover = function()
     }) == true
 end
 
--- ============================================================
 -- Static spell metadata cache (name/icon for instants, skip set)
--- ============================================================
 --- Once a spellID is known to never produce a GCD bar (hard-cast or off-GCD)
 --- it can not change mid-session: one table lookup replaces every API call.
 local spellSkip = {}
@@ -249,7 +239,7 @@ local spellNames = {}
 local spellIcons = {}
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper.
-local PlainNumber = _G.MSUF_Castbar_PlainNumber
+local PlainNumber = Utils.Castbar_PlainNumber
 
 --- Resolves and caches name/icon for an instant spell. Returns nil for
 --- hard-casts (and records them in the skip set).
@@ -279,9 +269,7 @@ local function ResolveInstantSpell(spellID)
     return name
 end
 
--- ============================================================
 -- Bar lifecycle
--- ============================================================
 -- Exactly one GCD bar is active at a time (activeFrame), so its finish
 -- callbacks are module-level keys of the Kernel scheduler.
 local OnFinishTimer, OnPollTicker, OnSecretCap
@@ -326,7 +314,7 @@ FinishGCDBar = function(frame)
     -- color. Only drop GCD ownership.
     if BarOwnedByRealCast(frame) then return end
 
-    local runtime = _G.MSUF_CastbarRuntime
+    local runtime = Castbars.Runtime
     if runtime then
         runtime:DisableNativeTimeText(frame)
         runtime:ClearTimer(frame.statusBar)
@@ -337,7 +325,7 @@ FinishGCDBar = function(frame)
     -- the native bindings above needed to be released.
     if frame.MSUF_testMode == true then return end
 
-    local applyTexts = _G.MSUF_CB_ApplyTexts
+    local applyTexts = Utils.CB_ApplyTexts
     if type(applyTexts) == "function" then
         applyTexts(frame, nil, "", "")
     else
@@ -457,10 +445,10 @@ local function ArmFinish(durationObj)
     Arm(OnPollTicker, POLL_INTERVAL)
 end
 
-local function StartGCDBar(frame, spellID, durationObj)
+local function StartGCDBar(frame, spellID, durationObj, general)
     if activeFrame and activeFrame ~= frame then FinishGCDBar(activeFrame) end
     activeFrame = frame
-    local runtime = _G.MSUF_CastbarRuntime
+    local runtime = Castbars.Runtime
     local statusBar = frame.statusBar
     if not (runtime and statusBar) then return end
 
@@ -469,7 +457,7 @@ local function StartGCDBar(frame, spellID, durationObj)
     local stable = runtime:RetainDuration(frame, durationObj)
 
     local reverseFill = false
-    local getReverse = _G.MSUF_GetReverseFillSafe
+    local getReverse = Utils.GetReverseFillSafe
     if type(getReverse) == "function" then
         reverseFill = getReverse(frame, false) == true
     end
@@ -484,10 +472,10 @@ local function StartGCDBar(frame, spellID, durationObj)
     frame._msufGCDActive = true
     frame.interrupted = nil
 
-    local g = GeneralDB()
+    local g = general or GeneralDB()
     local showTime = g == nil or g.showGCDBarTime ~= false
     local showSpell = g == nil or g.showGCDBarSpell ~= false
-    local applyTexts = _G.MSUF_CB_ApplyTexts
+    local applyTexts = Utils.CB_ApplyTexts
 
     local castText = ""
     if showSpell then
@@ -514,7 +502,7 @@ local function StartGCDBar(frame, spellID, durationObj)
         end
     end
 
-    local updateColor = _G.MSUF_PlayerCastbar_UpdateColorForInterruptible
+    local updateColor = Player.PlayerCastbar_UpdateColorForInterruptible
     if not frame._msufDetachedGCD and type(updateColor) == "function" then
         updateColor(frame)
     end
@@ -527,9 +515,7 @@ local function StartGCDBar(frame, spellID, durationObj)
     ArmFinish(stable)
 end
 
--- ============================================================
 -- Driver: UNIT_SPELLCAST_SUCCEEDED -> GCD bar
--- ============================================================
 local driver = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GCDBarDriver"))
 local succeededRegistered = false
 
@@ -559,9 +545,10 @@ local function SyncRegistration()
 end
 
 local function OnSucceeded(spellID)
+    local general = GeneralDB()
     -- Guard against stale registration after a profile switch: read the live
     -- setting and self-heal the event registration.
-    if not IsGCDBarEnabled() then
+    if not IsGCDBarEnabled(general) then
         SyncRegistration()
         return
     end
@@ -569,9 +556,9 @@ local function OnSucceeded(spellID)
     spellID = PlainNumber(spellID)
     if not spellID or spellSkip[spellID] then return end
 
-    local detached = DetachedWanted()
+    local detached = DetachedWantedFromGeneral(general)
     if detached and (detachedPreview or not DetachedVisible()) then return end
-    local frame = detached and EnsureDetached() or _G.MSUF_PlayerCastbar
+    local frame = detached and EnsureDetached() or Frames.player
     if frame then
         if BarOwnedByRealCast(frame) then return end
         if frame.MSUF_testMode then return end
@@ -592,26 +579,27 @@ local function OnSucceeded(spellID)
         return
     end
 
-    local isCastbarEnabled = _G.MSUF_IsCastbarEnabledForUnit
+    local isCastbarEnabled = Bridge.IsCastbarEnabledForUnit
     if not detached and type(isCastbarEnabled) == "function" and not isCastbarEnabled("player") then
         return
     end
 
     if not frame then
-        local init = _G.MSUF_InitSafePlayerCastbar
+        local init = Manager.InitSafePlayerCastbar
         if type(init) ~= "function" then return end
         init()
-        frame = _G.MSUF_PlayerCastbar
+        frame = Frames.player
         if not frame then return end
     end
 
     if not durationObj then return end
 
-    StartGCDBar(frame, spellID, durationObj)
+    StartGCDBar(frame, spellID, durationObj, general)
 end
 
 driver:SetScript("OnEvent", function(_, event, _, _, spellID)
     if event == "PLAYER_ENTERING_WORLD" then
+        Config.Refresh()
         SyncRegistration()
         return
     end
@@ -622,26 +610,30 @@ end)
 --- SUCCEEDED registration after login-time profile binding.
 driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 
--- ============================================================
 -- Public API (menu + castbar apply pipeline)
--- ============================================================
-local ExportPublic = ns.ExportPublic
+local Publish = PublicAPI.Publish
 
-ExportPublic("MSUF_GCDBar_IsSupported", GCDBarSupported)
-ExportPublic("MSUF_GCDBar_SyncRegistration", SyncRegistration)
-ExportPublic("MSUF_GCDBar_RefreshLayout", function()
+GCD.GCDBar_IsSupported = GCDBarSupported
+Publish("MSUF_GCDBar_IsSupported", GCD.GCDBar_IsSupported)
+GCD.GCDBar_SyncRegistration = SyncRegistration
+GCD.GCDBar_RefreshLayout = function()
+    Config.Refresh()
     if activeFrame then FinishGCDBar(activeFrame) end
     SyncRegistration()
-end)
+end
+Publish("MSUF_GCDBar_RefreshLayout", GCD.GCDBar_RefreshLayout)
 
-ExportPublic("MSUF_SetGCDBarEnabled", function(enabled)
-    local g = GeneralDB()
+GCD.SetGCDBarEnabled = function(enabled)
+    local db = Config.Source()
+    local g = db and db.general
     if g then
         g.showGCDBar = (enabled == true)
     end
+    Config.Refresh()
     SyncRegistration()
     if not enabled then
         FinishGCDBar(activeFrame)
         RefreshDetached()
     end
-end)
+end
+Publish("MSUF_SetGCDBarEnabled", GCD.SetGCDBarEnabled)

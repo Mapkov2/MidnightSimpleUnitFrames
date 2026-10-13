@@ -243,6 +243,7 @@ function MSUF_InitProfiles(startup)
     char.activeProfile = active
     MSUF_ActiveProfile = active
     MSUF_DB = profiles[active]
+    if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
     _G.MSUF_GF_InvalidateConfCache()
     --- After DB swap: seed missing defaults so per-unit conf tables exist.
     --- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
@@ -345,6 +346,7 @@ function MSUF_SwitchProfile(name)
     char.activeProfile = name
     MSUF_ActiveProfile = name
     MSUF_DB = profiles[name]
+    if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
     _G.MSUF_GF_InvalidateConfCache()
     --- Compiled unit-frame configs are rebuilt by the runtime apply below
     --- (MSUF_UFCore_NotifyConfigChanged in State/MSUF_ProfileRuntime.lua).
@@ -382,6 +384,7 @@ function MSUF_ResetProfile(name)
     end
     if name == MSUF_ActiveProfile then
         MSUF_DB = profiles[name]
+        if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
         _G.MSUF_GF_InvalidateConfCache()
         MSUF_ProfileIO_RunEnsureDB(true)
         --- The reset belongs to this profile only: sync members keep their
@@ -2509,6 +2512,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
             MSUF_DB[k] = v
         end
     end
+    if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
     --- Ensure the active profile table in GlobalDB points to MSUF_DB.
     if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
@@ -2725,6 +2729,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         for k, v in pairs(newTable) do
             target[k] = v
         end
+        if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
         MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
         if ProfileSync then ProfileSync.Rebase() end

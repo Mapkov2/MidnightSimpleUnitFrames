@@ -2,6 +2,7 @@
 -- Castbar background texture: a key resolved before LibSharedMedia knows it is
 -- cached as the fallback forever; the LSM refresh clears only the foreground caches.
 local root = arg[1]
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local registered = {}
 local LSM = {}
 function LSM:Fetch(kind, key, noDefault)
@@ -18,6 +19,7 @@ _G.MSUF_UpdateCastbarEditInfo = function() end
 _G.MSUF_SyncCastbarPositionPopup = function() end
 _G.MSUF_IsPlayerInCombat = function() return false end
 _G.MSUF_DB = { general = { castbarTexture = "Late Media Bar", castbarBackgroundTexture = "Late Media Bar" } }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 -- Load the real shared predicates without replacing this fixture's visual providers.
 local utilityNS = { ExportPublic = function(_, value) return value end }
 local previousMSUF = _G.MSUF

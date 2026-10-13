@@ -1,15 +1,20 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarVisuals.lua
---- Profile-driven detail layout for castbar icons, spell text, time text, and
---- per-unit font/icon overrides.
----
---- This file is visual/layout only. It may inspect existing frame sizes and
---- SavedVariables, but it should not decide whether a unit is currently casting
---- or register spellcast events.
+-- Profile-driven icon/text layout and per-unit font overrides; event ownership stays in Driver.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarVisuals.lua").Castbars
+local Anchors = Castbars.Anchors
+local Config = Castbars.Config
+local Core = Castbars.Core
+local Driver = Castbars.Driver
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local PublicAPI = Castbars.PublicAPI
+local Rounded = Castbars.Rounded
+local Style = Castbars.Style
+local Utils = Castbars.Utils
+local Visuals = Castbars.Visuals
+local Publish = PublicAPI.Publish
 MSUF.Castbars = MSUF.Castbars or {}
 local Visuals = MSUF.Castbars.Visuals or {}
 MSUF.Castbars.Visuals = Visuals
@@ -28,27 +33,18 @@ local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
 local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
 local GetCastbarTextColor = Require("MSUF_GetCastbarTextColor", FILE)
 local GetCastbarBackgroundColor = Require("MSUF_GetCastbarBackgroundColor", FILE)
-local GetFontPath = Require("MSUF_GetFontPath", FILE)
-local GetFontFlags = Require("MSUF_GetFontFlags", FILE)
-local RefreshCastbarStyleCache = Require("MSUF_RefreshCastbarStyleCache", FILE)
-local ApplyCastbarOutline = Require("MSUF_ApplyCastbarOutline", FILE)
-local GetSpellNameShorteningConfig = Require("MSUF_GetCastbarSpellNameShorteningConfig", FILE)
-local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
+local GetFontPath = Core.GetFontPath
+local GetFontFlags = Core.GetFontFlags
+local RefreshCastbarStyleCache = Core.RefreshCastbarStyleCache
+local ApplyCastbarOutline = Style.ApplyCastbarOutline
+local GetSpellNameShorteningConfig = Utils.GetCastbarSpellNameShorteningConfig
+local RefreshCastbarSpellNameText = Utils.RefreshCastbarSpellNameText
 
 --- Providers that load after this file (Driver, InterruptReady, Rounded),
 --- resolved when a castbar is laid out: every layout runs after the core
 --- finished loading.
-local function Later(name)
-    return Require(name, FILE)
-end
-
 local function GeneralDB()
-    if not _G.MSUF_DB then
-        EnsureDB()
-    end
-    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
-    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
-    return _G.MSUF_DB.general
+    return Config.EnsureSource().general
 end
 
 local function NormalizeUnit(unit)
@@ -61,7 +57,7 @@ end
 
 local function UnitFromFrame(frame)
     if not frame then return nil end
-    local fromCore = _G.MSUF_GetCastbarUnitFromFrame
+    local fromCore = Core.GetCastbarUnitFromFrame
     local unit = type(fromCore) == "function" and fromCore(frame) or nil
     unit = NormalizeUnit(unit)
     if unit then return unit end
@@ -69,8 +65,8 @@ local function UnitFromFrame(frame)
     if frame._msufIsArenaCastbar then return "arena" end
     unit = NormalizeUnit(frame.unit or frame.MSUF_unit or frame._msufUnit)
     if unit then return unit end
-    if frame == _G.MSUF_BossCastbarPreview then return "boss" end
-    if frame == _G.MSUF_ArenaCastbarPreview or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
+    if frame == Frames.Get("bossPreview", 1) then return "boss" end
+    if frame == Frames.Get("arenaPreview", 1) or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then
         if name:find("Boss", 1, true) or name:find("boss", 1, true) then return "boss" end
@@ -91,7 +87,7 @@ local function PrefixForUnit(unit)
     return nil
 end
 
-local CastbarFrameInset = _G.MSUF_CastbarFrameInset
+local CastbarFrameInset = Anchors.CastbarFrameInset
 
 local function Num(value, fallback)
     value = tonumber(value)
@@ -176,7 +172,8 @@ local function NormalizeIconPosition(value)
     if value == "RIGHT" or value == "INSIDE_LEFT" or value == "INSIDE_RIGHT" then return value end
     return "LEFT"
 end
-ExportPublic("MSUF_NormalizeCastbarIconPosition", NormalizeIconPosition)
+Visuals.NormalizeCastbarIconPosition = NormalizeIconPosition
+Publish("MSUF_NormalizeCastbarIconPosition", Visuals.NormalizeCastbarIconPosition)
 
 local function NormalizeTextPosition(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
@@ -268,7 +265,7 @@ local function FontPathForSelection(value, globalPath)
 end
 
 --- The Fonts page writes its text shadow into the shared general table, but the
---- same controls also write a per-unit scope (MSUF_DB.player/target/focus/boss
+--- same controls also write a per-unit scope (Config.Read().player/target/focus/boss
 --- with fontOverride). MSUF_FontRuntime refreshes exactly this unit's castbar
 --- when that scope changes, so the castbar has to resolve the override too --
 --- otherwise the refresh runs and the text keeps the shared value. Precedence
@@ -277,7 +274,7 @@ local function ResolveFontShadow(g, unit)
     local enabled = g.textBackdrop ~= false
     local alpha, x, y = _G.MSUF_ResolveFontShadowMetrics(
         g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
-    local conf = unit and _G.MSUF_DB and _G.MSUF_DB[unit]
+    local conf = unit and Config.Read()[unit]
     if type(conf) == "table" and conf.fontOverride == true then
         if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
         if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
@@ -524,7 +521,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             else
                 host:SetPoint("LEFT", frame, "LEFT", x, y)
             end
-            local resolveIconLevel = _G.MSUF_ResolveCastbarIconFrameLevel
+            local resolveIconLevel = Core.ResolveCastbarIconFrameLevel
             local manualIconLevel = type(resolveIconLevel) == "function" and resolveIconLevel(unit, g) or nil
             if host.SetFrameLevel and statusBar.GetFrameLevel then host:SetFrameLevel(manualIconLevel or ((statusBar:GetFrameLevel() or 0) + 6)) end
             host:Show()
@@ -800,16 +797,16 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     local targetFontReady = ApplyCastTargetTextLayout(frame, g, unit, prefix)
     frame._msufCastbarDetailLayoutUnit = unit
     frame._msufCastbarDetailLayoutFontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
-    frame._msufCastbarDetailLayoutVisualRev = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
+    frame._msufCastbarDetailLayoutVisualRev = tonumber(Config.styleRevision) or 1
     frame._msufCastbarDetailFontsReady = timeFontReady ~= false
         and spellFontReady ~= false
         and targetFontReady ~= false
     if frame._msufIsPreview ~= true then
-        Later("MSUF_RefreshCastTargetText")(frame)
+        Driver.RefreshCastTargetText(frame)
     end
 end
 
-ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)
+Visuals.ApplyCastbarDetailLayout = ApplyCastbarDetailLayout
 Visuals.ApplyDetailLayout = ApplyCastbarDetailLayout
 
 --- Refreshes one existing frame without touching cast state. This is used by the
@@ -821,10 +818,10 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
 
     ApplyCastbarOutline(frame, false)
 
-    Later("MSUF_KickReady_ApplyLayout")(frame)
+    KickReady.KickReady_ApplyLayout(frame)
 
     if frame.MSUF_castActive then
-        Later("MSUF_KickReady_RefreshFrame")(frame, nil)
+        KickReady.KickReady_RefreshFrame(frame, nil)
     end
 
     if frame.backgroundBar then
@@ -844,15 +841,18 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
         end
     end
 
-    Later("MSUF_RoundedCastbar_RefreshFrame")(frame)
+    Rounded.RoundedCastbar_RefreshFrame(frame)
 
     ApplyCastbarDetailLayout(frame, forcedUnit, general)
 end
-ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
+Visuals.RefreshCastbarFrame = RefreshCastbarFrame
 Visuals.RefreshFrame = RefreshCastbarFrame
 
-ExportPublic("MSUF_NormalizeCastbarTextPosition", NormalizeTextPosition)
+Visuals.NormalizeCastbarTextPosition = NormalizeTextPosition
+Publish("MSUF_NormalizeCastbarTextPosition", Visuals.NormalizeCastbarTextPosition)
 
-ExportPublic("MSUF_NormalizeCastbarTextJustify", NormalizeJustify)
+Visuals.NormalizeCastbarTextJustify = NormalizeJustify
+Publish("MSUF_NormalizeCastbarTextJustify", Visuals.NormalizeCastbarTextJustify)
 
-ExportPublic("MSUF_NormalizeCastbarTruncate", NormalizeSpellNameTruncate)
+Visuals.NormalizeCastbarTruncate = NormalizeSpellNameTruncate
+Publish("MSUF_NormalizeCastbarTruncate", Visuals.NormalizeCastbarTruncate)

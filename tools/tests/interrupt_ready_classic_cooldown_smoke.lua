@@ -16,6 +16,7 @@
 -- Forever) as arguments.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local flavor = arg[2] or "Vanilla"
 
 local function Check(condition, message)
@@ -73,6 +74,7 @@ UnitClass = function() return "Warrior", "WARRIOR" end
 C_SpellBook = { IsSpellKnownOrInSpellBook = function(spellID) return spellID == 6552 end }
 MSUF_ShouldUseMSUFCastbar = function() return true end
 MSUF_DB = { general = { kickReadyShowTarget = true, kickReadyStyle = "box" } }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
 local PUMMEL = 6552
 local cooldowns = {}
@@ -129,6 +131,7 @@ Check(_G.MSUF_KickReady_GetSpellID() == PUMMEL, "Warriors must interrupt with Pu
 local target = { unit = "target", statusBar = CreateFrame("StatusBar"), MSUF_castActive = true,
     isNotInterruptible = false, MSUF_kickInterruptibleConfirmed = true }
 MSUF_TargetCastbar = target
+ns.Castbars.Frames.Register("target", nil, target)
 
 local function Paint()
     now = now + 0.016

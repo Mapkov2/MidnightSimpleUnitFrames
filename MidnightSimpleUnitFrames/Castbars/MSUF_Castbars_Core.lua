@@ -1,16 +1,20 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_Castbars_Core.lua
---- Castbar settings, media resolution, font helpers, visual refresh glue, and
---- global compatibility exports.
----
---- This is a compatibility hub rather than a clean ownership layer. Keep new
---- feature logic in the newer readable modules when possible, and use this file
---- mainly to preserve old globals and bridge profile/media settings.
+-- Media, visual refresh and cold apply coordination.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_Castbars_Core.lua").Castbars
+local Anchors = Castbars.Anchors
+local Config = Castbars.Config
+local Core = Castbars.Core
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local Manager = Castbars.Manager
+local Previews = Castbars.Previews
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
+local Visuals = Castbars.Visuals
 
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 local IsSecret = MSUF.Util.IsSecret
 
 local type = type
@@ -53,10 +57,6 @@ local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
 --- Providers that load after this file (Utils, Anchors, Visuals; the Classic
 --- visual compat wraps MSUF_RefreshCastbarFrame), resolved when they are
 --- used: every caller runs after the core finished loading.
-local function Later(name)
-    return Require(name, FILE)
-end
-
 local function ResolveFontPath(path, size, flags)
     local resolver = _G.MSUF_ResolveFontPath
     if type(resolver) == "function" then
@@ -67,9 +67,9 @@ end
 
 local IsInCombat = _G.MSUF_IsPlayerInCombat
 
-ExportPublic("MSUF_BossTestMode", _G.MSUF_BossTestMode or false)
+PublicAPI.Publish("MSUF_BossTestMode", _G.MSUF_BossTestMode or false)
 
-ExportPublic("MSUF_CastbarUnitInfo", _G.MSUF_CastbarUnitInfo or {
+Core.CastbarUnitInfo = Core.CastbarUnitInfo or {
     player = {
         label = "Player Castbar",
         prefix = "castbarPlayer",
@@ -111,10 +111,10 @@ ExportPublic("MSUF_CastbarUnitInfo", _G.MSUF_CastbarUnitInfo or {
         isBoss = false,
         isArena = true,
     },
-})
+}
 
 local function GetCastbarUnitInfo(unit)
-    local info = _G.MSUF_CastbarUnitInfo
+    local info = Core.CastbarUnitInfo
     return info and info[unit] or nil
 end
 
@@ -157,40 +157,42 @@ local function GetCastbarPrefix(unit)
     local info = GetCastbarUnitInfo(unit)
     return info and info.prefix or nil
 end
-ExportPublic("MSUF_GetCastbarPrefix", GetCastbarPrefix)
+Core.GetCastbarPrefix = GetCastbarPrefix
+Publish("MSUF_GetCastbarPrefix", Core.GetCastbarPrefix)
 
 local function GetCastbarDefaultOffsets(unit)
     local info = GetCastbarUnitInfo(unit)
     if not info then return 0, 0 end
     return info.defaultX or 0, info.defaultY or 0
 end
-ExportPublic("MSUF_GetCastbarDefaultOffsets", GetCastbarDefaultOffsets)
+Core.GetCastbarDefaultOffsets = GetCastbarDefaultOffsets
+Publish("MSUF_GetCastbarDefaultOffsets", Core.GetCastbarDefaultOffsets)
 
 local function GetCastbarUnitFromFrame(frame)
     if not frame then return nil end
-    if _G.MSUF_BossCastbarPreview and frame == _G.MSUF_BossCastbarPreview then return "boss" end
-    if ( _G.MSUF_PlayerCastbar and frame == _G.MSUF_PlayerCastbar )
-        or ( _G.MSUF_PlayerCastbarPreview and frame == _G.MSUF_PlayerCastbarPreview ) then
+    if Frames.Get("bossPreview", 1) and frame == Frames.Get("bossPreview", 1) then return "boss" end
+    if ( Frames.player and frame == Frames.player )
+        or ( Frames.playerPreview and frame == Frames.playerPreview ) then
         return "player"
     end
-    if ( _G.MSUF_TargetCastbar and frame == _G.MSUF_TargetCastbar )
-        or ( _G.MSUF_TargetCastbarPreview and frame == _G.MSUF_TargetCastbarPreview ) then
+    if ( Frames.target and frame == Frames.target )
+        or ( Frames.targetPreview and frame == Frames.targetPreview ) then
         return "target"
     end
-    if ( _G.MSUF_FocusCastbar and frame == _G.MSUF_FocusCastbar )
-        or ( _G.MSUF_FocusCastbarPreview and frame == _G.MSUF_FocusCastbarPreview ) then
+    if ( Frames.focus and frame == Frames.focus )
+        or ( Frames.focusPreview and frame == Frames.focusPreview ) then
         return "focus"
     end
     return nil
 end
-ExportPublic("MSUF_GetCastbarUnitFromFrame", GetCastbarUnitFromFrame)
+Core.GetCastbarUnitFromFrame = GetCastbarUnitFromFrame
 
 local ApplyCastbarVisualsForUnit
 
-local function ApplyCastbarUnitAndSync(unit)
+local function ApplyCastbarUnitAndSync(unit, current)
     unit = NormalizeCastbarUnit(unit)
     if not unit then return end
-    if not _G.MSUF_DB then _G.MSUF_EnsureDB() end
+    if not current then Config.Invalidate() end
 
     local poolKind = (IsBossCastbarUnit(unit) and "boss") or (IsArenaCastbarUnit(unit) and "arena") or nil
     if poolKind then
@@ -199,9 +201,9 @@ local function ApplyCastbarUnitAndSync(unit)
             pool.ApplyPositionSetting(nil, true, true)
         end
         if ApplyCastbarVisualsForUnit then
-            ApplyCastbarVisualsForUnit(poolKind)
-        elseif _G.MSUF_UpdateCastbarVisuals then
-            _G.MSUF_UpdateCastbarVisuals(poolKind)
+            ApplyCastbarVisualsForUnit(poolKind, nil, nil, true)
+        elseif Core.UpdateCastbarVisuals then
+            Core.UpdateCastbarVisuals(poolKind, true)
         end
         UpdateCastbarEditInfo(poolKind)
         SyncCastbarPositionPopup(poolKind)
@@ -209,37 +211,28 @@ local function ApplyCastbarUnitAndSync(unit)
     end
 
     if unit == "player" then
-        Later("MSUF_ReanchorPlayerCastBarBase")()
+        Anchors.ReanchorPlayerCastBarBase()
     elseif unit == "target" then
-        Later("MSUF_ReanchorTargetCastBarBase")()
+        Anchors.ReanchorTargetCastBarBase()
     elseif unit == "focus" then
-        Later("MSUF_ReanchorFocusCastBarBase")()
+        Anchors.ReanchorFocusCastBarBase()
     end
 
     if ApplyCastbarVisualsForUnit then
-        ApplyCastbarVisualsForUnit(unit)
-    elseif _G.MSUF_UpdateCastbarVisuals then
-        _G.MSUF_UpdateCastbarVisuals(unit)
+        ApplyCastbarVisualsForUnit(unit, nil, nil, true)
+    elseif Core.UpdateCastbarVisuals then
+        Core.UpdateCastbarVisuals(unit, true)
     end
     UpdateCastbarEditInfo(unit)
     SyncCastbarPositionPopup(unit)
 end
-ExportPublic("MSUF_ApplyCastbarUnitAndSync", ApplyCastbarUnitAndSync)
+Core.ApplyCastbarUnitAndSync = ApplyCastbarUnitAndSync
+Publish("MSUF_ApplyCastbarUnitAndSync", Core.ApplyCastbarUnitAndSync)
 
 local GetGlobalFontFlags
 
 local function EnsureDB()
-    local db = _G.MSUF_DB
-    if not db then
-        EnsureDBProvider()
-        db = _G.MSUF_DB
-    end
-    if not db then
-        db = {}
-        ExportPublic("MSUF_DB", db)
-    end
-    db.general = db.general or {}
-    return db
+    return Config.EnsureSource()
 end
 
 local function GetFontPath()
@@ -307,12 +300,13 @@ local function GetGlobalFontSettings()
     return fontPath, fontFlags, red, green, blue, fontSize, textBackdrop
 end
 MSUF.MSUF_GetGlobalFontSettings = GetGlobalFontSettings
-ExportPublic("MSUF_GetGlobalFontSettings", GetGlobalFontSettings)
+Core.GetGlobalFontSettings = GetGlobalFontSettings
+Publish("MSUF_GetGlobalFontSettings", Core.GetGlobalFontSettings)
 
 local function ResolveTextureCandidate(key)
     if type(key) ~= "string" or key == "" then return nil, true end
 
-    local builtin = _G.MSUF_BUILTIN_BAR_TEXTURES
+    local builtin = Core.BUILTIN_BAR_TEXTURES
     if type(builtin) == "table" then
         local path = builtin[key]
         if type(path) == "string" and path ~= "" then
@@ -344,10 +338,10 @@ local function GetCastbarTexture()
     local castbarKey = general and general.castbarTexture or nil
     local barKey = general and general.barTexture or nil
 
-    local cache = _G.MSUF_CastbarTextureCache
+    local cache = Core.CastbarTextureCache
     if not cache then
         cache = {}
-        ExportPublic("MSUF_CastbarTextureCache", cache)
+        Core.CastbarTextureCache = cache
     end
 
     local cacheKey = (castbarKey or "") .. "|" .. (barKey or "")
@@ -364,7 +358,8 @@ local function GetCastbarTexture()
     if cacheable then cache[cacheKey] = texture end
     return texture
 end
-ExportPublic("MSUF_GetCastbarTexture", GetCastbarTexture)
+Core.GetCastbarTexture = GetCastbarTexture
+Publish("MSUF_GetCastbarTexture", Core.GetCastbarTexture)
 
 local ResolveStatusbarTextureKey
 
@@ -375,10 +370,10 @@ local function GetCastbarBackgroundTexture()
     if key == nil or key == "" then key = general and general.castbarTexture end
     if key == nil or key == "" then key = general and general.barTexture end
 
-    local cache = _G.MSUF_CastbarBackgroundTextureCache
+    local cache = Core.CastbarBackgroundTextureCache
     if not cache then
         cache = {}
-        ExportPublic("MSUF_CastbarBackgroundTextureCache", cache)
+        Core.CastbarBackgroundTextureCache = cache
     end
 
     local cacheKey = key or ""
@@ -390,20 +385,20 @@ local function GetCastbarBackgroundTexture()
     if cacheable then cache[cacheKey] = texture end
     return texture
 end
-ExportPublic("MSUF_GetCastbarBackgroundTexture", GetCastbarBackgroundTexture)
-
-if not _G.MSUF_CastbarStyleRevision then ExportPublic("MSUF_CastbarStyleRevision", 1) end
+Core.GetCastbarBackgroundTexture = GetCastbarBackgroundTexture
+Publish("MSUF_GetCastbarBackgroundTexture", Core.GetCastbarBackgroundTexture)
 
 local function BumpCastbarStyleRevision()
-    local revision = _G.MSUF_CastbarStyleRevision or 1
-    ExportPublic("MSUF_CastbarStyleRevision", revision + 1)
-    return _G.MSUF_CastbarStyleRevision
+    Config.Invalidate("texture")
+    return Config.textureRevision
 end
-ExportPublic("MSUF_BumpCastbarStyleRevision", BumpCastbarStyleRevision)
+
+Core.BumpCastbarStyleRevision = BumpCastbarStyleRevision
+Publish("MSUF_BumpCastbarStyleRevision", Core.BumpCastbarStyleRevision)
 
 local function GetGlobalCastbarStyleCache()
-    local revision = _G.MSUF_CastbarStyleRevision or 1
-    local cache = _G.MSUF_GlobalCastbarStyleCache
+    local revision = Config.textureRevision or 1
+    local cache = Core.GlobalCastbarStyleCache
     if cache and cache.rev == revision then return cache end
 
     cache = cache or {}
@@ -416,14 +411,14 @@ local function GetGlobalCastbarStyleCache()
     local bgTexture = GetCastbarBackgroundTexture()
     if not bgTexture or bgTexture == "" then bgTexture = texture end
     cache.bgTexture = bgTexture
-    ExportPublic("MSUF_GlobalCastbarStyleCache", cache)
+    Core.GlobalCastbarStyleCache = cache
     return cache
 end
 
 local function RefreshCastbarStyleCache(frame)
     if not frame then return end
 
-    local revision = _G.MSUF_CastbarStyleRevision or 1
+    local revision = Config.textureRevision or 1
     if frame.MSUF_castbarStyleRev == revision then return end
 
     local cache = GetGlobalCastbarStyleCache()
@@ -433,15 +428,15 @@ local function RefreshCastbarStyleCache(frame)
         frame.MSUF_cachedCastbarBackgroundTexture = cache.bgTexture or cache.texture
     end
 end
-ExportPublic("MSUF_RefreshCastbarStyleCache", RefreshCastbarStyleCache)
+Core.RefreshCastbarStyleCache = RefreshCastbarStyleCache
 
 local function ForEachCastbarFrame(callback)
-    callback(_G.MSUF_PlayerCastbar)
-    callback(_G.MSUF_TargetCastbar)
-    callback(_G.MSUF_FocusCastbar)
-    callback(_G.MSUF_PlayerCastbarPreview)
-    callback(_G.MSUF_TargetCastbarPreview)
-    callback(_G.MSUF_FocusCastbarPreview)
+    callback(Frames.player)
+    callback(Frames.target)
+    callback(Frames.focus)
+    callback(Frames.playerPreview)
+    callback(Frames.targetPreview)
+    callback(Frames.focusPreview)
 end
 
 local function UpdateTextureForFrame(frame, texture, bgTexture, revision)
@@ -460,9 +455,10 @@ local function UpdateTextureForFrame(frame, texture, bgTexture, revision)
     end
 end
 
-local function UpdateCastbarTextures()
-    BumpCastbarStyleRevision()
-    local revision = _G.MSUF_CastbarStyleRevision or 1
+local function UpdateCastbarTextures(current)
+    if not current then Config.Invalidate() end
+    Config.Advance("texture")
+    local revision = Config.textureRevision or 1
     local texture = GetCastbarTexture()
     if not texture then return end
 
@@ -485,21 +481,24 @@ local function UpdateCastbarTextures()
     local refreshRoundedGlow = MSUF.Castbars and MSUF.Castbars.RefreshRoundedGlow
     if refreshRoundedGlow then refreshRoundedGlow() end
 end
-ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)
-ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)
+Core.UpdateCastbarTextures = UpdateCastbarTextures
+Publish("MSUF_UpdateCastbarTextures", Core.UpdateCastbarTextures)
+Core.UpdateCastbarTextures_Immediate = UpdateCastbarTextures
+Publish("MSUF_UpdateCastbarTextures_Immediate", Core.UpdateCastbarTextures_Immediate)
 
 local resolvedStatusbarTextureCache = {}
 
 local function ClearResolvedStatusbarTextureCache()
     resolvedStatusbarTextureCache = {}
-    local castbarTextureCache = _G.MSUF_CastbarTextureCache
+    local castbarTextureCache = Core.CastbarTextureCache
     if type(castbarTextureCache) == "table" then
         for key in pairs(castbarTextureCache) do castbarTextureCache[key] = nil end
     end
 
     GetLSM()
 end
-ExportPublic("MSUF_ClearResolvedStatusbarTextureCache", ClearResolvedStatusbarTextureCache)
+Core.ClearResolvedStatusbarTextureCache = ClearResolvedStatusbarTextureCache
+Publish("MSUF_ClearResolvedStatusbarTextureCache", Core.ClearResolvedStatusbarTextureCache)
 
 function ResolveStatusbarTextureKey(key)
     if type(key) ~= "string" or key == "" then return "Interface\\TargetingFrame\\UI-StatusBar" end
@@ -509,7 +508,7 @@ function ResolveStatusbarTextureKey(key)
 
     local resolved
     local cacheable = false
-    local builtin = _G.MSUF_BUILTIN_BAR_TEXTURES
+    local builtin = Core.BUILTIN_BAR_TEXTURES
     if type(builtin) == "table" then
         local path = builtin[key]
         if type(path) == "string" and path ~= "" and IsKnownAsset(path) then
@@ -545,9 +544,10 @@ function ResolveStatusbarTextureKey(key)
     if cacheable then resolvedStatusbarTextureCache[key] = fallback end
     return fallback
 end
-ExportPublic("MSUF_ResolveStatusbarTextureKey", ResolveStatusbarTextureKey)
+Core.ResolveStatusbarTextureKey = ResolveStatusbarTextureKey
+Publish("MSUF_ResolveStatusbarTextureKey", Core.ResolveStatusbarTextureKey)
 
-ExportPublic("MSUF_BUILTIN_BAR_TEXTURES", _G.MSUF_BUILTIN_BAR_TEXTURES or {
+Core.BUILTIN_BAR_TEXTURES = Core.BUILTIN_BAR_TEXTURES or {
     Blizzard = "Interface\\TargetingFrame\\UI-StatusBar",
     Flat = "Interface\\Buttons\\WHITE8x8",
     ["MSUF Lucent"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga",
@@ -558,14 +558,16 @@ ExportPublic("MSUF_BUILTIN_BAR_TEXTURES", _G.MSUF_BUILTIN_BAR_TEXTURES or {
     TooltipBorder = "Interface\\Tooltips\\UI-Tooltip-Border",
     DialogBG = "Interface\\DialogFrame\\UI-DialogBox-Background",
     Parchment = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground",
-})
+}
+Publish("MSUF_BUILTIN_BAR_TEXTURES", Core.BUILTIN_BAR_TEXTURES)
 
 local function GetBarTexture()
     local db = EnsureDB()
     local general = (db and db.general) or nil
     return ResolveStatusbarTextureKey(general and general.barTexture)
 end
-ExportPublic("MSUF_GetBarTexture", GetBarTexture)
+Core.GetBarTexture = GetBarTexture
+Publish("MSUF_GetBarTexture", Core.GetBarTexture)
 
 local function GetBarBackgroundTexture()
     local db = EnsureDB()
@@ -574,7 +576,8 @@ local function GetBarBackgroundTexture()
     if key == nil or key == "" then key = general and general.barTexture end
     return ResolveStatusbarTextureKey(key)
 end
-ExportPublic("MSUF_GetBarBackgroundTexture", GetBarBackgroundTexture)
+Core.GetBarBackgroundTexture = GetBarBackgroundTexture
+Publish("MSUF_GetBarBackgroundTexture", Core.GetBarBackgroundTexture)
 
 local function ApplySparkLayout(frame, statusBar, general, height)
     local enabled = general and general.castbarShowSpark == true
@@ -599,7 +602,7 @@ local function ApplySparkLayout(frame, statusBar, general, height)
         if texture then
             -- Moving edge = side opposite the fill anchor: LEFT when
             -- reverse-filled, RIGHT otherwise (fill and drain alike).
-            local reversed = Later("MSUF_GetCastbarReverseFillForFrame")(frame, false) == true
+            local reversed = Utils.GetCastbarReverseFillForFrame(frame, false) == true
             spark:ClearAllPoints()
             spark:SetPoint("CENTER", texture, reversed and "LEFT" or "RIGHT", 0, 0)
         end
@@ -612,7 +615,7 @@ local function ApplyCastbarSparkVisual(frame, general)
     local height = (frame.GetHeight and frame:GetHeight()) or frame.statusBar:GetHeight() or 18
     ApplySparkLayout(frame, frame.statusBar, general, height)
 end
-ExportPublic("MSUF_ApplyCastbarSparkVisual", ApplyCastbarSparkVisual)
+Core.ApplyCastbarSparkVisual = ApplyCastbarSparkVisual
 
 local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     if not frame or not frame.statusBar then return end
@@ -628,8 +631,8 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
         local globalWidth = tonumber(general.castbarGlobalWidth)
         local globalHeight = tonumber(general.castbarGlobalHeight)
         unit = forcedUnit or GetCastbarUnitFromFrame(frame)
-        local normalizer = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
-        local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(unit)
+        local normalizer = Anchors.NormalizeCastbarWidthSource or Anchors.NormalizePlayerCastbarWidthSource
+        local widthSourceKey = Anchors.GetCastbarWidthSourceKey and Anchors.GetCastbarWidthSourceKey(unit)
         if widthSourceKey then
             local widthSource = general[widthSourceKey]
             if type(normalizer) == "function" then
@@ -655,7 +658,7 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
         -- pass. Auto Width only masks the width half of that bug. Resolve both
         -- dimensions from the real boss settings in every width-source mode.
         if unit == "boss" or unit == "arena" then
-            local desiredWidth, desiredHeight = Later("MSUF_GetCastbarDesiredSize")(
+            local desiredWidth, desiredHeight = Anchors.GetCastbarDesiredSize(
                 unit, general, frame, width, height)
             if desiredWidth and desiredWidth > 0 then width = desiredWidth end
             if desiredHeight and desiredHeight > 0 then height = desiredHeight end
@@ -685,7 +688,8 @@ local function GetCastbarFrameLevelOffset(unit, general)
     if layer > 30 then return 30 end
     return layer
 end
-ExportPublic("MSUF_GetCastbarFrameLevelOffset", GetCastbarFrameLevelOffset)
+Core.GetCastbarFrameLevelOffset = GetCastbarFrameLevelOffset
+Publish("MSUF_GetCastbarFrameLevelOffset", Core.GetCastbarFrameLevelOffset)
 
 local function CastbarAnchorFrame(frame, unit)
     local frameUnit = frame and tostring(frame.unit or "") or ""
@@ -752,7 +756,7 @@ local function ResolveCastbarIconFrameLevel(unit, general)
     local layers = MSUF.UF and MSUF.UF.Layers
     return layers and layers.ElementLevel and layers.ElementLevel(value, 0, 4) or value
 end
-ExportPublic("MSUF_ResolveCastbarIconFrameLevel", ResolveCastbarIconFrameLevel)
+Core.ResolveCastbarIconFrameLevel = ResolveCastbarIconFrameLevel
 
 -- The castbar occupies one universal user-layer slot. Its children retain
 -- their established detail ordering inside that slot.
@@ -777,15 +781,15 @@ local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
     SetCastbarFrameLevel(frame._msufOutlineHost, statusLevel + 20)
     SetCastbarFrameLevel(frame._msufRoundedCastbarOutlineHost, statusLevel + 20)
 end
-ExportPublic("MSUF_ApplyCastbarFrameLayer", ApplyCastbarFrameLayer)
+Core.ApplyCastbarFrameLayer = ApplyCastbarFrameLayer
 
 local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
     if not (frame and frame.statusBar) then return false end
     local height, width
     general, height, width = ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     ApplyCastbarFrameLayer(frame, general, forcedUnit)
-    local globalRevision = _G.MSUF__castbarStyleGlobalRev or 1
-    local textureRevision = _G.MSUF_CastbarStyleRevision or 1
+    local globalRevision = Config.styleRevision or 1
+    local textureRevision = Config.textureRevision or 1
     if frame._msufCastbarColdGlobalRev == globalRevision
         and frame._msufCastbarColdTextureRev == textureRevision
         and frame._msufCastbarColdUnit == forcedUnit
@@ -793,10 +797,10 @@ local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
         and frame._msufCastbarColdHeight == height then
         return true
     end
-    Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)
+    Visuals.RefreshCastbarFrame(frame, forcedUnit, general)
     -- The public entry, like the anchor and pool paths: Classic replaces it
     -- with the inner-surface spark (Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua).
-    Later("MSUF_ApplyCastbarSparkVisual")(frame, general)
+    Core.ApplyCastbarSparkVisual(frame, general)
     frame._msufCastbarStyleRev = globalRevision
     frame._msufCastbarColdGlobalRev = globalRevision
     frame._msufCastbarColdTextureRev = textureRevision
@@ -807,12 +811,12 @@ local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
 end
 
 local function BumpCastbarVisualRevisions()
-    BumpCastbarStyleRevision()
+    Config.Advance("texture")
 
-    local bumpStyle = _G.MSUF_BumpCastbarStyleRev
+    local bumpStyle = Manager.BumpCastbarStyleRev
     if type(bumpStyle) == "function" then bumpStyle() end
 
-    local bumpTime = _G.MSUF_BumpCastTimeRev
+    local bumpTime = Manager.BumpCastTimeRev
     if type(bumpTime) == "function" then bumpTime() end
 end
 
@@ -834,7 +838,7 @@ end
 local poolPreviewRefreshLocked = {}
 -- Boss re-runs its Edit Mode preview setup after a refresh (the Retail
 -- behaviour); arena never did.
-local SETUP_AFTER_PREVIEW_REFRESH = { boss = "MSUF_SetupBossCastbarPreviewEditMode" }
+local SETUP_AFTER_PREVIEW_REFRESH = { boss = "SetupBossCastbarPreviewEditMode" }
 
 --- Rebuilds the pool's previews out of combat, or restyles the ones that exist
 --- while the preview module is missing or busy.
@@ -847,7 +851,7 @@ local function RefreshPoolPreviews(pool, general)
         poolPreviewRefreshLocked[kind] = true
         preview:Update()
         local setupName = SETUP_AFTER_PREVIEW_REFRESH[kind]
-        local setupEditMode = setupName and _G[setupName]
+        local setupEditMode = setupName and Previews[setupName]
         if type(setupEditMode) == "function" then setupEditMode() end
         poolPreviewRefreshLocked[kind] = false
         return true
@@ -856,13 +860,13 @@ local function RefreshPoolPreviews(pool, general)
     local did = false
     if preview then
         for index = 1, preview.maxFrames do
-            did = ApplyCastbarVisualFrameCold(_G[preview:Name(index)], general, kind) or did
+            did = ApplyCastbarVisualFrameCold(Frames.Get(preview.frameKind, index), general, kind) or did
         end
     end
     return did
 end
 
-ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
+ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general, current)
     if IsBossCastbarUnit(unit) then
         unit = "boss"
     elseif IsArenaCastbarUnit(unit) then
@@ -870,18 +874,21 @@ ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
     else
         unit = tostring(unit or "")
     end
-    if not revisionsReady then BumpCastbarVisualRevisions() end
+    if not revisionsReady then
+        if not current then Config.Invalidate() end
+        BumpCastbarVisualRevisions()
+    end
     general = general or EnsureDB().general or {}
     local did = false
     if unit == "player" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, general, unit) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, general, unit) or did end
+        did = ApplyCastbarVisualFrameCold(Frames.player, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(Frames.playerPreview, general, unit) or did end
     elseif unit == "target" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, general, unit) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, general, unit) or did end
+        did = ApplyCastbarVisualFrameCold(Frames.target, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(Frames.targetPreview, general, unit) or did end
     elseif unit == "focus" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, general, unit) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, unit) or did end
+        did = ApplyCastbarVisualFrameCold(Frames.focus, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(Frames.focusPreview, general, unit) or did end
     else
         local pool = CastbarPool(unit)
         if pool then
@@ -891,17 +898,18 @@ ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
     end
     return did
 end
-ExportPublic("MSUF_ApplyCastbarVisualsForUnit", ApplyCastbarVisualsForUnit)
+Core.ApplyCastbarVisualsForUnit = ApplyCastbarVisualsForUnit
+Publish("MSUF_ApplyCastbarVisualsForUnit", Core.ApplyCastbarVisualsForUnit)
 
 local function ApplyAllCastbarVisuals(general)
-    ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, general, "player")
-    ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, general, "target")
-    ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, general, "focus")
+    ApplyCastbarVisualFrameCold(Frames.player, general, "player")
+    ApplyCastbarVisualFrameCold(Frames.target, general, "target")
+    ApplyCastbarVisualFrameCold(Frames.focus, general, "focus")
 
     if not IsInCombat() then
-        ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, general, "player")
-        ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, general, "target")
-        ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, "focus")
+        ApplyCastbarVisualFrameCold(Frames.playerPreview, general, "player")
+        ApplyCastbarVisualFrameCold(Frames.targetPreview, general, "target")
+        ApplyCastbarVisualFrameCold(Frames.focusPreview, general, "focus")
     end
 
     local pools = CastbarPools()
@@ -911,31 +919,35 @@ local function ApplyAllCastbarVisuals(general)
     end
 end
 
-local function UpdateCastbarVisuals(unit)
+local function UpdateCastbarVisuals(unit, current)
+    if not current then Config.Invalidate() end
     unit = NormalizeCastbarUnit(unit)
     BumpCastbarVisualRevisions()
     local general = EnsureDB().general or {}
     if unit then
         if unit == "player" then
-            Later("MSUF_ReanchorPlayerCastBarBase")()
+            Anchors.ReanchorPlayerCastBarBase()
         end
         return ApplyCastbarVisualsForUnit(unit, true, general)
     end
 
-    Later("MSUF_ReanchorPlayerCastBarBase")()
+    Anchors.ReanchorPlayerCastBarBase()
 
     ApplyAllCastbarVisuals(general)
 end
-ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
-ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", UpdateCastbarVisuals)
+Core.UpdateCastbarVisuals = UpdateCastbarVisuals
+Publish("MSUF_UpdateCastbarVisuals", Core.UpdateCastbarVisuals)
+Core.UpdateCastbarVisuals_Immediate = UpdateCastbarVisuals
+Publish("MSUF_UpdateCastbarVisuals_Immediate", Core.UpdateCastbarVisuals_Immediate)
 
 local CASTBAR_SYNC_UNITS = { "player", "target", "focus", "boss", "arena" }
 
-local function ApplyAllCastbarsAndSync()
+local function ApplyAllCastbarsAndSync(current)
+    if not current then Config.Invalidate() end
     local general = EnsureDB().general or {}
-    Later("MSUF_ReanchorPlayerCastBarBase")()
-    Later("MSUF_ReanchorTargetCastBarBase")()
-    Later("MSUF_ReanchorFocusCastBarBase")()
+    Anchors.ReanchorPlayerCastBarBase()
+    Anchors.ReanchorTargetCastBarBase()
+    Anchors.ReanchorFocusCastBarBase()
     local pools = CastbarPools()
     for index = 1, #pools do
         pools[index].ApplyPositionSetting(nil, true, true)
@@ -953,9 +965,10 @@ local function ApplyAllCastbarsAndSync()
     end
     -- Castbars/MSUF_InterruptReady.lua: consumers of the interrupt indicator's
     -- look (the MSUF Suite's nameplates) redraw from the settings just applied.
-    Later("MSUF_KickReady_NotifySettings")()
+    KickReady.KickReady_NotifySettings(true)
 end
-ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)
+Core.ApplyAllCastbarsAndSync = ApplyAllCastbarsAndSync
+Publish("MSUF_ApplyAllCastbarsAndSync", Core.ApplyAllCastbarsAndSync)
 
 do
     local UF = MSUF and MSUF.UF
@@ -973,5 +986,7 @@ MSUF.Castbars._GetFontPath = GetFontPath
 MSUF.Castbars._GetFontFlags = GetGlobalFontFlags
 MSUF.MSUF_GetFontPath = GetFontPath
 MSUF.MSUF_GetFontFlags = GetGlobalFontFlags
-ExportPublic("MSUF_GetFontPath", GetFontPath)
-ExportPublic("MSUF_GetFontFlags", GetGlobalFontFlags)
+Core.GetFontPath = GetFontPath
+Publish("MSUF_GetFontPath", Core.GetFontPath)
+Core.GetFontFlags = GetGlobalFontFlags
+Publish("MSUF_GetFontFlags", Core.GetFontFlags)

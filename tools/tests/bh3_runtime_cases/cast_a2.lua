@@ -3,6 +3,7 @@
 -- (Blizzard CastingBarMixin:OnEvent: complete = interruptedBy == nil). The
 -- target driver shows interrupt feedback for it; the player castbar does not.
 local root = arg[1]
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
 local world = World.New(root, "timer", { flavor = arg[2] or "Mists" })
 _G.INTERRUPTED = "Interrupted"
@@ -23,13 +24,13 @@ print("target driver after kicked CHANNEL_STOP: text=" .. tostring(bar.castText.
 -- 2. The player castbar, real runtime file.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))(
     "MidnightSimpleUnitFrames", world.ns)
-_G.MSUF_IsCastbarEnabledForUnit = function() return true end
+world.ns.Castbars.Bridge.IsCastbarEnabledForUnit = function() return true end
 local player = world.NewWidget("StatusBar", "MSUF_PlayerProbeCastBar")
 player.unit = "player"
 player.statusBar = world.NewWidget("StatusBar")
 player.castText = world.NewWidget("FontString")
 player.timeText = world.NewWidget("FontString")
-local OnEvent = _G.MSUF_PlayerCastbar_OnEvent
+local OnEvent = _G.MSUF.Castbars.Player.PlayerCastbar_OnEvent
 
 world:StartChannel("player", "Mind Flay", 3, 41)
 OnEvent(player, "UNIT_SPELLCAST_CHANNEL_START", "player", "PMF-guid", 15407, 41)

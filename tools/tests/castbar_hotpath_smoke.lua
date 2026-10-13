@@ -11,6 +11,7 @@
 --
 -- Plain Lua 5.1, repo root as arg 1.
 local root = arg and arg[1] or "."
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local function Check(condition, message)
     if not condition then error(message or "check failed", 2) end
@@ -55,7 +56,7 @@ do
     _G.MSUF_SetStatusBarColorIfChanged = nil
 
     LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", NewNamespace())
-    local applyTint = _G.MSUF_Castbar_ApplyNonInterruptibleTint
+    local applyTint = _G.MSUF.Castbars.Utils.Castbar_ApplyNonInterruptibleTint
     Check(type(applyTint) == "function", "non-interruptible tint export missing")
 
     local function NewTintFrame()
@@ -140,7 +141,8 @@ do
     }
     local namespace = NewNamespace()
     LoadAddonFile("Castbars/MSUF_CastbarStyle.lua", namespace)
-    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    namespace.Castbars.Config.Compile()
+    namespace.MSUF_CastbarStyle:ApplyOutline(frame, false)
     Equal(host.borderR, 0, "default castbar border red was not black")
     Equal(host.borderG, 0, "default castbar border green was not black")
     Equal(host.borderB, 0, "default castbar border blue was not black")
@@ -151,14 +153,16 @@ do
     general.castbarBorderG = 0.34
     general.castbarBorderB = 0.56
     general.castbarBorderA = 0.78
-    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    namespace.Castbars.Config.Compile()
+    namespace.MSUF_CastbarStyle:ApplyOutline(frame, false)
     Equal(host.borderR, 0.12, "initial castbar border red was not applied")
     Equal(host.borderG, 0.34, "initial castbar border green was not applied")
     Equal(host.borderB, 0.56, "initial castbar border blue was not applied")
     Equal(host.borderA, 0.78, "initial castbar border alpha was not applied")
 
     scale = 2
-    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    namespace.Castbars.Config.Compile()
+    namespace.MSUF_CastbarStyle:ApplyOutline(frame, false)
     Equal(host.borderR, 0.12, "castbar border red reset after backdrop rebuild")
     Equal(host.borderG, 0.34, "castbar border green reset after backdrop rebuild")
     Equal(host.borderB, 0.56, "castbar border blue reset after backdrop rebuild")
@@ -196,6 +200,7 @@ do
         CreateDurationTextBinding = function() return createdBinding end,
     }
     local namespace = NewNamespace()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", namespace)
     LoadAddonFile("Castbars/MSUF_CastbarRuntime.lua", namespace)
     local runtime = namespace.MSUF_CastbarRuntime
     Check(type(runtime) == "table", "castbar runtime missing")
@@ -428,8 +433,8 @@ do
     _G.MSUF_RefreshCastbarStyleCache = nil
 
     LoadAddonFile("Castbars/MSUF_Castbars.lua", NewNamespace())
-    local register = _G.MSUF_RegisterCastbar
-    local unregister = _G.MSUF_UnregisterCastbar
+    local register = _G.MSUF.Castbars.Manager.RegisterCastbar
+    local unregister = _G.MSUF.Castbars.Manager.UnregisterCastbar
     Check(type(register) == "function" and type(unregister) == "function", "castbar manager exports missing")
 
     local function NewManagedFrame(unit, workMask, empower)

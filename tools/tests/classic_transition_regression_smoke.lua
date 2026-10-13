@@ -12,6 +12,9 @@ end
 local source = Read("MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua")
 local now, scheduled, hidden, cancelled = 0, {}, 0, 0
 local env = setmetatable({
+    Config = { DB = { player = {} } },
+    Manager = {}, Utils = {},
+    Runtime = { ApplyInterruptBarVisuals = function() end },
     GetTime = function() return now end,
     CancelScheduled = function(cb) scheduled[cb] = nil; cancelled = cancelled + 1 end,
     ScheduleDelayed = function(cb, delay) scheduled[cb] = now + delay end,
@@ -22,6 +25,7 @@ local env = setmetatable({
     DisableFrameOnUpdate = function() end,
     ReleaseRuntimeActive = function() end,
 }, { __index = _G })
+env.Config.Read = function() return env.Config.DB end
 env._G = setmetatable({
     GetTime = function() return now end,
     MSUF_DB = { player = {} },

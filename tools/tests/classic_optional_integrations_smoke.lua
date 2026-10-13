@@ -8,7 +8,7 @@ C_AddOns = { GetAddOnMetadata = function(_, key)
 end }
 Enum = flavor == "Mainline" and { EditModeSystem = { Minimap = 1 } } or nil
 C_EditMode = nil
-local ns = {}
+local ns = { Castbars = { Config = { Invalidate = function() end } } }
 local function load(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end

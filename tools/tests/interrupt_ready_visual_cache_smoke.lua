@@ -16,6 +16,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local function Check(condition, message)
     if not condition then error(message or "check failed", 2) end
@@ -136,12 +137,14 @@ for channel = 1, 3 do
     for previous = 1, channel - 1 do color[tostring(previous)] = 0.5 end
     color[tostring(channel)] = 0.5
     _G.MSUF_DB.general.kickNotReadyColor = color
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     Refresh(nil)
     Check(Paints() == 1, "a change of colour channel " .. channel .. " alone did not repaint")
 end
 
 -- Readiness alone repaints even when both states share one colour.
 _G.MSUF_DB.general.kickReadyColor = { ["1"] = 0.5, ["2"] = 0.5, ["3"] = 0.5 }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 remaining = 0
 Refresh(nil)
 Check(Paints() == 1, "readiness alone (same colour) did not repaint")
@@ -167,6 +170,7 @@ Check(Paints() == 1, "a tint that found no outline was cached")
 -- The box style caches the same way and repaints on the style change.
 local boxPaints = 0
 _G.MSUF_DB.general.kickReadyStyle = "box"
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 Refresh(nil)
 local box = frame.kickReadyBox
 Check(box and box.fill, "box style built no indicator box")

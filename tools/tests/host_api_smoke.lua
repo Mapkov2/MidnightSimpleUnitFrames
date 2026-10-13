@@ -663,7 +663,7 @@ do
         globals[name] = value
         return value
     end
-    for _, path in ipairs({ REQUIRE, BOUNDARY, SCALE_RUNTIME, HOST_API }) do
+    for _, path in ipairs({ REQUIRE, BOUNDARY, root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua", SCALE_RUNTIME, HOST_API }) do
         local chunk = assert(LoadChunk(path))
         setfenv(chunk, env)("MidnightSimpleUnitFrames", ns)
     end

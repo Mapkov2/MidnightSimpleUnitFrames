@@ -19,8 +19,11 @@ local world = World.New(root, "timer", {
 _G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 local general = _G.MSUF_DB.general
 general.castbarShowGlow = true
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 general.castbarInterruptibleR, general.castbarInterruptibleG, general.castbarInterruptibleB = 0, 1, 0
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 general.castbarNonInterruptibleR, general.castbarNonInterruptibleG, general.castbarNonInterruptibleB = 1, 0, 0
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 
 local bar = world:Driver("target")
 -- The bar's fill texture: one vertex colour shared by SetVertexColorFromBoolean

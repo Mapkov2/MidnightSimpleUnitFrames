@@ -18,6 +18,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
@@ -57,14 +58,15 @@ local function LoadTickModule(flavor)
     IsPlayerSpell = function() return false end
     C_Timer = { After = function() end }
     MSUF_DB = { general = {}, player = { castbar = {} } }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     local ns = {
         Client = { IsForever = false, IsVanilla = flavor == "Vanilla", IsRetail = flavor == "Mainline" },
         ExportPublic = function(name, value) _G[name] = value end,
     }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
-    Check(type(_G.MSUF_GetCastbarCountsDown) == "function", "castbar utilities no longer export the count direction")
+    Check(type(_G.MSUF.Castbars.Utils.GetCastbarCountsDown) == "function", "castbar utilities no longer export the count direction")
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarChannelTicks.lua"))("MSUF", ns)
-    return _G.MSUF_PlayerChannelHasteMarkers_Update
+    return _G.MSUF.Castbars.ChannelTicks.PlayerChannelHasteMarkers_Update
 end
 
 local function ChannelFrame(spellID, reverse)
@@ -104,12 +106,18 @@ end
 local function CheckAccent(update, spellID, options, label)
     local general = MSUF_DB.general
     general.castbarShowChannelTicks = true
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     general.castbarAccentLastTick = true
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     general.castbarUnifiedDirection = options.unified == true
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     local castbar = MSUF_DB.player.castbar
     castbar.channelTickUseCustom = options.custom ~= nil
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     castbar.channelTickCount = options.custom and #options.custom or nil
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     castbar.channelTickPosPct = options.custom
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     local frame = ChannelFrame(spellID, options.reverse)
     local countsDown = options.unified ~= true
     -- A running bar carries the direction it was bound with; previews carry
@@ -121,7 +129,7 @@ local function CheckAccent(update, spellID, options, label)
         countsDown = not countsDown
     end
     -- A partial load without the castbar utilities applies the same rule.
-    local helper = _G.MSUF_GetCastbarCountsDown
+    local helper = _G.MSUF.Castbars.Utils.GetCastbarCountsDown
     if options.noHelper then _G.MSUF_GetCastbarCountsDown = nil end
     update(frame, true)
     _G.MSUF_GetCastbarCountsDown = helper
@@ -140,6 +148,7 @@ local function CheckAccent(update, spellID, options, label)
     Check(accented == 1, label .. ": expected exactly one accented tick, found " .. accented)
     Check(IsAccent(latestMarker), label .. ": the accent is not on the tick the fill edge reaches last")
     general.castbarAccentLastTick = false
+    if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
     update(frame, true)
     for index = 1, #markers do
         Check(not IsAccent(markers[index]), label .. ": accent survived switching the option off")

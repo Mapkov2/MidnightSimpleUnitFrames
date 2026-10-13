@@ -115,7 +115,7 @@ end
 do
     local world = NewWorld("timer")
     local bar = world:Driver("focus")
-    local engine = assert(_G.MSUF_GetCastbarEngine(), "castbar engine missing")
+    local engine = assert(_G.MSUF.Castbars.Engine.GetCastbarEngine(), "castbar engine missing")
     local published = {}
     engine:Subscribe("focus", function(state)
         published[#published + 1] = (state and state.active == true) and state.spellName or false
@@ -155,9 +155,9 @@ end
 
 do
     local world = NewWorld("timer", { pools = true })
-    _G.MSUF_ApplyBossCastbarsEnabled()
-    _G.MSUF_ApplyArenaCastbarsEnabled()
-    local engine = assert(_G.MSUF_GetCastbarEngine(), "castbar engine missing")
+    _G.MSUF.Castbars.Pools.ApplyBossCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
+    local engine = assert(_G.MSUF.Castbars.Engine.GetCastbarEngine(), "castbar engine missing")
     local pools = world.ns.Castbars.Pools
     for _, unit in ipairs({ "boss1", "arena1" }) do
         local published = {}
@@ -185,8 +185,8 @@ end
 
 do
     local world = NewWorld("timer", { pools = true })
-    _G.MSUF_ApplyBossCastbarsEnabled()
-    _G.MSUF_ApplyArenaCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyBossCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
     local FAILSAFE = 32
     for _, unit in ipairs({ "boss1", "arena1" }) do
         local pool = unit == "boss1" and _G.MSUF_BossCastbars or _G.MSUF_ArenaCastbars
@@ -214,15 +214,21 @@ do
     world:Fire(arena, "UNIT_SPELLCAST_START")
     assert(arena.events.UNIT_HEALTH == true, "arena1: no UNIT_HEALTH before the pool was switched off")
     _G.MSUF_DB.general.enableArenaCastbar = false
-    _G.MSUF_ApplyArenaCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
     assert(next(arena.events) == nil, "arena1: a disabled pool kept events")
     _G.MSUF_DB.general.enableArenaCastbar = true
-    _G.MSUF_ApplyArenaCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
     world:Advance(0.1)
     world:StartCast("arena1", "Incinerate", 2, 83)
     world:Fire(arena, "UNIT_SPELLCAST_START")
     assert(arena.MSUF_castActive == true and arena.events.UNIT_HEALTH == true,
         "arena1: a re-enabled pool lost the UNIT_HEALTH death signal")
+    world.ns.Castbars.Backend.Set("arena", "HIDE", _G.MSUF_DB.general)
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
+    assert(next(arena.events) == nil, "Backend.Set: disabled arena kept events")
+    world.ns.Castbars.Backend.Set("arena", "MSUF", _G.MSUF_DB.general)
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
+    assert(arena.events.UNIT_SPELLCAST_START, "Backend.Set: arena did not re-enable")
 end
 
 --------------------------------------------------------------------------
@@ -257,7 +263,7 @@ end
 do
     local world = NewWorld("timer")
     local bar = world:Driver("focus")
-    local engine = assert(_G.MSUF_GetCastbarEngine(), "castbar engine missing")
+    local engine = assert(_G.MSUF.Castbars.Engine.GetCastbarEngine(), "castbar engine missing")
     local events = {}
     engine:Subscribe("focus", function(_, event) events[#events + 1] = event end)
 

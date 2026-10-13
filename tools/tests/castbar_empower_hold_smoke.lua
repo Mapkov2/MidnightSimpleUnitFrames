@@ -29,7 +29,7 @@ env.MSUF_Castbars_OnSettingsChanged()
 world:Advance(0.5)
 for index = #world.errors, 1, -1 do world.errors[index] = nil end
 
-local frame = Check(env.MSUF_TargetCastBar, "the target castbar was not built")
+local frame = Check(env.MSUF.Castbars.Frames.Get("target"), "the target castbar was not built")
 local function Fire(event, castBarID)
     world:Fire(frame, event, world:Payload(event, "target", castBarID))
 end
@@ -64,8 +64,9 @@ Check(not frame.interrupted, "restricted empower stop without interrupter must e
 world:Advance(1.5)
 
 -- 3. Player cancellation and kicks keep feedback for either event order.
-local player = Check(env.MSUF_PlayerCastbar, "the player castbar was not built")
+local player = Check(env.MSUF.Castbars.Frames.Get("player"), "the player castbar was not built")
 env.MSUF_DB.player.showInterrupt = true
+if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
 local stopWatch = world:Watch(world:CastbarPaths())
 local function CheckStagesCleared()
     Check(not player.isEmpower and player.empowerStageEnds == nil, "player empower stages were not cleared")
@@ -114,6 +115,7 @@ end
 -- Successful stops and the user's disabled-feedback option retain their behavior.
 for _, show in ipairs({ true, false }) do
     env.MSUF_DB.player.showInterrupt = show
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
     world:StartChannel("player", "Fire Breath", 2, 80, { empowered = true })
     world:Fire(player, "UNIT_SPELLCAST_EMPOWER_START", world:Payload("UNIT_SPELLCAST_EMPOWER_START", "player", 80))
     world.channeling.player = nil

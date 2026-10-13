@@ -289,7 +289,8 @@ end
 -- Castbars -----------------------------------------------------------------
 for _, name in ipairs({ "MSUF_ApplyArenaCastbarsEnabled", "MSUF_UpdateArenaCastbarPreview",
     "MSUF_ApplyArenaCastbarPositionSetting" }) do
-    local fn = forever.env[name]
+    local fn = name == "MSUF_ApplyArenaCastbarsEnabled" and forever.core.Castbars.Pools.ApplyArenaCastbarsEnabled
+        or forever.env[name]
     Check(type(fn) == "function", "Forever lost the arena castbar export " .. name)
     local ok, message = pcall(fn)
     Check(ok, "Forever " .. name .. " raised: " .. tostring(message))
@@ -298,7 +299,7 @@ end
 -- Forever it must leave the profile's arena castbar choice as Midnight stored it.
 local foreverGeneral = { arenaCastbarBackend = "MSUF", enableArenaCastbar = true }
 forever.env.MSUF_DB = { general = foreverGeneral }
-local applied, applyError = pcall(forever.env.MSUF_ApplyArenaCastbarsEnabled)
+local applied, applyError = pcall(forever.env.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled)
 forever.env.MSUF_DB = nil
 Check(applied, "Forever arena castbar apply raised with a profile: " .. tostring(applyError))
 Check(foreverGeneral.arenaCastbarBackend == "MSUF" and foreverGeneral.enableArenaCastbar == true,

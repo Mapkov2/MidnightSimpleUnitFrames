@@ -1,18 +1,17 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarStyle.lua
---- Shared castbar outline helpers (the outline host, its inset and colour).
----
---- Style is allowed to touch existing regions, but not to create cast-state or
---- register events. Runtime/Driver own live casts; Visuals owns the per-unit
---- icon, spell text and time text layout.
+-- Outline host, inset and color; Runtime/Driver own casts, Visuals owns icon/text layout.
 
 local _, ns = ...
-ns = ns or {}
-local ExportPublic = ns.ExportPublic
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_CastbarStyle.lua").Castbars
+local Config = Castbars.Config
+local KickReady = Castbars.KickReady
+local PublicAPI = Castbars.PublicAPI
+local Rounded = Castbars.Rounded
+local Style = Castbars.Style
+local Publish = PublicAPI.Publish
 
-ns.MSUF_CastbarStyle = ns.MSUF_CastbarStyle or {}
+ns.MSUF_CastbarStyle = Castbars.Style
 
-local Style = ns.MSUF_CastbarStyle
 local floor, ceil = math.floor, math.ceil
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local OUTLINE_BACKDROPS = {}
@@ -22,7 +21,7 @@ local function GeneralDB()
         _G.MSUF_EnsureDB()
     end
 
-    return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    return (Config.Read().general) or {}
 end
 
 local function EffectiveScale(region)
@@ -71,7 +70,7 @@ local function OutlineEdge(frame, general)
     return edge, thickness
 end
 
-function Style:GetCastbarOutlineInset(frame, general)
+function Style:OutlineInset(frame, general)
     local edge = OutlineEdge(frame, general or GeneralDB())
     return edge
 end
@@ -153,11 +152,11 @@ local function RefreshInterruptOutline(frame)
     if not frame._kickReadyBorderTinted then return end
     -- The style owner just rebuilt/recolored the actual edges. A cached
     -- readiness key no longer proves that its tint is on those edges.
-    local refresh = _G.MSUF_KickReady_RefreshOutline
+    local refresh = KickReady.KickReady_RefreshOutline
     if type(refresh) == "function" then refresh(frame) end
 end
 
-function Style:ApplyCastbarOutline(frame, force)
+function Style:ApplyOutline(frame, force)
     if not frame then
         return
     end
@@ -168,7 +167,7 @@ function Style:ApplyCastbarOutline(frame, force)
     local green = tonumber(general.castbarBorderG) or 0
     local blue = tonumber(general.castbarBorderB) or 0
     local alpha = tonumber(general.castbarBorderA) or 1
-    local applyRounded = _G.MSUF_RoundedCastbar_ApplyOutline
+    local applyRounded = Rounded.RoundedCastbar_ApplyOutline
     if type(applyRounded) == "function"
         and applyRounded(frame, edge, thickness, red, green, blue, alpha) then
         RefreshInterruptOutline(frame)
@@ -225,10 +224,10 @@ function Style:ApplyCastbarOutline(frame, force)
     if colorChanged then RefreshInterruptOutline(frame) end
 end
 
-ExportPublic("MSUF_ApplyCastbarOutline", function(frame, force)
-    return Style:ApplyCastbarOutline(frame, force)
-end)
+Style.ApplyCastbarOutline = function(frame, force)
+    return Style:ApplyOutline(frame, force)
+end
 
-ExportPublic("MSUF_GetCastbarOutlineInset", function(frame, general)
-    return Style:GetCastbarOutlineInset(frame, general)
-end)
+Style.GetCastbarOutlineInset = function(frame, general)
+    return Style:OutlineInset(frame, general)
+end

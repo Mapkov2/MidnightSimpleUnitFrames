@@ -170,14 +170,14 @@ local function CastbarForUnit(unit)
   end
 
   if unit == "target" then
-    local castbar = _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+    local castbar = MSUF.Castbars.Frames.Get("target")
     if castbar then
       castbarCache[unit] = castbar
       return castbar
     end
     return nil
   elseif unit == "focus" then
-    local castbar = _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+    local castbar = MSUF.Castbars.Frames.Get("focus")
     if castbar then
       castbarCache[unit] = castbar
       return castbar

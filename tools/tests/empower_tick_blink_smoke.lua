@@ -14,6 +14,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local printOnly = arg[2] == "print"
 
 local function Check(condition, message)
@@ -48,11 +49,12 @@ local function Advance(seconds)
 end
 
 _G.MSUF_DB = { general = { empowerStageBlinkTime = 0.2 } }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 _G.MSUF_EnsureDBLazy = function() end
 _G.MSUF_Castbar_PlainNumber = function(value) return tonumber(value) end
 local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua"))("MidnightSimpleUnitFrames", ns)
-local blink = assert(_G.MSUF_BlinkEmpowerTick, "MSUF_BlinkEmpowerTick missing")
+local blink = assert(_G.MSUF.Castbars.Empower.BlinkEmpowerTick, "MSUF_BlinkEmpowerTick missing")
 local blinkTime = assert(_G.MSUF_GetEmpowerStageBlinkTime, "MSUF_GetEmpowerStageBlinkTime missing")()
 
 local tick = { width = 2, red = 1, green = 1, blue = 1, alpha = 0.9 }

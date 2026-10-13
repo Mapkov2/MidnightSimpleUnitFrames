@@ -1,5 +1,4 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_PlayerCastbarRuntime.lua
 --- Player castbar runtime.
 ---
 --- Player is special because it supports vehicle casts, latency display,
@@ -8,9 +7,20 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- neighboring Castbar modules; this file owns player event interpretation.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_PlayerCastbarRuntime.lua").Castbars
+local Config = Castbars.Config
+local Bridge = Castbars.Bridge
+local ChannelTicks = Castbars.ChannelTicks
+local Driver = Castbars.Driver
+local Empower = Castbars.Empower
+local Engine = Castbars.Engine
+local Manager = Castbars.Manager
+local Player = Castbars.Player
+local PublicAPI = Castbars.PublicAPI
+local Runtime = Castbars.Runtime
+local Utils = Castbars.Utils
 
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 
 local C_Timer = _G.C_Timer
 local RunNextFrame = _G.MSUF_RunNextFrame
@@ -47,7 +57,7 @@ local function CastbarEngine()
     if castbarEngine then return castbarEngine end
     castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
     if not castbarEngine then
-        local getter = _G.MSUF_GetCastbarEngine
+        local getter = Engine.GetCastbarEngine
         castbarEngine = type(getter) == "function" and getter() or nil
     end
     return castbarEngine
@@ -63,8 +73,8 @@ local INTERRUPT_IDENTITY_GRACE = 0.25
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared OnUpdate teardown and
 -- lazy DB bootstrap; harnesses that load this file standalone load Utils first.
-local DisableFrameOnUpdate = _G.MSUF_Castbar_DisableFrameOnUpdate
-local EnsureDBLazy = _G.MSUF_EnsureDBLazy
+local DisableFrameOnUpdate = Utils.Castbar_DisableFrameOnUpdate
+local EnsureDBLazy = Utils.EnsureDBLazy
 
 local function ClearFrameOnUpdateScript(frame)
     if frame and frame.SetScript then
@@ -72,7 +82,7 @@ local function ClearFrameOnUpdateScript(frame)
     end
 end
 
-local CastbarRuntime = _G.MSUF_CastbarRuntime
+local CastbarRuntime = Castbars.Runtime
 local ApplyInterruptValues = CastbarRuntime and CastbarRuntime.ApplyInterruptValues
 
 local function ReleaseRuntimeActive(frame)
@@ -83,25 +93,25 @@ end
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
 -- harnesses that load this file standalone load Utils first.
-local PlainNumber = _G.MSUF_Castbar_PlainNumber
+local PlainNumber = Utils.Castbar_PlainNumber
 
 local function CallEmpowerStart(frame, stage)
-    local fn = _G.MSUF_PlayerCastbar_EmpowerStart
+    local fn = Empower.PlayerCastbar_EmpowerStart
     if fn then fn(frame, stage) end
 end
 
 local function ClearEmpower(frame, hideFrame)
-    local fn = _G.MSUF_PlayerCastbar_ClearEmpower
+    local fn = Empower.PlayerCastbar_ClearEmpower
     if fn then fn(frame, hideFrame) end
 end
 
 local function UpdateChannelHasteMarkers(frame, force)
-    local fn = _G.MSUF_PlayerChannelHasteMarkers_Update
+    local fn = ChannelTicks.PlayerChannelHasteMarkers_Update
     if fn then fn(frame, force) end
 end
 
 local function HideChannelHasteMarkers(frame)
-    local fn = _G.MSUF_PlayerChannelHasteMarkers_Hide
+    local fn = ChannelTicks.PlayerChannelHasteMarkers_Hide
     if fn then fn(frame) end
 end
 
@@ -110,13 +120,13 @@ local function ApplyLatencyBar(frame, pct, isChanneled)
 
     local width = frame.statusBar:GetWidth() or 0
     width = width * (pct or 0)
-    local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false)
+    local reverseFill = Utils.GetReverseFillSafe(frame, isChanneled and true or false)
     reverseFill = reverseFill and true or false
 
     -- The zone marks the final latency window: filling bars finish opposite
     -- their anchor; a draining (non-unified) channel finishes on its anchor side.
     if isChanneled then
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local general = Config.Read().general
         if not (general and general.castbarUnifiedDirection == true) then
             reverseFill = not reverseFill
         end
@@ -171,9 +181,7 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
     if not frame or not frame.latencyBar or not frame.statusBar then return end
 
     durationSeconds = PlainNumber(durationSeconds)
-    EnsureDBLazy()
-
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     if frame.latencyText then frame.latencyText:Hide() end
     if general.castbarShowLatency == false and not general.castbarShowLatencyText then
         frame.latencyBar:Hide()
@@ -246,8 +254,7 @@ end
 local function UpdateColorForInterruptible(frame)
     if not frame or not frame.statusBar then return end
 
-    EnsureDBLazy()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local general = Config.Read().general or {}
 
     if general.playerCastbarOverrideEnabled then
         if not (frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime) then
@@ -271,7 +278,7 @@ local function UpdateColorForInterruptible(frame)
             end
 
             if red and green and blue then
-                _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
+                Utils.SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
                 return
             end
         end
@@ -300,8 +307,8 @@ local function UpdateColorForInterruptible(frame)
 
     local red, green, blue, alpha
     if forceNotInterruptible then
-        if _G.MSUF_GetNonInterruptibleCastColor then
-            red, green, blue = _G.MSUF_GetNonInterruptibleCastColor()
+        if Utils.GetNonInterruptibleCastColor then
+            red, green, blue = Utils.GetNonInterruptibleCastColor()
             alpha = 1
         end
         if not red or not green or not blue then
@@ -313,8 +320,8 @@ local function UpdateColorForInterruptible(frame)
             red, green, blue, alpha = 0.4, 0.01, 0.01, 1
         end
     else
-        if _G.MSUF_GetInterruptibleCastColor then
-            red, green, blue = _G.MSUF_GetInterruptibleCastColor()
+        if Utils.GetInterruptibleCastColor then
+            red, green, blue = Utils.GetInterruptibleCastColor()
             alpha = 1
         end
         if not red or not green or not blue then
@@ -328,7 +335,7 @@ local function UpdateColorForInterruptible(frame)
     end
 
     -- Castbars/MSUF_CastbarUtils.lua (loads first) owns the colour write.
-    _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
+    Utils.SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
 end
 
 local function InvalidateCastState(unit)
@@ -546,10 +553,10 @@ local function ApplyActiveCast(
     frame.MSUF_channelDuration = isChannel and durationObj or nil
     frame.MSUF_channelTotal = nil
 
-    local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    local reverseFill = Utils.GetReverseFillSafe(frame, isChannel)
     -- The anchor never flips per cast type any more, so the drain has to come
     -- from the value: channels count down unless unified direction is on.
-    local countsDown = _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
+    local countsDown = Utils.GetCastbarCountsDown(frame, isChannel) == true
     local timerDriven = false
 
     if durationObj then
@@ -568,7 +575,7 @@ local function ApplyActiveCast(
         state.castBarID = castBarID
         state.spellSequenceID = spellSequenceID or castBarID
         state.reverseFill = reverseFill
-        _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
+        Runtime.Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
         timerDriven = frame.MSUF_timerDriven == true
     else
         frame.MSUF_durationObj = nil
@@ -576,7 +583,7 @@ local function ApplyActiveCast(
         frame.MSUF_timerDriven = nil
         if frame.icon then frame.icon:SetTexture(icon or nil) end
         if frame.castText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
+            Utils.CB_ApplyTexts(frame, nil, spellName or "", nil)
         end
     end
 
@@ -623,10 +630,10 @@ local function ApplyActiveCast(
     frame.MSUF_timerDriven = timerDriven and true or nil
 
     frame:Show()
-    if _G.MSUF_RegisterCastbar then _G.MSUF_RegisterCastbar(frame) end
-    if _G.MSUF_UpdateCastbarFrame then
+    if Manager.RegisterCastbar then Manager.RegisterCastbar(frame) end
+    if Manager.UpdateCastbarFrame then
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-        _G.MSUF_UpdateCastbarFrame(frame, 0, now)
+        Manager.UpdateCastbarFrame(frame, 0, now)
     end
 
     if isChannel then
@@ -657,14 +664,14 @@ local function ApplyCastState(frame, state)
     -- fields this value lives next to. delayTimeMs is NeverSecret, so it needs
     -- no secret-safe unwrapping. The shared resolver also measures the legacy
     -- start shift on clients whose cast tuple carries no delay.
-    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    local resolvePushback = Utils.Castbar_ResolvePushbackMS
     if type(resolvePushback) == "function" then
         frame._msufPushbackMS = resolvePushback(frame, state)
     else
         frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
     end
     if frame.castText then
-        _G.MSUF_RefreshCastbarSpellNameText(frame)
+        Utils.RefreshCastbarSpellNameText(frame)
     end
     return true
 end
@@ -720,11 +727,11 @@ local function StopPlayerCastbar(frame)
     frame._msufActiveCastUnit = nil
     HideChannelHasteMarkers(frame)
 
-    if _G.MSUF_CB_ResetStateOnStop then
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
+    if Runtime.CB_ResetStateOnStop then
+        Runtime.CB_ResetStateOnStop(frame, "STOPPED")
     else
         DisableFrameOnUpdate(frame)
-        if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
+        if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
         if frame.latencyBar then frame.latencyBar:Hide() end
         if frame.latencyText then frame.latencyText:Hide() end
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
@@ -826,8 +833,8 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
         state = BuildCastState(unit, frame)
     end
     if state and state.active == true then
-        if _G.MSUF_PlayerCastbar_Cast then
-            _G.MSUF_PlayerCastbar_Cast(frame)
+        if Player.PlayerCastbar_Cast then
+            Player.PlayerCastbar_Cast(frame)
         else
             ApplyCastState(frame, state)
         end
@@ -837,7 +844,7 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
     DisableFrameOnUpdate(frame)
     ReleaseRuntimeActive(frame)
     if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
-    if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
+    if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
     frame._msufActiveCastGUID = nil
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
@@ -877,8 +884,7 @@ local function ShowInterruptFeedback(frame, label)
     frame._msufSoftResyncToken = (frame._msufSoftResyncToken or 0) + 1
     frame._msufSoftResyncScheduledToken = nil
     ClearPendingPlayerInterrupt(frame)
-    EnsureDBLazy()
-    local playerDB = (_G.MSUF_DB and _G.MSUF_DB.player) or {}
+    local playerDB = (Config.Read().player) or {}
     if playerDB.showInterrupt == false then
         InvalidatePlayerInterruptHide(frame)
         DisableFrameOnUpdate(frame)
@@ -896,29 +902,29 @@ local function ShowInterruptFeedback(frame, label)
     end
 
     DisableFrameOnUpdate(frame)
-    if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
+    if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
     frame.MSUF_durationObj = nil
     frame.MSUF_channelDirect = nil
     frame.MSUF_timerDriven = nil
     frame.MSUF_timerRangeSet = nil
-    if _G.MSUF_ClearCastbarTimerDuration and frame.statusBar then
-        _G.MSUF_ClearCastbarTimerDuration(frame.statusBar)
+    if Runtime.ClearCastbarTimerDuration and frame.statusBar then
+        Runtime.ClearCastbarTimerDuration(frame.statusBar)
     end
     frame._msufActiveCastUnit = nil
     frame._msufActiveCastGUID = nil
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
     frame._msufChanNilSince = nil
-    local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
+    local getFeedbackDuration = Utils.GetInterruptFeedbackDuration
     local duration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
     frame.interruptFeedbackEndTime = GetTime() + duration
 
-    local reverseFill = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(frame, false) or false
+    local reverseFill = Utils.GetReverseFillSafe and Utils.GetReverseFillSafe(frame, false) or false
     local interruptLabel = label or INTERRUPTED
     if ApplyInterruptValues then
         ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
     else
-        _G.MSUF_ApplyInterruptBarVisuals(frame, {
+        Runtime.ApplyInterruptBarVisuals(frame, {
             barValue = 1,
             reverseFill = reverseFill,
             label = interruptLabel,
@@ -941,7 +947,7 @@ local function DisablePlayerCastbar(frame)
     InvalidatePlayerInterruptHide(frame)
     DisableFrameOnUpdate(frame)
     ReleaseRuntimeActive(frame)
-    if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
+    if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
     frame.interruptFeedbackEndTime = nil
     MarkPlayerStateInactive(frame)
     ClearActiveCastIdentity(frame)
@@ -954,7 +960,7 @@ local function DisablePlayerCastbar(frame)
 end
 
 local function ShowPlayerInterruptFeedback(frame, interruptedBy)
-    ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, "player", INTERRUPTED))
+    ShowInterruptFeedback(frame, Driver.Castbar_ResolveInterruptLabel(interruptedBy, "player", INTERRUPTED))
 end
 
 local function HandleEmpowerEvent(frame, event, ...)
@@ -1019,7 +1025,7 @@ local function MatchesPendingInterrupt(frame, eventUnit, castGUID, castBarID)
 end
 
 local function PlayerCastbarOnEventImpl(frame, event, ...)
-    if not _G.MSUF_IsCastbarEnabledForUnit("player") then
+    if not Bridge.IsCastbarEnabledForUnit("player") then
         DisablePlayerCastbar(frame)
         return
     end
@@ -1131,7 +1137,8 @@ local function PlayerCastbarOnEvent(frame, event, ...)
     return PlayerCastbarOnEventImpl(frame, event, ...)
 end
 
-ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)
-ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", UpdateColorForInterruptible)
-ExportPublic("MSUF_PlayerCastbar_Cast", CastPlayerCastbar)
-ExportPublic("MSUF_PlayerCastbar_OnEvent", PlayerCastbarOnEvent)
+Player.PlayerCastbar_UpdateLatencyZone = UpdateLatencyZone
+Publish("MSUF_PlayerCastbar_UpdateLatencyZone", Player.PlayerCastbar_UpdateLatencyZone)
+Player.PlayerCastbar_UpdateColorForInterruptible = UpdateColorForInterruptible
+Player.PlayerCastbar_Cast = CastPlayerCastbar
+Player.PlayerCastbar_OnEvent = PlayerCastbarOnEvent

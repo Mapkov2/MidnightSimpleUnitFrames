@@ -77,14 +77,11 @@ end
 local function HideMSUFCastbar(unit)
   unit = CastbarUnit(unit)
   if unit == "player" then
-    HideFrame(_G.MSUF_PlayerCastBar)
-    HideFrame(_G.MSUF_PlayerCastbar)
+    HideFrame(MSUF.Castbars.Frames.Get("player"))
   elseif unit == "target" then
-    HideFrame(_G.MSUF_TargetCastbar)
-    HideFrame(_G.MSUF_TargetCastBar)
+    HideFrame(MSUF.Castbars.Frames.Get("target"))
   elseif unit == "focus" then
-    HideFrame(_G.MSUF_FocusCastbar)
-    HideFrame(_G.MSUF_FocusCastBar)
+    HideFrame(MSUF.Castbars.Frames.Get("focus"))
   elseif unit == "boss" or unit == "arena" then
     -- Every built bar of the pool (Castbars/MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools

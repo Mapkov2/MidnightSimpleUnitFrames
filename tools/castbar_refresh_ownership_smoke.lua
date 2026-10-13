@@ -45,7 +45,7 @@ local function ownerCountFor(needle, sources)
     return count
 end
 
-local ownerNeedle = 'ExportPublic("MSUF_UpdateCastbarVisuals",'
+local ownerNeedle = 'Publish("MSUF_UpdateCastbarVisuals",'
 local ownerCount = 0
 for _, text in ipairs({ core, visuals, manager, fonts }) do
     local start = 1
@@ -58,23 +58,23 @@ for _, text in ipairs({ core, visuals, manager, fonts }) do
 end
 
 assert(ownerCount == 1, "castbar visual refresh must have exactly one public owner")
-assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)'))
-assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", UpdateCastbarVisuals)'))
+assert(contains(core, 'Publish("MSUF_UpdateCastbarVisuals", Core.UpdateCastbarVisuals)'))
+assert(contains(core, 'Publish("MSUF_UpdateCastbarVisuals_Immediate", Core.UpdateCastbarVisuals_Immediate)'))
 assert(not contains(visuals, "previousUpdateCastbarVisuals"))
 assert(not contains(manager, "InstallStyleRevisionHook"))
 assert(not contains(manager, "InstallCastTimeRevisionHook"))
-assert(not contains(fonts, 'ExportPublic("MSUF_UpdateCastbarVisuals",'))
-assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)'))
-assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)'))
-assert(not contains(fonts, 'ExportPublic("MSUF_UpdateCastbarTextures",'))
-assert(contains(core, 'ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)'))
+assert(not contains(fonts, 'Publish("MSUF_UpdateCastbarVisuals",'))
+assert(contains(core, 'Publish("MSUF_UpdateCastbarTextures", Core.UpdateCastbarTextures)'))
+assert(contains(core, 'Publish("MSUF_UpdateCastbarTextures_Immediate", Core.UpdateCastbarTextures_Immediate)'))
+assert(not contains(fonts, 'Publish("MSUF_UpdateCastbarTextures",'))
+assert(contains(core, 'Publish("MSUF_ApplyAllCastbarsAndSync", Core.ApplyAllCastbarsAndSync)'))
 -- The fill-direction refresher had no caller and was removed (quality wave 3);
 -- the menu applies castbarFillDirection through the castbar visual refresh.
 assert(ownerCountFor('ExportPublic("MSUF_UpdateCastbarFillDirection",', { core, style }) == 0,
     "the unused castbar fill-direction refresher came back")
-assert(ownerCountFor('ExportPublic("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
+assert(ownerCountFor('Publish("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
     "castbar reverse-fill resolution must have exactly one public owner")
-assert(contains(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",'))
+assert(contains(utils, 'Publish("MSUF_GetCastbarReverseFillForFrame",'))
 
 local backendSyncStart = assert(backend:find("function Backend.Sync", 1, true))
 local backendSyncEnd = assert(backend:find("function Backend.IsMSUF", backendSyncStart, true))
@@ -83,19 +83,19 @@ assert(contains(backendSyncBody, 'Backend.Get("arena", general)'),
     "backend compatibility sync must normalize Arena with the other castbar units")
 
 local anyStart = assert(bridge:find("local AreAnyCastbarsEnabled", 1, true))
-local anyEnd = assert(bridge:find('ExportPublic("MSUF_AreAnyCastbarsEnabled"', anyStart, true))
+local anyEnd = assert(bridge:find('Bridge.AreAnyCastbarsEnabled =', anyStart, true))
 local anyBody = bridge:sub(anyStart, anyEnd - 1)
-assert(contains(anyBody, 'ShouldUseMSUF("arena")') and contains(anyBody, "MSUF_DB.arena"),
+assert(contains(anyBody, 'ShouldUseMSUF("arena")') and contains(anyBody, "Config.Read().arena"),
     "castbar module enablement must include the Arena backend and Arena frame gate")
 
 local hideStart = assert(bridge:find("local CastbarsForceHideAll", 1, true))
-local hideEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_ForceHideAll"', hideStart, true))
+local hideEnd = assert(bridge:find('Bridge.Castbars_ForceHideAll =', hideStart, true))
 local hideBody = bridge:sub(hideStart, hideEnd - 1)
 assert(contains(hideBody, "local castbars = poolOrder[poolIndex].Castbars()"),
     "central castbar force-hide must include every castbar pool (Boss and Arena)")
 
 local settingsStart = assert(bridge:find("local CastbarsOnSettingsChanged", 1, true))
-local settingsEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_OnSettingsChanged"', settingsStart, true))
+local settingsEnd = assert(bridge:find('Publish("MSUF_Castbars_OnSettingsChanged"', settingsStart, true))
 local settingsBody = bridge:sub(settingsStart, settingsEnd - 1)
 assert(contains(settingsBody, "poolOrder[poolIndex].ApplyEnabled()"),
     "central settings refresh must apply every pool's (Boss and Arena) backend and lifecycle state")
@@ -111,14 +111,14 @@ local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold",
 local coldEnd = assert(core:find("local function BumpCastbarVisualRevisions", coldStart, true))
 local coldBody = core:sub(coldStart, coldEnd - 1)
 -- Core resolves the Visuals follower when it runs (Visuals loads later).
-local _, coldRefreshCount = coldBody:gsub('Later%("MSUF_RefreshCastbarFrame"%)%(', "")
+local _, coldRefreshCount = coldBody:gsub('Visuals%.RefreshCastbarFrame%(', "")
 assert(coldRefreshCount == 1, "each Core frame pass must invoke exactly one Visuals follower")
 assert(contains(coldBody, "ApplyCastbarBaseGeometry(frame, general, forcedUnit)"))
 assert(contains(coldBody, "frame._msufCastbarColdGlobalRev == globalRevision"),
     "cold visual pass must skip an already-applied revision and geometry")
-assert(contains(coldBody, 'Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)'))
+assert(contains(coldBody, 'Visuals.RefreshCastbarFrame(frame, forcedUnit, general)'))
 -- The public spark entry, so a client that replaces it (Classic) owns the result.
-assert(contains(coldBody, 'Later("MSUF_ApplyCastbarSparkVisual")(frame, general)'),
+assert(contains(coldBody, 'Core.ApplyCastbarSparkVisual(frame, general)'),
     "the cold visual pass must lay the spark out through the public spark entry")
 assert(contains(core, "spark:SetShown(enabled)"),
     "cold castbar style pass must own spark visibility")
@@ -182,8 +182,8 @@ assert(not contains(playerInterruptBody, "HasActivePlayerCast"),
 
 assert(contains(interruptReady, "EvaluateColorValueFromBoolean"),
     "secret interrupt colors must use the allocation-free scalar evaluator")
-assert(contains(interruptReady, 'ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)'))
-assert(contains(focusKickIcon, "_G.MSUF_KickReady_EvaluateRGBA("))
+assert(contains(interruptReady, 'Publish("MSUF_KickReady_EvaluateRGBA", KickReady.KickReady_EvaluateRGBA)'))
+assert(contains(focusKickIcon, "KickReady.KickReady_EvaluateRGBA("))
 assert(not contains(focusKickIcon, "EvaluateColorFromBoolean("),
     "focus kick icon must not allocate transient ColorMixin results")
 assert(not contains(focusKickIcon, 'iconFrame:SetScript("OnUpdate"'),
@@ -194,7 +194,7 @@ assert(contains(focusKickIcon, "runtime:BindNativeTimeText(iconFrame, durationOb
     "focus-kick icon must use the shared native duration binder")
 assert(contains(focusKickIcon, "source._msufForceLuaTimeTextFollower = true"),
     "focus-kick degraded path must attach to the existing castbar manager")
-assert(contains(manager, 'ExportPublic("MSUF_Castbar_SyncTimeTextFollower", SyncTimeTextFollower)'),
+assert(contains(manager, 'Manager.Castbar_SyncTimeTextFollower = SyncTimeTextFollower'),
     "castbar manager must own detached fallback text propagation")
 local lifecycleStart = assert(driver:find("local ACTIVE_LIFECYCLE_EVENTS", 1, true))
 local lifecycleEnd = assert(driver:find("local SetCastLifecycleActive", lifecycleStart, true))
@@ -203,7 +203,7 @@ assert(contains(lifecycleBody, '"UNIT_FLAGS",') and contains(lifecycleBody, '"UN
     "target/focus active lifecycle event set is incomplete")
 assert(not contains(lifecycleBody, '"UNIT_HEALTH",'),
     "target/focus active lifecycle retained high-frequency UNIT_HEALTH")
-assert(contains(driver, 'ExportPublic("MSUF_Castbar_SetLifecycleActive", SetCastLifecycleActive)'),
+assert(contains(driver, 'Driver.Castbar_SetLifecycleActive = SetCastLifecycleActive'),
     "castbar lifecycle owner must be shared with Runtime stop paths")
 assert(contains(driver, "local function ToKnownPlainBool(value)"),
     "castbar lifecycle decisions must be secret-safe")
@@ -248,14 +248,14 @@ assert(contains(driver, 'frame._msufCastLifecycleMode = "FLAGS"'),
 assert(contains(driver, "frame:RegisterUnitEvent(ACTIVE_LIFECYCLE_EVENTS[index], frame.unit)"),
     "active target/focus lifecycle did not retain unit-filtered registration")
 
-assert(contains(anchors, 'ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)'))
-assert(contains(anchors, 'ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)'))
-assert(contains(anchors, 'ExportPublic("MSUF_ReanchorFocusCastBarBase", ReanchorFocusCastBarBase)'))
+assert(contains(anchors, 'Anchors.ReanchorPlayerCastBarBase = ReanchorPlayerCastBarBase'))
+assert(contains(anchors, 'Anchors.ReanchorTargetCastBarBase = ReanchorTargetCastBarBase'))
+assert(contains(anchors, 'Anchors.ReanchorFocusCastBarBase = ReanchorFocusCastBarBase'))
 -- Core resolves the Anchors re-anchors when it runs (Anchors loads later).
-assert(contains(core, 'Later("MSUF_ReanchorPlayerCastBarBase")()'))
-assert(contains(core, 'Later("MSUF_ReanchorTargetCastBarBase")()'))
-assert(contains(core, 'Later("MSUF_ReanchorFocusCastBarBase")()'))
-assert(not contains(visuals, 'ExportPublic("MSUF_ReanchorPlayerCastBar",'))
+assert(contains(core, 'Anchors.ReanchorPlayerCastBarBase()'))
+assert(contains(core, 'Anchors.ReanchorTargetCastBarBase()'))
+assert(contains(core, 'Anchors.ReanchorFocusCastBarBase()'))
+assert(not contains(visuals, 'Publish("MSUF_ReanchorPlayerCastBar",'))
 
 local sizeStart = assert(anchors:find("local function ApplyPlayerCastbarSizeAndLayout", 1, true))
 local sizeEnd = assert(anchors:find("ApplyCastbarEffectiveSizeUnit = function", sizeStart, true))

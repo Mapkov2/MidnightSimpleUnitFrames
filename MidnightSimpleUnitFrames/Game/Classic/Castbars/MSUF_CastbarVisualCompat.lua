@@ -9,6 +9,14 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarVisualCompat.lua").Castbars
+local Visuals = Castbars.Visuals
+local Config = Castbars.Config
+local Core = Castbars.Core
+local Frames = Castbars.Frames
+local PublicAPI = Castbars.PublicAPI
+local Style = Castbars.Style
+local Utils = Castbars.Utils
 
 local G = _G
 local type = type
@@ -20,13 +28,13 @@ local unpack = unpack or table.unpack
 local CLASSIC_SPARK_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Spark"
 local MIN_INNER_HEIGHT = 2
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
+local Publish = PublicAPI.Publish or function(name, value)
     G[name] = value
     MSUF[name] = value
     return value
 end
 
-local SharedGetOutlineInset = G.MSUF_GetCastbarOutlineInset
+local SharedGetOutlineInset = Style.GetCastbarOutlineInset
 
 local function RegionHeight(region, fallback)
     if region and type(region.GetHeight) == "function" then
@@ -54,7 +62,7 @@ end
 
 local function GeneralDB(general)
     if general then return general end
-    local db = G.MSUF_DB
+    local db = Config.Read()
     return (db and db.general) or {}
 end
 
@@ -112,8 +120,8 @@ local function ApplyClassicSparkVisual(frame, general)
     local fillTexture = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()
     if fillTexture then
         local reversed = false
-        if type(G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-            reversed = G.MSUF_GetCastbarReverseFillForFrame(frame, false) == true
+        if type(Utils.GetCastbarReverseFillForFrame) == "function" then
+            reversed = Utils.GetCastbarReverseFillForFrame(frame, false) == true
         elseif statusBar.GetReverseFill then
             reversed = statusBar:GetReverseFill() and true or false
         end
@@ -133,14 +141,14 @@ local function ApplyToUnit(unit, general)
     if unit:match("^arena%d+$") then unit = "arena" end
 
     if unit == "player" then
-        ApplyClassicSparkVisual(G.MSUF_PlayerCastbar or G.MSUF_PlayerCastBar, general)
-        ApplyClassicSparkVisual(G.MSUF_PlayerCastbarPreview, general)
+        ApplyClassicSparkVisual(Frames.player, general)
+        ApplyClassicSparkVisual(Frames.playerPreview, general)
     elseif unit == "target" then
-        ApplyClassicSparkVisual(G.MSUF_TargetCastbar or G.MSUF_TargetCastBar, general)
-        ApplyClassicSparkVisual(G.MSUF_TargetCastbarPreview, general)
+        ApplyClassicSparkVisual(Frames.target, general)
+        ApplyClassicSparkVisual(Frames.targetPreview, general)
     elseif unit == "focus" then
-        ApplyClassicSparkVisual(G.MSUF_FocusCastbar or G.MSUF_FocusCastBar, general)
-        ApplyClassicSparkVisual(G.MSUF_FocusCastbarPreview, general)
+        ApplyClassicSparkVisual(Frames.focus, general)
+        ApplyClassicSparkVisual(Frames.focusPreview, general)
     else
         -- Boss and arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
         local pools = MSUF.Castbars and MSUF.Castbars.Pools
@@ -162,43 +170,36 @@ local function ApplyToAll(general)
     ApplyToUnit("arena", general)
 end
 
-local function HookGlobal(name, callback)
-    local original = G[name]
-    if type(original) ~= "function" then return false end
-    if type(G.hooksecurefunc) == "function" then
-        G.hooksecurefunc(name, callback)
-        return true
-    end
-
-    -- Test/legacy fallback. These are cold-path visual functions, so preserving
-    -- the return tuple through a short temporary table has no hot-path cost.
-    G[name] = function(...)
+local function HookModule(module, key, name, callback)
+    local original = module[key]
+    if not original then return false end
+    module[key] = function(...)
         local results = { original(...) }
         callback(...)
         return unpack(results)
     end
-    MSUF[name] = G[name]
+    PublicAPI.Publish(name, module[key])
     return true
 end
 
-ExportPublic("MSUF_GetCastbarOutlineInset", GetClassicOutlineInset)
-ExportPublic("MSUF_ApplyCastbarSparkVisual", ApplyClassicSparkVisual)
-ExportPublic("MSUF_ClassicCastbar_GetOutlineInset", GetClassicOutlineInset)
-ExportPublic("MSUF_ClassicCastbar_ApplySparkVisual", ApplyClassicSparkVisual)
+Style.GetCastbarOutlineInset = GetClassicOutlineInset
+Core.ApplyCastbarSparkVisual = ApplyClassicSparkVisual
+Style.ClassicCastbar_GetOutlineInset = GetClassicOutlineInset
+Style.ClassicCastbar_ApplySparkVisual = ApplyClassicSparkVisual
 
-HookGlobal("MSUF_RefreshCastbarFrame", function(frame, _, general)
+HookModule(Visuals, "RefreshCastbarFrame", "MSUF_RefreshCastbarFrame", function(frame, _, general)
     ApplyClassicSparkVisual(frame, general)
 end)
-HookGlobal("MSUF_ApplyCastbarVisualsForUnit", function(unit, _, general)
+HookModule(Core, "ApplyCastbarVisualsForUnit", "MSUF_ApplyCastbarVisualsForUnit", function(unit, _, general)
     ApplyToUnit(unit, general)
 end)
-HookGlobal("MSUF_UpdateCastbarVisuals", function(unit)
+HookModule(Core, "UpdateCastbarVisuals", "MSUF_UpdateCastbarVisuals", function(unit)
     if unit then ApplyToUnit(unit) else ApplyToAll() end
 end)
-HookGlobal("MSUF_UpdateCastbarVisuals_Immediate", function(unit)
+HookModule(Core, "UpdateCastbarVisuals_Immediate", "MSUF_UpdateCastbarVisuals_Immediate", function(unit)
     if unit then ApplyToUnit(unit) else ApplyToAll() end
 end)
-HookGlobal("MSUF_ApplyAllCastbarsAndSync", function()
+HookModule(Core, "ApplyAllCastbarsAndSync", "MSUF_ApplyAllCastbarsAndSync", function()
     ApplyToAll()
 end)
 
@@ -208,8 +209,8 @@ end)
 local UF = MSUF.UF
 if UF and type(UF.RegisterVisualRefreshCallback) == "function" then
     UF.RegisterVisualRefreshCallback("Castbars", function(unit)
-        if unit ~= nil and unit ~= "*" and type(G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-            G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        if unit ~= nil and unit ~= "*" and type(Core.ApplyCastbarVisualsForUnit) == "function" then
+            Core.ApplyCastbarVisualsForUnit(unit)
         end
     end)
 end

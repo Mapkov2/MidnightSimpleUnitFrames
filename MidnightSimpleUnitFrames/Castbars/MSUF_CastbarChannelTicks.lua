@@ -1,10 +1,13 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
--- Player channel tick marker support.
--- Adds optional spell-aware channel markers to the player castbar using existing DB fields.
--- This augments castbar visuals only; cast/channel state remains in the shared runtime.
+-- Optional spell-aware player channel markers; cast/channel state stays in Runtime.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarChannelTicks.lua").Castbars
+local Config = Castbars.Config
+local ChannelTicks = Castbars.ChannelTicks
+local Frames = Castbars.Frames
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
+local Publish = PublicAPI.Publish
 -- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
 -- and Era tick counts. TBC and Mists keep the Retail table below until their
 -- spell data has been verified.
@@ -177,7 +180,7 @@ local function AutomaticMarkerLayout(frame)
 end
 
 local function TickConfig(frame)
-    local db = MSUF_DB
+    local db = Config.Read()
     local general = db and db.general or nil
     local playerCastbar = db and db.player and db.player.castbar or nil
 
@@ -380,11 +383,11 @@ UpdatePlayerChannelHasteMarkers = function(frame, force)
     -- frame without one (a preview) asks the same cast-type rule.
     local countsDown = frame._msufCountsDown
     if type(countsDown) ~= "boolean" then
-        local getCountsDown = _G.MSUF_GetCastbarCountsDown
+        local getCountsDown = Utils.GetCastbarCountsDown
         if type(getCountsDown) == "function" then
             countsDown = getCountsDown(frame, true) == true
         else
-            local general = MSUF_DB and MSUF_DB.general
+            local general = Config.Read().general
             countsDown = not (general and general.castbarUnifiedDirection == true)
         end
     end
@@ -400,7 +403,7 @@ UpdatePlayerChannelHasteMarkers = function(frame, force)
             end
         end
     end
-    local accentLast = MSUF_DB and MSUF_DB.general and MSUF_DB.general.castbarAccentLastTick == true
+    local accentLast = Config.Read().general and Config.Read().general.castbarAccentLastTick == true
     for index = 1, tickCount do
         local marker = markers[index]
         if marker then
@@ -419,10 +422,11 @@ UpdatePlayerChannelHasteMarkers = function(frame, force)
 end
 
 local function UpdateCastbarChannelTicks()
-    UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbar, true)
-    UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbarPreview, true)
+    UpdatePlayerChannelHasteMarkers(Frames.player, true)
+    UpdatePlayerChannelHasteMarkers(Frames.playerPreview, true)
 end
 
-ExportPublic("MSUF_PlayerChannelHasteMarkers_Update", UpdatePlayerChannelHasteMarkers)
-ExportPublic("MSUF_PlayerChannelHasteMarkers_Hide", HidePlayerChannelTickMarkers)
-ExportPublic("MSUF_ApplyPlayerChannelTickMarkers", UpdateCastbarChannelTicks)
+ChannelTicks.PlayerChannelHasteMarkers_Update = UpdatePlayerChannelHasteMarkers
+ChannelTicks.PlayerChannelHasteMarkers_Hide = HidePlayerChannelTickMarkers
+ChannelTicks.ApplyPlayerChannelTickMarkers = UpdateCastbarChannelTicks
+Publish("MSUF_ApplyPlayerChannelTickMarkers", ChannelTicks.ApplyPlayerChannelTickMarkers)

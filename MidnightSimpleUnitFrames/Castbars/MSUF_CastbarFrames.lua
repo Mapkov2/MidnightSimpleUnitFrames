@@ -1,15 +1,18 @@
+local _, MSUF = ...
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarFrames.lua").Castbars
+local Config = Castbars.Config
+local Core = Castbars.Core
+local Frames = Castbars.Frames
+local Runtime = Castbars.Runtime
+local Style = Castbars.Style
+local Utils = Castbars.Utils
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarFrames.lua
---- Frame construction helpers for real castbars and menu/edit previews.
----
---- This file creates regions and initial visual structure only. Runtime applies
---- live cast state, Visuals applies profile-driven detail layout, and Anchors
---- moves/sizes existing frames.
+-- Builds real/preview regions; Runtime paints casts, Visuals details, Anchors geometry.
 
 local G = _G
 
 local function Translate(text)
-    local ns = G.MSUF_NS
+    local ns = MSUF
     local locale = (type(ns) == "table" and ns.L) or G.MSUF_L
 
     if type(ns) == "table" and type(ns.Translate) == "function" then
@@ -22,14 +25,14 @@ end
 -- Castbars/MSUF_Castbars_Core.lua (the texture) and Castbars/MSUF_CastbarUtils.lua
 -- (the fill direction) load before this file in every TOC.
 local function CastbarTexture()
-    return MSUF_GetCastbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
+    return Core.GetCastbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
 end
 
 local function CastbarBackgroundTexture()
     local texture = CastbarTexture()
 
-    if type(G.MSUF_GetCastbarBackgroundTexture) == "function" then
-        local backgroundTexture = G.MSUF_GetCastbarBackgroundTexture()
+    if type(Core.GetCastbarBackgroundTexture) == "function" then
+        local backgroundTexture = Core.GetCastbarBackgroundTexture()
         if backgroundTexture and backgroundTexture ~= "" then
             texture = backgroundTexture
         end
@@ -82,7 +85,7 @@ end
 
 --- Builds the common frame element set used by target/focus/boss style castbars:
 --- background, status bar, icon, text, time text, spark, and outline.
-function G.MSUF_BuildCastbarFrameElements(frame)
+function Frames.BuildCastbarFrameElements(frame)
     local barHeight = 18
 
     local roundLayout = G.MSUF_SetRoundLayoutToNearestPixel
@@ -110,14 +113,14 @@ function G.MSUF_BuildCastbarFrameElements(frame)
         statusBar:GetStatusBarTexture():SetHorizTile(false)
     end
 
-    if type(G.MSUF_ApplyCastbarTimerDirection) == "function" then
-        G.MSUF_ApplyCastbarTimerDirection(
+    if type(Runtime.ApplyCastbarTimerDirection) == "function" then
+        Runtime.ApplyCastbarTimerDirection(
             statusBar,
             nil,
-            MSUF_GetCastbarReverseFillForFrame(frame, false)
+            Utils.GetCastbarReverseFillForFrame(frame, false)
         )
     elseif statusBar.SetReverseFill then
-        statusBar:SetReverseFill(MSUF_GetCastbarReverseFillForFrame(frame, false))
+        statusBar:SetReverseFill(Utils.GetCastbarReverseFillForFrame(frame, false))
     end
 
     frame.statusBar = statusBar
@@ -155,15 +158,15 @@ function G.MSUF_BuildCastbarFrameElements(frame)
 
     frame.spark = CreateSpark(statusBar, barHeight)
 
-    if type(G.MSUF_ApplyCastbarOutline) == "function" then
-        G.MSUF_ApplyCastbarOutline(frame, true)
+    if type(Style.ApplyCastbarOutline) == "function" then
+        Style.ApplyCastbarOutline(frame, true)
     end
 end
 
 --- Preview frames are intentionally non-secure and self-contained. They mimic
 --- real castbar regions closely enough for menu/edit-mode layout without
 --- subscribing to live spellcast events.
-function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
+function Frames.CreateCastbarPreviewFrame(unit, name, options)
     options = options or {}
 
     local parent = options.parent or UIParent
@@ -263,8 +266,8 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
 
     frame.spark = CreateSpark(statusBar, statusBarHeight)
 
-    if type(G.MSUF_ApplyCastbarOutline) == "function" then
-        G.MSUF_ApplyCastbarOutline(frame, true)
+    if type(Style.ApplyCastbarOutline) == "function" then
+        Style.ApplyCastbarOutline(frame, true)
     end
 
     return frame

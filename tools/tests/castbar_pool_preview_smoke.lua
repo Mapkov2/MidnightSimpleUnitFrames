@@ -13,6 +13,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 
 local CASTBARS = "MidnightSimpleUnitFrames/Castbars/"
@@ -104,6 +105,7 @@ local function NewWorld(arenaSlots)
     _G.MAX_BOSS_FRAMES = 5
     _G.MSUF_MAX_ARENA_FRAMES = arenaSlots
     _G.MSUF_DB = { general = {}, boss = {}, arena = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.MSUF_EnsureCastbarGeneralDB = function() return _G.MSUF_DB.general end
     _G.MSUF_IsPlayerInCombat = function() return W.combat end
     _G.MSUF_ShouldUseMSUFCastbar = function() return true end
@@ -177,6 +179,7 @@ local KINDS = {
 local function EditMode(on)
     _G.MSUF_UnitEditModeActive = on
     _G.MSUF_DB.general.castbarPlayerPreviewEnabled = on
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 end
 
 for _, K in ipairs(KINDS) do
@@ -195,8 +198,8 @@ for _, K in ipairs(KINDS) do
         and (type(_G["MSUF_End" .. cap .. "CastbarPreviewBatch"]) == "function") == K.batch,
         kind .. " batch globals are wrong")
     Check(type(_G["MSUF_Set" .. cap .. "CastbarTestMode"]) == "function"
-        and type(_G["MSUF_Setup" .. cap .. "CastbarPreviewEditMode"]) == "function",
-        kind .. " lost its test-mode or Edit Mode setup global")
+        and type(W.ns.Castbars.Previews["Setup" .. cap .. "CastbarPreviewEditMode"]) == "function",
+        kind .. " lost its public test-mode or internal Edit Mode setup")
 
     for index = 1, 3 do W.unitFrames[kind .. index] = W.NewFrame("UF_" .. kind .. index) end
     W.unitFrames[kind .. "3"].shown = false
@@ -209,7 +212,10 @@ for _, K in ipairs(KINDS) do
     update()
     local first, second = _G[K.first], _G[K.second]
     Check(first and second and first.shown and second.shown, kind .. " previews 1-2 are not shown in Edit Mode")
-    Check(_G["MSUF_" .. cap .. "CastbarPreview"] == first, kind .. " slot 1 alias is not published")
+    Check(W.ns.Castbars.Frames.Get(kind .. "Preview") == first, kind .. " slot 1 namespace identity is wrong")
+    if kind == "arena" then
+        Check(_G["MSUF_" .. cap .. "CastbarPreview"] == nil, kind .. " removed preview alias was republished")
+    end
     Check(_G[K.first:gsub("1$", "") .. "3"] and not _G[K.first:gsub("1$", "") .. "3"].shown,
         kind .. " preview 3 shows under a hidden unit frame")
     Check(first.unit == kind and first._msufIsPreview and first[preview.kindFlag]
@@ -223,6 +229,7 @@ for _, K in ipairs(KINDS) do
         kind .. " preview fill is not hidden")
     Check(first.castTargetText.text == "" and not first.castTargetText.shown, kind .. " target name shows while off")
     _G.MSUF_DB.general["show" .. cap .. "CastTargetName"] = true
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     first.MSUF_testMode = true
     preview:ApplyLayout(first, 1)
     Check(first.statusBar.MSUF_hideFillTexture == nil and first.statusBar.fill.alpha == 1,
@@ -255,9 +262,11 @@ for _, K in ipairs(KINDS) do
     Check(first.shown == false, kind .. " preview refreshed in combat")
     W.combat = false
     _G.MSUF_DB[kind].enabled = false
+    _G.MSUF.Castbars.Config.Invalidate()
     update()
     Check(not first.shown and not second.shown, kind .. " previews show for a disabled kind")
     _G.MSUF_DB[kind].enabled = true
+    _G.MSUF.Castbars.Config.Invalidate()
 
     -- The page preview survives the persistent option being off.
     EditMode(false)
@@ -288,7 +297,7 @@ for _, K in ipairs(KINDS) do
         and first.statusBar.MSUF_hideFillTexture == true, kind .. " test mode off left the animation")
 
     -- Edit Mode setup and drag positioning reach every slot.
-    _G["MSUF_Setup" .. cap .. "CastbarPreviewEditMode"]()
+    W.ns.Castbars.Previews["Setup" .. cap .. "CastbarPreviewEditMode"]()
     Check(first.editHandlers == kind and second.editHandlers == kind, kind .. " Edit Mode setup missed a slot")
     first.point, second.point = nil, nil
     Check(_G.MSUF_PositionCastbarPreviewUnit(kind .. "2") == true and first.point and second.point,

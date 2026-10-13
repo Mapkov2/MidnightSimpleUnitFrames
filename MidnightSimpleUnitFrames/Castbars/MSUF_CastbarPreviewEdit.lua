@@ -1,9 +1,14 @@
--- Castbar preview edit bridge.
--- Maps preview drag/resize handles back to the same DB keys and reanchor helpers used by live
--- castbars. This is an edit-mode cold path and should not observe live cast events.
+-- Cold preview drag/resize bridge to the live castbars' DB keys and anchor helpers.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarPreviewEdit.lua").Castbars
+local Config = Castbars.Config
+local Anchors = Castbars.Anchors
+local Core = Castbars.Core
+local PreviewEdit = Castbars.PreviewEdit
+local Previews = Castbars.Previews
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
+local Publish = PublicAPI.Publish
 
 local UNIT_CONFIG = {
     player = {
@@ -56,7 +61,7 @@ local UNIT_CONFIG = {
 }
 local CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL = 0.05
 
-local GeneralDB = _G.MSUF_EnsureCastbarGeneralDB
+local GeneralDB = Utils.EnsureCastbarGeneralDB
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -82,11 +87,11 @@ end
 --- owns the apply and sync (reanchor, visuals, edit info, popup); the per-step
 --- fallback that stood here never ran. Late-bound: the menu preview wraps it.
 local function ApplyUnitAndSync(unit)
-    _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    Core.ApplyCastbarUnitAndSync(unit)
 end
 
 local function PositionPreviewOnly(unit)
-    local position = _G.MSUF_PositionCastbarPreviewUnit
+    local position = Previews.PositionCastbarPreviewUnit
     if type(position) == "function" then
         return position(unit) and true or false
     end
@@ -107,16 +112,17 @@ local function PulsePreview(unit)
     end
 
     local config = UNIT_CONFIG[unit]
-    local setTestMode = config and _G[config.test]
+    local setTestMode = config and Previews[config.test:sub(6)]
     if type(setTestMode) ~= "function" then
         return
     end
 
     setTestMode(true, true)
 
-    local timers = _G.MSUF_CastbarPreviewPulseTimers
+    local timers = PreviewEdit.CastbarPreviewPulseTimers
     if not timers then
-        timers = ExportPublic("MSUF_CastbarPreviewPulseTimers", {})
+        timers = {}
+        PreviewEdit.CastbarPreviewPulseTimers = timers
     end
 
     if type(timers[unit]) == "table" then
@@ -174,14 +180,15 @@ local function RegisterPreviewNudgeTarget(frame, unit, config)
             general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
             general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
 
+            Config.Invalidate()
             ApplyUnitAndSync(unit)
         end,
     })
 end
 
 local function UsesWidthSource(general, unit)
-    local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(unit)
-    local normalize = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+    local widthSourceKey = Anchors.GetCastbarWidthSourceKey and Anchors.GetCastbarWidthSourceKey(unit)
+    local normalize = Anchors.NormalizeCastbarWidthSource or Anchors.NormalizePlayerCastbarWidthSource
     local widthSource = widthSourceKey and general[widthSourceKey]
 
     if type(normalize) == "function" then
@@ -245,6 +252,7 @@ local function PreviewDragUpdate(unit, config)
             liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY * toBar)
         end
 
+        Config.Invalidate()
         if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
             dragFrame._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
             dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
@@ -352,6 +360,7 @@ local function PreviewMouseUp(unit)
 
         PulsePreview(unit)
         if moved then
+            Config.Invalidate()
             ApplyUnitAndSync(unit)
         end
         if self._msufCastbarHistoryDrag then
@@ -384,4 +393,4 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
     frame:SetScript("OnMouseUp", PreviewMouseUp(unit))
 end
 
-ExportPublic("MSUF_SetupCastbarPreviewEditHandlers", SetupCastbarPreviewEditHandlers)
+PreviewEdit.SetupCastbarPreviewEditHandlers = SetupCastbarPreviewEditHandlers

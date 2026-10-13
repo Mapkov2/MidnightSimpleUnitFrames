@@ -143,6 +143,7 @@ local function LoadProvider(options)
     _G.MSUF_ClassPower_Apply = function(opts) h.cpApply[#h.cpApply + 1] = opts end
 
     local ns = {
+        Castbars = { Config = { Invalidate = function() end } },
         Util = {
             InCombat = function() return h.combatEdge == true or env:IsInCombat() end,
             IsPlayerInCombat = function() return h.combatEdge == true or env:IsInCombat() end,

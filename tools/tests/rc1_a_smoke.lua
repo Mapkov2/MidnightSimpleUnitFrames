@@ -40,6 +40,7 @@
 --
 -- Plain Lua 5.1, repo root as arg 1.
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local failures = {}
 local function Check(condition, message)

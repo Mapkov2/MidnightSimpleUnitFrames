@@ -210,8 +210,8 @@ local function NewWorld(arenaSlots)
     general.showBossCastTargetName = true
     general.showArenaCastTargetName = true
     _G.MSUF_DB.bars = { roundedFramesEnabled = true, roundedCastbars = true }
-    _G.MSUF_ApplyBossCastbarsEnabled()
-    _G.MSUF_ApplyArenaCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyBossCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
     _G.MSUF_UnitEditModeActive = true
     _G.MSUF_UpdateBossCastbarPreview()
     _G.MSUF_UpdateArenaCastbarPreview()
@@ -227,11 +227,12 @@ local function Scenario(arenaSlots)
         sections[#sections + 1] = { key = arenaSlots .. " slots: " .. label, text = text }
     end
 
-    Add(Run(world, "effective size boss", function() _G.MSUF_ApplyCastbarEffectiveSizeUnit("boss") end))
-    Add(Run(world, "effective size arena", function() _G.MSUF_ApplyCastbarEffectiveSizeUnit("arena") end))
+    Add(Run(world, "effective size boss", function() _G.MSUF.Castbars.Anchors.ApplyCastbarEffectiveSizeUnit("boss") end))
+    Add(Run(world, "effective size arena", function() _G.MSUF.Castbars.Anchors.ApplyCastbarEffectiveSizeUnit("arena") end))
 
     general.bossCastbarMatchWidth = "unitframe"
     general.arenaCastbarMatchWidth = "unitframe"
+    world.ns.Castbars.Config.Invalidate()
     Add(Run(world, "width source boss", function() _G.MSUF_UpdateCastbarWidthSourceSync(general, "boss") end))
     Add(Run(world, "width source arena", function() _G.MSUF_UpdateCastbarWidthSourceSync(general, "arena") end))
     Add(Run(world, "width source resize", function()
@@ -249,6 +250,7 @@ local function Scenario(arenaSlots)
     end))
     general.bossCastbarMatchWidth = nil
     general.arenaCastbarMatchWidth = nil
+    world.ns.Castbars.Config.Invalidate()
 
     -- A custom target-name colour makes the preview recolour observable.
     _G.MSUF_GetCastbarTargetNameColor = function() return 0.25, 0.5, 0.75, true end
@@ -262,14 +264,14 @@ local function Scenario(arenaSlots)
     Add(Run(world, "classic spark arena", function() _G.MSUF_ApplyCastbarVisualsForUnit("arena") end))
 
     Add(Run(world, "frame layer", function()
-        for index = 1, 5 do _G.MSUF_ApplyCastbarFrameLayer(_G["MSUF_BossCastbar" .. index], general, "boss") end
-        for index = 1, arenaSlots do _G.MSUF_ApplyCastbarFrameLayer(_G["MSUF_ArenaCastbar" .. index], general, "arena") end
+        for index = 1, 5 do _G.MSUF.Castbars.Core.ApplyCastbarFrameLayer(_G["MSUF_BossCastbar" .. index], general, "boss") end
+        for index = 1, arenaSlots do _G.MSUF.Castbars.Core.ApplyCastbarFrameLayer(_G["MSUF_ArenaCastbar" .. index], general, "arena") end
         for index = 2, 5 do
-            _G.MSUF_ApplyCastbarFrameLayer(_G["MSUF_BossCastbarPreview" .. index], general, "boss")
+            _G.MSUF.Castbars.Core.ApplyCastbarFrameLayer(_G["MSUF_BossCastbarPreview" .. index], general, "boss")
         end
-        _G.MSUF_ApplyCastbarFrameLayer(_G.MSUF_BossCastbarPreview, general, "boss")
+        _G.MSUF.Castbars.Core.ApplyCastbarFrameLayer(_G.MSUF.Castbars.Frames.Get("bossPreview"), general, "boss")
         for index = 1, arenaSlots do
-            _G.MSUF_ApplyCastbarFrameLayer(_G["MSUF_ArenaCastbarPreview" .. index], general, "arena")
+            _G.MSUF.Castbars.Core.ApplyCastbarFrameLayer(_G["MSUF_ArenaCastbarPreview" .. index], general, "arena")
         end
     end))
 end

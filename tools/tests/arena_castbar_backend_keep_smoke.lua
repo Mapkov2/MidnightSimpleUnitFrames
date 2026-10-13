@@ -87,6 +87,8 @@ local function Load(pool, flavor, general)
         env[name] = value
         return value
     end
+    local fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
+    fixture.Attach(root, ns, loadfile, env)
     ok, message = world:LoadFile(CORE .. "Castbars/MSUF_Castbars_Backend.lua", ADDON, ns)
     Check(ok, flavor .. ": Castbars/MSUF_Castbars_Backend.lua failed: " .. tostring(message))
 
@@ -114,11 +116,16 @@ local function Load(pool, flavor, general)
     ns.Castbars.UnitCastEvents = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP" }
 
     -- Both descriptors are built by the shared pool module, which loads first.
+    ns.Castbars.Driver.CreateCastBar = env.MSUF_CreateCastBar
+    ns.Castbars.Backend.SetCastbarBackend = env.MSUF_SetCastbarBackend
+    ns.Castbars.Config.Compile()
     ok, message = world:LoadFile(CORE .. "Castbars/MSUF_CastbarPools.lua", ADDON, ns)
     Check(ok, flavor .. ": Castbars/MSUF_CastbarPools.lua failed: " .. tostring(message))
     ok, message = world:LoadFile(CORE .. pool.file, ADDON, ns)
+    fixture.Bind(ns, env)
     Check(ok, flavor .. ": " .. pool.file .. " failed: " .. tostring(message))
-    Check(type(env[pool.apply]) == "function", flavor .. ": " .. pool.apply .. " is not exported")
+    Check(type(ns.Castbars.Pools[pool.apply:gsub("^MSUF_", "")]) == "function",
+        flavor .. ": " .. pool.apply .. " has no namespace provider")
     rec.writes, rec.created = {}, 0
     return env, ns.Client, rec
 end
@@ -153,9 +160,9 @@ for _, pool in ipairs(POOLS) do
             local stored = Copy(general)
 
             -- Two refreshes: the profile must survive every one, not only the first.
-            env[pool.apply]()
-            env[pool.apply]()
-            local built = rawget(env, pool.pool)
+            env.MSUF.Castbars.Pools[pool.apply:gsub("^MSUF_", "")]()
+            env.MSUF.Castbars.Pools[pool.apply:gsub("^MSUF_", "")]()
+            local built = env.MSUF.Castbars.Pools[pool.pool:gsub("^MSUF_", "")]
 
             if keep then
                 Check(Same(general, stored), label .. ": a castbar refresh rewrote the profile to "

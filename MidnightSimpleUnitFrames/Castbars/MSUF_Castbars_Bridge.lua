@@ -1,15 +1,21 @@
---- Castbars/MSUF_Castbars_Bridge.lua
---- Glue between castbar backend policy, Blizzard frame suppression, and the
---- addon module lifecycle.
----
---- The actual castbar implementations live in Player/Driver/Boss files. This
---- bridge decides whether MSUF, Blizzard, or no castbar owns each unit and
---- exposes stable globals for older code paths.
+-- Backend ownership, Blizzard frame suppression and the castbar module lifecycle.
+-- Player, Driver and Pools own the cast implementations.
 
 local _, ns = ...
-ns = ns or _G.MSUF_NS or {}
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_Castbars_Bridge.lua").Castbars
+local Config = Castbars.Config
+local Anchors = Castbars.Anchors
+local Backend = Castbars.Backend
+local Bridge = Castbars.Bridge
+local ChannelTicks = Castbars.ChannelTicks
+local Driver = Castbars.Driver
+local FocusDriver = Castbars.FocusDriver
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local Manager = Castbars.Manager
+local PublicAPI = Castbars.PublicAPI
 
-local ExportPublic = ns.ExportPublic
+local Publish = PublicAPI.Publish
 
 ns.UF = ns.UF or {}
 
@@ -18,11 +24,11 @@ local function GeneralDB()
         _G.MSUF_EnsureDB()
     end
 
-    return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    return (Config.Read().general) or {}
 end
 
 local function GetBackend(unit)
-    return ns.MSUF_CastbarBackend.Resolve(unit)
+    return Backend.Resolve(unit, Config.Read().general)
 end
 
 local function ShouldUseMSUF(unit)
@@ -33,13 +39,13 @@ local function ShouldUseBlizzard(unit)
     return unit == "player" and GetBackend(unit) == "BLIZZARD"
 end
 
-local IsCastbarEnabledForUnit = _G.MSUF_IsCastbarEnabledForUnit
+local IsCastbarEnabledForUnit = Bridge.IsCastbarEnabledForUnit
 if type(IsCastbarEnabledForUnit) ~= "function" then
     IsCastbarEnabledForUnit = function(unit)
         return ShouldUseMSUF(unit)
     end
 end
-ExportPublic("MSUF_IsCastbarEnabledForUnit", IsCastbarEnabledForUnit)
+Bridge.IsCastbarEnabledForUnit = IsCastbarEnabledForUnit
 
 --- Reversible ownership for Blizzard's player castbar. PetCastingBarFrame is
 --- owned by Blizzard's PetFrame lifecycle and must stay outside this bridge;
@@ -224,7 +230,8 @@ end
 local function SuppressBlizzardPlayerCastbars()
     return NativeOwner:Apply()
 end
-ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
+Bridge.SuppressBlizzardPlayerCastbars = SuppressBlizzardPlayerCastbars
+Publish("MSUF_SuppressBlizzardPlayerCastbars", Bridge.SuppressBlizzardPlayerCastbars)
 
 local SyncBlizzardCastbarEvents
 eventFrame = CreateFrame("Frame")
@@ -261,29 +268,29 @@ end
 -- that default asked for; PLAYER_LOGIN resyncs them from the saved profile.
 RegisterOwnershipEvents()
 
-local AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled
+local AreAnyCastbarsEnabled = Bridge.AreAnyCastbarsEnabled
 if type(AreAnyCastbarsEnabled) ~= "function" then
     AreAnyCastbarsEnabled = function()
         if ShouldUseMSUF("player") or ShouldUseMSUF("target") or ShouldUseMSUF("focus") then
             return true
         end
 
-        if ShouldUseMSUF("boss") and not (_G.MSUF_DB and _G.MSUF_DB.boss and _G.MSUF_DB.boss.enabled == false) then
+        if ShouldUseMSUF("boss") and not (Config.Read() and Config.Read().boss and Config.Read().boss.enabled == false) then
             return true
         end
 
-        if ShouldUseMSUF("arena") and not (_G.MSUF_DB and _G.MSUF_DB.arena and _G.MSUF_DB.arena.enabled == false) then
+        if ShouldUseMSUF("arena") and not (Config.Read() and Config.Read().arena and Config.Read().arena.enabled == false) then
             return true
         end
 
         local general = GeneralDB()
         return general.enableFocusKickIcon == true
-            and not (_G.MSUF_DB and _G.MSUF_DB.focus and _G.MSUF_DB.focus.enabled == false)
+            and not (Config.Read() and Config.Read().focus and Config.Read().focus.enabled == false)
     end
 end
-ExportPublic("MSUF_AreAnyCastbarsEnabled", AreAnyCastbarsEnabled)
+Bridge.AreAnyCastbarsEnabled = AreAnyCastbarsEnabled
 
-local CastbarsForceHideAll = _G.MSUF_Castbars_ForceHideAll
+local CastbarsForceHideAll = Bridge.Castbars_ForceHideAll
 if type(CastbarsForceHideAll) ~= "function" then
     CastbarsForceHideAll = function()
         local function Hide(frame)
@@ -292,10 +299,9 @@ if type(CastbarsForceHideAll) ~= "function" then
             end
         end
 
-        Hide(_G.MSUF_PlayerCastBar)
-        Hide(_G.MSUF_PlayerCastbar)
-        Hide(_G.MSUF_TargetCastbar)
-        Hide(_G.MSUF_FocusCastbar)
+        Hide(Frames.player)
+        Hide(Frames.target)
+        Hide(Frames.focus)
 
         -- Boss and arena: every built pool (MSUF_CastbarPools.lua).
         local pools = ns.Castbars and ns.Castbars.Pools
@@ -310,16 +316,17 @@ if type(CastbarsForceHideAll) ~= "function" then
         end
     end
 end
-ExportPublic("MSUF_Castbars_ForceHideAll", CastbarsForceHideAll)
+Bridge.Castbars_ForceHideAll = CastbarsForceHideAll
 
 --- One refresh entry for menus/profile changes. It syncs legacy backend flags,
 --- applies ownership changes, and hides stale frames if no castbar feature is on.
-local CastbarsOnSettingsChanged = _G.MSUF_Castbars_OnSettingsChanged
+local CastbarsOnSettingsChanged = Bridge.Castbars_OnSettingsChanged
 if type(CastbarsOnSettingsChanged) ~= "function" then
-    CastbarsOnSettingsChanged = function()
-        local syncBackend = _G.MSUF_SyncCastbarBackendLegacyFlags
+    CastbarsOnSettingsChanged = function(_, current)
+        if not current then Config.Invalidate() end
+        local syncBackend = Backend.SyncCastbarBackendLegacyFlags
         if type(syncBackend) == "function" then
-            syncBackend(GeneralDB())
+            syncBackend(Config.Source(true).general)
         end
 
         SyncBlizzardCastbarEvents()
@@ -327,16 +334,16 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
         -- The castbar files below load after this one, before any settings
         -- change: the focus kick state driver, the castbar driver and the
         -- interrupt-ready indicator.
-        _G.MSUF_FocusKickDriver_ForceUpdate()
-        _G.MSUF_CastbarDriver_SyncLifecycle(true)
-        _G.MSUF_KickReady_RefreshAll()
+        FocusDriver.FocusKickDriver_ForceUpdate()
+        Driver.CastbarDriver_SyncLifecycle(true)
+        KickReady.KickReady_RefreshAll(true)
 
-        local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+        local applyPlayerState = Manager.PlayerCastbar_ApplyBackendState
         if type(applyPlayerState) == "function" then
             applyPlayerState()
         end
 
-        local applyUnitState = _G.MSUF_CastbarDriver_ApplyBackendState
+        local applyUnitState = Driver.CastbarDriver_ApplyBackendState
         if type(applyUnitState) == "function" then
             applyUnitState("target")
             applyUnitState("focus")
@@ -350,15 +357,16 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
         end
 
         -- Castbars/MSUF_CastbarAnchors.lua and _ChannelTicks.lua (after this file).
-        _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
-        _G.MSUF_ApplyPlayerChannelTickMarkers()
+        Anchors.UpdateCastbarWidthSourceSync(GeneralDB())
+        ChannelTicks.ApplyPlayerChannelTickMarkers()
 
         if not AreAnyCastbarsEnabled() then
             CastbarsForceHideAll()
         end
     end
 end
-ExportPublic("MSUF_Castbars_OnSettingsChanged", CastbarsOnSettingsChanged)
+Bridge.Castbars_OnSettingsChanged = CastbarsOnSettingsChanged
+Publish("MSUF_Castbars_OnSettingsChanged", Bridge.Castbars_OnSettingsChanged)
 
 local function RunNextFrame(callback)
     if type(callback) ~= "function" then
@@ -368,11 +376,11 @@ local function RunNextFrame(callback)
     C_Timer.After(0, callback)
 end
 
-local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame
+local CastbarsRunNextFrame = Bridge.Castbars_RunNextFrame
 if type(CastbarsRunNextFrame) ~= "function" then
     CastbarsRunNextFrame = RunNextFrame
 end
-ExportPublic("MSUF_Castbars_RunNextFrame", CastbarsRunNextFrame)
+Bridge.Castbars_RunNextFrame = CastbarsRunNextFrame
 
 --- Module registration lets the kernel disable/shutdown castbars without
 --- knowing about individual player/target/focus/boss implementation files.
@@ -394,7 +402,7 @@ if type(registerModule) == "function" then
         end,
         RefreshSettings = function(_, reason)
             CastbarsOnSettingsChanged(reason or "module_refresh")
-            _G.MSUF_ApplyPlayerChannelTickMarkers()
+            ChannelTicks.ApplyPlayerChannelTickMarkers()
         end,
     })
 end

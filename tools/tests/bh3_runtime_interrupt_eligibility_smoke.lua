@@ -11,6 +11,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local REBUKE, AVENGERS_SHIELD = 96231, 31935
 local classToken, knownSpells, petSpells, usable, power, reads = "PRIEST", {}, {}, true, false, 0
@@ -111,6 +112,7 @@ _G.C_Spell.IsSpellUsable = function() return usable, power end
 local K = ns.KickReady
 K.Register("audit", function() end)
 _G.MSUF_DB.general.kickReadyShowNameplates = true
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 _G.MSUF_KickReady_RefreshAll()
 assert(K.SlotCount() == 0, "unlearned Silence appears ready")
 assert(events.SPELLS_CHANGED, "learned spell events are not subscribed")

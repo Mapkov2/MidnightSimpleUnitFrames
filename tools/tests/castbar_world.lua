@@ -35,6 +35,9 @@ end
 local BASE_FILES = {
     ["MSUF_Require.lua"] = true,
     ["MSUF_Scheduler.lua"] = true,
+    ["MSUF_Castbars_PublicAPI.lua"] = true,
+    ["MSUF_Castbars_Backend.lua"] = true,
+    ["MSUF_CastbarConfig.lua"] = true,
     ["MSUF_CastbarUtils.lua"] = true,
     ["MSUF_CastbarRuntime.lua"] = true,
     ["MSUF_CastbarEngine.lua"] = true,
@@ -212,6 +215,7 @@ function World.New(root, backend, options)
     _G.UIParent = NewWidget("Frame")
     _G.GameFontHighlight = NewWidget("Font")
     _G.MSUF_DB = { general = {}, target = {}, focus = {}, boss = {}, arena = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
     local ns = {
         ExportPublic = function(name, value)
@@ -231,6 +235,7 @@ function World.New(root, backend, options)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
     _G.MSUF = previousMSUF
     ns.Util = utilityNS.Util
+    ns.Public = { GetCastbarTimeFormat = _G.MSUF_GetCastbarTimeFormat }
     world.ns = ns
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.
@@ -246,16 +251,27 @@ function World.New(root, backend, options)
     _G.MSUF_MAX_ARENA_FRAMES = options.arenaSlots or 3
     local extra = {}
     for index = 1, #(options.extra or {}) do extra[options.extra[index]] = true end
+    local Fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
     local loaded = {}
     for _, path in ipairs(manifest.Paths(root, options.flavor or World.FLAVOR)) do
         local name = path:match("([^/]+)$")
         local inCastbars = path:find("/Castbars/", 1, true) or path:find("/Kernel/", 1, true)
         if inCastbars and (BASE_FILES[name] or extra[name] or (options.pools and IsPoolFile(name))) then
             assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+            if name == "MSUF_Castbars_PublicAPI.lua" then Fixture.Seed(ns) end
+            if ns.Castbars then Fixture.Bind(ns) end
             loaded[name] = true
         end
     end
     for name in pairs(BASE_FILES) do assert(loaded[name], "castbar world could not load " .. name) end
+    ns.Castbars.Config.Compile()
+    local register = ns.Castbars.Frames.Register
+    ns.Castbars.Frames.Register = function(...)
+        local frame = register(...)
+        Fixture.Bind(ns)
+        return frame
+    end
+    ns._castbarFixtureAttached = true
     world.loaded = loaded
     assert(type(_G.MSUF_ScheduleAfter) == "function", "Kernel scheduler did not load")
     assert((backend == "signal") == (ns.Scheduler.signalMap ~= false),
@@ -329,7 +345,7 @@ end
 -- A target or focus driver castbar with the regions
 -- MSUF_BuildCastbarFrameElements would have built, and a completion log.
 function World:Driver(unit)
-    local frame = assert(_G.MSUF_CreateCastBar("MSUF_" .. unit .. "SmokeCastBar", unit), "driver castbar missing")
+    local frame = assert(_G.MSUF.Castbars.Driver.CreateCastBar("MSUF_" .. unit .. "SmokeCastBar", unit), "driver castbar missing")
     frame.statusBar = self.NewWidget("StatusBar")
     frame.castText = self.NewWidget("FontString")
     frame.completedAt = {}

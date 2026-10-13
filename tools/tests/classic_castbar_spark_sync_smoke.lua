@@ -32,7 +32,7 @@ local function General() return env.MSUF_DB.general end
 General().castbarShowSpark, General().castbarSparkOverflow, General().castbarOutlineThickness = true, false, 3
 
 local function Spark(path)
-    local frame = env.MSUF_TargetCastbar or env.MSUF_TargetCastBar
+    local frame = env.MSUF.Castbars.Frames.Get("target") or env.MSUF.Castbars.Frames.Get("target")
     Check(frame and frame.statusBar and frame.spark, path .. ": the target castbar has no spark")
     local inner, outer = frame.statusBar:GetHeight(), frame:GetHeight()
     Check(inner and outer and inner < outer, path .. ": the outline did not inset the status bar")

@@ -1,4 +1,3 @@
---- Castbars/MSUF_FocusKick_StateDriver.lua
 --- Focus-kick ownership subscriber.
 ---
 --- The regular focus castbar driver already owns the complete spellcast event
@@ -8,9 +7,15 @@
 
 local G = _G
 local _, ns = ...
-ns = ns or G.MSUF_NS or {}
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_FocusKick_StateDriver.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local Engine = Castbars.Engine
+local FocusDriver = Castbars.FocusDriver
+local FocusKick = Castbars.FocusKick
+local Frames = Castbars.Frames
 
-G.MSUF_FocusKickUseEngineDriver = true
+FocusDriver.FocusKickUseEngineDriver = true
 
 local refreshQueued = false
 local subscribed = false
@@ -18,32 +23,22 @@ local pendingState
 local pendingStateSet = false
 local OnEngineState
 
-local function Engine()
-    local engine = ns.MSUF_CastbarEngine
-    if engine then return engine end
-    local getter = G.MSUF_GetCastbarEngine
-    return type(getter) == "function" and getter() or nil
+local function GetEngine()
+    return Engine
 end
 
 local function FocusKickEnabled()
-    local db = G.MSUF_DB
-    if not db or not db.general then return false end
-    if db.focus and db.focus.enabled == false then return false end
-
-    local shouldUseMSUF = G.MSUF_ShouldUseMSUFCastbar
-    if type(shouldUseMSUF) == "function" and not shouldUseMSUF("focus", db.general) then
-        return false
-    end
-    return db.general.enableFocusKickIcon == true
+    local record = Config.Read("focus")
+    return record.enabled and record.unit.enabled ~= false and record.general.enableFocusKickIcon == true
 end
 
 local function FocusKickShowsCastbar()
-    local db = G.MSUF_DB
+    local db = Config.Read()
     return db and db.general and db.general.focusKickShowCastbar == true
 end
 
 local function SetFocusCastbarSuppressed(suppressed)
-    local focusCastbar = G.MSUF_FocusCastBar or G.MSUF_FocusCastbar
+    local focusCastbar = Frames.focus
     if not (focusCastbar and focusCastbar.SetAlpha) then return end
 
     focusCastbar._msufFocusKickSuppressed = suppressed and true or nil
@@ -57,16 +52,16 @@ local function SetFocusCastbarSuppressed(suppressed)
 end
 
 local function EnsureFocusKickUI()
-    if G.__MSUF_FocusKickUIInit or type(G.MSUF_InitFocusKickIcon) ~= "function" then return end
+    if G.__MSUF_FocusKickUIInit or type(FocusKick.InitFocusKickIcon) ~= "function" then return end
     G.__MSUF_FocusKickUIInit = true
-    G.MSUF_InitFocusKickIcon()
+    FocusKick.InitFocusKickIcon()
 end
 
 local function SetSubscribed(enabled)
     enabled = enabled and true or false
     if subscribed == enabled then return end
 
-    local engine = Engine()
+    local engine = GetEngine()
     if not engine then return end
     if enabled and type(engine.Subscribe) == "function" then
         subscribed = engine:Subscribe("focus", OnEngineState) == true
@@ -81,21 +76,21 @@ local function ApplyState(state, stateProvided)
     SetSubscribed(enabled)
     if not enabled then
         SetFocusCastbarSuppressed(false)
-        if type(G.MSUF_FocusKick_ApplyCastState) == "function" then
-            G.MSUF_FocusKick_ApplyCastState(nil)
-        elseif G.MSUF_FocusKickIcon and G.MSUF_FocusKickIcon.Hide then
-            G.MSUF_FocusKickIcon:Hide()
+        if type(FocusKick.FocusKick_ApplyCastState) == "function" then
+            FocusKick.FocusKick_ApplyCastState(nil)
+        elseif Frames.Get("focusKick") and Frames.Get("focusKick").Hide then
+            Frames.Get("focusKick"):Hide()
         end
         return
     end
 
     EnsureFocusKickUI()
     SetFocusCastbarSuppressed(not FocusKickShowsCastbar())
-    if not stateProvided and state == nil and type(G.MSUF_BuildCastState) == "function" then
-        state = G.MSUF_BuildCastState("focus")
+    if not stateProvided and state == nil and type(Engine.BuildCastState) == "function" then
+        state = Engine.BuildCastState("focus")
     end
-    if type(G.MSUF_FocusKick_ApplyCastState) == "function" then
-        G.MSUF_FocusKick_ApplyCastState(state)
+    if type(FocusKick.FocusKick_ApplyCastState) == "function" then
+        FocusKick.FocusKick_ApplyCastState(state)
     end
 end
 
@@ -122,13 +117,13 @@ OnEngineState = function(state, event)
         return
     end
     if event == "UNIT_SPELLCAST_INTERRUPTED"
-        and type(G.MSUF_FocusKick_PlayInterruptFeedback) == "function" then
-        G.MSUF_FocusKick_PlayInterruptFeedback()
+        and type(FocusKick.FocusKick_PlayInterruptFeedback) == "function" then
+        FocusKick.FocusKick_PlayInterruptFeedback()
     end
     QueueRefresh(state, true)
 end
 
-G.MSUF_FocusKickDriver_ForceUpdate = function()
+FocusDriver.FocusKickDriver_ForceUpdate = function()
     local enabled = FocusKickEnabled()
     SetSubscribed(enabled)
     if not enabled then
@@ -147,3 +142,5 @@ end
 -- unit frame spawn at PLAYER_LOGIN (Factory.SpawnAll) runs
 -- MSUF_FocusKickDriver_ForceUpdate with the saved profile, and every castbar
 -- settings change after it does too (MSUF_Castbars_OnSettingsChanged).
+
+Castbars.PublicAPI.Publish("MSUF_FocusKickDriver_ForceUpdate", FocusDriver.FocusKickDriver_ForceUpdate)

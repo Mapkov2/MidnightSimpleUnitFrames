@@ -495,6 +495,7 @@ local function ApplyCastbarDragPosition(d, centerX, centerY, uiScale)
 
     g[d.castbarXKey] = nextX
     g[d.castbarYKey] = nextY
+    MSUF.Castbars.Config.Invalidate()
 
     if not MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(d.castbarUnit) then
         MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)

@@ -102,7 +102,9 @@ Shell\EditMode\MSUF_EditMode.xml
 # ---------------------------------------------------------------
 # RUNTIME SERVICES (pre-unitframe engine)
 # ---------------------------------------------------------------
+Castbars\MSUF_Castbars_PublicAPI.lua
 Castbars\MSUF_Castbars_Backend.lua
+Castbars\MSUF_CastbarConfig.lua
 Castbars\MSUF_Castbars_Bridge.lua
 Shell\MSUF_MinimapButton.lua
 Shell\MSUF_AddonCompartment.lua

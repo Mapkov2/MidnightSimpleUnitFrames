@@ -236,7 +236,8 @@ def complete_scan(tool):
             continue
         listed.append(os.path.join(ROOT, rel))
         literals.update(EXPORT_LITERAL.findall(tool.strip_comments(tool.read_text(os.path.join(ROOT, rel)))))
-    expect(len(literals) > 800, "only %d ExportPublic literals found; the scan root is wrong" % len(literals))
+    expect({"MSUF_DB", "MSUF_ApplyAllCastbarsAndSync", "MSUF_GetFontPath"}.issubset(literals),
+           "the scan root lost its profile, castbar and font export anchors")
     lost = sorted(name for name in literals if name not in exports and name not in tool.FOREIGN_GLOBALS)
     expect(not lost, "the inventory misses %d ExportPublic names: %s" % (len(lost), ", ".join(lost[:12])))
     luac = find_luac()

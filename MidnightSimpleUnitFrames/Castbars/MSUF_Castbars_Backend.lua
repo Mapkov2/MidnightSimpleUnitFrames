@@ -1,4 +1,3 @@
---- Castbars/MSUF_Castbars_Backend.lua
 --- Backend policy for each castbar unit.
 ---
 --- Public settings still include older `enable*Castbar` booleans, while newer
@@ -7,11 +6,13 @@
 --- continue to agree.
 
 local _, ns = ...
-ns = ns or _G.MSUF_NS or {}
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_Castbars_Backend.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local PublicAPI = Castbars.PublicAPI
 
-local ExportPublic = ns.ExportPublic
+local Publish = PublicAPI.Publish
 
-local Backend = {}
 ns.MSUF_CastbarBackend = Backend
 ns.Castbars = ns.Castbars or {}
 ns.Castbars.Backend = Backend
@@ -72,7 +73,7 @@ local function ResolveGeneralDB(general)
         return general
     end
 
-    return _G.MSUF_DB and _G.MSUF_DB.general or nil
+    return Config.Source() and Config.Source().general or nil
 end
 
 function Backend.Normalize(value)
@@ -160,9 +161,11 @@ function Backend.Get(unit, general)
     local backend = Backend.Resolve(unit, general)
     local backendKey = BACKEND_KEYS[unit]
     local legacyEnableKey = LEGACY_ENABLE_KEYS[unit]
-    if general and backendKey then
+    if general and backendKey
+        and (general[backendKey] ~= backend or general[legacyEnableKey] ~= (backend == "MSUF")) then
         general[backendKey] = backend
         general[legacyEnableKey] = backend == "MSUF"
+        Config.Invalidate()
     end
     return backend
 end
@@ -181,8 +184,11 @@ function Backend.Set(unit, value, general)
     end
 
     local backend = Backend.NormalizeForUnit(unit, value) or "MSUF"
-    general[backendKey] = backend
-    general[legacyEnableKey] = backend == "MSUF"
+    if general[backendKey] ~= backend or general[legacyEnableKey] ~= (backend == "MSUF") then
+        general[backendKey] = backend
+        general[legacyEnableKey] = backend == "MSUF"
+        Config.Invalidate()
+    end
     return backend
 end
 
@@ -192,6 +198,16 @@ function Backend.Sync(general)
         return nil
     end
 
+    local previous = Config.DB.general
+    if general == Config.sourceGeneral and previous then
+        for unit, key in pairs(BACKEND_KEYS) do
+            local enableKey = LEGACY_ENABLE_KEYS[unit]
+            if general[key] == previous[key] and general[enableKey] ~= previous[enableKey] then
+                local disabled = BLIZZARD_SUPPORTED_UNITS[unit] and "BLIZZARD" or "HIDE"
+                Backend.Set(unit, general[enableKey] ~= false and "MSUF" or disabled, general)
+            end
+        end
+    end
     Backend.Get("player", general)
     Backend.Get("target", general)
     Backend.Get("focus", general)
@@ -212,10 +228,15 @@ function Backend.IsHide(unit, general)
     return Backend.Resolve(unit, general) == "HIDE"
 end
 
-ExportPublic("MSUF_NormalizeCastbarBackend", Backend.Normalize)
-ExportPublic("MSUF_NormalizeCastbarBackendForUnit", Backend.NormalizeForUnit)
-ExportPublic("MSUF_GetCastbarBackend", Backend.Get)
-ExportPublic("MSUF_SetCastbarBackend", Backend.Set)
-ExportPublic("MSUF_SyncCastbarBackendLegacyFlags", Backend.Sync)
-ExportPublic("MSUF_ShouldUseMSUFCastbar", Backend.IsMSUF)
-ExportPublic("MSUF_ShouldUseBlizzardCastbar", Backend.IsBlizzard)
+Backend.NormalizeCastbarBackend = Backend.Normalize
+Publish("MSUF_NormalizeCastbarBackend", Backend.NormalizeCastbarBackend)
+Backend.NormalizeCastbarBackendForUnit = Backend.NormalizeForUnit
+Publish("MSUF_NormalizeCastbarBackendForUnit", Backend.NormalizeCastbarBackendForUnit)
+Backend.GetCastbarBackend = Backend.Get
+Publish("MSUF_GetCastbarBackend", Backend.GetCastbarBackend)
+Backend.SetCastbarBackend = Backend.Set
+Publish("MSUF_SetCastbarBackend", Backend.SetCastbarBackend)
+Backend.SyncCastbarBackendLegacyFlags = Backend.Sync
+Backend.ShouldUseMSUFCastbar = Backend.IsMSUF
+Publish("MSUF_ShouldUseMSUFCastbar", Backend.ShouldUseMSUFCastbar)
+Backend.ShouldUseBlizzardCastbar = Backend.IsBlizzard

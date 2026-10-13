@@ -860,8 +860,10 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
         if result.castbarRequested and result.castbarSupported then
             dst.showInterrupt = src.showInterrupt
             dst.showInterruptSource = src.showInterruptSource
+            MSUF.Castbars.Config.Invalidate()
             if CopyCastbar(g, srcKey, dstKey) then
                 result.castbarApplied = true
+                MSUF.Castbars.Config.Invalidate()
                 _G.MSUF_UpdateCastbarWidthSourceSync(g, dstKey)
             end
         end

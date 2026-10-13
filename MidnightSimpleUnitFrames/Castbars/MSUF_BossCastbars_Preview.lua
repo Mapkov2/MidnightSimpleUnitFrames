@@ -1,4 +1,3 @@
---- Castbars/MSUF_BossCastbars_Preview.lua
 --- Edit/menu previews for boss castbars: the boss descriptor of
 --- MSUF_CastbarPoolPreviews.lua.
 ---
@@ -8,16 +7,16 @@
 --- stay as compatibility aliases of the pool preview module.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_BossCastbars_Preview.lua").Castbars
+local Pools = Castbars.Pools
+local Previews = Castbars.Previews
+local Publish = Castbars.PublicAPI.Publish
 
-local Pools = assert(MSUF.Castbars and MSUF.Castbars.Pools, "MSUF_CastbarPools.lua must load first")
 assert(Pools.DefinePreview, "MSUF_CastbarPoolPreviews.lua must load first")
 
 local api = Pools.DefinePreview(Pools.kinds.boss, {
     namePrefix = "MSUF_BossCastbarPreview",
     firstUnsuffixed = true,
-    publishFirstSlot = function(frame) ExportPublic("MSUF_BossCastbarPreview", frame) end,
     indexField = "_msufBossIndex",
     label = "Celestial Ruin",
     targetLabel = "Cleave Training Dummy",
@@ -26,6 +25,9 @@ local api = Pools.DefinePreview(Pools.kinds.boss, {
     testModeKey = "bossCastbarTestMode",
 }).api
 
-ExportPublic("MSUF_BeginBossCastbarPreviewBatch", api.BeginBatch)
-ExportPublic("MSUF_EndBossCastbarPreviewBatch", api.EndBatch)
-ExportPublic("MSUF_UpdateBossCastbarPreview", api.Update)
+Previews.BeginBossCastbarPreviewBatch = api.BeginBatch
+Publish("MSUF_BeginBossCastbarPreviewBatch", Previews.BeginBossCastbarPreviewBatch)
+Previews.EndBossCastbarPreviewBatch = api.EndBatch
+Publish("MSUF_EndBossCastbarPreviewBatch", Previews.EndBossCastbarPreviewBatch)
+Previews.UpdateBossCastbarPreview = api.Update
+Publish("MSUF_UpdateBossCastbarPreview", Previews.UpdateBossCastbarPreview)

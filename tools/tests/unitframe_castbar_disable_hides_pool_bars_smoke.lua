@@ -48,6 +48,8 @@ local function Publish(pool, global, prefix, count)
         _G[prefix .. index] = bars[index]
     end
     _G[global] = bars
+    MSUF.Castbars.Pools.live[pool.kind] = bars
+    for index, bar in ipairs(bars) do MSUF.Castbars.Frames.Register(pool.kind, index, bar) end
     Check(pool.Bar(1) == bars[1], pool.kind .. " pool Bar(1) does not return the published bar")
     return bars
 end
@@ -58,6 +60,7 @@ local bossBars = Publish(pools.boss, "MSUF_BossCastbars", "MSUF_BossCastbar", 5)
 local arenaBars = Publish(pools.arena, "MSUF_ArenaCastbars", "MSUF_ArenaCastbar", 2)
 local targetBar = NewBar("MSUF_TargetCastbar")
 _G.MSUF_TargetCastbar = targetBar
+MSUF.Castbars.Frames.Register("target", nil, targetBar)
 
 local function Reset()
     for _, bar in ipairs(bossBars) do bar.shown = true end

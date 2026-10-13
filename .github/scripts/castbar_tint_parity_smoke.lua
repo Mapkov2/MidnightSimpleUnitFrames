@@ -5,6 +5,7 @@
 --   <repo> <reference root>                 compare with a live reference source instead
 --   <repo> <reference root> record "<label>"  rewrite the golden file from that source
 local root = arg[1] or "."
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local Golden = assert(loadfile(root .. "/.github/scripts/golden_baseline.lua"))()
 local baseline, recording, label = Golden.Mode(arg)
 local function Forbidden() error("restricted tint value inspected by Lua") end
@@ -38,7 +39,8 @@ local function Load(source, native, secretAPI, colors)
   local ns={ExportPublic=function(name,value) exports[name]=value end}
   local file=source.."/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"
   assert(loadfile(file))("MidnightSimpleUnitFrames",ns)
-  local update=assert(exports.MSUF_Castbar_ApplyNonInterruptibleTint)
+  local update=assert(ns.Castbars and ns.Castbars.Utils.Castbar_ApplyNonInterruptibleTint
+    or exports.MSUF_Castbar_ApplyNonInterruptibleTint)
   local function Frame(booleanSink)
     local texture={}
     if booleanSink then

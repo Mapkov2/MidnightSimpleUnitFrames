@@ -108,6 +108,7 @@ do
     _G.MSUF_EnsureDB = function() _G.MSUF_DB = _G.MSUF_DB or { general = {} } end
     _G.MSUF_InstallGlobalScaleGate = function() end
     assert(loadfile(CORE .. "Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(CORE .. "Castbars/MSUF_Castbars_PublicAPI.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(CORE .. "Runtime/MSUF_UIScaleRuntime.lua"))("MidnightSimpleUnitFrames", MSUF)
 
     -- A pooled boss bar known only by its frame name (the pool table is not
@@ -119,6 +120,8 @@ do
     _G.MSUF_BossCastbar1 = tabled
     _G.MSUF_BossCastbars = { tabled }
     _G.MSUF_boss2CastBar = decoy
+    MSUF.Castbars.Frames.Register("boss", 3, named)
+    MSUF.Castbars.Frames.Register("boss", 1, tabled)
 
     _G.MSUF_ApplyMsufScale(0.8)
     Check(math.abs(tabled.scale - 0.8) < 1e-6, "the published boss pool bar was not scaled: " .. tabled.scale)

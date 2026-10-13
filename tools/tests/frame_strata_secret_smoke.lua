@@ -55,16 +55,16 @@ for _, flavor in ipairs({ "Mainline", "Forever", "TBC" }) do
     for _, unit in ipairs({ "player", "target", "boss", "arena" }) do
         castbar.unit = unit
         castbar.frameStrata = Secrets.New("string")
-        env.MSUF_ApplyCastbarFrameLayer(castbar, {}, unit)
+        ns.Castbars.Core.ApplyCastbarFrameLayer(castbar, {}, unit)
         assert(castbar.frameStrata == ((unit == "boss" or unit == "arena") and "HIGH" or "MEDIUM"),
             "secret castbar strata did not use its unit fallback")
     end
     anchor.frameStrata = "LOW"
     castbar.frameStrata = Secrets.New("string")
-    env.MSUF_ApplyCastbarFrameLayer(castbar, {}, "player")
+    ns.Castbars.Core.ApplyCastbarFrameLayer(castbar, {}, "player")
     assert(castbar.frameStrata == "LOW", "castbar did not share its public anchor strata")
     local before = setters
-    env.MSUF_ApplyCastbarFrameLayer(castbar, {}, "player")
+    ns.Castbars.Core.ApplyCastbarFrameLayer(castbar, {}, "player")
     assert(setters == before, "unchanged public strata caused a redundant write")
     local violations = stop()
     assert(#violations == 0, table.concat(violations, "\n"))

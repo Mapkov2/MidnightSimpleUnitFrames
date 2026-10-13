@@ -1,72 +1,26 @@
---- Castbars/MSUF_CastbarRuntime.lua
---- Applies normalized cast-state to visible castbar frames.
----
---- Runtime is the shared mutation layer: timer duration, reverse fill, icon/text,
---- registration with the castbar manager, interrupt visuals, and stop cleanup all
---- pass through here. Keep API reads in Engine/Driver and keep static frame
---- construction in Frames.
----
---- Frame-field contract. Fields the runtime writes on a castbar frame (all
---- cleared by Stop / ReleaseActive unless noted):
----   MSUF_castActive               a cast or channel is currently displayed
----   MSUF_durationObj              stable LuaDurationObject driving bar and text
----   MSUF_isChanneled              the active cast is a channel
----   MSUF_channelDirect            target/focus channel fed directly from events
----   MSUF_timerDriven              the client StatusBar timer owns the fill
----   _msufActiveDurationSeq/Type   sequence id and cast type of the applied cast
----   _msufStableDurationObj        per-frame duration container reused via Assign
----   _msufLastIncomingDuration     last duration object handed to StableDuration
----   _msufPlainEndTime/_msufRemaining/_msufPlainTotal
----                                 plain-number snapshot for Lua fallback paths
----   _msufDurationSnapshotUnsafe   duration is secret; no Lua snapshot exists
----   _msufCountsDown               bar value counts down (non-unified channel)
----   _msufTimerAssumeCountdown     timer-driven bar known to count down
----   _msufStripeReverseFill        reverse fill resolved for this cast
----   _msufPushbackMS               NeverSecret pushback delay captured per cast
----                                 (shared resolver) before the castText write
----   _msufCastbarWorkMask          WorkMask bits still owed to the Lua manager
----   _msufCastbarGlowTick          glow fade is part of the current work mask
----   _msufCastTimeEnabled/_msufCastTimeFormat/_msufCastTimeRev/_msufCastbarConfigMask
----                                 compiled cast-time settings for one revision
----   _msufLastTimeDecimal/_msufLastTimeTotalDecimal/_msufLastTimeFormat
----                                 last Lua time text written (duplicate skip)
----   _msufDurationTextBinding/_msufDurationTextConfigured/
----   _msufDurationTextFormat/_msufDurationTextDuration
----                                 native DurationTextBinding and its last config
----   _msufNativeTimeBound          native text binding is enabled on timeText
----   _msufNativeTextUnsafe         binding lacks a method; Lua time text instead
----   _msufNativeTimerUnsafe        no SetTimerDuration: manager drives only time text + completion (legacy casts: endTime Lua fill)
----   _msufNativeCompletionTimer/_msufNativeCompletionDeadline/
----   _msufNativeCompletionCallback completion deadline for native casts (a
----                                 Kernel-scheduler key: armed flag true/false,
----                                 deadline number/false, per-frame callback)
----   _msufNativeCompletionUnsafe   the duration turned unreadable; stay on the manager
----   The *Unsafe and armed/bound flags are false when clear, never nil: they
----   flip every cast, and a key cleared to nil is re-inserted (a table
----   regrowth once the collector has seen it) on the next cast.
----   _msufCastState/_msufCastPhase published cast-state table and phase
----   _msufHideToken                bumped to invalidate pending hide timers
----   _msufInUnregister             re-entrancy guard around Hide inside Stop
---- Cleared here but written elsewhere: hideTimer/succeededTimer (driver),
---- _msufFastText (manager), _msufLastSBValue (driver Lua fill),
---- _msufHardStopNoChannelSince (manager hard stop), MSUF_timerRangeSet,
---- _msufHardStopNoCastSince, castDuration, castElapsed (legacy). Read-only
---- here: _msufCastLifecycleOwned (driver/boss), _msufBarKey, _msufIsBossCastbar,
---- _msufTimeTextFollower, _msufForceLuaTimeTextFollower, _msufFocusKickSuppressed.
+--- Runtime applies normalized state; Engine/Driver own API reads, Frames construction.
+--- Reused timer/binding flags clear to false to avoid per-cast table regrowth.
+--- Full field ownership and teardown contract: Castbars/README.md.
 
 local _, ns = ...
-ns = ns or _G.MSUF_NS or {}
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_CastbarRuntime.lua").Castbars
+local Config = Castbars.Config
+local Driver = Castbars.Driver
+local Engine = Castbars.Engine
+local Manager = Castbars.Manager
+local PublicAPI = Castbars.PublicAPI
+local Runtime = Castbars.Runtime
+local Utils = Castbars.Utils
 
-local ExportPublic = ns.ExportPublic
+local Publish = PublicAPI.Publish
 -- Kernel/MSUF_Scheduler.lua loads first in every TOC. Its keyed deadlines
 -- allocate nothing after a key's first use; a C_Timer handle per cast did.
 local Scheduler = ns.Scheduler
 
-local Runtime = ns.MSUF_CastbarRuntime or {}
 ns.MSUF_CastbarRuntime = Runtime
 ns.Castbars = ns.Castbars or {}
 ns.Castbars.Runtime = Runtime
-ExportPublic("MSUF_CastbarRuntime", Runtime)
+Castbars.Runtime = Runtime
 
 -- File-level aliases for the per-cast/per-tick paths. GetTime,
 -- GetTimePreciseSec, C_Timer and issecretvalue deliberately stay late-bound in
@@ -163,7 +117,7 @@ end
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared OnUpdate teardown;
 -- harnesses that load this file standalone load Utils first.
-local DisableFrameOnUpdate = _G.MSUF_Castbar_DisableFrameOnUpdate
+local DisableFrameOnUpdate = Utils.Castbar_DisableFrameOnUpdate
 
 local function HideAfterManagerUnregister(frame, managerUnregistered)
     if not (frame and frame.Hide) then return end
@@ -211,20 +165,20 @@ end
 --- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper
 --- (secret/nan/inf -> nil, wrappers unwrapped). Harnesses that load Runtime
 --- standalone load Utils first.
-local PlainNumber = _G.MSUF_Castbar_PlainNumber
+local PlainNumber = Utils.Castbar_PlainNumber
 -- The same file owns the fill direction, the status-bar colour write, the
 -- interrupt shake and the empower teardown.
-local GetCastbarReverseFillForFrame = _G.MSUF_GetCastbarReverseFillForFrame
-local SetStatusBarColorIfChanged = _G.MSUF_SetStatusBarColorIfChanged
-local PlayCastbarShake = _G.MSUF_PlayCastbarShake
-local ClearEmpowerState = _G.MSUF_ClearEmpowerState
+local GetCastbarReverseFillForFrame = Utils.GetCastbarReverseFillForFrame
+local SetStatusBarColorIfChanged = Utils.SetStatusBarColorIfChanged
+local PlayCastbarShake = Utils.PlayCastbarShake
+local ClearEmpowerState = Utils.ClearEmpowerState
 
 --- The castbar manager (Castbars/MSUF_Castbars.lua) and the driver's time
 --- text load after this file, before any cast: resolved on first use.
 local FILE = "Castbars/MSUF_CastbarRuntime.lua"
 local RegisterCastbar, UpdateCastTimeText
 local function Register(frame)
-    RegisterCastbar = RegisterCastbar or ns.Require("MSUF_RegisterCastbar", FILE)
+    RegisterCastbar = RegisterCastbar or Manager.RegisterCastbar
     return RegisterCastbar(frame)
 end
 
@@ -479,14 +433,14 @@ function Runtime:DisableNativeTimeText(frame)
     DisableNativeTimeText(frame)
 end
 
-local CastTimeUnitKey = _G.MSUF_CastTimeUnitKey
+local CastTimeUnitKey = Utils.CastTimeUnitKey
 
 --- Compile settings shared by the text and manager paths.  DB reads are cold:
 --- one per castbar settings revision, not one per manager registration/tick.
 function Runtime:RefreshWorkConfig(frame, force)
     if not frame then return true, "CURRENT", 0 end
 
-    local revision = _G.MSUF__castTimeGlobalRev or 1
+    local revision = Config.revision
     if not force
         and frame._msufCastTimeRev == revision
         and frame._msufCastTimeEnabled ~= nil
@@ -495,27 +449,10 @@ function Runtime:RefreshWorkConfig(frame, force)
         return frame._msufCastTimeEnabled, frame._msufCastTimeFormat, frame._msufCastbarConfigMask
     end
 
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local unit = frame.unit
-    local enabled = true
-    if general then
-        if unit == "player" then
-            enabled = general.showPlayerCastTime ~= false
-        elseif unit == "target" then
-            enabled = general.showTargetCastTime ~= false
-        elseif unit == "focus" then
-            enabled = general.showFocusCastTime ~= false
-        elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
-            enabled = general.showBossCastTime ~= false
-        elseif frame._msufIsArenaCastbar or tostring(unit or ""):match("^arena%d+$") then
-            enabled = general.showArenaCastTime ~= false
-        end
-    end
-
-    local format = "CURRENT"
-    if general and type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        format = _G.MSUF_GetCastbarTimeFormat(CastTimeUnitKey(frame, unit), general) or format
-    end
+    local unit = CastTimeUnitKey(frame, frame.unit)
+    local record = Config.Read(unit)
+    local enabled = not record or record.timeEnabled
+    local format = record and record.timeFormat or "CURRENT"
 
     if frame._msufCastTimeFormat ~= format then
         frame._msufLastTimeDecimal = nil
@@ -523,7 +460,7 @@ function Runtime:RefreshWorkConfig(frame, force)
         frame._msufLastTimeFormat = nil
     end
 
-    local glowEnabled = general == nil or general.castbarShowGlow ~= false
+    local glowEnabled = not record or record.showGlow
     local configMask = glowEnabled and WORK_GLOW or 0
 
     frame._msufCastTimeEnabled = enabled and true or false
@@ -607,7 +544,7 @@ function Runtime:PrepareWork(frame)
     frame._msufCastbarWorkMask = mask
     frame._msufCastbarGlowTick = MaskHas(mask, WORK_GLOW) or nil
     if hadGlowTick and frame._msufCastbarGlowTick ~= true then
-        local resetGlow = _G.MSUF_ResetCastbarGlowFade
+        local resetGlow = Utils.ResetCastbarGlowFade
         if type(resetGlow) == "function" then resetGlow(frame) end
     end
     return mask
@@ -715,7 +652,7 @@ function Runtime:ReleaseActive(frame)
     if not frame then return end
 
     activeDurationFrames[frame] = nil
-    local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
+    local setLifecycleActive = Driver.Castbar_SetLifecycleActive
     if type(setLifecycleActive) == "function" then setLifecycleActive(frame, false) end
     self:DeactivateNative(frame)
     frame.MSUF_castActive = false
@@ -738,7 +675,7 @@ function Runtime:ReleaseActive(frame)
 end
 
 function Runtime:RefreshActiveWork()
-    local register = _G.MSUF_RegisterCastbar
+    local register = Manager.RegisterCastbar
     if type(register) ~= "function" then return end
 
     for frame in pairs(activeDurationFrames) do
@@ -755,7 +692,7 @@ local function SetText(frame, textKey, value)
         return
     end
 
-    local applyTexts = _G.MSUF_CB_ApplyTexts
+    local applyTexts = Utils.CB_ApplyTexts
     if type(applyTexts) == "function" then
         if textKey == "castText" then
             applyTexts(frame, nil, value or "", nil)
@@ -767,13 +704,13 @@ local function SetText(frame, textKey, value)
     end
 
     if textKey == "timeText" and frame._msufTimeTextFollower then
-        local syncFollower = _G.MSUF_Castbar_SyncTimeTextFollower
+        local syncFollower = Manager.Castbar_SyncTimeTextFollower
         if type(syncFollower) == "function" then syncFollower(frame) end
     end
 end
 
 local function UnifiedDirectionEnabled()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = Config.Read().general
     return general ~= nil and general.castbarUnifiedDirection == true
 end
 
@@ -781,7 +718,7 @@ end
 --- Lua fallback paths through MSUF_GetCastbarCountsDown so both renderings of a
 --- channel agree.
 local function CountsDown(frame, isChanneled)
-    local resolver = _G.MSUF_GetCastbarCountsDown
+    local resolver = Utils.GetCastbarCountsDown
     if type(resolver) == "function" then
         return resolver(frame, isChanneled and true or false) == true
     end
@@ -992,7 +929,7 @@ function Runtime:ApplyActive(frame, state, options)
     -- composes the "+x.x" suffix, so a pushed-back cast carries the suffix on
     -- its first paint. The shared resolver passes a client delayTimeMS through;
     -- nil when the state carries no delay.
-    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    local resolvePushback = Utils.Castbar_ResolvePushbackMS
     if type(resolvePushback) == "function" then
         frame._msufPushbackMS = resolvePushback(frame, state)
     else
@@ -1052,7 +989,7 @@ function Runtime:ApplyActive(frame, state, options)
         and frame.timeText
         and frame._msufNativeTimeBound ~= true
     then
-        UpdateCastTimeText = UpdateCastTimeText or ns.Require("MSUF_UpdateCastTimeText_FromStatusBar", FILE)
+        UpdateCastTimeText = UpdateCastTimeText or Driver.UpdateCastTimeText_FromStatusBar
         UpdateCastTimeText(frame)
     end
 
@@ -1094,7 +1031,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
 
     local red, green, blue = colorR, colorG, colorB
     if not (red and green and blue) then
-        local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
+        local resolveColor = Utils.ResolveInterruptFeedbackCastColor
         if type(resolveColor) == "function" then
             red, green, blue = resolveColor()
         end
@@ -1163,9 +1100,9 @@ function Runtime:Stop(frame, reasonOrOptions)
 
     DisableFrameOnUpdate(frame)
     activeDurationFrames[frame] = nil
-    local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
+    local setLifecycleActive = Driver.Castbar_SetLifecycleActive
     if type(setLifecycleActive) == "function" then setLifecycleActive(frame, false) end
-    local unregisterCastbar = _G.MSUF_UnregisterCastbar
+    local unregisterCastbar = Manager.UnregisterCastbar
     local unregistered = type(unregisterCastbar) == "function"
     if unregistered then
         -- The manager owns native deactivation during unregister. Calling it
@@ -1261,7 +1198,7 @@ function Runtime:Stop(frame, reasonOrOptions)
 end
 
 function Runtime:BuildState(unit, previousState)
-    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    local engine = (Engine.GetCastbarEngine and Engine.GetCastbarEngine()) or nil
     if engine and engine.BuildState then
         return engine:BuildState(unit, previousState)
     end
@@ -1271,30 +1208,30 @@ end
 
 --- Compatibility globals for older castbar files. New code should call Runtime
 --- methods through ns when possible, but these exports keep load order flexible.
-ExportPublic("MSUF_ApplyTimerAndFill", function(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
+Runtime.ApplyTimerAndFill = function(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
     return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
-end)
+end
 
-ExportPublic("MSUF_ApplyCastbarTimerDirection", function(statusBar, durationObj, reverseFill, isChanneled)
+Runtime.ApplyCastbarTimerDirection = function(statusBar, durationObj, reverseFill, isChanneled)
     return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
-end)
+end
 
-ExportPublic("MSUF_ClearCastbarTimerDuration", function(statusBar)
+Runtime.ClearCastbarTimerDuration = function(statusBar)
     return Runtime:ClearTimer(statusBar)
-end)
+end
 
-ExportPublic("MSUF_Castbar_ApplyActiveDuration", function(frame, state, options)
+Runtime.Castbar_ApplyActiveDuration = function(frame, state, options)
     return Runtime:ApplyActive(frame, state, options)
-end)
+end
 
-ExportPublic("MSUF_ApplyInterruptBarVisuals", function(frame, options)
+Runtime.ApplyInterruptBarVisuals = function(frame, options)
     return Runtime:ApplyInterrupt(frame, options)
-end)
+end
 
 -- Stop takes (frame, reason) where reason is a string or an options table;
 -- every caller passes a reason string, so the forwarder carries exactly that.
-ExportPublic("MSUF_CB_ResetStateOnStop", function(frame, reason)
+Runtime.CB_ResetStateOnStop = function(frame, reason)
     return Runtime:Stop(frame, reason)
-end)
+end
 
 -- Historical export name; the implementation lives in MSUF_CastbarUtils.lua.

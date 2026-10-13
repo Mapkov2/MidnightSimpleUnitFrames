@@ -1,3 +1,5 @@
+local root = arg[1] or "."
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 -- arena_unit_scope_smoke.lua
 -- Contract smoke for the dedicated arena1-3 unit-frame scope.
 -- Pins the registration surface a new indexed unit family must keep in step:
@@ -107,8 +109,8 @@ Check(anchors:find('"player", "target", "focus", "boss", "arena"', 1, true),
     "CASTBAR_UNITS no longer syncs the arena castbars")
 local arenaCastbars = Read("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua")
 for _, marker in ipairs({
-    'ExportPublic("MSUF_ApplyArenaCastbarPositionSetting", pool.ApplyPositionSetting)',
-    'ExportPublic("MSUF_ArenaCastbars_SyncLifecycle", pool.SyncLifecycle)',
+    'Publish("MSUF_ApplyArenaCastbarPositionSetting", Pools.ApplyArenaCastbarPositionSetting)',
+    'Pools.ArenaCastbars_SyncLifecycle = pool.SyncLifecycle',
     '"ARENA_OPPONENT_UPDATE"',
     '"ARENA_PREP_OPPONENT_SPECIALIZATIONS"',
     '"PVP_MATCH_STATE_CHANGED"',
@@ -157,6 +159,7 @@ end
 -- functions, each cut at its own `end`.
 local detailsChunk, detailsError = compile([[
 local MSUF = ...
+local Castbars = MSUF.Castbars
 local PREVIEW_UNITS = {}
 local NO_POOL_PREVIEWS = {}
 ]] .. Slice.Declarations(castbarPagePreview, {
@@ -300,8 +303,9 @@ local advancedColors = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/
 Check(advancedColors:find('SetControlEnabled(detailTargetColor, DetailUnit() ~= "player")', 1, true),
     "Advanced Colors disables the castbar target-name color for Arena castbars again")
 
-local AURAS_RUNTIME = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+local AURAS_RUNTIME = "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_CustomConfig.lua"
 local aurasRuntime = Read(AURAS_RUNTIME)
+    .. Read("MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_UnitConfig.lua")
 -- Reason: the three custom-scope normalizers the chunk returns.
 local auraScopeChunk, auraScopeError = compile(
     Slice.Declarations(aurasRuntime, {
@@ -552,8 +556,8 @@ local function ExerciseArenaCastbarPool(slots, expected)
         "MidnightSimpleUnitFrames", namespace)
     assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
         "MidnightSimpleUnitFrames", namespace)
-    _G.MSUF_ApplyArenaCastbarPositionSetting(true, true)
-    local pool = _G.MSUF_ArenaCastbars
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarPositionSetting(true, true)
+    local pool = _G.MSUF.Castbars.Pools.ArenaCastbars
     local label = tostring(slots)
     Check(type(pool) == "table" and #pool == expected and created == expected,
         "arena castbar pool for MSUF_MAX_ARENA_FRAMES=" .. label .. " did not build " .. expected .. " bars")
@@ -589,6 +593,9 @@ local function ExerciseArenaPreviewHide(slots, expected)
         "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     }) do
         assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
+    end
+    for index = 1, 6 do
+        namespace.Castbars.Frames.Register("arenaPreview", index, _G["MSUF_ArenaCastbarPreview" .. index])
     end
     namespace.Castbars.Pools.previews.arena:HideAll()
     for index = 1, 6 do

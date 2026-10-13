@@ -54,7 +54,7 @@ general.castbarTargetWidth, general.castbarTargetHeight = 333, 21
 
 -- Only the focus bar exists.
 local focus = world:Driver("focus")
-Check(_G.MSUF_FocusCastbar == focus and _G.MSUF_TargetCastbar == nil, "the fixture must build the focus bar only")
+Check(_G.MSUF.Castbars.Frames.focus == focus and _G.MSUF.Castbars.Frames.target == nil, "the fixture must build the focus bar only")
 local sizeCalls = 0
 for _, method in ipairs({ "SetWidth", "SetHeight", "SetSize" }) do
     local original = focus[method]
@@ -74,18 +74,18 @@ Check(focus.shown == true, "the target re-anchor hid the focus castbar (no targe
 -- 2. Both castbars are on: the target size pass without a target bar sizes nothing.
 owned = { target = true, focus = true }
 sizeCalls = 0
-local applied = _G.MSUF_ApplyCastbarEffectiveSizeUnit("target")
+local applied = _G.MSUF.Castbars.Anchors.ApplyCastbarEffectiveSizeUnit("target")
 Check(applied == false, "the target size pass without a target bar reported " .. tostring(applied))
 Check(sizeCalls == 0, "the target size pass resized the focus castbar " .. sizeCalls .. " time(s)")
 
 -- 3. The focus pass still reaches the focus bar.
 sizeCalls = 0
-Check(_G.MSUF_ApplyCastbarEffectiveSizeUnit("focus") == true, "the focus size pass found no focus bar")
+Check(_G.MSUF.Castbars.Anchors.ApplyCastbarEffectiveSizeUnit("focus") == true, "the focus size pass found no focus bar")
 Check(sizeCalls > 0, "the focus size pass did not resize the focus castbar")
 
 -- 4. With a target bar built, the target pass sizes that bar and not the focus bar.
 local target = world:Driver("target")
-Check(_G.MSUF_TargetCastbar == target, "the fixture must build the target bar")
+Check(_G.MSUF.Castbars.Frames.target == target, "the fixture must build the target bar")
 sizeCalls = 0
 local targetCalls = 0
 local original = target.SetWidth
@@ -93,7 +93,7 @@ target.SetWidth = function(self, ...)
     targetCalls = targetCalls + 1
     return original(self, ...)
 end
-Check(_G.MSUF_ApplyCastbarEffectiveSizeUnit("target") == true, "the target size pass found no target bar")
+Check(_G.MSUF.Castbars.Anchors.ApplyCastbarEffectiveSizeUnit("target") == true, "the target size pass found no target bar")
 Check(targetCalls > 0, "the target size pass did not resize the target castbar")
 Check(sizeCalls == 0, "the target size pass also resized the focus castbar")
 

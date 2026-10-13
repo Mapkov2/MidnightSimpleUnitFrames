@@ -10,6 +10,7 @@
 -- (Castbars/MSUF_CastbarPreviewEdit.lua). At scale 1.0 the offset delta stays
 -- the raw cursor delta. arg 1 = repo root.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local failures = {}
 local function Check(condition, message)
@@ -146,7 +147,7 @@ local function Drag(ratio, mode)
         MSUF_EM_UndoBeginChange = function() return true end
         MSUF_EM_UndoCommitChange = function() end
         castBar.SetClampedToScreen, castBar.SetFrameStrata, castBar.EnableMouse = function() end, function() end, function() end
-        MSUF_SetupCastbarPreviewEditHandlers(castBar, "player")
+        _G.MSUF.Castbars.PreviewEdit.SetupCastbarPreviewEditHandlers(castBar, "player")
         castBar.scripts.OnMouseDown(castBar, "LeftButton")
         cursorX, cursorY = startCX + MOVE_X, startCY + MOVE_Y
         castBar.scripts.OnUpdate(castBar, 0.06)

@@ -19,6 +19,7 @@
 --   lua .github/scripts/auras3_test_driver.lua tools/tests/arena_editmode_exit_restore_smoke.lua <repoRoot> [flavor|all] [scenario]
 
 local root = tostring((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/+$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 if root == "" then root = "." end
 local ONLY_FLAVOR = arg and arg[2]
 local ONLY_SCENARIO = arg and arg[3]

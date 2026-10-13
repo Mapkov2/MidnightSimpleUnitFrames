@@ -5,7 +5,7 @@ local function Check(id,f)
 end
 local function NewRuntime()
  local e=setmetatable({}, {__index=_G});e._G=e
- local ns={Client={},NumberFormat={Refresh=function()end},UF={DisableBlizzardFrames=function()end}}
+ local ns={Client={},Castbars={Config={Invalidate=function()end}},NumberFormat={Refresh=function()end},UF={DisableBlizzardFrames=function()end}}
  local function noop()end
  for _,name in ipairs({"MSUF_ApplyMsufScale","MSUF_TargetSoundDriver_ApplySetting","MSUF_NSRTNicknames_ApplySetting","MSUF_Grid2EditMode_SetEnabled","MSUF_DetailsEditMode_SetEnabled","MSUF_DominosEditMode_SetEnabled","MSUF_DandersEditMode_SetEnabled","MSUF_GF_InvalidateConfCache","MSUF_UFCore_NotifyConfigChanged","MSUF_ApplyModules","MSUF_GF_RebuildAll","MSUF_ClassPower_Apply","MSUF_ApplyPowerBarEmbedLayout_All","MSUF_Castbars_OnSettingsChanged","MSUF_ApplyAllCastbarsAndSync","MSUF_UpdateAllFonts_Immediate"}) do e[name]=noop end
  ns.Require=function()return noop end

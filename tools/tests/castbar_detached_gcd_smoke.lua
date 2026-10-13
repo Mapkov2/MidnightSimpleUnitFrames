@@ -1,4 +1,5 @@
 local root = assert(arg[1], "root required")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 -- Client contracts this fixture holds the module to:
 -- * PLAYER_REGEN_DISABLED is delivered before InCombatLockdown() turns true;
 --   UnitAffectingCombat("player") already answers true.
@@ -65,6 +66,7 @@ local function Load(client, spellAPI)
     UnitAffectingCombat = function(unit) return unit == "player" and affecting end
     MSUF_Castbar_PlainNumber = function(v) return type(v) == "number" and v or nil end
     MSUF_DB = { general = { showGCDBar = true, gcdBarDetached = true, gcdBarIdle = false } }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     duration = { GetRemainingDuration = function() return .9 end }
     C_Spell = spellAPI
     C_DurationUtil = { CreateDuration = function()
@@ -116,20 +118,21 @@ do
     Event("PLAYER_ENTERING_WORLD")
     assert(driver.events.UNIT_SPELLCAST_SUCCEEDED and not driver.events.PLAYER_REGEN_DISABLED)
     local mover = Mover()
-    assert(mover and mover.isEnabled() and not MSUF_DetachedGCDBar.shown)
-    local bar = MSUF_DetachedGCDBar
+    assert(mover and mover.isEnabled() and not _G.MSUF.Castbars.Frames.gcd.shown)
+    local bar = _G.MSUF.Castbars.Frames.gcd
     assert(bar.castText.font[1] == "castbar-font" and bar.castText.font[3] == "THICKOUTLINE",
         "the separate GCD bar ignores the castbar font")
     layoutWrites = 0
     Event("UNIT_SPELLCAST_SUCCEEDED", 123)
     assert(casts == 1 and bar.shown and bar.statusBar.bound == duration and bar.timeBound == duration,
         "detached GCD did not animate during a real player cast")
-    assert(not MSUF_PlayerCastbar.shown and #timers == 1, "separate GCD borrowed player frame or duplicated timers")
+    assert(not _G.MSUF.Castbars.Frames.player.shown and #timers == 1, "separate GCD borrowed player frame or duplicated timers")
     duration.expired = true
     timers[1].fn()
     assert(not bar.shown and bar.statusBar.bound ~= duration, "the finished GCD still drives the separate bar")
     assert(layoutWrites == 0, "an instant cast relaid the separate GCD bar out (" .. layoutWrites .. " writes)")
     MSUF_DB.general.gcdBarIdle = true; MSUF_GCDBar_RefreshLayout()
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     assert(bar.shown and bar.statusBar.value == 0, "idle background missing")
     assert(bar.statusBar:Displayed() == 0, "the idle background still shows the finished GCD as a full bar")
     -- A second GCD with the idle background on also ends empty.
@@ -143,6 +146,7 @@ do
     assert(bar.statusBar:Displayed() == .65, "the Edit Mode sample is hidden by a stale timer binding")
     mover.onSessionChanged(false); assert(bar.castText.text == "")
     MSUF_DB.general.gcdBarCombatOnly = true; MSUF_GCDBar_RefreshLayout()
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     assert(not bar.shown and driver.events.PLAYER_REGEN_DISABLED)
     Event("PLAYER_REGEN_DISABLED")
     assert(bar.shown, "the combat-only idle bar did not appear at the pull")
@@ -159,8 +163,9 @@ end
 local function CheckUnsupported(label, client, spellAPI)
     local driver, Mover = Load(client, spellAPI)
     MSUF_DB.general.gcdBarIdle = true
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     driver.scripts.OnEvent(driver, "PLAYER_ENTERING_WORLD")
-    assert(not (MSUF_DetachedGCDBar and MSUF_DetachedGCDBar.shown), label .. ": an empty separate GCD bar is shown")
+    assert(not (_G.MSUF.Castbars.Frames.gcd and _G.MSUF.Castbars.Frames.gcd.shown), label .. ": an empty separate GCD bar is shown")
     local mover = Mover()
     assert(not (mover and mover.isEnabled()), label .. ": the separate GCD bar has an Edit Mode mover")
     return driver
@@ -184,7 +189,7 @@ do
         if timers[#timers] then timers[#timers].fn() end
     end
     assert(MSUF_GCDBar_IsSupported() == true, "Forever with the GCD spell must arm the bar")
-    assert(MSUF_DetachedGCDBar and casts == 5, "Forever with the GCD spell did not run the separate bar")
+    assert(_G.MSUF.Castbars.Frames.gcd and casts == 5, "Forever with the GCD spell did not run the separate bar")
     assert(lookups == 1, "the Forever spell data was asked " .. lookups .. " times instead of once")
 end
 

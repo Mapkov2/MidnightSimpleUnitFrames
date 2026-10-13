@@ -9,6 +9,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 _G = _G or _ENV
 
 local eventHandler
@@ -158,8 +159,8 @@ local targetFrame = {
         right = Edge(),
     },
 }
-_G.MSUF_TargetCastbar = targetFrame
-_G.MSUF_FocusKick_RefreshReadyColor = function()
+_G.MSUF.Castbars.Frames.Register("target", nil, targetFrame)
+_G.MSUF.Castbars.FocusKick.FocusKick_RefreshReadyColor = function()
     focusReadyRefreshes = focusReadyRefreshes + 1
 end
 
@@ -198,6 +199,8 @@ assert(timerAfterCalls == 0)
 -- Fill style reuses the same driver and receives one event repaint plus one
 -- cooldown-end repaint. The readiness value stays secret throughout.
 _G.MSUF_DB.general.kickReadyStyle = "fill"
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+_G.MSUF.Castbars.Config.Compile()
 local fillRefreshes = 0
 local lastFillReady
 targetFrame.UpdateColorForInterruptible = function()
@@ -281,6 +284,8 @@ local function Measure(label, operation)
 end
 
 _G.MSUF_DB.general.kickReadyStyle = "border"
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+_G.MSUF.Castbars.Config.Compile()
 targetFrame.MSUF_castActive = true
 targetFrame.UpdateColorForInterruptible = nil
 -- Edges that record without allocating, so the bytes are the module's own.

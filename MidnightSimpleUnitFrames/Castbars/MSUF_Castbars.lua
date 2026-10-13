@@ -1,14 +1,23 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_Castbars.lua
----
---- Player castbar creation, backend application, castbar manager, and timer text
---- update loop. Newer castbar modules own most behavior; this file preserves the
---- historic globals and the shared runtime manager used by player, target, focus,
---- and boss castbars.
+-- Player frame/backend setup, shared castbar manager and timer text updates.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = (MSUF.ExportPublic)
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_Castbars.lua").Castbars
+local Bridge = Castbars.Bridge
+local ChannelTicks = Castbars.ChannelTicks
+local Config = Castbars.Config
+local Core = Castbars.Core
+local Empower = Castbars.Empower
+local Engine = Castbars.Engine
+local Frames = Castbars.Frames
+local GCD = Castbars.GCD
+local Manager = Castbars.Manager
+local Player = Castbars.Player
+local PublicAPI = Castbars.PublicAPI
+local Runtime = Castbars.Runtime
+local Style = Castbars.Style
+local Utils = Castbars.Utils
+local Publish = PublicAPI.Publish
 
 -- File-level aliases for the manager tick/update paths; MSUF_* lookups stay
 -- late-bound on purpose.
@@ -28,12 +37,12 @@ local UnitHasVehicleUI = _G.UnitHasVehicleUI
 local UnitChannelInfo = _G.UnitChannelInfo
 
 local FILE = "Castbars/MSUF_Castbars.lua"
-local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
-local PlayerCastbarOnEvent = _G.MSUF_PlayerCastbar_OnEvent
-local UpdateLatencyZone = _G.MSUF_PlayerCastbar_UpdateLatencyZone
-local LayoutEmpowerTicks = _G.MSUF_LayoutEmpowerTicks
-local BlinkEmpowerTick = _G.MSUF_BlinkEmpowerTick
-local IsEmpowerStageBlinkEnabled = _G.MSUF_IsEmpowerStageBlinkEnabled
+local PlayerCastbarCast = Player.PlayerCastbar_Cast
+local PlayerCastbarOnEvent = Player.PlayerCastbar_OnEvent
+local UpdateLatencyZone = Player.PlayerCastbar_UpdateLatencyZone
+local LayoutEmpowerTicks = Empower.LayoutEmpowerTicks
+local BlinkEmpowerTick = Empower.BlinkEmpowerTick
+local IsEmpowerStageBlinkEnabled = Empower.IsEmpowerStageBlinkEnabled
 
 local PLAYER_EMPOWER_EVENTS = {
     "UNIT_SPELLCAST_EMPOWER_START",
@@ -72,7 +81,7 @@ local function Now()
     return now()
 end
 
-local EnsureGeneralDB = _G.MSUF_EnsureCastbarGeneralDB
+local EnsureGeneralDB = Utils.EnsureCastbarGeneralDB
 
 local issecretvalue = _G.issecretvalue
 
@@ -80,7 +89,7 @@ local issecretvalue = _G.issecretvalue
 -- former inline copy here only differed when a ToPlain or MSUF_ToPlainNumber
 -- global existed; neither is defined by the addon or the client, so the two
 -- were equivalent in practice.
-local ToPlainNumber = _G.MSUF_Castbar_PlainNumber
+local ToPlainNumber = Utils.Castbar_PlainNumber
 
 local function SetText(fontString, text)
     if not fontString then return end
@@ -103,7 +112,7 @@ local function SyncTimeTextFollower(frame)
     end
 end
 
-ExportPublic("MSUF_Castbar_SyncTimeTextFollower", SyncTimeTextFollower)
+Manager.Castbar_SyncTimeTextFollower = SyncTimeTextFollower
 
 local function SetCastTimeText(frame, remaining, total)
     if type(_G.MSUF_SetCastTimeText) == "function" then
@@ -174,18 +183,18 @@ local function HardHidePlayerCastbar(frame)
     frame.MSUF_wantsEmpower = nil
     if frame.timeText then frame.timeText:SetText("") end
     if frame.latencyBar then frame.latencyBar:Hide() end
-    if type(_G.MSUF_PlayerChannelHasteMarkers_Hide) == "function" then
-        _G.MSUF_PlayerChannelHasteMarkers_Hide(frame)
+    if type(ChannelTicks.PlayerChannelHasteMarkers_Hide) == "function" then
+        ChannelTicks.PlayerChannelHasteMarkers_Hide(frame)
     end
     if UnregisterCastbar then UnregisterCastbar(frame) end
     frame:Hide()
 end
 
 local function InitializeExistingPlayerCast()
-    local playerFrame = _G.MSUF_PlayerCastbar
+    local playerFrame = Frames.player
     if not (playerFrame and playerFrame._msufPlayerEventsRegistered and PlayerCastbarCast) then return end
 
-    local buildState = _G.MSUF_BuildCastState
+    local buildState = Engine.BuildCastState
     local state = type(buildState) == "function" and buildState("player") or nil
     local active = state and state.active == true
     if not active
@@ -230,8 +239,8 @@ local function CreatePlayerCastbarFrame()
     statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
     local barTexture = "Interface\\TargetingFrame\\UI-StatusBar"
-    if type(_G.MSUF_GetCastbarTexture) == "function" then
-        barTexture = _G.MSUF_GetCastbarTexture() or barTexture
+    if type(Core.GetCastbarTexture) == "function" then
+        barTexture = Core.GetCastbarTexture() or barTexture
     end
     statusBar:SetStatusBarTexture(barTexture)
     statusBar:GetStatusBarTexture():SetHorizTile(false)
@@ -242,8 +251,8 @@ local function CreatePlayerCastbarFrame()
     backgroundBar:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT", 0, 0)
 
     local backgroundTexture = barTexture
-    if type(_G.MSUF_GetCastbarBackgroundTexture) == "function" then
-        local texture = _G.MSUF_GetCastbarBackgroundTexture()
+    if type(Core.GetCastbarBackgroundTexture) == "function" then
+        local texture = Core.GetCastbarBackgroundTexture()
         if texture and texture ~= "" then backgroundTexture = texture end
     end
     backgroundBar:SetTexture(backgroundTexture)
@@ -297,7 +306,7 @@ local function CreatePlayerCastbarFrame()
         frame.MSUF_latencyHooked = true
     end
 
-    if _G.MSUF_ApplyCastbarOutline then _G.MSUF_ApplyCastbarOutline(frame, true) end
+    if Style.ApplyCastbarOutline then Style.ApplyCastbarOutline(frame, true) end
 
     frame.empowerStageTicks = frame.empowerStageTicks or {}
     for index = 1, 4 do
@@ -312,7 +321,7 @@ local function CreatePlayerCastbarFrame()
     end
 
     SetPlayerCastbarEventsRegistered(frame, true)
-    local runtime = _G.MSUF_CastbarRuntime
+    local runtime = Castbars.Runtime
     if runtime and runtime.PrewarmNativeTimeText then
         runtime:PrewarmNativeTimeText(frame)
     end
@@ -321,88 +330,88 @@ local function CreatePlayerCastbarFrame()
 end
 
 local function InitSafePlayerCastbar()
-    if not _G.MSUF_PlayerCastbar then
-        ExportPublic("MSUF_PlayerCastbar", CreatePlayerCastbarFrame())
+    if not Frames.player then
+        Frames.Register("player", nil, CreatePlayerCastbarFrame())
     end
     AfterZero(InitializeExistingPlayerCast)
 end
 
-ExportPublic("MSUF_InitSafePlayerCastbar", InitSafePlayerCastbar)
+Manager.InitSafePlayerCastbar = InitSafePlayerCastbar
 
 local function PlayerCastbarApplyBackendState()
     local enabled = true
-    local isCastbarEnabled = _G.MSUF_IsCastbarEnabledForUnit
+    local isCastbarEnabled = Bridge.IsCastbarEnabledForUnit
     if type(isCastbarEnabled) == "function" then
         enabled = isCastbarEnabled("player") == true
     end
 
     -- Coldpath apply pass: re-sync the GCD bar's event registration so profile
     -- switches enable/disable it without a reload.
-    if type(_G.MSUF_GCDBar_SyncRegistration) == "function" then
-        _G.MSUF_GCDBar_SyncRegistration()
+    if type(GCD.GCDBar_SyncRegistration) == "function" then
+        GCD.GCDBar_SyncRegistration()
     end
 
     if enabled then
         InitSafePlayerCastbar()
-        if _G.MSUF_PlayerCastbar then
-            SetPlayerCastbarEventsRegistered(_G.MSUF_PlayerCastbar, true)
+        if Frames.player then
+            SetPlayerCastbarEventsRegistered(Frames.player, true)
         end
-        return _G.MSUF_PlayerCastbar
+        return Frames.player
     end
 
-    if _G.MSUF_PlayerCastbar then
-        SetPlayerCastbarEventsRegistered(_G.MSUF_PlayerCastbar, false)
-        HardHidePlayerCastbar(_G.MSUF_PlayerCastbar)
+    if Frames.player then
+        SetPlayerCastbarEventsRegistered(Frames.player, false)
+        HardHidePlayerCastbar(Frames.player)
     end
     return nil
 end
 
-ExportPublic("MSUF_PlayerCastbar_ApplyBackendState", PlayerCastbarApplyBackendState)
+Manager.PlayerCastbar_ApplyBackendState = PlayerCastbarApplyBackendState
 
-ExportPublic("MSUF__castbarStyleGlobalRev", _G.MSUF__castbarStyleGlobalRev or 1)
-local castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
+Config.styleRevision = Config.styleRevision or 1
+local castbarStyleRev = Config.styleRevision
 
-ExportPublic("MSUF__castTimeGlobalRev", _G.MSUF__castTimeGlobalRev or 1)
-local castTimeRev = _G.MSUF__castTimeGlobalRev or 1
+Config.timeRevision = Config.timeRevision or 1
+local castTimeRev = Config.timeRevision or 1
 
-local applyGlowFade = _G.MSUF_ApplyCastbarGlowFade
-local resetGlowFade = _G.MSUF_ResetCastbarGlowFade
-local refreshStyleCache = _G.MSUF_RefreshCastbarStyleCache
-local castbarRuntime = _G.MSUF_CastbarRuntime
+local applyGlowFade = Utils.ApplyCastbarGlowFade
+local resetGlowFade = Utils.ResetCastbarGlowFade
+local refreshStyleCache = Core.RefreshCastbarStyleCache
+local castbarRuntime = Castbars.Runtime
 local updateCastbarFrameRef
 
 AfterZero(function()
-    applyGlowFade = _G.MSUF_ApplyCastbarGlowFade or applyGlowFade
-    resetGlowFade = _G.MSUF_ResetCastbarGlowFade or resetGlowFade
-    refreshStyleCache = _G.MSUF_RefreshCastbarStyleCache or refreshStyleCache
-    castbarRuntime = _G.MSUF_CastbarRuntime or castbarRuntime
-    updateCastbarFrameRef = _G.MSUF_UpdateCastbarFrame
+    applyGlowFade = Utils.ApplyCastbarGlowFade or applyGlowFade
+    resetGlowFade = Utils.ResetCastbarGlowFade or resetGlowFade
+    refreshStyleCache = Core.RefreshCastbarStyleCache or refreshStyleCache
+    castbarRuntime = Castbars.Runtime or castbarRuntime
+    updateCastbarFrameRef = Manager.UpdateCastbarFrame
 end)
 
 local function BumpCastbarStyleRev()
-    ExportPublic("MSUF__castbarStyleGlobalRev", (_G.MSUF__castbarStyleGlobalRev or 1) + 1)
-    castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
+    Config.Advance("style")
+    castbarStyleRev = Config.styleRevision
 end
 
-ExportPublic("MSUF_BumpCastbarStyleRev", BumpCastbarStyleRev)
+Manager.BumpCastbarStyleRev = BumpCastbarStyleRev
 
 local function BumpCastTimeRev()
-    ExportPublic("MSUF__castTimeGlobalRev", (_G.MSUF__castTimeGlobalRev or 1) + 1)
-    castTimeRev = _G.MSUF__castTimeGlobalRev
-    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    Config.Advance("time")
+    castTimeRev = Config.timeRevision
+    local runtime = castbarRuntime or Castbars.Runtime
     if runtime and runtime.RefreshActiveWork then runtime:RefreshActiveWork() end
 end
 
-ExportPublic("MSUF_BumpCastTimeRev", BumpCastTimeRev)
+Manager.BumpCastTimeRev = BumpCastTimeRev
 
 --- The enabled flag and the time format are compiled once per revision by
 --- Runtime:RefreshWorkConfig (Castbars/MSUF_CastbarRuntime.lua loads first).
 local function IsCastTimeEnabled(frame, force)
     if not (frame and frame.unit) then return true end
 
-    local revision = _G.MSUF__castTimeGlobalRev or 1
+    local revision = Config.revision
     if force or frame._msufCastTimeRev ~= revision or frame._msufCastTimeEnabled == nil then
-        local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+        local runtime = castbarRuntime or Castbars.Runtime
         runtime:RefreshWorkConfig(frame, true)
         frame._msufCastTimeRev = revision
     end
@@ -410,11 +419,11 @@ local function IsCastTimeEnabled(frame, force)
     return frame._msufCastTimeEnabled ~= false
 end
 
-ExportPublic("MSUF_IsCastTimeEnabled", function(frame)
+Manager.IsCastTimeEnabled = function(frame)
     return IsCastTimeEnabled(frame, false)
-end)
+end
 
-local oldManager = _G.MSUF_CastbarManager
+local oldManager = Manager.CastbarManager
 if oldManager then
     if oldManager.SetScript then
         oldManager:SetScript("OnUpdate", nil)
@@ -429,7 +438,7 @@ CastbarManager.low = {}
 CastbarManager.high = {}
 CastbarManager.failsafe = {}
 CastbarManager:Hide()
-ExportPublic("MSUF_CastbarManager", CastbarManager)
+Manager.CastbarManager = CastbarManager
 
 local activeCount = 0
 local highFrequencyCount = 0
@@ -469,7 +478,7 @@ local function StopCastbarIfUnitMissing(frame)
         pools.Stop(frame)
     else
         -- Castbars/MSUF_CastbarRuntime.lua loads before this file in every TOC.
-        MSUF.Require("MSUF_CB_ResetStateOnStop", FILE)(frame, "STOPPED")
+        Runtime.CB_ResetStateOnStop(frame, "STOPPED")
     end
     return true
 end
@@ -508,7 +517,7 @@ local function UpdateFastTextFrame(frame, elapsed)
             heavyIn = heavyIn - elapsed
             if heavyIn <= 0 then
                 heavyIn = frame._msufTickInterval or 0.10
-                local updater = updateCastbarFrameRef or _G.MSUF_UpdateCastbarFrame
+                local updater = updateCastbarFrameRef or Manager.UpdateCastbarFrame
                 if updater then updater(frame, elapsed, nil, managerTime) end
             end
             frame._msufHeavyIn = heavyIn
@@ -558,7 +567,7 @@ local function UpdateHeavyFrame(frame, elapsed)
     heavyIn = heavyIn - elapsed
     if heavyIn <= 0 then
         heavyIn = frame._msufTickInterval or 0.10
-        local updater = updateCastbarFrameRef or _G.MSUF_UpdateCastbarFrame
+        local updater = updateCastbarFrameRef or Manager.UpdateCastbarFrame
         if updater then updater(frame, elapsed, frameNow, managerTime) end
     end
     frame._msufHeavyIn = heavyIn
@@ -809,7 +818,7 @@ end
 --- runtime). false: the native completion timer alone owns this frame, which
 --- has no manager work left.
 local function ResolveRegisteredWork(frame)
-    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    local runtime = castbarRuntime or Castbars.Runtime
     local workMask
     if runtime and runtime.PrepareWork then
         workMask = runtime:PrepareWork(frame)
@@ -955,7 +964,7 @@ UnregisterCastbar = function(frame)
     if not (CastbarManager and CastbarManager.active) then return end
 
     frame._msufInUnregister = true
-    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    local runtime = castbarRuntime or Castbars.Runtime
     if runtime and runtime.DeactivateNative then runtime:DeactivateNative(frame) end
     if resetGlowFade then resetGlowFade(frame) end
 
@@ -1345,7 +1354,7 @@ UpdateCastbarFrame = function(frame, elapsed, now, sampleTime)
     if frame._msufCastbarWorkMask == 0 then return end
 
     local castTimeEnabled = frame._msufCastTimeEnabled
-    if castTimeEnabled == nil or frame._msufCastTimeRev ~= castTimeRev then
+    if castTimeEnabled == nil or frame._msufCastTimeRev ~= Config.revision then
         castTimeEnabled = IsCastTimeEnabled(frame, false)
     end
 
@@ -1374,6 +1383,6 @@ UpdateCastbarFrame = function(frame, elapsed, now, sampleTime)
     UpdateEndTimeFrame(frame, now)
 end
 
-ExportPublic("MSUF_RegisterCastbar", RegisterCastbar)
-ExportPublic("MSUF_UnregisterCastbar", UnregisterCastbar)
-ExportPublic("MSUF_UpdateCastbarFrame", UpdateCastbarFrame)
+Manager.RegisterCastbar = RegisterCastbar
+Manager.UnregisterCastbar = UnregisterCastbar
+Manager.UpdateCastbarFrame = UpdateCastbarFrame

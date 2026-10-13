@@ -29,7 +29,7 @@ local function GCDBarSupported()
     local spellAPI = _G.C_Spell
     gcdBarSupported = false
     if type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function" then
-        local castbar = _G.MSUF_PlayerCastbar
+        local castbar = MSUF.Castbars.Frames.Get("player")
         local bar = castbar and castbar.statusBar
         if not bar and type(_G.CreateFrame) == "function" then bar = PixelLayoutRegion(_G.CreateFrame("StatusBar")) end
         gcdBarSupported = bar ~= nil and type(bar.SetTimerDuration) == "function"
@@ -71,6 +71,7 @@ local function BuildBehaviorSection(PageState, secBuilder)
             setValue = function(value)
                 local duration = max(0, min(5, tonumber(value) or 0.5))
                 SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
+                MSUF.Castbars.Config.Refresh()
                 M.PlayCastbarPreviewInterrupt()
             end,
         } },
@@ -371,6 +372,7 @@ local function BuildFocusKickSection(PageState, secBuilder)
             setValue = function(v)
                 if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
                     { applyAll = false, preview = false, notify = false }) then
+                    MSUF.Castbars.Config.Refresh()
                     _G.MSUF_FocusKickDriver_ForceUpdate()
                 end
             end } },

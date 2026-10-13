@@ -122,13 +122,13 @@ local function ManualHeight(g, unit)
 end
 
 local function CastbarFrame(unit)
-    if unit == "player" then return _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar end
-    if unit == "target" then return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar end
-    if unit == "focus" then return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar end
-    if unit == "boss" then return _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] end
+    if unit == "player" then return MSUF.Castbars.Frames.Get("playerPreview") or MSUF.Castbars.Frames.Get("player") end
+    if unit == "target" then return MSUF.Castbars.Frames.Get("targetPreview") or MSUF.Castbars.Frames.Get("target") end
+    if unit == "focus" then return MSUF.Castbars.Frames.Get("focusPreview") or MSUF.Castbars.Frames.Get("focus") end
+    if unit == "boss" then return MSUF.Castbars.Frames.Get("bossPreview") or _G["MSUF_BossCastbarPreview1"] end
     if unit == "arena" then
         local frames = _G.MSUF_ArenaCastbars
-        return _G.MSUF_ArenaCastbarPreview or _G["MSUF_ArenaCastbarPreview1"]
+        return MSUF.Castbars.Frames.Get("arenaPreview") or _G["MSUF_ArenaCastbarPreview1"]
             or (frames and frames[1]) or _G.MSUF_ArenaCastbar1
     end
 end

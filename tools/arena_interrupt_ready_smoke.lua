@@ -1,3 +1,5 @@
+local root = arg[1] or "."
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 -- Pins Arena across the interrupt-ready UI and runtime surfaces.
 -- Run from the repository root: lua tools/arena_interrupt_ready_smoke.lua
 
@@ -39,13 +41,13 @@ _G.MSUF_ShouldUseMSUFCastbar = function(unit)
 end
 
 assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", _G.MSUF_NS)
-local shouldTint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor)
+local shouldTint = assert(_G.MSUF.Castbars.Utils.Castbar_ShouldUseInterruptUnavailableColor)
 assert(shouldTint({ unit = "arena1" }) == true,
     "Arena castbar did not receive Interrupt Ready fill tint")
 -- TBC and Mists publish five arena slots; arena5 shares the arena scope.
 assert(shouldTint({ unit = "arena5" }) == true,
     "Arena slot 5 castbar did not receive Interrupt Ready fill tint")
-_G.MSUF_ShouldUseMSUFCastbar = function() return false end
+_G.MSUF_NS.Castbars.Backend.ShouldUseMSUFCastbar = function() return false end
 assert(shouldTint({ unit = "arena1" }) == false and shouldTint({ unit = "arena5" }) == false,
     "Arena Interrupt Ready fill tint ignored backend ownership")
 

@@ -1,4 +1,5 @@
 local root = assert(arg[1], "repository root argument missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local now = 1
 local casting
@@ -22,6 +23,7 @@ _G.UnitChannelDuration = nil
 _G.GetUnitEmpowerStageCount = nil
 _G.issecretvalue = function() return false end
 _G.MSUF_DB = { general = {} }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
 local namespace = {
     ExportPublic = function(name, value)
@@ -63,12 +65,13 @@ now = now + 1
 channeling = nil
 casting = { "Smelt", "Smelt", 136241, 8000, 9000, true, "trade-guid", false, 2656 }
 _G.MSUF_DB.general.castbarHideTradeSkills = true
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 local hidden = engine:BuildState("player")
 assert(hidden.active == false and hidden.castType == "NONE", "Classic tradeskill cast filter failed")
 
 -- Legacy clients report no delayTimeMS: UNIT_SPELLCAST_DELAYED moves the start
 -- time instead. The shared resolver measures that shift per cast identity.
-local resolvePushback = assert(_G.MSUF_Castbar_ResolvePushbackMS, "pushback resolver export missing")
+local resolvePushback = assert(_G.MSUF.Castbars.Utils.Castbar_ResolvePushbackMS, "pushback resolver export missing")
 local pushFrame = {}
 assert(resolvePushback(pushFrame, { castType = "CAST", castID = "push-guid", startTimeMS = 1000 }) == nil,
     "first legacy cast sighting reported a pushback")
@@ -87,6 +90,7 @@ assert(resolvePushback(pushFrame, { castType = "CHANNEL", castID = "chan-guid", 
     "a channel was measured with the legacy cast start shift")
 
 _G.MSUF_DB.general.castbarShowPushback = true
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 local suffixText
 local suffixFrame = { MSUF_castActive = true, castText = { SetText = function(_, value) suffixText = value end } }
 suffixFrame._msufPushbackMS = resolvePushback(suffixFrame, { castType = "CAST", castID = "fire-guid", startTimeMS = 2000 })
@@ -102,17 +106,16 @@ _G.UnitClass = function() return "Mage", "MAGE" end
 _G.UnitHasVehicleUI = function() return false end
 _G.issecure = function() return true end
 local retailState
-namespace.Castbars = {
-    Engine = {
+namespace.Castbars.Engine = {
         Invalidate = function() end,
         BuildState = function(_, unit, previous)
             if retailState then return retailState end
             return engine:BuildState(unit, previous)
         end,
-    },
 }
+namespace.Castbars.Utils.GetReverseFillSafe = _G.MSUF.Castbars.Utils.GetReverseFillSafe
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))("MidnightSimpleUnitFrames", namespace)
-local castPlayer = assert(_G.MSUF_PlayerCastbar_Cast, "player castbar cast export missing")
+local castPlayer = assert(_G.MSUF.Castbars.Player.PlayerCastbar_Cast, "player castbar cast export missing")
 local noop = function() end
 local playerFrame = {
     unit = "player",
@@ -203,18 +206,25 @@ do
         Client = { IsClassic = true, IsVanilla = true },
     }
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+    _G.MSUF, _G.MSUF_NS = driverNamespace, driverNamespace
     manifest.LoadSelected(root, "Vanilla", driverNamespace, {
         "Kernel/MSUF_Require.lua",
+        "Castbars/MSUF_Castbars_PublicAPI.lua",
+        "Castbars/MSUF_Castbars_Backend.lua",
+        "Castbars/MSUF_CastbarConfig.lua",
         "Castbars/MSUF_CastbarUtils.lua",
         "Castbars/MSUF_CastbarRuntime.lua",
         "Castbars/MSUF_CastbarEngine.lua",
         "Castbars/MSUF_CastbarDriver.lua",
     })
+    assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Bind(driverNamespace)
+    driverNamespace.Castbars.Frames.BuildCastbarFrameElements = function() end
     -- The client runs zero-delay callbacks on the next frame; the files above
     -- re-resolve their late-bound helpers there.
     for index = 1, #pendingAfter do pendingAfter[index]() end
     pendingAfter = {}
     _G.MSUF_DB.general.castbarShowPushback = true
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
     -- a) Legacy pushback through the real target driver. Classic cast tuples
     -- carry no delayTimeMS, so UNIT_SPELLCAST_DELAYED only moves startTimeMS;
@@ -222,8 +232,9 @@ do
     -- castID starts without one.
     do
         -- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
-        _G.MSUF_BuildCastbarFrameElements = function() end
-        local driven = assert(_G.MSUF_CreateCastBar("MSUF_EngineSmokeTargetCastBar", "target"),
+        assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Bind(driverNamespace)
+    driverNamespace.Castbars.Frames.BuildCastbarFrameElements = function() end
+        local driven = assert(driverNamespace.Castbars.Driver.CreateCastBar("MSUF_EngineSmokeTargetCastBar", "target"),
             "driver castbar missing")
         driven.statusBar = NewWidget()
         driven.castText = NewWidget()
@@ -259,7 +270,7 @@ do
     -- options. The client delayTimeMS is stored before the cast text write, so
     -- the very first paint of the pushed-back cast already carries the suffix.
     do
-        local applyActive = assert(_G.MSUF_Castbar_ApplyActiveDuration, "ApplyActive export missing")
+        local applyActive = assert(_G.MSUF.Castbars.Runtime.Castbar_ApplyActiveDuration, "ApplyActive export missing")
         local liveOptions = { skipColor = true, skipRegister = true, skipTimeText = true, skipShow = true }
         local frame = NewWidget()
         frame.unit = "target"

@@ -96,7 +96,7 @@ local function Calls()
 end
 
 -- 1. A hidden bar: the previews release its events and write nothing else.
-_G.MSUF_HideBlizzardPlayerCastbar()
+_G.MSUF.Castbars.Previews.HideBlizzardPlayerCastbar()
 Check(next(bar.events) == nil, "1: the previews kept the Blizzard castbar's cast events")
 Check(Calls() == "UnregisterAllEvents", "1: unexpected calls on a hidden bar: " .. Calls())
 
@@ -104,15 +104,16 @@ Check(Calls() == "UnregisterAllEvents", "1: unexpected calls on a hidden bar: " 
 calls = {}
 bar.shown, bar.alpha, bar.mouse = true, 0.7, true
 bar.events.UNIT_SPELLCAST_START = true
-_G.MSUF_HideBlizzardPlayerCastbar()
+_G.MSUF.Castbars.Previews.HideBlizzardPlayerCastbar()
 Check(bar.shown, "2: the shown managed bar was hidden")
 Check(bar.alpha == 0 and bar.mouse == false and next(bar.events) == nil,
     "2: the shown managed bar was not concealed: alpha " .. tostring(bar.alpha) .. ", mouse " .. tostring(bar.mouse))
-_G.MSUF_HideBlizzardPlayerCastbar()
+_G.MSUF.Castbars.Previews.HideBlizzardPlayerCastbar()
 Check(bar.alpha == 0, "2: a second pass changed the concealed bar")
 
 -- 3. Blizzard owns the player castbar again: the Bridge gives the alpha back.
 general.castbarPlayerBackend = "BLIZZARD"
+_G.MSUF.Castbars.Config.Compile()
 _G.MSUF_SuppressBlizzardPlayerCastbars()
 Check(bar.alpha == 0.7 and bar.mouse == true, "3: the release did not restore the concealed bar: alpha "
     .. tostring(bar.alpha) .. ", mouse " .. tostring(bar.mouse))

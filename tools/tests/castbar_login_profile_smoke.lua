@@ -160,7 +160,7 @@ end
 
 --- Engine subscriptions the focus-kick state driver holds on the focus unit.
 local function FocusKickSubscribed(world)
-    local engine = assert(world.env.MSUF_GetCastbarEngine(), "no castbar engine")
+    local engine = assert(world.env.MSUF.Castbars.Engine.GetCastbarEngine(), "no castbar engine")
     for _, callback in ipairs(engine._subs and engine._subs.focus or {}) do
         if debug.getinfo(callback, "S").source:find("MSUF_FocusKick_StateDriver.lua", 1, true) then return true end
     end

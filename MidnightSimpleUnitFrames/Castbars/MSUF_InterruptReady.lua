@@ -1,5 +1,4 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_InterruptReady.lua
 --- Optional interrupt-readiness indicator for target, focus, and boss castbars.
 ---
 --- This module answers two questions: "is any of my interrupts ready?" and
@@ -10,8 +9,16 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- MSUF.KickReady, which MSUF_HostAPI.GetKickReady() hands out.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_InterruptReady.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local FocusKick = Castbars.FocusKick
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local PublicAPI = Castbars.PublicAPI
+local Rounded = Castbars.Rounded
+local Style = Castbars.Style
+local Publish = PublicAPI.Publish
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local IS_CLASSIC = MSUF.Client ~= nil and MSUF.Client.IsClassic == true
 
@@ -151,9 +158,7 @@ local function InvalidateCooldownSnapshot()
 end
 
 local function GeneralDB()
-    local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then ensure() end
-    local db = _G.MSUF_DB
+    local db = Config.Read()
     return (db and db.general) or {}
 end
 
@@ -667,7 +672,8 @@ local function SelectReadyColor(isReady, readyColor, notReadyColor)
     end
     return EvaluateColorFromBoolean(isReady, readyColor, notReadyColor)
 end
-ExportPublic("MSUF_KickReady_SelectColor", SelectReadyColor)
+KickReady.KickReady_SelectColor = SelectReadyColor
+Publish("MSUF_KickReady_SelectColor", KickReady.KickReady_SelectColor)
 
 local function ColorForReady(isReady, general)
     local readyColor, notReadyColor = ReadyColors(general)
@@ -691,7 +697,7 @@ local function ShouldShow(general, unit)
 end
 
 local function CastbarFeatureActive(general, unit, key)
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local shouldUse = Backend.ShouldUseMSUFCastbar
     if type(shouldUse) == "function" then return shouldUse(unit, general) == true end
     return general[key] ~= false
 end
@@ -767,7 +773,7 @@ local function OutlineTextures(frame)
 end
 
 local function TintOutline(frame, red, green, blue, alpha)
-    local tintRounded = _G.MSUF_RoundedCastbar_TintOutline
+    local tintRounded = Rounded.RoundedCastbar_TintOutline
     if type(tintRounded) == "function" and tintRounded(frame, red, green, blue, alpha) then
         frame._kickReadyBorderTinted = true
         return
@@ -801,7 +807,7 @@ local function RestoreOutline(frame)
     frame._kickReadyBorderTinted = nil
 
     -- Castbars/MSUF_CastbarStyle.lua loads before this file in every TOC.
-    _G.MSUF_ApplyCastbarOutline(frame, true)
+    Style.ApplyCastbarOutline(frame, true)
 end
 
 --- Raw interruptibility can be nil, false, true, or a wrapped/secret value
@@ -1266,7 +1272,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     frame._msufKickReadyVisualKey = remember or nil
 end
 
---- PERF: RefreshAll/RefreshActive/KickReady_RefreshFrame run per cooldown or
+--- PERF: RefreshAll/RefreshActive/KickReady.KickReady_RefreshFrame run per cooldown or
 --- castbar event; a fresh status table per call is steady combat garbage. The
 --- shared scratch is safe because the status never escapes these calls and the
 --- three entry points never nest into each other.
@@ -1320,8 +1326,8 @@ local function RefreshAll(updateFillColor)
 
     -- Keep this traversal direct. RefreshAll is event-driven and a capturing
     -- callback here produced one short-lived closure on every refresh.
-    RefreshFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, nil, status, general, updateFillColor)
-    RefreshFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, nil, status, general, updateFillColor)
+    RefreshFrame(Frames.target, nil, status, general, updateFillColor)
+    RefreshFrame(Frames.focus, nil, status, general, updateFillColor)
 
     -- Boss, then arena: every built pool (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools
@@ -1387,7 +1393,7 @@ local function RefreshActive(updateFillColor, seededReady, seededRemaining, seed
 end
 
 local function RefreshExternalReadyConsumers()
-    local refreshFocusKick = _G.MSUF_FocusKick_RefreshReadyColor
+    local refreshFocusKick = FocusKick.FocusKick_RefreshReadyColor
     if type(refreshFocusKick) == "function" then
         refreshFocusKick()
     end
@@ -1582,34 +1588,34 @@ HandleCooldownWakeDone = function(slot)
     if activeConsumerCount > 0 then NotifyConsumers("readiness") end
 end
 
-local function KickReady_Init()
+function KickReady.KickReady_Init()
     if not FeatureEnabled() then return nil end
     ResolveInterruptSpellID()
     return state.spellID
 end
 
-local function KickReady_IsReady()
+function KickReady.KickReady_IsReady()
     if not FeatureEnabled() then return nil end
     local ready = InterruptStatus()
     return ready
 end
 
-local function KickReady_GetSpellID()
+function KickReady.KickReady_GetSpellID()
     if not FeatureEnabled() then return nil end
     if not state.spellsResolved then ResolveInterruptSpellID() end
     return state.spellID
 end
 
-local function KickReady_GetReadyBoolForTint()
+function KickReady.KickReady_GetReadyBoolForTint()
     return InterruptReadyBoolForTint()
 end
 
-local function KickReady_EvaluateRGBA(ready, rawNotInterruptible)
+function KickReady.KickReady_EvaluateRGBA(ready, rawNotInterruptible)
     local red, green, blue, alpha = EvaluateIndicatorRGBA(ready, rawNotInterruptible)
     return red, green, blue, alpha
 end
 
-local function KickReady_ApplyLayout(frame)
+function KickReady.KickReady_ApplyLayout(frame)
     local general = GeneralDB()
     if IndicatorStyle(general) == "fill" then
         HideIndicatorVisual(frame)
@@ -1621,7 +1627,7 @@ local function KickReady_ApplyLayout(frame)
     end
 end
 
-local function KickReady_RefreshFrame(frame, castState)
+function KickReady.KickReady_RefreshFrame(frame, castState)
     local status = AcquireScratchStatus()
     RefreshFrame(frame, castState, status)
     ResolveFillStatus(status)
@@ -1634,7 +1640,7 @@ end
 
 -- The outline owner only needs a new paint after replacing its edges. Keep
 -- this independent of shared scratch status and cooldown wake scheduling.
-local function KickReady_RefreshOutline(frame)
+function KickReady.KickReady_RefreshOutline(frame)
     if not (frame and frame._kickReadyBorderTinted) then return end
     frame._msufKickReadyVisualKey = nil
     RefreshFrame(frame)
@@ -1673,7 +1679,8 @@ end
 -- MSUF's settings path (the castbar menu, the unit-frame spawn): every
 -- consumer re-reads the look, and an active one repaints, which also keeps
 -- the cooldown-event dedupe true for the readiness it shows.
-local function KickReady_RefreshAll()
+function KickReady.KickReady_RefreshAll(current)
+    if not current then Config.Invalidate() end
     local remaining, resolved = RefreshEngine()
     if consumerCount > 0 then NotifyConsumers("settings") end
     return remaining, resolved
@@ -1682,28 +1689,13 @@ end
 -- MSUF's castbar appearance pass (MSUF_ApplyAllCastbarsAndSync: colors,
 -- outline, texture, box size and placement) changes the look consumers draw
 -- without touching the engine: they only redraw.
-local function KickReady_NotifySettings()
+function KickReady.KickReady_NotifySettings(current)
+    if not current then Config.Invalidate() end
     if consumerCount > 0 then NotifyConsumers("settings") end
 end
 
------------------------------------------------------------------- consumers
--- MSUF.KickReady: this engine and MSUF's indicator look for consumers that
--- draw on castbars MSUF does not own (the MSUF Suite's nameplates), handed
--- out by MSUF_HostAPI.GetKickReady() (Runtime/MSUF_HostAPI.lua). Version 1:
---   Register(owner, onChange) -> true    onChange(reason): "readiness" and
---       "projection" while the owner is active, "settings" always
---       (NotifyConsumers above)
---   Unregister(owner)
---   HasConsumers() -> boolean   a consumer is registered (MSUF's menu gates the
---       nameplate switch on it)
---   SetActive(owner, active)    the owner shows readiness on a running cast
---   Look() -> table             MSUF's indicator settings (ConsumerLook below)
---   RGBA(rawNotInterruptible) -> r, g, b, a    MSUF's border and box color
---   FillColors() -> interruptible, notInterruptible, unavailable (ColorMixin)
---   SelectColor(readyColor, notReadyColor) -> ColorMixin   readyColor while any
---       interrupt is ready; a restricted readiness is selected natively
---   SlotCount() -> 0..2         tracked interrupts (0: the class has none)
---   Cooldown(index) -> Duration | nil   that interrupt's cooldown, this frame
+-- MSUF.KickReady v1 is the HostAPI consumer surface for foreign castbars.
+-- Registration, active/settings notifications and result fields: Castbars/README.md.
 local function ConsumerSetActive(owner, active)
     active = active == true and consumers[owner] ~= nil
     if (activeConsumers[owner] == true) == active then return end
@@ -1735,16 +1727,7 @@ local function ConsumerUnregister(owner)
     RefreshEngine()
 end
 
--- MSUF's indicator settings for a consumer that draws the indicator the way
--- MSUF's castbars do. One reused table, refreshed from the profile per call:
---   show        the nameplate switch
---   style       "border" | "box" | "fill" (IndicatorStyle)
---   marker, segment             the time marker and shade
---   readyR, readyG, readyB, readyA   their color
---   outline     the castbar outline's width (MSUF_CastbarStyle.lua's clamp)
---   boxSize     0 = the castbar's height (ApplyBoxLayout), then clamped 8..80
---   boxAnchor, boxOffsetX, boxOffsetY
---   texture     MSUF's castbar texture (the fill style)
+-- Reused consumer look table, refreshed from the profile each call; fields: Castbars/README.md.
 local look = {}
 local function ConsumerLook()
     local general = GeneralDB()
@@ -1805,7 +1788,7 @@ local function ConsumerCooldown(index)
     return SlotCooldown(slots[index])
 end
 
-MSUF.KickReady = {
+local consumerAPI = {
     version = 1,
     Register = ConsumerRegister,
     Unregister = ConsumerUnregister,
@@ -1818,6 +1801,7 @@ MSUF.KickReady = {
     SlotCount = ConsumerSlotCount,
     Cooldown = ConsumerCooldown,
 }
+MSUF.KickReady = consumerAPI
 
 local function CooldownEventAlreadyDisplayed()
     -- GetSpellCooldownDuration returns a fresh Duration object. Reuse this
@@ -1845,16 +1829,16 @@ local function CooldownEventAlreadyDisplayed()
     return true, ready, remaining, cooldown, true
 end
 
-ExportPublic("MSUF_KickReady_Init", KickReady_Init)
-ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
-ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
-ExportPublic("MSUF_KickReady_GetReadyBoolForTint", KickReady_GetReadyBoolForTint)
-ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)
-ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
-ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
-ExportPublic("MSUF_KickReady_RefreshOutline", KickReady_RefreshOutline)
-ExportPublic("MSUF_KickReady_RefreshAll", KickReady_RefreshAll)
-ExportPublic("MSUF_KickReady_NotifySettings", KickReady_NotifySettings)
+Publish("MSUF_KickReady_Init", KickReady.KickReady_Init)
+Publish("MSUF_KickReady_IsReady", KickReady.KickReady_IsReady)
+Publish("MSUF_KickReady_GetSpellID", KickReady.KickReady_GetSpellID)
+Publish("MSUF_KickReady_GetReadyBoolForTint", KickReady.KickReady_GetReadyBoolForTint)
+Publish("MSUF_KickReady_EvaluateRGBA", KickReady.KickReady_EvaluateRGBA)
+Publish("MSUF_KickReady_ApplyLayout", KickReady.KickReady_ApplyLayout)
+Publish("MSUF_KickReady_RefreshFrame", KickReady.KickReady_RefreshFrame)
+Publish("MSUF_KickReady_RefreshOutline", KickReady.KickReady_RefreshOutline)
+Publish("MSUF_KickReady_RefreshAll", KickReady.KickReady_RefreshAll)
+Publish("MSUF_KickReady_NotifySettings", KickReady.KickReady_NotifySettings)
 
 UpdateCooldownEventRegistration = function()
     if not eventFrame then

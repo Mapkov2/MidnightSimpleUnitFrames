@@ -75,6 +75,8 @@ Check(arena2.alpha == 0.4, "arena2 frame alpha " .. tostring(arena2.alpha))
 local bossCastbar = NewRegion("MSUF_BossCastbar1")
 bossCastbar.unit = "boss1"
 _G.MSUF_BossCastbars = { bossCastbar }
+MSUF.Castbars.Pools.live.boss = _G.MSUF_BossCastbars
+MSUF.Castbars.Frames.Register("boss", 1, bossCastbar)
 _G.MSUF_BossCastbar1 = bossCastbar
 local arenaCastbars = {}
 for index = 1, 2 do
@@ -84,6 +86,8 @@ for index = 1, 2 do
   _G["MSUF_ArenaCastbar" .. index] = castbar
 end
 _G.MSUF_ArenaCastbars = arenaCastbars
+MSUF.Castbars.Pools.live.arena = arenaCastbars
+for i, frame in ipairs(arenaCastbars) do MSUF.Castbars.Frames.Register("arena", i, frame) end
 Check(arenaPool.Bar(1) == arenaCastbars[1], "arena pool Bar(1) does not return the published bar")
 
 UF.ApplyRangeModifier(boss1, 0.4, true)

@@ -7,7 +7,9 @@ local world = World.New(root, "timer", { flavor = arg[2] or "Mists" })
 _G.INTERRUPTED = "Interrupted"
 local general = _G.MSUF_DB.general
 general.castbarInterruptibleR, general.castbarInterruptibleG, general.castbarInterruptibleB = 0, 1, 0
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 general.castbarNonInterruptibleR, general.castbarNonInterruptibleG, general.castbarNonInterruptibleB = 1, 0, 0
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 
 local bar = world:Driver("target")
 local function Color()
@@ -29,7 +31,7 @@ world:Advance(0.3)
 world.casting.target = nil
 world:StartCast("target", "Frostbolt", 2.5, 12)
 world:Fire(bar, "PLAYER_TARGET_CHANGED")
-local engineState = _G.MSUF_GetCastbarEngine():GetState("target")
+local engineState = _G.MSUF.Castbars.Engine.GetCastbarEngine():GetState("target")
 print("B after swap      color", Color(), "isNotInterruptible", tostring(bar.isNotInterruptible),
     "engine state.isNotInterruptible", tostring(engineState.isNotInterruptible),
     "api raw", tostring(engineState.apiNotInterruptibleRaw), "shown", tostring(bar.shown),

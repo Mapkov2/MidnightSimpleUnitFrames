@@ -1,16 +1,18 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarUtils.lua
---- Utility exports for castbar colors, preview sync, interrupt tinting,
---- shake/glow feedback, reverse fill, and spell-name shortening.
----
---- Many modules call these globals directly. Keep this file as a compatibility
---- surface; new code should prefer clearer helpers in Runtime/Style/Visuals and
---- leave these exports stable unless a migration is planned.
+-- Colors, previews, feedback, fill direction and spell-name shortening.
+-- Namespace utilities; public aliases belong to PublicAPI.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarUtils.lua").Castbars
+local Backend = Castbars.Backend
+local Config = Castbars.Config
+local Driver = Castbars.Driver
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
 
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 
 local C_Timer = _G.C_Timer
 local type = type
@@ -36,16 +38,16 @@ local function PlainPositiveNumber(value)
 end
 
 local function GetInterruptFeedbackDuration()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = Config.Read().general
     local duration = general and tonumber(general.castbarInterruptFeedbackDuration)
     if type(duration) ~= "number" then
-        duration = tonumber(_G.MSUF_INTERRUPT_FEEDBACK_DURATION) or 0.5
+        duration = tonumber(Driver.INTERRUPT_FEEDBACK_DURATION) or 0.5
     end
     if duration < 0 then return 0 end
     if duration > 5 then return 5 end
     return duration
 end
-ExportPublic("MSUF_GetInterruptFeedbackDuration", GetInterruptFeedbackDuration)
+Utils.GetInterruptFeedbackDuration = GetInterruptFeedbackDuration
 
 -- The castbar preview hard sync; this file is its only provider.
 do
@@ -87,15 +89,13 @@ do
         end
     end
 
-    ExportPublic("MSUF_HardSyncCastbarPreview", HardSyncCastbarPreview)
+    Utils.HardSyncCastbarPreview = HardSyncCastbarPreview
 end
 
 local function EnsureDBLazy()
-    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-    end
+    Config.Read()
 end
-ExportPublic("MSUF_EnsureDBLazy", EnsureDBLazy)
+Utils.EnsureDBLazy = EnsureDBLazy
 
 --- Single owner of the castbar OnUpdate teardown. Castbar Runtime and the
 --- player runtime alias this instead of carrying their own copy.
@@ -103,11 +103,11 @@ local function DisableFrameOnUpdate(frame)
     if not frame or not frame.SetScript then return end
     frame:SetScript("OnUpdate", nil)
 end
-ExportPublic("MSUF_Castbar_DisableFrameOnUpdate", DisableFrameOnUpdate)
+Utils.Castbar_DisableFrameOnUpdate = DisableFrameOnUpdate
 
 local function GetAnchorFrame()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local source = Config.Source()
+    local general = (source and source.general) or {}
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
     -- The Integrations module answers first; without it the client model does.
     -- The C_CooldownViewer namespace is never the signal: the shared engine
@@ -139,7 +139,8 @@ local function GetAnchorFrame()
 
     return _G.UIParent
 end
-ExportPublic("MSUF_GetAnchorFrame", GetAnchorFrame)
+Utils.GetAnchorFrame = GetAnchorFrame
+Publish("MSUF_GetAnchorFrame", Utils.GetAnchorFrame)
 
 local function SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
     if not (statusBar and statusBar.SetStatusBarColor) then return end
@@ -173,7 +174,7 @@ local function SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha
 end
 
 -- This file is the only provider; its own writes below call the local.
-ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
+Utils.SetStatusBarColorIfChanged = SetStatusBarColorIfChangedImpl
 
 -- Castbar colors are global settings, so all target/focus/boss bars can share
 -- the same three ColorObjects. Keep only one object per semantic color and
@@ -254,7 +255,7 @@ local function ApplyNonInterruptibleTint(
             -- can reuse the immutable configured colors directly; restricted
             -- inputs must still go through Blizzard's secret-safe selector.
             if readySecret then
-                local selectReadyColor = _G.MSUF_KickReady_SelectColor or EvaluateColorFromBoolean
+                local selectReadyColor = KickReady.KickReady_SelectColor or EvaluateColorFromBoolean
                 activeCastColor = selectReadyColor(interruptReadyBool, castColor, unavailableColor)
             elseif type(interruptReadyBool) == "boolean" then
                 activeCastColor = interruptReadyBool and castColor or unavailableColor
@@ -310,7 +311,7 @@ local function ApplyNonInterruptibleTint(
 
     return usedBooleanTint
 end
-ExportPublic("MSUF_Castbar_ApplyNonInterruptibleTint", ApplyNonInterruptibleTint)
+Utils.Castbar_ApplyNonInterruptibleTint = ApplyNonInterruptibleTint
 
 local SetTextIfChanged = _G.MSUF_SetTextIfChanged
 
@@ -334,7 +335,7 @@ local function ResolveReverseFill(frame, override, isChanneled)
         return override.reverseFill == true
     end
 
-    local resolver = _G.MSUF_GetCastbarReverseFillForFrame
+    local resolver = Utils.GetCastbarReverseFillForFrame
     if type(resolver) == "function" then
         local reverseFill = resolver(frame, isChanneled and true or false)
         if reverseFill ~= nil then
@@ -348,7 +349,7 @@ end
 local function GetReverseFillSafe(frame, isChanneled)
     return ResolveReverseFill(frame, nil, isChanneled)
 end
-ExportPublic("MSUF_GetReverseFillSafe", GetReverseFillSafe)
+Utils.GetReverseFillSafe = GetReverseFillSafe
 
 --- How the bar value moves is a cast-type property, never an anchor property.
 --- Casts and empower bars count up (elapsed time) so they fill toward the far
@@ -360,11 +361,10 @@ local function GetCastbarCountsDown(frame, isChanneled)
     if isChanneled ~= true then return false end
     if frame and frame.isEmpower == true then return false end
 
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     return general.castbarUnifiedDirection ~= true
 end
-ExportPublic("MSUF_GetCastbarCountsDown", GetCastbarCountsDown)
+Utils.GetCastbarCountsDown = GetCastbarCountsDown
 
 local function GetCastbarUnitKey(frame)
     if not frame then return nil end
@@ -378,9 +378,9 @@ local function GetCastbarUnitKey(frame)
         if key == "boss" or key:sub(1, 4) == "boss" then return key end
     end
 
-    if frame == _G.MSUF_PlayerCastbar or frame == _G.MSUF_PlayerCastbarPreview then return "player" end
-    if frame == _G.MSUF_TargetCastbar or frame == _G.MSUF_TargetCastbarPreview then return "target" end
-    if frame == _G.MSUF_FocusCastbar or frame == _G.MSUF_FocusCastbarPreview then return "focus" end
+    if frame == Frames.player or frame == Frames.playerPreview then return "player" end
+    if frame == Frames.target or frame == Frames.targetPreview then return "target" end
+    if frame == Frames.focus or frame == Frames.focusPreview then return "focus" end
 
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then
@@ -397,8 +397,7 @@ end
 --- target override). Casts and empower bars both count up; channels keep this
 --- same anchor and reverse their value direction when unified fill is off.
 local function GetCastbarReverseFillForFrame(frame, _)
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     local reverseFill = general.castbarFillDirection == "RTL"
 
     if general.castbarOpositeDirectionTarget == true then
@@ -410,36 +409,34 @@ local function GetCastbarReverseFillForFrame(frame, _)
 
     return reverseFill
 end
-ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)
+Utils.GetCastbarReverseFillForFrame = GetCastbarReverseFillForFrame
+Publish("MSUF_GetCastbarReverseFillForFrame", Utils.GetCastbarReverseFillForFrame)
 
-local function GetInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+local function GetInterruptibleCastColor(general)
+    general = general or Config.Read().general or {}
     local red = tonumber(general.castbarInterruptibleR)
     local green = tonumber(general.castbarInterruptibleG)
     local blue = tonumber(general.castbarInterruptibleB)
     if red and green and blue then return red, green, blue, 1 end
 end
-ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
+Utils.GetInterruptibleCastColor = GetInterruptibleCastColor
 
-local function GetNonInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+local function GetNonInterruptibleCastColor(general)
+    general = general or Config.Read().general or {}
     local red = tonumber(general.castbarNonInterruptibleR)
     local green = tonumber(general.castbarNonInterruptibleG)
     local blue = tonumber(general.castbarNonInterruptibleB)
     if red and green and blue then return red, green, blue, 1 end
 end
-ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
+Utils.GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 
 -- The custom colours come from this file's getters, the only owner of the
 -- public aliases (Runtime/MSUF_Colors.lua keeps its palette-fallback getters
 -- for the menu's MSUF._colorsAPI only).
 local function ResolveCastbarColors()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = Config.Read().general or {}
 
-    local castR, castG, castB = GetInterruptibleCastColor()
+    local castR, castG, castB = GetInterruptibleCastColor(general)
     if not (castR and castG and castB) then
         local key = general.castbarInterruptibleColor or "teal"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -451,7 +448,7 @@ local function ResolveCastbarColors()
     end
     if not (castR and castG and castB) then castR, castG, castB = 0, 0.85, 0.85 end
 
-    local nonR, nonG, nonB = GetNonInterruptibleCastColor()
+    local nonR, nonG, nonB = GetNonInterruptibleCastColor(general)
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -465,7 +462,8 @@ local function ResolveCastbarColors()
 
     return castR, castG, castB, nonR, nonG, nonB
 end
-ExportPublic("MSUF_ResolveCastbarColors", ResolveCastbarColors)
+Utils.ResolveCastbarColors = ResolveCastbarColors
+Publish("MSUF_ResolveCastbarColors", Utils.ResolveCastbarColors)
 
 local function EnsureShakeGroup(frame)
     if not frame or frame.MSUF_ShakeGroup then return end
@@ -497,8 +495,7 @@ end
 local function PlayCastbarShake(frame)
     if not frame then return end
 
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     if general.castbarInterruptShake == false then return end
 
     local strength = tonumber(general.castbarShakeStrength) or 8
@@ -516,20 +513,18 @@ local function PlayCastbarShake(frame)
         frame.MSUF_ShakeGroup:Play()
     end
 end
-ExportPublic("MSUF_PlayCastbarShake", PlayCastbarShake)
+Utils.PlayCastbarShake = PlayCastbarShake
 
 local function GetInterruptUnavailableCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     local red = tonumber(general.castbarInterruptUnavailableR)
     local green = tonumber(general.castbarInterruptUnavailableG)
     local blue = tonumber(general.castbarInterruptUnavailableB)
     if red and green and blue then return red, green, blue, 1 end
 end
-ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
+Utils.GetInterruptUnavailableCastColor = GetInterruptUnavailableCastColor
 
 local function ResolveInterruptFeedbackCastColor()
-    EnsureDBLazy()
 
     local getter = _G.MSUF_GetInterruptFeedbackCastColor
     if type(getter) == "function" then
@@ -537,7 +532,7 @@ local function ResolveInterruptFeedbackCastColor()
         if red and green and blue then return red, green, blue, 1 end
     end
 
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     local red = tonumber(general.castbarInterruptFeedbackR)
     local green = tonumber(general.castbarInterruptFeedbackG)
     local blue = tonumber(general.castbarInterruptFeedbackB)
@@ -558,7 +553,8 @@ local function ResolveInterruptFeedbackCastColor()
 
     return 1.0, 0.82, 0.0, 1
 end
-ExportPublic("MSUF_ResolveInterruptFeedbackCastColor", ResolveInterruptFeedbackCastColor)
+Utils.ResolveInterruptFeedbackCastColor = ResolveInterruptFeedbackCastColor
+Publish("MSUF_ResolveInterruptFeedbackCastColor", Utils.ResolveInterruptFeedbackCastColor)
 
 --- Interrupt-ready units: a castbar unit's config row (target, focus, boss for
 --- boss and bossN, arena for arena and arenaN; nil for any other unit) and the
@@ -595,21 +591,19 @@ local function UnitSupportsInterruptUnavailableTint(frame, general)
     local key = unit and KICK_READY_ROW[unit]
     if not key or general[KICK_READY_SHOW_KEY[key]] ~= true then return false end
     -- Resolve live ownership directly; no per-query closure is needed.
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local shouldUse = Backend.ShouldUseMSUFCastbar
     return type(shouldUse) ~= "function" or shouldUse(key, general) == true
 end
 
 local function ShouldUseInterruptUnavailableColor(frame)
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     if general.kickReadyStyle ~= "fill" then return false end
     return UnitSupportsInterruptUnavailableTint(frame, general)
 end
-ExportPublic("MSUF_Castbar_ShouldUseInterruptUnavailableColor", ShouldUseInterruptUnavailableColor)
+Utils.Castbar_ShouldUseInterruptUnavailableColor = ShouldUseInterruptUnavailableColor
 
 local function ResolveInterruptUnavailableCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     local red, green, blue
 
     -- This file's getter (the public alias's only owner).
@@ -629,25 +623,26 @@ local function ResolveInterruptUnavailableCastColor()
 
     return red, green, blue, 1
 end
-ExportPublic("MSUF_ResolveInterruptUnavailableCastColor", ResolveInterruptUnavailableCastColor)
+Utils.ResolveInterruptUnavailableCastColor = ResolveInterruptUnavailableCastColor
+Publish("MSUF_ResolveInterruptUnavailableCastColor", Utils.ResolveInterruptUnavailableCastColor)
 
 local function GetInterruptUnavailableTintArgs(frame)
     if not ShouldUseInterruptUnavailableColor(frame) then return nil end
     if not (_G.C_CurveUtil and type(_G.C_CurveUtil.EvaluateColorFromBoolean) == "function") then return nil end
-    if type(_G.MSUF_KickReady_GetSpellID) == "function" and not _G.MSUF_KickReady_GetSpellID() then return nil end
+    if type(KickReady.KickReady_GetSpellID) == "function" and not KickReady.KickReady_GetSpellID() then return nil end
 
     local readyBool
-    if type(_G.MSUF_KickReady_GetReadyBoolForTint) == "function" then
-        readyBool = _G.MSUF_KickReady_GetReadyBoolForTint()
-    elseif type(_G.MSUF_KickReady_IsReady) == "function" then
-        readyBool = _G.MSUF_KickReady_IsReady()
+    if type(KickReady.KickReady_GetReadyBoolForTint) == "function" then
+        readyBool = KickReady.KickReady_GetReadyBoolForTint()
+    elseif type(KickReady.KickReady_IsReady) == "function" then
+        readyBool = KickReady.KickReady_IsReady()
     end
     if not CanUseBooleanTintValue(readyBool) then return nil end
 
     local red, green, blue, alpha = ResolveInterruptUnavailableCastColor()
     return red, green, blue, alpha or 1, readyBool, true
 end
-ExportPublic("MSUF_Castbar_GetInterruptUnavailableTintArgs", GetInterruptUnavailableTintArgs)
+Utils.Castbar_GetInterruptUnavailableTintArgs = GetInterruptUnavailableTintArgs
 
 local toPlainIsSecret = _G.issecretvalue
 local toPlainHuge = math.huge
@@ -704,19 +699,18 @@ local function PlainNumber(value)
 
     return nil
 end
-ExportPublic("MSUF_Castbar_PlainNumber", PlainNumber)
+Utils.Castbar_PlainNumber = PlainNumber
 
 local glowEnabledCache
 local glowEnabledRevision = -1
 
 local function IsCastbarGlowEnabled()
-    local revision = _G.MSUF__castTimeGlobalRev or 1
+    local revision = Config.revision
     if glowEnabledRevision == revision and glowEnabledCache ~= nil then
         return glowEnabledCache
     end
 
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local general = (Config.Read().general) or nil
     glowEnabledCache = not (general and general.castbarShowGlow == false)
     glowEnabledRevision = revision
     return glowEnabledCache
@@ -729,7 +723,8 @@ local function ResetCastbarGlowFade(frame)
     statusBar._msufGlowApplied = nil
     statusBar._msufGlowLastP = nil
 end
-ExportPublic("MSUF_ResetCastbarGlowFade", ResetCastbarGlowFade)
+Utils.ResetCastbarGlowFade = ResetCastbarGlowFade
+Publish("MSUF_ResetCastbarGlowFade", Utils.ResetCastbarGlowFade)
 
 -- One white overlay per castbar while the glow is on. Rounded and slanted
 -- castbars build it on their cold apply and mask it with the bar's surface
@@ -760,7 +755,7 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     end
 
     if not IsCastbarGlowEnabled() then
-        _G.MSUF_ResetCastbarGlowFade(frame)
+        Utils.ResetCastbarGlowFade(frame)
         return
     end
 
@@ -799,16 +794,17 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     overlay:Show()
     statusBar._msufGlowApplied = true
 end
-ExportPublic("MSUF_ApplyCastbarGlowFade", ApplyCastbarGlowFade)
+Utils.ApplyCastbarGlowFade = ApplyCastbarGlowFade
+Publish("MSUF_ApplyCastbarGlowFade", Utils.ApplyCastbarGlowFade)
 
 local function ApplyCastbarColor(frame, reason)
     if not (frame and frame.UpdateColorForInterruptible) then return end
 
     local result = frame:UpdateColorForInterruptible()
-    if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, reason) end
+    if KickReady.KickReady_RefreshFrame then KickReady.KickReady_RefreshFrame(frame, reason) end
     return result
 end
-ExportPublic("MSUF_CB_ApplyColor", ApplyCastbarColor)
+Utils.CB_ApplyColor = ApplyCastbarColor
 
 local function Utf8Truncate(text, maxChars)
     if not text or text == "" then return text, false end
@@ -927,8 +923,7 @@ end
 local function GetSpellNameShorteningConfig(frame)
     if not frame then return false end
 
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local general = (Config.Read().general) or nil
     if not general then return false end
 
     local unit = GetCastbarUnitKey(frame)
@@ -972,12 +967,12 @@ local function GetSpellNameShorteningConfig(frame)
     -- decides on/off above, so folding larger modes onto MODE_KEY_MAX costs nothing.
     local modeKeyMax = SPELL_NAME_SHORTENING.MODE_KEY_MAX
     local modeKey = mode > modeKeyMax and modeKeyMax or mode
-    local revision = tonumber(_G.MSUF_CastbarStyleRevision) or 1
+    local revision = tonumber(Config.textureRevision) or 1
     local cacheKey = (((revision * 4 + modeKey) * 128 + maxLen) * 256 + reserved)
         * 4096 + math_floor(fitWidth + 0.5)
     return true, maxLen, reserved, cacheKey
 end
-ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", GetSpellNameShorteningConfig)
+Utils.GetCastbarSpellNameShorteningConfig = GetSpellNameShorteningConfig
 
 local function ShortenCastbarSpellName(frame, text)
     local isSecret = _G.issecretvalue
@@ -1043,7 +1038,8 @@ local function ShortenCastbarSpellName(frame, text)
     end
     return out
 end
-ExportPublic("MSUF_ShortenCastbarSpellName", ShortenCastbarSpellName)
+Utils.ShortenCastbarSpellName = ShortenCastbarSpellName
+Publish("MSUF_ShortenCastbarSpellName", Utils.ShortenCastbarSpellName)
 
 --- Pushback suffix ("+0.4"). delayTimeMs is NeverSecret in 12.x and is captured
 --- once per cast into frame._msufPushbackMS, so this costs one field read per
@@ -1057,8 +1053,7 @@ local function PushbackSuffix(frame)
     local delayMS = frame._msufPushbackMS
     if type(delayMS) ~= "number" or delayMS <= 0 then return nil end
 
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     if general.castbarShowPushback ~= true then return nil end
 
     return string.format(" +%.1f", delayMS / 1000)
@@ -1101,7 +1096,7 @@ local function ResolveCastbarPushbackMS(frame, state)
     if moved > 0 then return moved end
     return nil
 end
-ExportPublic("MSUF_Castbar_ResolvePushbackMS", ResolveCastbarPushbackMS)
+Utils.Castbar_ResolvePushbackMS = ResolveCastbarPushbackMS
 
 local function ComposeCastText(frame, text)
     local out = ShortenCastbarSpellName(frame, text)
@@ -1119,7 +1114,7 @@ local function RefreshCastbarSpellNameText(frame)
     if rawText == nil then return end
     SetText(frame.castText, ComposeCastText(frame, rawText))
 end
-ExportPublic("MSUF_RefreshCastbarSpellNameText", RefreshCastbarSpellNameText)
+Utils.RefreshCastbarSpellNameText = RefreshCastbarSpellNameText
 
 local function ApplyCastbarTexts(frame, source, castText, timeText)
     if not frame then return end
@@ -1133,7 +1128,8 @@ local function ApplyCastbarTexts(frame, source, castText, timeText)
     end
     if timeText ~= nil and frame.timeText then SetText(frame.timeText, timeText) end
 end
-ExportPublic("MSUF_CB_ApplyTexts", ApplyCastbarTexts)
+Utils.CB_ApplyTexts = ApplyCastbarTexts
+Publish("MSUF_CB_ApplyTexts", Utils.CB_ApplyTexts)
 
 local function ClearEmpowerState(frame)
     if not frame then return end
@@ -1174,21 +1170,13 @@ local function ClearEmpowerState(frame)
         end
     end
 end
-ExportPublic("MSUF_ClearEmpowerState", ClearEmpowerState)
+Utils.ClearEmpowerState = ClearEmpowerState
 
 local function EnsureGeneralDB()
-    local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then ensure() end
-
-    local db = _G.MSUF_DB
-    if not db then
-        db = {}
-        ExportPublic("MSUF_DB", db)
-    end
-    db.general = db.general or {}
-    return db.general
+    return Config.EnsureSource().general
 end
-ExportPublic("MSUF_EnsureCastbarGeneralDB", EnsureGeneralDB)
+
+Utils.EnsureCastbarGeneralDB = EnsureGeneralDB
 
 local function CastTimeUnitKey(frame, unit)
     unit = tostring(unit or ""):lower()
@@ -1198,4 +1186,4 @@ local function CastTimeUnitKey(frame, unit)
     if unit:match("^arena%d+$") then return "arena" end
     return unit
 end
-ExportPublic("MSUF_CastTimeUnitKey", CastTimeUnitKey)
+Utils.CastTimeUnitKey = CastTimeUnitKey

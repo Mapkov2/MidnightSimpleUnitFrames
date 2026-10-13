@@ -1,4 +1,3 @@
---- Castbars/MSUF_CastbarEngine.lua
 --- Normalizes Blizzard cast/channel/empower API output into one cast-state
 --- table used by the player, target, focus, boss, kick-ready, and preview code.
 ---
@@ -7,19 +6,22 @@
 --- and cache only enough to avoid duplicate work within the same frame.
 
 local _, ns = ...
-ns = ns or {}
-local ExportPublic = ns.ExportPublic
+local Castbars = ns.Require("MSUF", "Castbars/MSUF_CastbarEngine.lua").Castbars
+local Config = Castbars.Config
+local Engine = Castbars.Engine
+local PublicAPI = Castbars.PublicAPI
+local Utils = Castbars.Utils
+local Publish = PublicAPI.Publish
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
 -- harnesses that load the engine standalone load Utils first.
-local PlainNumber = _G.MSUF_Castbar_PlainNumber
+local PlainNumber = Utils.Castbar_PlainNumber
 local type = type
 local pairs = pairs
 local table_remove = table.remove
 
-ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
+ns.MSUF_CastbarEngine = Castbars.Engine
 
-local Engine = ns.MSUF_CastbarEngine
 ns.Castbars = ns.Castbars or {}
 ns.Castbars.Engine = Engine
 local buildStateCacheTime = {}
@@ -155,13 +157,12 @@ end
 -- MSUF_CastbarUtils.lua loads first and owns the shared lazy DB bootstrap and
 -- the fill-anchor rule (MSUF_GetCastbarReverseFillForFrame, target override
 -- included); harnesses that load this file standalone load Utils first.
-local EnsureDBLazy = _G.MSUF_EnsureDBLazy
+local EnsureDBLazy = Utils.EnsureDBLazy
 
 --- Profession casts are filtered out before any frame work happens. The flag is
 --- NeverSecret in 12.x, so the filter also holds for PvP-restricted units.
 local function HideTradeSkillCasts()
-    EnsureDBLazy()
-    local general = (MSUF_DB and MSUF_DB.general) or {}
+    local general = (Config.Read().general) or {}
     return general.castbarHideTradeSkills == true
 end
 
@@ -274,7 +275,7 @@ function Engine:BuildState(unit, previousState)
             state.durationObj = UnitCastingDuration(unit)
         end
 
-        state.reverseFill = MSUF_GetCastbarReverseFillForFrame(state)
+        state.reverseFill = Utils.GetCastbarReverseFillForFrame(state)
         ApplyIdentity(state)
         return state
     end
@@ -306,7 +307,7 @@ function Engine:BuildState(unit, previousState)
             state.durationObj = UnitChannelDuration(unit)
         end
 
-        state.reverseFill = MSUF_GetCastbarReverseFillForFrame(state)
+        state.reverseFill = Utils.GetCastbarReverseFillForFrame(state)
         ApplyIdentity(state)
         return state
     end
@@ -357,20 +358,20 @@ function Engine:ResolveTargetInfo(state)
     return state.targetName, state.targetClass, true
 end
 
-if not _G.MSUF_BuildCastState then
-    ExportPublic("MSUF_BuildCastState", function(unit, previousState)
+if not Engine.BuildCastState then
+    Engine.BuildCastState = function(unit, previousState)
         return Engine:BuildState(unit, previousState)
-    end)
+    end
 end
 
-if not _G.MSUF_ResolveCastbarTargetInfo then
-    ExportPublic("MSUF_ResolveCastbarTargetInfo", function(state)
+if not Engine.ResolveCastbarTargetInfo then
+    Engine.ResolveCastbarTargetInfo = function(state)
         return Engine:ResolveTargetInfo(state)
-    end)
+    end
 end
 
-if not _G.MSUF_GetCastbarEngine then
-    ExportPublic("MSUF_GetCastbarEngine", function()
+if not Engine.GetCastbarEngine then
+    Engine.GetCastbarEngine = function()
         return Engine
-    end)
+    end
 end

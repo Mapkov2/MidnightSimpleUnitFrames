@@ -2,6 +2,7 @@
 -- Loads the real Castbars/MSUF_CastbarUtils.lua + Castbars/MSUF_InterruptReady.lua.
 -- lua51 focuskick_fill_probe.lua <repoRoot>
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local KICK = 1766
 local frameStamp = 100
 local events, eventHandler = {}, nil
@@ -53,11 +54,12 @@ local function Run(style)
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. file))("MidnightSimpleUnitFrames", ns)
     end
     local iconRepaints = 0
-    _G.MSUF_FocusKick_RefreshReadyColor = function() iconRepaints = iconRepaints + 1 end
+    ns.Castbars.FocusKick.FocusKick_RefreshReadyColor = function() iconRepaints = iconRepaints + 1 end
 
     -- The focus castbar (suppressed by the tracker, alpha 0) runs a cast.
     local focusBar = { unit = "focus", MSUF_castActive = true, statusBar = {} }
     _G.MSUF_FocusCastbar = focusBar
+    ns.Castbars.Frames.Register("focus", nil, focusBar)
     _G.MSUF_KickReady_RefreshAll()                 -- unit-frame spawn
     _G.MSUF_KickReady_RefreshFrame(focusBar, nil)  -- cast start (driver ApplyColor path)
     local registered = events.SPELL_UPDATE_COOLDOWN == true

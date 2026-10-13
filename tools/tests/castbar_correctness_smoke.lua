@@ -7,6 +7,7 @@
 --
 -- Plain Lua 5.1, repo root as arg 1.
 local root = arg and arg[1] or "."
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local function Check(condition, message)
     if not condition then error(message or "check failed", 2) end
@@ -160,6 +161,7 @@ do
     _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
     _G.MSUF_GetFontFlags = function() return "OUTLINE" end
     _G.MSUF_DB = { general = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     -- The providers MSUF_CastbarVisuals.lua requires at load (State, Kernel,
     -- Runtime colours, the castbar Core, Style and Utils), reduced to no-ops
     -- and plain values: these checks are about which elements show.
@@ -178,7 +180,7 @@ do
     local MSUF = LoadAddonFile("Castbars/MSUF_CastbarVisuals.lua", namespace)
     local apply = MSUF.Castbars.Visuals.ApplyDetailLayout
     Check(type(apply) == "function", "Visuals.ApplyDetailLayout missing")
-    Check(_G.MSUF_ApplyCastbarDetailLayout == apply, "MSUF_ApplyCastbarDetailLayout alias missing")
+    Check(_G.MSUF.Castbars.Visuals.ApplyCastbarDetailLayout == apply, "MSUF_ApplyCastbarDetailLayout alias missing")
 
     local function General(overrides)
         local g = {
@@ -277,6 +279,8 @@ do
     for _, backend in ipairs({ "timer", "signal" }) do
         local world = World.New(root, backend)
         _G.MSUF_DB.general.castbarHideTradeSkills = true
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+        world.ns.Castbars.Config.Compile()
         local bar = world:Driver("target")
         local label = backend .. ": "
 
@@ -322,9 +326,9 @@ do
     _G.INTERRUPTED = LOCALIZED
 
     -- Label resolver fallback (no interrupter, toggle off).
-    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(nil, "target"), LOCALIZED,
+    Equal(_G.MSUF.Castbars.Driver.Castbar_ResolveInterruptLabel(nil, "target"), LOCALIZED,
         "interrupt label resolver fallback")
-    Equal(_G.MSUF_Castbar_ResolveInterruptLabel("Player-1-0001", "target"), LOCALIZED,
+    Equal(_G.MSUF.Castbars.Driver.Castbar_ResolveInterruptLabel("Player-1-0001", "target"), LOCALIZED,
         "interrupt label without showInterruptSource")
 
     -- Target/focus driver: frame:SetInterrupted.
@@ -338,7 +342,7 @@ do
     world:Advance(1.0)
 
     -- Runtime interrupt visuals without a label.
-    local runtime = assert(_G.MSUF_CastbarRuntime, "castbar runtime missing")
+    local runtime = assert(world.ns.Castbars.Runtime, "castbar runtime missing")
     local frame = world.NewWidget("Frame")
     frame.statusBar = world.NewWidget("StatusBar")
     frame.castText = world.NewWidget("FontString")
@@ -349,14 +353,14 @@ do
     -- Player castbar: an interrupted empowered cast.
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))(
         "MidnightSimpleUnitFrames", world.ns)
-    _G.MSUF_IsCastbarEnabledForUnit = function() return true end
+    world.ns.Castbars.Bridge.IsCastbarEnabledForUnit = function() return true end
     local player = world.NewWidget("StatusBar", "MSUF_PlayerSmokeCastBar")
     player.unit = "player"
     player.statusBar = world.NewWidget("StatusBar")
     player.castText = world.NewWidget("FontString")
     player.timeText = world.NewWidget("FontString")
     player.isEmpower = true
-    _G.MSUF_PlayerCastbar_OnEvent(player, "UNIT_SPELLCAST_INTERRUPTED", "player", "Fire Breath-guid", 357208, nil, 91)
+    _G.MSUF.Castbars.Player.PlayerCastbar_OnEvent(player, "UNIT_SPELLCAST_INTERRUPTED", "player", "Fire Breath-guid", 357208, nil, 91)
     Equal(player.castText.text, LOCALIZED, "player empowered-cast interrupt label")
     _G.INTERRUPTED = nil
 end
@@ -376,29 +380,35 @@ do
     _G.issecretvalue = function(value) return rawequal(value, SECRET) end
     _G.C_Timer = { After = function() end }
     _G.MSUF_DB = { general = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     local utilsNamespace = NewNamespace()
     LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", utilsNamespace)
     local applyTexts = assert(_G.MSUF_CB_ApplyTexts, "MSUF_CB_ApplyTexts missing")
-    local refresh = assert(_G.MSUF_RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
+    local refresh = assert(_G.MSUF.Castbars.Utils.RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
 
     -- The saved shortening modes are named (OFF/ON); legacy booleans and
     -- larger mode numbers keep their meaning, and the boss override wins.
     local modes = assert(utilsNamespace.Castbars and utilsNamespace.Castbars.SpellNameShortening,
         "the spell name shortening modes are not named")
     Check(modes.OFF == 0 and modes.ON == 1, "the shortening mode values changed")
-    local config = assert(_G.MSUF_GetCastbarSpellNameShorteningConfig, "shortening config missing")
+    local config = assert(_G.MSUF.Castbars.Utils.GetCastbarSpellNameShorteningConfig, "shortening config missing")
     local cases = { { 0, false }, { 1, true }, { true, true }, { false, false }, { 3, true }, { 7, true } }
     for _, case in ipairs(cases) do
         _G.MSUF_DB.general.castbarSpellNameShortening = case[1]
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
         Check((config({ unit = "target" }) == true) == case[2], "shortening " .. tostring(case[1]) .. " decided wrongly")
     end
     _G.MSUF_DB.general.castbarSpellNameShortening = modes.ON
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.MSUF_DB.general.bossCastSpellNameShortening = false
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     Check(config({ unit = "boss1" }) == false, "the boss shortening override was ignored")
     _G.MSUF_DB.general.bossCastSpellNameShortening = nil
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
     for _, mode in ipairs({ 0, 1 }) do
         _G.MSUF_DB.general.castbarSpellNameShortening = mode
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
         local label = "shortening " .. mode .. ": "
         local frame = { unit = "arena1", castText = NewWidget("FontString", FONTSTRING, {}) }
         applyTexts(frame, nil, "Fireball")
@@ -449,7 +459,7 @@ do
     AssertSecretTestFirst(FunctionBody(castbars, "local function CheckChannelHardStop(", "CheckChannelHardStop"),
         "channelName", "CheckChannelHardStop")
     local driver = ReadSource("Castbars/MSUF_CastbarDriver.lua")
-    AssertSecretTestFirst(FunctionBody(driver, "function _G.MSUF_Castbar_ResolveInterruptLabel(", "ResolveInterruptLabel"),
+    AssertSecretTestFirst(FunctionBody(driver, "function Driver.Castbar_ResolveInterruptLabel(", "ResolveInterruptLabel"),
         "interruptedBy", "MSUF_Castbar_ResolveInterruptLabel")
     local utils = ReadSource("Castbars/MSUF_CastbarUtils.lua")
     AssertSecretTestFirst(FunctionBody(utils, "local function ShortenCastbarSpellName(", "ShortenCastbarSpellName"),
@@ -463,7 +473,7 @@ do
     _G.INTERRUPTED = "Interrupted"
     _G.MSUF_DB.target.showInterruptSource = true
     _G.UnitNameFromGUID = function() error("a secret interrupter GUID reached UnitNameFromGUID") end
-    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(SECRET_GUID, "target"), "Interrupted",
+    Equal(_G.MSUF.Castbars.Driver.Castbar_ResolveInterruptLabel(SECRET_GUID, "target"), "Interrupted",
         "a secret interrupter did not fall back to the plain label")
     _G.INTERRUPTED = nil
     _G.UnitNameFromGUID = nil
@@ -506,6 +516,7 @@ do
     local combat = false
     _G.InCombatLockdown = function() return combat end
     _G.MSUF_DB = { general = { enableFocusKickIcon = false }, focus = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.MSUF_SetFontChecked = function() return true end
     -- The font providers the preview's time text calls (Castbars_Core and
     -- Runtime/MSUF_FontRegistry.lua, both loaded before the icon) and the
@@ -524,6 +535,7 @@ do
 
     -- Dragging the preview in combat.
     _G.MSUF_DB.general.enableFocusKickIcon = true
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.MSUF_FocusKick_SetPreviewEnabled(true)
     local preview = assert(_G.MSUF_FocusKickPreviewFrame, "focus-kick preview frame missing")
     combat = true
@@ -553,7 +565,7 @@ do
     _G.UIParent = _G.CreateFrame()
     LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", namespace)
     LoadAddonFile("Castbars/MSUF_InterruptReady.lua", namespace)
-    local tint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor, "unavailable tint gate missing")
+    local tint = assert(_G.MSUF.Castbars.Utils.Castbar_ShouldUseInterruptUnavailableColor, "unavailable tint gate missing")
     local units = assert(namespace.Castbars.KickReadyUnits, "the interrupt-ready unit rule is not shared")
     local tokens = { "player", "target", "focus", "boss", "arena", "pet", "bosstarget", "boss1target",
         "arenapet1", "bossX" }
@@ -564,7 +576,8 @@ do
             kickReadyShowBoss = math.floor(mask / 4) % 2 == 1, kickReadyShowArena = math.floor(mask / 8) % 2 == 1 }
         local owned = math.floor(mask / 16) % 2 == 1
         _G.MSUF_DB = { general = general }
-        _G.MSUF_ShouldUseMSUFCastbar = function() return owned end
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+        namespace.Castbars.Backend.ShouldUseMSUFCastbar = function() return owned end
         for _, unit in ipairs(tokens) do
             local key = units.Key(unit)
             local fill = key ~= nil and general[units.ShowKey[key]] == true
@@ -603,7 +616,8 @@ do
                 for name in pairs(OWNERS) do
                     local quoted = '"' .. name .. '"'
                     if source:find("ExportPublic%(%s*" .. quoted:gsub("%W", "%%%0"))
-                        or source:find("%f[%w_]_?G%." .. name .. "%s*=[^=]") then
+                        or source:find("%f[%w_]_?G%." .. name .. "%s*=[^=]")
+                        or source:find("%f[%w_]Utils%." .. name:sub(6) .. "%s*=[^=]") then
                         writers[name][#writers[name] + 1] = path
                     end
                 end

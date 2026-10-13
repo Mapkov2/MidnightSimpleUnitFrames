@@ -5,6 +5,7 @@ local function read(path)
     f:close()
     return s
 end
+local loadfile = assert(loadfile("tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local core = "MidnightSimpleUnitFrames/"
 local options = "MidnightSimpleUnitFrames_Options/"
 for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do

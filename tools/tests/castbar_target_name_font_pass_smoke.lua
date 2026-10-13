@@ -84,6 +84,7 @@ end
 local world = World.New(root, "timer", { extra = EXTRA, setup = Setup, richWidgets = true })
 local general = _G.MSUF_DB.general
 general.castbarTargetShowTargetName = true
+if _G.MSUF and _G.MSUF.Castbars then _G.MSUF.Castbars.Config.Compile() end
 
 local frame = world:Driver("target")
 local fs = world.NewWidget("FontString")
@@ -101,7 +102,7 @@ local function Color()
 end
 
 -- 1. The cast paints its target's class colour.
-_G.MSUF_CastbarDriver_ApplyBackendState("target")
+_G.MSUF.Castbars.Driver.CastbarDriver_ApplyBackendState("target")
 world:StartCast("target", "Frostbolt", 3, 77)
 world:Fire(frame, "UNIT_SPELLCAST_START", "Frostbolt-guid", 133)
 world:Advance(0.1)
@@ -111,14 +112,14 @@ Check(classCalls == 1, "1: one cast asked C_ClassColor " .. classCalls .. " time
 
 -- 2. A font pass mid-cast rewrites the colour; the class colour comes back.
 textColor = { 0.9, 0.8, 0.1 }
-_G.MSUF_ApplyCastbarDetailLayout(frame, "target", general)
+_G.MSUF.Castbars.Visuals.ApplyCastbarDetailLayout(frame, "target", general)
 Check(Is(MAGE), "2: after a mid-cast font pass the name kept the font colour (" .. Color()
     .. "); the per-cast class cache skipped the repaint")
 Check(classCalls == 2, "2: the font pass repaint asked C_ClassColor " .. (classCalls - 1) .. " times, not once")
 
 -- 3. A font pass with a current font cache writes nothing and asks nothing.
 writes = 0
-_G.MSUF_ApplyCastbarDetailLayout(frame, "target", general)
+_G.MSUF.Castbars.Visuals.ApplyCastbarDetailLayout(frame, "target", general)
 Check(Is(MAGE) and writes == 0, "3: an unchanged font pass rewrote the colour " .. writes .. " times")
 Check(classCalls == 2, "3: an unchanged font pass asked C_ClassColor again")
 world:Fire(frame, "UNIT_SPELLCAST_DELAYED", "Frostbolt-guid", 133)
@@ -126,10 +127,10 @@ Check(Is(MAGE) and classCalls == 2, "3: a pushback repaint asked C_ClassColor ag
 
 -- 4. A custom target name colour survives a font pass that rewrote it.
 customColor = { 0.3, 0.9, 0.3 }
-_G.MSUF_RefreshCastTargetText(frame)
+_G.MSUF.Castbars.Driver.RefreshCastTargetText(frame)
 Check(Is(customColor), "4: the custom target name colour was not applied: " .. Color())
 textColor = { 0.2, 0.2, 0.9 }
-_G.MSUF_ApplyCastbarDetailLayout(frame, "target", general)
+_G.MSUF.Castbars.Visuals.ApplyCastbarDetailLayout(frame, "target", general)
 Check(Is(customColor), "4: after a font pass the custom target name colour stayed lost: " .. Color())
 
 print("castbar_target_name_font_pass_smoke: ok")

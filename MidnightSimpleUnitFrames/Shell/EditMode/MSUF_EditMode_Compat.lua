@@ -466,6 +466,7 @@ function SyncCastbarEditModeWithUnitEdit()
     local g = db.general
     local active = EM2.State and EM2.State.IsActive()
     g.castbarPlayerPreviewEnabled = active and true or false
+    MSUF.Castbars.Config.Invalidate()
     if not active then MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)() end
 
     MSUF.Require("MSUF_UpdatePlayerCastbarPreview", CALLER)()
@@ -475,21 +476,21 @@ end
 local function CastbarToggleFrameCenter(unit)
     local preview, runtime
     if unit == "player" then
-        preview = _G.MSUF_PlayerCastbarPreview
-        runtime = _G.MSUF_PlayerCastbar
+        preview = MSUF.Castbars.Frames.Get("playerPreview")
+        runtime = MSUF.Castbars.Frames.Get("player")
     elseif unit == "target" then
-        preview = _G.MSUF_TargetCastbarPreview
-        runtime = _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+        preview = MSUF.Castbars.Frames.Get("targetPreview")
+        runtime = MSUF.Castbars.Frames.Get("target")
     elseif unit == "focus" then
-        preview = _G.MSUF_FocusCastbarPreview
-        runtime = _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+        preview = MSUF.Castbars.Frames.Get("focusPreview")
+        runtime = MSUF.Castbars.Frames.Get("focus")
     elseif unit == "boss" then
-        preview = _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1
+        preview = MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1
         local bossCastbars = _G.MSUF_BossCastbars
         runtime = (bossCastbars and bossCastbars[1])
             or _G.MSUF_BossCastbar1
     elseif unit == "arena" then
-        preview = _G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1
+        preview = MSUF.Castbars.Frames.Get("arenaPreview") or _G.MSUF_ArenaCastbarPreview1
         local arenaCastbars = _G.MSUF_ArenaCastbars
         runtime = (arenaCastbars and arenaCastbars[1])
             or _G.MSUF_ArenaCastbar1

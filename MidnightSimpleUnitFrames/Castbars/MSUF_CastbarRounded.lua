@@ -5,9 +5,15 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- controller invokes ApplyAll on its deferred/cold apply route; ordinary
 --- castbar visual refreshes only rebind masks when their textures changed.
 local _, MSUF = ...
-MSUF = MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarRounded.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local Frames = Castbars.Frames
+local PublicAPI = Castbars.PublicAPI
+local Rounded = Castbars.Rounded
+local Style = Castbars.Style
 
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 local RoundedSurface = MSUF.RoundedSurface or {}
 local CreateFrame = _G.CreateFrame
 
@@ -24,12 +30,11 @@ local MaskSurfaceTexture = RoundedSurface.MaskTextureWith
 local roundedRuntimeActive = false
 
 local function SavedDB()
-    return _G.MSUF_DB
+    return Config.Read()
 end
 
 local function BarsDB()
-    local db = SavedDB()
-    return db and db.bars or nil
+    return Config.Read().bars
 end
 
 local function SettingStyle()
@@ -215,8 +220,8 @@ local function FrameUsesMSUFBackend(frame)
     if not frame or frame._msufIsPreview == true then return true end
     local unit = tostring(frame.unit or "")
     if unit:match("^boss%d+$") then unit = "boss" end
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local shouldUse = Backend.ShouldUseMSUFCastbar
+    local general = Config.Read().general
     if type(shouldUse) == "function" and unit ~= "" then return shouldUse(unit, general) == true end
     return true
 end
@@ -224,7 +229,7 @@ end
 local function RestoreSquareOutline(frame)
     frame._msufOutlineT = nil
     frame._msufOutlineEdge = nil
-    local apply = _G.MSUF_ApplyCastbarOutline
+    local apply = Style.ApplyCastbarOutline
     if type(apply) == "function" then
         frame._msufRoundedCastbarBypass = true
         apply(frame, true)
@@ -269,7 +274,7 @@ local function ApplyFrame(frame)
     if ensureGlow then ensureGlow(frame.statusBar) end
     ApplySurfaceMasks(frame)
     frame._msufRoundedCastbarActive = true
-    local applyOutline = _G.MSUF_ApplyCastbarOutline
+    local applyOutline = Style.ApplyCastbarOutline
     if type(applyOutline) == "function" then applyOutline(frame, true) end
     return true
 end
@@ -282,12 +287,12 @@ local function ForEachCastbar(callback)
             callback(frame)
         end
     end
-    Visit(_G.MSUF_PlayerCastbar or _G.MSUF_PlayerCastBar)
-    Visit(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar)
-    Visit(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
-    Visit(_G.MSUF_PlayerCastbarPreview)
-    Visit(_G.MSUF_TargetCastbarPreview)
-    Visit(_G.MSUF_FocusCastbarPreview)
+    Visit(Frames.player)
+    Visit(Frames.target)
+    Visit(Frames.focus)
+    Visit(Frames.playerPreview)
+    Visit(Frames.targetPreview)
+    Visit(Frames.focusPreview)
     -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools
     local order = pools and pools.order
@@ -337,7 +342,8 @@ MSUF.Castbars = MSUF.Castbars or {}
 MSUF.Castbars.MaskGlowOverlay = MaskGlowOverlay
 MSUF.Castbars.RefreshRoundedGlow = RefreshGlowOverlays
 MSUF.RoundedCastbarsApplyAll = ApplyAll
-ExportPublic("MSUF_RoundedCastbar_RefreshFrame", ApplyFrame)
-ExportPublic("MSUF_RoundedCastbar_ApplyOutline", ApplyRoundedOutline)
-ExportPublic("MSUF_RoundedCastbar_TintOutline", TintRoundedOutline)
-ExportPublic("MSUF_RoundedCastbar_RenderPreview", RenderPreviewFrame)
+Rounded.RoundedCastbar_RefreshFrame = ApplyFrame
+Rounded.RoundedCastbar_ApplyOutline = ApplyRoundedOutline
+Rounded.RoundedCastbar_TintOutline = TintRoundedOutline
+Rounded.RoundedCastbar_RenderPreview = RenderPreviewFrame
+Publish("MSUF_RoundedCastbar_RenderPreview", Rounded.RoundedCastbar_RenderPreview)

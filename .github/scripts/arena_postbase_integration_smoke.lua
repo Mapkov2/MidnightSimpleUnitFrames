@@ -38,6 +38,11 @@ local configHelpers = Slice(driver, {
     "local function CastbarConfigUnitKey",
     "local function CastTargetTextEnabled",
 })
+local Config = { DB = {} }
+function Config.Read() return Config.DB end
+_G.Config = Config
+local Driver = {}
+_G.Driver = Driver
 local configUnitKey, castTargetTextEnabled = Compile(configHelpers .. [[
 return CastbarConfigUnitKey, CastTargetTextEnabled
 ]], "Arena castbar config harness")()
@@ -52,29 +57,35 @@ _G.MSUF_DB = {
     arena = { showInterrupt = false, showInterruptSource = true },
     boss = { showInterrupt = true, showInterruptSource = true },
 }
+Config.DB = _G.MSUF_DB
 assert(castTargetTextEnabled({ unit = "arena2", castTargetText = {} }) == true,
     "Arena cast-target text setting is not consumed by the live driver")
 _G.MSUF_DB.general.showArenaCastTargetName = false
+Config.DB = _G.MSUF_DB
 assert(castTargetTextEnabled({ unit = "arena2", castTargetText = {} }) == false,
     "Arena cast-target text cannot be disabled")
 
 -- Reason: the interrupter-source label is one exported function.
-local interruptLabelSource = Slice(driver, { "function _G.MSUF_Castbar_ResolveInterruptLabel" })
+local interruptLabelSource = Slice(driver, { "function Driver.Castbar_ResolveInterruptLabel" })
 _G.UnitNameFromGUID = function(guid) return guid == "arena-guid" and "Arena Kicker" or "Boss Kicker" end
 _G.UnitClassFromGUID = nil
 _G.SPELL_INTERRUPTED_BY = "Interrupted by %s"
 _G.INTERRUPTED = "Interrupted" -- Blizzard GlobalString; the label falls back to it
 Compile(configHelpers .. interruptLabelSource, "Arena interrupt-label harness")()
-assert(_G.MSUF_Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted by Arena Kicker",
+assert(Driver.Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted by Arena Kicker",
     "Arena interrupter-source label does not read the Arena settings root")
 _G.MSUF_DB.arena.showInterruptSource = false
-assert(_G.MSUF_Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted",
+assert(Driver.Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted",
     "Arena interrupter-source label ignores its disabled setting")
 _G.MSUF_DB.arena.showInterruptSource = true
 
 -- Reason: the interrupt feedback path is one frame method.
 local setInterruptedSource = Slice(driver, { "function frame:SetInterrupted" })
 local interruptedFrame = Compile([[
+local Config = _G.Config
+local Driver = _G.Driver
+local Runtime = { CB_ResetStateOnStop = function() end }
+local KickReady = {}
 local frame = { unit = "arena3" }
 local function CastbarConfigUnitKey(unit)
     if type(unit) ~= "string" then return unit end
@@ -107,14 +118,16 @@ local PoolNamespace = assert(loadfile("tools/tests/castbar_pool_namespace.lua"))
 local refreshAllSource = Slice(driver, { "local function RefreshAllCastTargetTextColors" })
 local refreshAllHarness = [[
 local MSUF = ...
+local Frames = MSUF.Castbars.Frames
 local liveVisited, previewVisited = {}, {}
 local function RefreshCastTargetText(frame) liveVisited[#liveVisited + 1] = frame end
 local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 1] = frame end
 ]] .. refreshAllSource .. [[
 return RefreshAllCastTargetTextColors, liveVisited, previewVisited
 ]]
+local colorNS = PoolNamespace(".", nil)
 local refreshAll, liveVisited, previewVisited =
-    Compile(refreshAllHarness, "Arena cast-target color refresh harness")(PoolNamespace(".", nil))
+    Compile(refreshAllHarness, "Arena cast-target color refresh harness")(colorNS)
 -- 3-slot pass: MSUF_MAX_ARENA_FRAMES unset (Mainline fallback 3); slots 4..5
 -- are decoys that must stay untouched.
 _G.MSUF_MAX_ARENA_FRAMES = nil
@@ -131,6 +144,7 @@ for index = 4, 5 do
 end
 _G.MSUF_ArenaCastbars = { arenaLive[1], arenaLive[2], arenaLive[3] }
 _G.MSUF_ArenaCastbarPreview = arenaPreview[1]
+PoolNamespace(".", nil, colorNS)
 refreshAll()
 AssertList(liveVisited, arenaLive, "Arena live cast-target color refresh")
 AssertList(previewVisited, arenaPreview, "Arena preview cast-target color refresh")

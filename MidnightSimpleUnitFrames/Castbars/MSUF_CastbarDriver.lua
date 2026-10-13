@@ -1,27 +1,34 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_CastbarDriver.lua
---- Target/focus castbar driver.
----
---- Owns unit spellcast event registration, delayed stop confirmation,
---- death/unit-change cleanup, and the handoff from Engine cast-state to Runtime
---- application for non-player castbars. Keep this file event-oriented; visual
---- changes belong in Frames/Runtime/Visuals where possible.
+-- Target/focus events, delayed stop confirmation and death/unit-change cleanup.
+-- Hands Engine cast state to Runtime; frame layout belongs to Frames/Visuals.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarDriver.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local Bridge = Castbars.Bridge
+local Core = Castbars.Core
+local Driver = Castbars.Driver
+local Engine = Castbars.Engine
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local Manager = Castbars.Manager
+local PublicAPI = Castbars.PublicAPI
+local Runtime = Castbars.Runtime
+local Utils = Castbars.Utils
 
 --- The castbar Utils load before this file in every client TOC; a missing
 --- helper is a load-order bug, so it fails here, loudly, and the cast paths
 --- call the resolved function instead of a guarded global.
 local FILE = "Castbars/MSUF_CastbarDriver.lua"
 local Require = MSUF.Require
-local EnsureDBLazy = Require("MSUF_EnsureDBLazy", FILE)
-local ApplyCastbarTexts = Require("MSUF_CB_ApplyTexts", FILE)
-local GetReverseFillSafe = Require("MSUF_GetReverseFillSafe", FILE)
-local GetCastbarCountsDown = Require("MSUF_GetCastbarCountsDown", FILE)
-local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
-local GetInterruptUnavailableTintArgs = Require("MSUF_Castbar_GetInterruptUnavailableTintArgs", FILE)
-local ApplyNonInterruptibleTint = Require("MSUF_Castbar_ApplyNonInterruptibleTint", FILE)
+local EnsureDBLazy = Utils.EnsureDBLazy
+local ApplyCastbarTexts = Utils.CB_ApplyTexts
+local GetReverseFillSafe = Utils.GetReverseFillSafe
+local GetCastbarCountsDown = Utils.GetCastbarCountsDown
+local RefreshCastbarSpellNameText = Utils.RefreshCastbarSpellNameText
+local GetInterruptUnavailableTintArgs = Utils.Castbar_GetInterruptUnavailableTintArgs
+local ApplyNonInterruptibleTint = Utils.Castbar_ApplyNonInterruptibleTint
 -- Kernel/MSUF_Util.lua loads before every castbar file. Resolved on the first
 -- cast target text write (castbar harnesses without that text skip it).
 local setTextIfChanged
@@ -30,7 +37,7 @@ local function SetTextIfChanged(fontString, text)
     setTextIfChanged(fontString, text)
 end
 
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 
 local C_Timer = _G.C_Timer
 local RunNextFrame = _G.MSUF_RunNextFrame
@@ -51,7 +58,7 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
-local castbarRuntime = MSUF.MSUF_CastbarRuntime or _G.MSUF_CastbarRuntime
+local castbarRuntime = Castbars.Runtime
 local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
 
 local function ScheduleDelayed(callback, delay)
@@ -70,12 +77,12 @@ end
 
 local function CastbarEngine()
     if castbarEngine then return castbarEngine end
-    local getter = _G.MSUF_GetCastbarEngine
+    local getter = Engine.GetCastbarEngine
     castbarEngine = type(getter) == "function" and getter() or nil
     return castbarEngine
 end
 
-ExportPublic("MSUF_INTERRUPT_FEEDBACK_DURATION", _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
+Driver.INTERRUPT_FEEDBACK_DURATION = Driver.INTERRUPT_FEEDBACK_DURATION or 0.5
 
 local ACTIVE_DURATION_OPTIONS = {
     skipColor = true,
@@ -85,37 +92,8 @@ local ACTIVE_DURATION_OPTIONS = {
 }
 
 local function IsCastbarEnabledForUnit(unit)
-    unit = unit or ""
-
-    local resolver = _G.MSUF_IsCastbarEnabledForUnit
-    if type(resolver) == "function" then
-        local enabled = resolver(unit)
-        if enabled ~= nil then
-            return enabled
-        end
-    end
-
-    EnsureDBLazy()
-
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
-    if not general then
-        return true
-    end
-
-    local shouldUseCastbar = _G.MSUF_ShouldUseMSUFCastbar
-    if type(shouldUseCastbar) == "function" then
-        return shouldUseCastbar(unit, general) == true
-    end
-
-    if unit == "player" then
-        return general.enablePlayerCastbar ~= false
-    elseif unit == "target" then
-        return general.enableTargetCastbar ~= false
-    elseif unit == "focus" then
-        return general.enableFocusCastbar ~= false
-    end
-
-    return true
+    local record = Config.Read(unit)
+    return not record or record.backend == "MSUF"
 end
 
 local CASTBAR_UNIT_EVENTS = {
@@ -218,7 +196,7 @@ SetCastLifecycleActive = function(frame, active)
     return true
 end
 
-ExportPublic("MSUF_Castbar_SetLifecycleActive", SetCastLifecycleActive)
+Driver.Castbar_SetLifecycleActive = SetCastLifecycleActive
 
 local function SetDriverEventsRegistered(frame, unit, enabled)
     if not frame then return end
@@ -275,7 +253,7 @@ local toPlainIsSecret = _G.issecretvalue
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
 -- harnesses that load the driver standalone load Utils first.
-local ToPlainNumber = _G.MSUF_Castbar_PlainNumber
+local ToPlainNumber = Utils.Castbar_PlainNumber
 
 local function ToPlainBool(value)
     if value == nil then return false end
@@ -368,7 +346,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     if not (frame and frame.timeText) then return end
     if frame._msufNativeTimeBound == true then return end
 
-    if not Require("MSUF_IsCastTimeEnabled", FILE)(frame) then
+    if not Manager.IsCastTimeEnabled(frame) then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
         return
     end
@@ -392,7 +370,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     _G.MSUF_SetCastTimeText(frame, remaining, total)
 end
 
-local ClearEmpowerState = _G.MSUF_ClearEmpowerState
+local ClearEmpowerState = Utils.ClearEmpowerState
 
 local function ClearFrameOnUpdate(frame)
     if not (frame and frame.SetScript) or frame._msufDriverOnUpdateCleared == true then return end
@@ -527,7 +505,7 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     frame._msufStripeReverseFill = reverseFill
     local countsDown = GetCastbarCountsDown(frame, isChannel and true or false) == true
     frame._msufCountsDown = countsDown
-    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    local resolvePushback = Utils.Castbar_ResolvePushbackMS
     if type(resolvePushback) == "function" then
         frame._msufPushbackMS = resolvePushback(frame, state)
     else
@@ -675,7 +653,7 @@ local function StopDriverFrame(frame, reason)
         SetTextIfChanged(frame.castTargetText, "")
         frame.castTargetText:Hide()
     end
-    _G.MSUF_CB_ResetStateOnStop(frame, reason)
+    Runtime.CB_ResetStateOnStop(frame, reason)
     PublishState(frame, nil, reason)
 end
 
@@ -774,7 +752,7 @@ local function EnsureDriverCallbacks(frame)
             return
         end
 
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
+        Runtime.CB_ResetStateOnStop(frame, "STOPPED")
     end
 
     frame._msufInterruptHideCB = function()
@@ -837,14 +815,15 @@ local function CastTargetTextEnabled(frame)
     if not (frame and frame.castTargetText) then return false end
     local unit = frame.unit
     local configUnit = CastbarConfigUnitKey(unit)
+    local general = Config.Read().general
     if unit == "target" then
-        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarTargetShowTargetName == true
+        return general and general.castbarTargetShowTargetName == true
     elseif unit == "focus" then
-        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarFocusShowTargetName == true
+        return general and general.castbarFocusShowTargetName == true
     elseif frame._msufIsBossCastbar or configUnit == "boss" then
-        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.showBossCastTargetName == true
+        return general and general.showBossCastTargetName == true
     elseif frame._msufIsArenaCastbar or configUnit == "arena" then
-        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.showArenaCastTargetName == true
+        return general and general.showArenaCastTargetName == true
     end
     return false
 end
@@ -922,7 +901,7 @@ local function ApplyCastTargetTextColor(frame, classFilename, sequenceID, genera
     end
     SetCastTargetTextPlainColorIfChanged(fs, 1, 1, 1)
 end
-ExportPublic("MSUF_ApplyCastTargetTextColor", ApplyCastTargetTextColor)
+Driver.ApplyCastTargetTextColor = ApplyCastTargetTextColor
 
 local function AdvanceBuildStateGeneration(unit)
     local engine = CastbarEngine()
@@ -932,7 +911,7 @@ local function AdvanceBuildStateGeneration(unit)
 end
 
 local function ResolveCastTargetInfo(state)
-    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    local engine = (Engine.GetCastbarEngine and Engine.GetCastbarEngine()) or nil
     if engine and type(engine.ResolveTargetInfo) == "function" then
         return engine:ResolveTargetInfo(state)
     end
@@ -987,7 +966,7 @@ local function RefreshCastTargetText(frame)
     end
     UpdateCastTargetText(frame, BuildState(frame))
 end
-ExportPublic("MSUF_RefreshCastTargetText", RefreshCastTargetText)
+Driver.RefreshCastTargetText = RefreshCastTargetText
 
 local function RefreshAllCastTargetTextColors()
     local function RefreshLive(frame)
@@ -997,10 +976,10 @@ local function RefreshAllCastTargetTextColors()
         if frame and frame.castTargetText then ApplyCastTargetTextColor(frame) end
     end
 
-    RefreshLive(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar)
-    RefreshLive(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
-    RefreshPreview(_G.MSUF_TargetCastbarPreview)
-    RefreshPreview(_G.MSUF_FocusCastbarPreview)
+    RefreshLive(Frames.target)
+    RefreshLive(Frames.focus)
+    RefreshPreview(Frames.targetPreview)
+    RefreshPreview(Frames.focusPreview)
 
     -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools
@@ -1014,7 +993,8 @@ local function RefreshAllCastTargetTextColors()
         end
     end
 end
-ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)
+Driver.RefreshAllCastTargetTextColors = RefreshAllCastTargetTextColors
+Publish("MSUF_RefreshAllCastTargetTextColors", Driver.RefreshAllCastTargetTextColors)
 
 local function RefreshTargetFocusChanged(frame)
     if not frame then return false end
@@ -1142,13 +1122,13 @@ end
 --- CastingBarMixin:GetInterruptText. Fails open to the plain label whenever the
 --- per-unit toggle is off or identity is restricted (secret GUID/name), so a
 --- PvP-restricted interrupter can never raise.
-function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
+function Driver.Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
     fallback = fallback or _G.INTERRUPTED
     local issecret = _G.issecretvalue
     if (issecret and issecret(interruptedBy) == true) or interruptedBy == nil then
         return fallback
     end
-    local db = _G.MSUF_DB
+    local db = Config.Read()
     local configUnit = CastbarConfigUnitKey(unit)
     local unitDB = db and configUnit and db[configUnit] or nil
     if not (unitDB and unitDB.showInterruptSource == true) then
@@ -1264,7 +1244,7 @@ local function SetInterruptibility(frame, event, eventUnit, notInterruptible)
     frame.isNotInterruptible = notInterruptible
     frame.MSUF_kickInterruptibleConfirmed = not notInterruptible
     frame._msufApiNotInterruptibleRaw = notInterruptible
-    if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
+    if frame.UpdateColorForInterruptible then Utils.CB_ApplyColor(frame) end
     local state = frame._msufCastState
     if state then
         state.isNotInterruptible = notInterruptible
@@ -1347,7 +1327,7 @@ end
 --- Castbars/MSUF_CastbarFrames.lua (loaded before this file) builds the
 --- regions; resolved when a castbar is built, a cold path.
 local function BuildCastbarFrameElements(frame)
-    return Require("MSUF_BuildCastbarFrameElements", FILE)(frame)
+    return Frames.BuildCastbarFrameElements(frame)
 end
 
 --- CreateCastBar build stage 1: the driver frame plus the identity fields the
@@ -1372,10 +1352,8 @@ local function InstallDriverColorMethod(frame)
             return
         end
 
-        EnsureDBLazy()
-
         local forcedNotInterruptible = self.isNotInterruptible == true
-        local castR, castG, castB, nonR, nonG, nonB = _G.MSUF_ResolveCastbarColors()
+        local castR, castG, castB, nonR, nonG, nonB = Utils.ResolveCastbarColors()
         local rawApiNotInterruptible = self._msufApiNotInterruptibleRaw
         if forcedNotInterruptible then
             rawApiNotInterruptible = true
@@ -1472,7 +1450,7 @@ local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, l
         state.durationObj = durationObj
         state.text = label or spellName
         state.icon = icon
-        _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
+        Runtime.Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
     end
 
     -- ApplyActive already resolved and installed reverse fill for the
@@ -1481,7 +1459,7 @@ local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, l
     local reverseFill
     if durationObj then reverseFill = frame._msufStripeReverseFill end
     if reverseFill == nil then
-        reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+        reverseFill = Utils.GetReverseFillSafe(frame, isChannel)
     end
     reverseFill = reverseFill == true
     frame._msufStripeReverseFill = reverseFill
@@ -1489,18 +1467,18 @@ local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, l
     if frame.UpdateColorForInterruptible then
         -- ApplyColor owns the single KickReady refresh; pass the state
         -- through so the decorator does not have to infer it again.
-        _G.MSUF_CB_ApplyColor(frame, state)
+        Utils.CB_ApplyColor(frame, state)
     end
     frame:Show()
     frame.MSUF_castActive = true
-    if _G.MSUF_RegisterCastbar then
-        _G.MSUF_RegisterCastbar(frame)
+    if Manager.RegisterCastbar then
+        Manager.RegisterCastbar(frame)
     end
     if frame.timeText
         and frame._msufNativeTimeBound ~= true
         and frame._msufCastTimeEnabled ~= false
     then
-        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
+        Driver.UpdateCastTimeText_FromStatusBar(frame)
     end
     UpdateCastTargetText(frame, state)
 
@@ -1519,7 +1497,7 @@ local function ShowNoCast(frame)
     frame.MSUF_kickInterruptibleConfirmed = nil
     UpdateCastTargetText(frame, nil)
     if frame.kickReadyBox then frame.kickReadyBox:Hide() end
-    if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
+    if KickReady.KickReady_RefreshFrame then KickReady.KickReady_RefreshFrame(frame, nil) end
 
     if frame.hideTimer then
         frame._msufHideToken = (frame._msufHideToken or 0) + 1
@@ -1580,42 +1558,40 @@ local function InstallDriverCastMethods(frame)
         self._msufInactiveRecheckToken = nil
         self._msufInterruptHideToken = nil
         self._msufInterruptHideDeadline = nil
-        _G.MSUF_CB_ResetStateOnStop(self, "INTERRUPTED")
+        Runtime.CB_ResetStateOnStop(self, "INTERRUPTED")
         self.interrupted = true
         self._msufApiNotInterruptibleRaw = nil
         self.MSUF_castActive = false
         self.MSUF_kickInterruptibleConfirmed = nil
         if self.kickReadyBox then self.kickReadyBox:Hide() end
-        if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
-        EnsureDBLazy()
-
+        if KickReady.KickReady_RefreshFrame then KickReady.KickReady_RefreshFrame(self, nil) end
         local configUnit = CastbarConfigUnitKey(self.unit)
-        local unitDB = (configUnit and _G.MSUF_DB and _G.MSUF_DB[configUnit]) or nil
+        local unitDB = (configUnit and Config.Read()[configUnit]) or nil
         if unitDB and unitDB.showInterrupt == false then
             self.interrupted = nil
-            if self.castText and _G.MSUF_CB_ApplyTexts then
-                _G.MSUF_CB_ApplyTexts(self, nil, "", nil)
+            if self.castText and Utils.CB_ApplyTexts then
+                Utils.CB_ApplyTexts(self, nil, "", nil)
             end
-            if self.timeText and _G.MSUF_CB_ApplyTexts then
-                _G.MSUF_CB_ApplyTexts(self, nil, nil, "")
+            if self.timeText and Utils.CB_ApplyTexts then
+                Utils.CB_ApplyTexts(self, nil, nil, "")
             end
             self:Hide()
             return
         end
 
-        local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
-        local interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, _G.INTERRUPTED)
+        local reverseFill = Utils.GetReverseFillSafe(self, false)
+        local interruptLabel = Driver.Castbar_ResolveInterruptLabel(interruptedBy, self.unit, _G.INTERRUPTED)
         if ApplyInterruptValues then
             ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else
-            _G.MSUF_ApplyInterruptBarVisuals(self, {
+            Runtime.ApplyInterruptBarVisuals(self, {
                 barValue = 1,
                 reverseFill = reverseFill,
                 label = interruptLabel,
             })
         end
 
-        local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
+        local getFeedbackDuration = Utils.GetInterruptFeedbackDuration
         local feedbackDuration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
 
         if self._msufCastState then
@@ -1647,7 +1623,7 @@ local function InstallDriverCastMethods(frame)
         -- keys so the later failsafe cannot rebuild the same idle state.
         ClearStopExpectation(self)
         ClearFrameOnUpdate(self)
-        _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
+        Runtime.CB_ResetStateOnStop(self, "SUCCEEDED")
         PublishState(self, nil, "SUCCEEDED")
     end
 end
@@ -1664,7 +1640,7 @@ local function FinishDriverFrame(frame, unit)
     if frame.UpdateColorForInterruptible then
         frame:UpdateColorForInterruptible()
     end
-    local runtime = MSUF.MSUF_CastbarRuntime or _G.MSUF_CastbarRuntime
+    local runtime = MSUF.MSUF_CastbarRuntime or Castbars.Runtime
     if runtime and runtime.PrewarmNativeTimeText then
         runtime:PrewarmNativeTimeText(frame)
     end
@@ -1674,14 +1650,11 @@ end
 --- CreateCastBar build stage 6: legacy per-unit global handles.
 local function ExportDriverFrame(frame, unit)
     if unit == "target" then
-        ExportPublic("MSUF_TargetCastbar", frame)
-        ExportPublic("MSUF_TargetCastBar", frame)
+        Frames.Register("target", nil, frame)
     elseif unit == "focus" then
-        ExportPublic("MSUF_FocusCastbar", frame)
-        ExportPublic("MSUF_FocusCastBar", frame)
+        Frames.Register("focus", nil, frame)
     elseif unit == "player" then
-        ExportPublic("MSUF_PlayerCastbar", frame)
-        ExportPublic("MSUF_PlayerCastBar", frame)
+        Frames.Register("player", nil, frame)
     end
 end
 
@@ -1703,13 +1676,13 @@ local function EnsureDriverUnit(unit)
     end
 
     if unit == "target" then
-        local frame = _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        local frame = Frames.target
         if frame and frame._msufCastbarDriver == true then
             return frame
         end
         return CreateCastBar("MSUF_TargetCastBar", "target")
     elseif unit == "focus" then
-        local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        local frame = Frames.focus
         if frame and frame._msufCastbarDriver == true then
             return frame
         end
@@ -1747,23 +1720,23 @@ local function HardHideDriverFrame(frame)
     frame.interrupted = nil
     frame.MSUF_kickInterruptibleConfirmed = nil
 
-    if _G.MSUF_CB_ResetStateOnStop then
-        _G.MSUF_CB_ResetStateOnStop(frame, "HARDHIDE")
+    if Runtime.CB_ResetStateOnStop then
+        Runtime.CB_ResetStateOnStop(frame, "HARDHIDE")
     elseif frame.Hide then
         frame:Hide()
     end
 
-    if _G.MSUF_UnregisterCastbar then
-        _G.MSUF_UnregisterCastbar(frame)
+    if Manager.UnregisterCastbar then
+        Manager.UnregisterCastbar(frame)
     end
 end
 
 local function GetExistingDriverFrame(unit)
     if unit == "target" then
-        local frame = _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        local frame = Frames.target
         if frame and frame._msufCastbarDriver == true then return frame end
     elseif unit == "focus" then
-        local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        local frame = Frames.focus
         if frame and frame._msufCastbarDriver == true then return frame end
     end
     return nil
@@ -1796,20 +1769,20 @@ end
 --- loads before this file in every TOC and owns MSUF_ApplyCastbarUnitAndSync,
 --- so its old per-function fallbacks never ran; resolved at login (cold path).
 local function MSUF_CastbarDriver_OnLogin()
-    local any = _G.MSUF_AreAnyCastbarsEnabled
+    local any = Bridge.AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
     -- Castbars/MSUF_Castbars_Core.lua loads before this file.
-    local applyUnit = Require("MSUF_ApplyCastbarUnitAndSync", FILE)
-    applyUnit("target")
-    applyUnit("focus")
-    applyUnit("player")
-    if _G.MSUF_UpdateCastbarTextures then _G.MSUF_UpdateCastbarTextures() end
+    local applyUnit = Core.ApplyCastbarUnitAndSync
+    applyUnit("target", true)
+    applyUnit("focus", true)
+    applyUnit("player", true)
+    if Core.UpdateCastbarTextures then Core.UpdateCastbarTextures(true) end
 end
 
 local function MSUF_CastbarDriver_OnEnteringWorld()
-    local any = _G.MSUF_AreAnyCastbarsEnabled
+    local any = Bridge.AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
@@ -1824,7 +1797,7 @@ local function SyncCastbarDriverLifecycle(runNow, atLoad)
     local register, unregister = Require("MSUF_EventBus_Register", FILE), Require("MSUF_EventBus_Unregister", FILE)
     unregister("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN")
     unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
-    local any = atLoad ~= true and _G.MSUF_AreAnyCastbarsEnabled
+    local any = atLoad ~= true and Bridge.AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return false end
     register("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN", MSUF_CastbarDriver_OnLogin, nil, true)
     register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
@@ -1833,7 +1806,7 @@ local function SyncCastbarDriverLifecycle(runNow, atLoad)
 end
 SyncCastbarDriverLifecycle(false, true)
 
-ExportPublic("MSUF_UpdateCastTimeText_FromStatusBar", MSUF_UpdateCastTimeText_FromStatusBar)
-ExportPublic("MSUF_CreateCastBar", CreateCastBar)
-ExportPublic("MSUF_CastbarDriver_ApplyBackendState", ApplyDriverBackendState)
-ExportPublic("MSUF_CastbarDriver_SyncLifecycle", SyncCastbarDriverLifecycle)
+Driver.UpdateCastTimeText_FromStatusBar = MSUF_UpdateCastTimeText_FromStatusBar
+Driver.CreateCastBar = CreateCastBar
+Driver.CastbarDriver_ApplyBackendState = ApplyDriverBackendState
+Driver.CastbarDriver_SyncLifecycle = SyncCastbarDriverLifecycle

@@ -68,6 +68,9 @@ if not MSUF.Require then
 end
 -- Load the shared specialization provider before pages query it.
 assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", MSUF)
+-- Menu pages resolve castbar providers through the same namespace as the core.
+local CastbarFixture = assert(loadfile(Join(ROOT, "tools/tests/castbar_namespace_fixture.lua")))()
+CastbarFixture.Attach(ROOT, MSUF, loadfile)
 -- The synchronization selector reads actual named profile storage. Reuse the
 -- pure shipped accessor rather than introducing a generator-only replacement.
 local ProfileSlice = require("msuf_source_slice")

@@ -1,3 +1,4 @@
+local loadfile = assert(loadfile(assert(arg[1]) .. '/tools/tests/castbar_namespace_fixture.lua'))().Loader(loadfile)
 local root = assert(arg[1]) .. '/MidnightSimpleUnitFrames/'
 local now, queue, shakes = 0, {}, 0
 local function later(delay, fn)
@@ -72,30 +73,30 @@ MSUF_KickReady_EvaluateRGBA=function() return 0,1,0,1 end
 local callback
 local engine={Subscribe=function(self,unit,fn) assert(unit=='focus'); callback=fn; return true end,
     Unsubscribe=function(self,unit,fn) assert(callback==fn); callback=nil end}
-local ns={MSUF_CastbarEngine=engine,ExportPublic=function(name,value) _G[name]=value end}
+local ns={Castbars={Engine=engine},ExportPublic=function(name,value) _G[name]=value end}
 assert(loadfile(root..'Castbars/MSUF_FocusKickIcon.lua'))('Fixture',ns)
 assert(loadfile(root..'Castbars/MSUF_FocusKick_StateDriver.lua'))('Fixture',ns)
-MSUF_BuildCastState=function(unit) assert(unit=='focus'); return nil end
+ns.Castbars.Engine.BuildCastState=function(unit) assert(unit=='focus'); return nil end
 MSUF_FocusKickDriver_ForceUpdate(); advance(.01)
 callback({active=true},'UNIT_SPELLCAST_START'); advance(.01)
-assert(MSUF_FocusKickIcon:IsShown())
-print('active: shown='..tostring(MSUF_FocusKickIcon:IsShown()))
+assert(_G.MSUF.Castbars.Frames.focusKick:IsShown())
+print('active: shown='..tostring(_G.MSUF.Castbars.Frames.focusKick:IsShown()))
 local calls=0
-local original=MSUF_FocusKickIcon.SetPoint
+local original=_G.MSUF.Castbars.Frames.focusKick.SetPoint
 MSUF_FocusKickIcon.SetPoint=function(self,...)
     local a={...}; if a[4]==306 or a[4]==294 then calls=calls+1 end
     original(self,...)
 end
 callback(nil,'UNIT_SPELLCAST_INTERRUPTED')
-print('interrupt synchronous: shown='..tostring(MSUF_FocusKickIcon:IsShown())..' shake_steps='..calls)
+print('interrupt synchronous: shown='..tostring(_G.MSUF.Castbars.Frames.focusKick:IsShown())..' shake_steps='..calls)
 advance(1/120)
-print('interrupt next frame: shown='..tostring(MSUF_FocusKickIcon:IsShown())..' shake_steps='..calls)
-assert(MSUF_FocusKickIcon:IsShown(), 'feedback hidden on next frame')
+print('interrupt next frame: shown='..tostring(_G.MSUF.Castbars.Frames.focusKick:IsShown())..' shake_steps='..calls)
+assert(_G.MSUF.Castbars.Frames.focusKick:IsShown(), 'feedback hidden on next frame')
 advance(.20)
-print('interrupt after 200ms: shown='..tostring(MSUF_FocusKickIcon:IsShown())..' shake_steps='..calls)
-assert(calls==6 and not MSUF_FocusKickIcon:IsShown(), 'feedback did not finish all shake steps')
+print('interrupt after 200ms: shown='..tostring(_G.MSUF.Castbars.Frames.focusKick:IsShown())..' shake_steps='..calls)
+assert(calls==6 and not _G.MSUF.Castbars.Frames.focusKick:IsShown(), 'feedback did not finish all shake steps')
 callback({active=true},'UNIT_SPELLCAST_START'); advance(.01)
 calls=0
-MSUF_FocusKick_PlayInterruptFeedback(); advance(.20)
-print('feedback without immediate nil-state refresh: shown='..tostring(MSUF_FocusKickIcon:IsShown())..' shake_steps='..calls)
+_G.MSUF.Castbars.FocusKick.FocusKick_PlayInterruptFeedback(); advance(.20)
+print('feedback without immediate nil-state refresh: shown='..tostring(_G.MSUF.Castbars.Frames.focusKick:IsShown())..' shake_steps='..calls)
 assert(calls==6)

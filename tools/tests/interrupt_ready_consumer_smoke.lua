@@ -11,6 +11,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local REBUKE, AVENGERS_SHIELD = 96231, 31935
 local frameStamp = 100
@@ -122,6 +123,7 @@ assert(next(events) == nil, "a registration alone started the engine while MSUF'
 -- MSUF's switch on, through MSUF's settings path: the engine runs and every
 -- consumer, active or not, hears about the settings.
 _G.MSUF_DB.general.kickReadyShowNameplates = true
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 _G.MSUF_KickReady_RefreshAll()
 assert(events.PLAYER_ENTERING_WORLD and events.PLAYER_SPECIALIZATION_CHANGED and events.SPELLS_CHANGED,
     "MSUF's nameplate switch did not start the engine for its consumer")
@@ -134,6 +136,7 @@ assert(_G.MSUF_KickReady_IsReady() == nil and _G.MSUF_KickReady_GetSpellID() == 
 assert(#calls == 0, "an inactive consumer was notified")
 
 -- MSUF's look for consumers that draw the indicator themselves.
+ns.Castbars.Config.Compile()
 local look = KickReady.Look()
 assert(look.show == true and look.style == "border" and look.marker == false and look.segment == false
     and look.outline == 1 and look.boxSize == 0 and look.boxAnchor == "RIGHT" and look.boxOffsetX == 4
@@ -142,6 +145,7 @@ assert(look.readyR == 0 and look.readyG == 1 and look.readyB == 0 and look.ready
 local general = _G.MSUF_DB.general
 general.kickReadyStyle, general.kickReadyAutoSize, general.kickReadySize = "box", false, 20
 general.castbarOutlineThickness, general.kickReadyTimeMarker = 3.4, true
+ns.Castbars.Config.Compile()
 look = KickReady.Look()
 assert(look.style == "box" and look.boxSize == 20 and look.outline == 3 and look.marker == true,
     "MSUF's look did not follow its settings")
@@ -297,8 +301,8 @@ Calls()
 local core = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua", "rb"))
 local coreText = core:read("*a"):gsub("\r\n", "\n")
 core:close()
-local sync = coreText:match("\nlocal function ApplyAllCastbarsAndSync%(%)\n(.-)\nend\n")
-assert(sync and sync:find('Later("MSUF_KickReady_NotifySettings")()', 1, true),
+local sync = coreText:match("\nlocal function ApplyAllCastbarsAndSync%(current%)\n(.-)\nend\n")
+assert(sync and sync:find('KickReady.KickReady_NotifySettings(true)', 1, true),
     "MSUF_ApplyAllCastbarsAndSync no longer tells the indicator's consumers to redraw")
 
 -- MSUF shows the nameplate switch only for a Suite whose nameplates draw the

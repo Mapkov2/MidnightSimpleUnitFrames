@@ -69,7 +69,7 @@ local UI_SCALE_1080 = 768 / 1080
 local UI_SCALE_1440 = 768 / 1440
 local UI_SCALE_4K = 768 / 2160
 local UI_SCALE_PRESETS = { ["1080p"] = UI_SCALE_1080, ["1440p"] = UI_SCALE_1440, ["4k"] = UI_SCALE_4K }
-local MSUF_SCALE_FRAME_GLOBALS = { "MSUF_PlayerCastbar", "MSUF_TargetCastbar", "MSUF_FocusCastbar", "MSUF_PlayerCastbarPreview", "MSUF_TargetCastbarPreview", "MSUF_FocusCastbarPreview", "MSUF_BossCastbar", "MSUF_BossCastbarPreview" }
+local CASTBAR_SCALE_KINDS = { "player", "target", "focus" }
 local function IsGroupFrameUnitKey(unitKey)
     if type(unitKey) ~= "string" then return false end
     return unitKey:sub(1, 5) == "party" or unitKey:sub(1, 4) == "raid"
@@ -94,20 +94,19 @@ local function CollectMsufScaleFrames()
         end
     end
     ForEachCoreFrame(add)
-    for i = 1, #MSUF_SCALE_FRAME_GLOBALS do add(_G[MSUF_SCALE_FRAME_GLOBALS[i]]) end
-    if type(_G.MSUF_BossCastbars) == "table" then
-        for i = 1, 5 do add(_G.MSUF_BossCastbars[i]) end
-    end
-    if type(_G.MSUF_ArenaCastbars) == "table" then
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do add(_G.MSUF_ArenaCastbars[i]) end
+    local castbarFrames = MSUF.Castbars.Frames
+    for i = 1, #CASTBAR_SCALE_KINDS do
+        local kind = CASTBAR_SCALE_KINDS[i]
+        add(castbarFrames.Get(kind))
+        add(castbarFrames.Get(kind .. "Preview"))
     end
     for i = 1, 5 do
-        add(_G["MSUF_BossCastbar" .. i])
-        add(_G["MSUF_BossCastbarPreview" .. (i == 1 and "" or i)])
+        add(castbarFrames.Get("boss", i))
+        add(castbarFrames.Get("bossPreview", i))
     end
     for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        add(_G["MSUF_ArenaCastbar" .. i])
-        add(_G["MSUF_ArenaCastbarPreview" .. i])
+        add(castbarFrames.Get("arena", i))
+        add(castbarFrames.Get("arenaPreview", i))
     end
     return frames
 end

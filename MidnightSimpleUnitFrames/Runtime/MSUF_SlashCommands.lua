@@ -85,6 +85,7 @@ local function MSUF_ResetPositionAnchorsToScreen()
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     g.anchorToCooldown = false
+    MSUF.Castbars.Config.Invalidate()
     g.anchorName = "UIParent"
 
     for i = 1, #MSUF_RESET_ANCHOR_UNITS do

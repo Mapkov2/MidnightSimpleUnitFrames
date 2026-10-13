@@ -11,6 +11,7 @@
 -- Usage: lua tools/tests/arena_quality_contracts_smoke.lua <repoRoot>
 
 local repo = assert(arg and arg[1], "usage: arena_quality_contracts_smoke.lua <repoRoot>"):gsub("\\", "/")
+local loadfile = assert(loadfile(repo .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local CORE = repo .. "/MidnightSimpleUnitFrames/"
 local TRINKETS = CORE .. "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
 -- The arena descriptor is built by the shared pool module, which loads first.
@@ -367,7 +368,7 @@ local function LoadArenaCastbars(options)
         W.layoutPasses = W.layoutPasses + 1
         frame._msufCastbarDetailLayoutUnit = unit
         frame._msufCastbarDetailLayoutFontEpoch = _G.MSUF_FontApplyEpoch
-        frame._msufCastbarDetailLayoutVisualRev = _G.MSUF__castbarStyleGlobalRev
+        frame._msufCastbarDetailLayoutVisualRev = W.namespace.Castbars.Config.styleRevision
     end
     _G.MSUF_CB_ResetStateOnStop = function() W.stops = W.stops + 1 end
     _G.MSUF_GetCastbarEngine = function()
@@ -406,6 +407,7 @@ local function LoadArenaCastbars(options)
     namespace.Castbars = namespace.Castbars or {}
     namespace.Castbars.Driver = { ShowState = function(frame, state) frame:Cast(state) end }
     namespace.Castbars.UnitCastEvents = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP" }
+    W.namespace = namespace
     assert(loadfile(POOLS))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", namespace)
     return W
@@ -434,7 +436,8 @@ Contract("arena castbar anchor validation stamp", function()
     _G.MSUF_arena1 = unitFrame
     assert(frame:PrepareForCast() == false and frame.point[1] == "TOPRIGHT",
         "cast start must not re-anchor while the visual revision is unchanged")
-    _G.MSUF__castbarStyleGlobalRev = 8
+    W.namespace.Castbars.Config.styleRevision = 8
+    W.namespace.Castbars.Config.revisions.style = 8
     assert(frame:PrepareForCast() == true and W.anchorPasses == 4 and W.layoutPasses == 4,
         "a moved visual revision must validate the anchor once on the next cast")
     assert(frame.point[1] == "TOPLEFT" and frame.point[2] == unitFrame,
@@ -444,7 +447,8 @@ Contract("arena castbar anchor validation stamp", function()
 
     -- A size change found by that validation still rebuilds the inner layout.
     W.width = 300
-    _G.MSUF__castbarStyleGlobalRev = 9
+    W.namespace.Castbars.Config.styleRevision = 9
+    W.namespace.Castbars.Config.revisions.style = 9
     assert(frame:PrepareForCast() == true and frame.width == 300, "the revalidation lost a changed castbar width")
 
     -- Every geometry owner converges on the anchor pass and re-stamps.
@@ -465,7 +469,7 @@ Contract("arena castbar anchor validation stamp", function()
     _G.MSUF_ApplyArenaCastbarPositionSetting(false, true)
     AssertStamped("the position setting")
     Stale()
-    _G.MSUF_ApplyArenaCastbarsEnabled()
+    _G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
     AssertStamped("the enable path")
     Stale()
     W.Fire("PLAYER_ENTERING_WORLD")
@@ -488,10 +492,10 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
     end
 
     local W = LoadArenaCastbars({})
-    _G.MSUF_ArenaCastbars_SyncLifecycle(false)
+    _G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(false)
     W.refusals.ARENA_OPPONENT_UPDATE = true
     W.registerCalls = {}
-    assert(_G.MSUF_ArenaCastbars_SyncLifecycle(true) == true, "SyncLifecycle must report an enabled lifecycle")
+    assert(_G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(true) == true, "SyncLifecycle must report an enabled lifecycle")
     for index = 1, #LIFECYCLE_EVENTS do
         assert(W.registerCalls[LIFECYCLE_EVENTS[index]] == 1,
             "a refusal skipped the remaining subscriptions: " .. LIFECYCLE_EVENTS[index])
@@ -514,15 +518,15 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
 
     -- Every settings refresh re-syncs the lifecycle: a bus that keeps refusing
     -- reuses the one frame.
-    _G.MSUF_ArenaCastbars_SyncLifecycle(true)
+    _G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(true)
     assert(#W.frames == 1 and next(W.bus) == nil and W.Fire("PLAYER_ENTERING_WORLD") == 1,
         "a repeated refusal must reuse the private frame and deliver each event once")
 
     -- Disabling clears it; a bus that accepts again takes the lifecycle back.
-    assert(_G.MSUF_ArenaCastbars_SyncLifecycle(false) == false and #W.EventFrames() == 0,
+    assert(_G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(false) == false and #W.EventFrames() == 0,
         "disabling the lifecycle left events on the private frame")
     W.refusals = {}
-    _G.MSUF_ArenaCastbars_SyncLifecycle(true)
+    _G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(true)
     assert(#W.EventFrames() == 0 and #W.frames == 1 and W.Fire("PLAYER_ENTERING_WORLD") == 1,
         "a recovered EventBus must own the lifecycle alone")
 
@@ -530,7 +534,7 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
     local classic = LoadArenaCastbars({ matchStateEvent = false })
     classic.refusals.PLAYER_ENTERING_WORLD = true
     classic.registerCalls = {}
-    _G.MSUF_ArenaCastbars_SyncLifecycle(true)
+    _G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(true)
     frames = classic.EventFrames()
     assert(#frames == 1 and CountKeys(frames[1].events) == 4 and frames[1].events.PVP_MATCH_STATE_CHANGED == nil
         and classic.registerCalls.PVP_MATCH_STATE_CHANGED == nil,
@@ -543,7 +547,7 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
     end } })
     denylisted.refusals.PLAYER_ENTERING_WORLD = true
     denylisted.registerCalls = {}
-    _G.MSUF_ArenaCastbars_SyncLifecycle(true)
+    _G.MSUF.Castbars.Pools.ArenaCastbars_SyncLifecycle(true)
     frames = denylisted.EventFrames()
     assert(#frames == 1 and frames[1].events.PVP_MATCH_STATE_CHANGED == nil
         and denylisted.registerCalls.PVP_MATCH_STATE_CHANGED == nil,

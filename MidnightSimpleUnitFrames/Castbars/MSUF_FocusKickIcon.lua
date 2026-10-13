@@ -1,5 +1,15 @@
+local _, MSUF = ...
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_FocusKickIcon.lua").Castbars
+local Config = Castbars.Config
+local Backend = Castbars.Backend
+local Core = Castbars.Core
+local FocusDriver = Castbars.FocusDriver
+local FocusKick = Castbars.FocusKick
+local Frames = Castbars.Frames
+local KickReady = Castbars.KickReady
+local Manager = Castbars.Manager
+local PublicAPI = Castbars.PublicAPI
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
---- Castbars/MSUF_FocusKickIcon.lua
 ---
 --- Visual widget for the focus-kick replacement cast display. The StateDriver
 --- owns enable checks, event registration, and cast-state selection; this file
@@ -7,7 +17,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- interrupt feedback animation.
 
 local MSUF = select(2, ...) or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Publish = PublicAPI.Publish
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -22,34 +32,21 @@ local initialized = false
 local function EnsureOptions()
     if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
 
-    local db = _G.MSUF_DB
-    if not db then
-        db = {}
-        ExportPublic("MSUF_DB", db)
-    end
-    db.general = db.general or {}
+    local db = Config.EnsureSource()
 
     local general = db.general
-    if general.enableFocusKickIcon == nil then general.enableFocusKickIcon = false end
-    if general.focusKickShowCastbar == nil then general.focusKickShowCastbar = false end
-    if general.focusKickIconOffsetX == nil then general.focusKickIconOffsetX = 300 end
-    if general.focusKickIconOffsetY == nil then general.focusKickIconOffsetY = 0 end
-    if general.focusKickIconWidth == nil then general.focusKickIconWidth = 40 end
-    if general.focusKickIconHeight == nil then general.focusKickIconHeight = 40 end
+    if general.enableFocusKickIcon == nil then general.enableFocusKickIcon = false Config.Invalidate() end
+    if general.focusKickShowCastbar == nil then general.focusKickShowCastbar = false Config.Invalidate() end
+    if general.focusKickIconOffsetX == nil then general.focusKickIconOffsetX = 300 Config.Invalidate() end
+    if general.focusKickIconOffsetY == nil then general.focusKickIconOffsetY = 0 Config.Invalidate() end
+    if general.focusKickIconWidth == nil then general.focusKickIconWidth = 40 Config.Invalidate() end
+    if general.focusKickIconHeight == nil then general.focusKickIconHeight = 40 Config.Invalidate() end
     return general
 end
 
 local function IsFocusKickEnabled()
-    local general = EnsureOptions()
-    local db = _G.MSUF_DB
-    if db and db.focus and db.focus.enabled == false then return false end
-
-    local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
-    if type(shouldUseMSUF) == "function" and not shouldUseMSUF("focus", general) then
-        return false
-    end
-
-    return general.enableFocusKickIcon == true
+    local record = Config.Read("focus")
+    return record.enabled and record.unit.enabled ~= false and record.geometry.enableFocusKickIcon == true
 end
 
 local function Clamp(value, minValue, maxValue)
@@ -73,14 +70,13 @@ end
 
 local function FocusSourceCastbar()
     return (iconFrame and iconFrame.MSUF_sourceCastBar)
-        or _G.MSUF_FocusCastBar
-        or _G.MSUF_FocusCastbar
+        or Frames.focus
 end
 
 local function DetachTimeDriver()
     if not iconFrame then return end
 
-    local runtime = _G.MSUF_CastbarRuntime
+    local runtime = Castbars.Runtime
     if runtime and runtime.DisableNativeTimeText then
         runtime:DisableNativeTimeText(iconFrame)
     end
@@ -97,7 +93,7 @@ local function DetachTimeDriver()
             and runtime and runtime.PrepareWork
         then
             runtime:PrepareWork(source)
-            _G.MSUF_RegisterCastbar(source)
+            Manager.RegisterCastbar(source)
         end
     end
 end
@@ -117,7 +113,7 @@ local function AttachTimeDriver(state)
     -- Kernel/MSUF_Util.lua owns the castbar time format.
     local format = _G.MSUF_GetCastbarTimeFormat("focus", general) or "CURRENT"
 
-    local runtime = _G.MSUF_CastbarRuntime
+    local runtime = Castbars.Runtime
     local source = FocusSourceCastbar()
     local durationObj = (source and source.MSUF_durationObj) or (state and state.durationObj)
     if durationObj
@@ -156,7 +152,7 @@ local function AttachTimeDriver(state)
     source._msufForceLuaTimeTextFollower = true
     iconFrame._msufTimeFollowerSource = source
     if runtime and runtime.PrepareWork then runtime:PrepareWork(source) end
-    _G.MSUF_RegisterCastbar(source)
+    Manager.RegisterCastbar(source)
 
     local text = source.timeText:GetText()
     if _G.issecretvalue and _G.issecretvalue(text) == true then
@@ -183,16 +179,16 @@ end
 
 local function ApplyTimeTextFont()
     local general = EnsureOptions()
-    local fontPath = _G.MSUF_GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-    local fontFlags = _G.MSUF_GetFontFlags() or "OUTLINE"
+    local fontPath = Core.GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local fontFlags = Core.GetFontFlags() or "OUTLINE"
     local fontSize = ResolveTextSize(general)
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        local g = Config.Read().general
         fontPath = resolveSafe(fontPath, fontSize, fontFlags, g and g.fontKey)
     end
 
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local g = Config.Read().general
     local applyResolved = _G.MSUF_ApplyResolvedFont
     local fontKey = g and g.fontKey
     ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
@@ -216,7 +212,7 @@ end
 
 local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibleRaw)
     if not iconFrame then return end
-    _G.MSUF_KickReady_Init()
+    KickReady.KickReady_Init()
 
     if iconFrame.icon and iconFrame.icon.SetDesaturated then
         iconFrame.icon:SetDesaturated(isNotInterruptible == true)
@@ -227,7 +223,7 @@ local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibl
         return
     end
 
-    SetBorderColor(_G.MSUF_KickReady_EvaluateRGBA(_G.MSUF_KickReady_IsReady(), apiNotInterruptibleRaw))
+    SetBorderColor(KickReady.KickReady_EvaluateRGBA(KickReady.KickReady_IsReady(), apiNotInterruptibleRaw))
 end
 
 local function LayoutBorderEdges()
@@ -295,6 +291,7 @@ local function EnsureIconFrame()
     if iconFrame then return iconFrame end
 
     iconFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_FocusKickIcon", ParentFrame, "BackdropTemplate"))
+    Frames.Register("focusKick", nil, iconFrame)
     iconFrame:SetFrameStrata("HIGH")
     iconFrame:SetFrameLevel(50)
     iconFrame:Hide()
@@ -338,6 +335,7 @@ local function EnsureIconFrame()
         if centerX and centerY and parentX and parentY then
             general.focusKickIconOffsetX = Round(centerX - parentX)
             general.focusKickIconOffsetY = Round(centerY - parentY)
+            Config.Invalidate()
         end
 
         ApplyIconLayout()
@@ -368,7 +366,7 @@ local function PlayInterruptFeedback()
                 iconFrame:Hide()
                 return
             end
-            local source = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+            local source = Frames.focus
             ApplyInterruptibilityColor(
                 source and source.isNotInterruptible == true,
                 source and source._msufApiNotInterruptibleRaw
@@ -445,6 +443,7 @@ local function NudgePreview(deltaX, deltaY)
     general.focusKickIconOffsetX = Clamp(Round((general.focusKickIconOffsetX or 0) + (deltaX or 0) * step), -500, 500)
     general.focusKickIconOffsetY = Clamp(Round((general.focusKickIconOffsetY or 0) + (deltaY or 0) * step), -500, 500)
 
+    Config.Invalidate()
     ApplyIconLayout()
     if refreshPreviewLayout then refreshPreviewLayout() end
     SetPreviewSelected(true)
@@ -568,6 +567,7 @@ local function EnsurePreviewFrame()
         if centerX and centerY and parentX and parentY then
             general.focusKickIconOffsetX = Clamp(Round(centerX - parentX), -500, 500)
             general.focusKickIconOffsetY = Clamp(Round(centerY - parentY), -500, 500)
+            Config.Invalidate()
             ApplyIconLayout()
             if refreshPreviewLayout then refreshPreviewLayout() end
             SetPreviewSelected(true)
@@ -646,13 +646,13 @@ end
 
 local function InitFocusKickIcon()
     EnsureInitialized(IsFocusKickEnabled())
-    _G.MSUF_FocusKickDriver_ForceUpdate()
+    FocusDriver.FocusKickDriver_ForceUpdate()
 end
 
 local function UpdateFocusKickIconOptions()
     EnsureInitialized(IsFocusKickEnabled())
     if iconFrame then ApplyIconLayout() end
-    _G.MSUF_FocusKickDriver_ForceUpdate()
+    FocusDriver.FocusKickDriver_ForceUpdate()
     if refreshPreviewLayout then refreshPreviewLayout() end
 end
 
@@ -661,7 +661,7 @@ local function IsPreviewEnabled()
 end
 
 local function ApplyCastState(state)
-    local general = EnsureOptions()
+    local general = Config.Read("focus").geometry
 
     if not IsFocusKickEnabled() then
         feedbackGeneration = feedbackGeneration + 1
@@ -695,7 +695,7 @@ local function ApplyCastState(state)
         _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
     end
 
-    iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+    iconFrame.MSUF_sourceCastBar = Frames.focus
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
     iconFrame:Show()
     -- The option, font, drag and shake paths own the geometry; a cast state
@@ -732,11 +732,15 @@ local function PlayInterruptFeedbackIfEnabled()
     PlayInterruptFeedback()
 end
 
-ExportPublic("MSUF_InitFocusKickIcon", InitFocusKickIcon)
-ExportPublic("MSUF_UpdateFocusKickIconOptions", UpdateFocusKickIconOptions)
-ExportPublic("MSUF_FocusKick_SetPreviewEnabled", SetPreviewEnabled)
-ExportPublic("MSUF_FocusKick_IsPreviewEnabled", IsPreviewEnabled)
-ExportPublic("MSUF_FocusKick_ApplyTimeTextFont", ApplyTimeTextFont)
-ExportPublic("MSUF_FocusKick_ApplyCastState", ApplyCastState)
-ExportPublic("MSUF_FocusKick_RefreshReadyColor", RefreshReadyColor)
-ExportPublic("MSUF_FocusKick_PlayInterruptFeedback", PlayInterruptFeedbackIfEnabled)
+FocusKick.InitFocusKickIcon = InitFocusKickIcon
+FocusKick.UpdateFocusKickIconOptions = UpdateFocusKickIconOptions
+Publish("MSUF_UpdateFocusKickIconOptions", FocusKick.UpdateFocusKickIconOptions)
+FocusKick.FocusKick_SetPreviewEnabled = SetPreviewEnabled
+Publish("MSUF_FocusKick_SetPreviewEnabled", FocusKick.FocusKick_SetPreviewEnabled)
+FocusKick.FocusKick_IsPreviewEnabled = IsPreviewEnabled
+Publish("MSUF_FocusKick_IsPreviewEnabled", FocusKick.FocusKick_IsPreviewEnabled)
+FocusKick.FocusKick_ApplyTimeTextFont = ApplyTimeTextFont
+Publish("MSUF_FocusKick_ApplyTimeTextFont", FocusKick.FocusKick_ApplyTimeTextFont)
+FocusKick.FocusKick_ApplyCastState = ApplyCastState
+FocusKick.FocusKick_RefreshReadyColor = RefreshReadyColor
+FocusKick.FocusKick_PlayInterruptFeedback = PlayInterruptFeedbackIfEnabled

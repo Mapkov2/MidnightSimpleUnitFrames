@@ -1,4 +1,3 @@
---- Castbars/MSUF_BossCastbars.lua
 --- Live boss castbar pool: the boss descriptor of MSUF_CastbarPools.lua.
 ---
 --- boss1..N follow the encounter lifecycle. ENCOUNTER_START and
@@ -10,13 +9,14 @@
 --- stay as compatibility aliases of the pool module.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_BossCastbars.lua").Castbars
+local Previews = Castbars.Previews
+local Config = Castbars.Config
+local Pools = Castbars.Pools
+local PublicAPI = Castbars.PublicAPI
+local Publish = PublicAPI.Publish
 
-local Pools = assert(MSUF.Castbars and MSUF.Castbars.Pools, "MSUF_CastbarPools.lua must load first")
+
 
 --- Boss units are a client fact: Classic Era and TBC have none. Read once at
 --- load, never per refresh.
@@ -33,7 +33,9 @@ local pool = Pools.Define({
     hasUnits = HAS_BOSS_UNITS,
     framePrefix = "MSUF_BossCastbar",
     poolGlobal = "MSUF_BossCastbars",
-    publishPool = function(castbars) ExportPublic("MSUF_BossCastbars", castbars) end,
+    publishPool = function(castbars) Pools.BossCastbars = castbars
+        Pools.live.boss = castbars
+    Publish("MSUF_BossCastbars", Pools.BossCastbars) end,
     kindFlag = "_msufIsBossCastbar",
     frameLevelBase = 50,
     fallbackY = -220,
@@ -45,8 +47,8 @@ local pool = Pools.Define({
         width = "bossCastbarWidth",
         height = "bossCastbarHeight",
     },
-    layoutDelta = "MSUF_GetBossLayoutDelta",
-    previewUpdate = "MSUF_UpdateBossCastbarPreview",
+    GetLayoutDelta = function() return _G.MSUF_GetBossLayoutDelta end,
+    GetPreviewUpdate = function() return Previews.UpdateBossCastbarPreview end,
     scheduleKeys = { pass = "MSUF_BOSS_POOL_LIFECYCLE", prewarm = "MSUF_BOSS_POOL_PREWARM" },
     lifecycle = {
         { event = "PLAYER_LOGIN", key = "MSUF_BOSS_CASTBARS_LOGIN", action = "pass", once = true },
@@ -59,7 +61,8 @@ local pool = Pools.Define({
     },
 })
 
-ExportPublic("MSUF_ApplyBossCastbarPositionSetting", pool.ApplyPositionSetting)
-ExportPublic("MSUF_ApplyBossCastbarsEnabled", pool.ApplyEnabled)
-ExportPublic("MSUF_BossCastbar_Stop", pool.Stop)
-ExportPublic("MSUF_BossCastbars_SyncLifecycle", pool.SyncLifecycle)
+Pools.ApplyBossCastbarPositionSetting = pool.ApplyPositionSetting
+Publish("MSUF_ApplyBossCastbarPositionSetting", Pools.ApplyBossCastbarPositionSetting)
+Pools.ApplyBossCastbarsEnabled = pool.ApplyEnabled
+Pools.BossCastbar_Stop = pool.Stop
+Pools.BossCastbars_SyncLifecycle = pool.SyncLifecycle

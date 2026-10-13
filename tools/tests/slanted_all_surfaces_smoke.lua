@@ -51,7 +51,7 @@ while #UF.frameList > initialFrameCount do table.remove(UF.frameList) end
 -- Both live and preview castbars use unit tokens, including every pool slot.
 core.RoundedCastbarsApplyAll(true)
 local casts = {}
-env.MSUF_ShouldUseMSUFCastbar = function() return true end
+core.Castbars.Backend.ShouldUseMSUFCastbar = function() return true end
 for _, entry in ipairs(units) do
     if entry.scope == "player" or entry.scope == "target" or entry.scope == "focus"
         or entry.scope == "boss" or entry.scope == "arena" then
@@ -59,7 +59,7 @@ for _, entry in ipairs(units) do
         frame.unit, frame.statusBar = entry.unit, Bar(frame)
         frame.backgroundBar, frame.latencyBar = frame:CreateTexture(), frame:CreateTexture()
         frame.empowerSegments = { frame:CreateTexture(), frame:CreateTexture() }
-        assert(env.MSUF_RoundedCastbar_RefreshFrame(frame), entry.unit .. ": castbar runtime disabled")
+        assert(env.MSUF.Castbars.Rounded.RoundedCastbar_RefreshFrame(frame), entry.unit .. ": castbar runtime disabled")
         assert(env.MSUF_RoundedCastbar_RenderPreview(frame, 2, 0, 0, 0, 1), "castbar preview failed")
         casts[#casts + 1] = { frame = frame, scope = entry.scope }
     end
@@ -192,7 +192,7 @@ end
 -- Clearing a scoped direction restores Shared without disturbing other units.
 db.player.slantedBarDirection = nil
 for _, entry in ipairs(casts) do
-    assert(env.MSUF_RoundedCastbar_RefreshFrame(entry.frame))
+    assert(env.MSUF.Castbars.Rounded.RoundedCastbar_RefreshFrame(entry.frame))
 end
 CheckCasts()
 for _, entry in ipairs(casts) do

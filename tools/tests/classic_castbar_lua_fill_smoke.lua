@@ -9,6 +9,7 @@
 -- The fill repaints on every rendered frame (at most once); time text, glow and
 -- hard stops keep the 20 Hz heavy cadence.
 local root = assert(arg[1], "repository root argument missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local STEP = 1 / 60
 local clock = 100
@@ -125,14 +126,21 @@ local ns = {
 }
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+_G.MSUF, _G.MSUF_NS = ns, ns
 manifest.LoadSelected(root, "Vanilla", ns, {
     "Kernel/MSUF_Require.lua",
+    "Castbars/MSUF_Castbars_PublicAPI.lua",
+    "Castbars/MSUF_Castbars_Backend.lua",
+    "Castbars/MSUF_CastbarConfig.lua",
     "Castbars/MSUF_CastbarUtils.lua",
     "Castbars/MSUF_CastbarRuntime.lua",
     "Castbars/MSUF_CastbarEngine.lua",
     "Castbars/MSUF_CastbarDriver.lua",
     "Castbars/MSUF_Castbars.lua",
 })
+assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Seed(ns)
+assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Bind(ns)
+ns.Castbars.Config.Compile()
 -- The client runs zero-delay callbacks on the next frame; the files above
 -- re-resolve their late-bound helpers there.
 -- Glow recorder: while glowTotals is a table it records the total and skips
@@ -147,14 +155,15 @@ _G.MSUF_ApplyCastbarGlowFade = function(frame, remaining, total)
     end
     return realGlowFade(frame, remaining, total)
 end
+ns.Castbars.Utils.ApplyCastbarGlowFade = _G.MSUF_ApplyCastbarGlowFade
 for index = 1, #pendingAfter do pendingAfter[index]() end
 pendingAfter = {}
 
-local manager = assert(_G.MSUF_CastbarManager, "castbar manager missing")
-local RegisterCastbar = assert(_G.MSUF_RegisterCastbar, "MSUF_RegisterCastbar missing")
-local UpdateCastbarFrame = assert(_G.MSUF_UpdateCastbarFrame, "MSUF_UpdateCastbarFrame missing")
-local GetCountsDown = assert(_G.MSUF_GetCastbarCountsDown, "MSUF_GetCastbarCountsDown missing")
-assert(type(_G.MSUF_CB_ResetStateOnStop) == "function", "MSUF_CB_ResetStateOnStop missing")
+local manager = assert(_G.MSUF.Castbars.Manager.CastbarManager, "castbar manager missing")
+local RegisterCastbar = assert(_G.MSUF.Castbars.Manager.RegisterCastbar, "MSUF_RegisterCastbar missing")
+local UpdateCastbarFrame = assert(_G.MSUF.Castbars.Manager.UpdateCastbarFrame, "MSUF_UpdateCastbarFrame missing")
+local GetCountsDown = assert(_G.MSUF.Castbars.Utils.GetCastbarCountsDown, "MSUF_GetCastbarCountsDown missing")
+assert(type(_G.MSUF.Castbars.Runtime.CB_ResetStateOnStop) == "function", "MSUF_CB_ResetStateOnStop missing")
 
 local function NewCastbar(unit)
     local frame = NewWidget("Frame")
@@ -168,7 +177,7 @@ local function NewCastbar(unit)
     -- The driver's SetSucceeded ends in the shared runtime stop.
     function frame:SetSucceeded()
         self.completions = self.completions + 1
-        _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
+        _G.MSUF.Castbars.Runtime.CB_ResetStateOnStop(self, "SUCCEEDED")
     end
     return frame
 end
@@ -385,8 +394,9 @@ AssertFinished(target, "hard-stopped channel")
 -- measures that shift and repaints the cast text with the "+x.x" suffix.
 _G.MSUF_DB.general.castbarShowPushback = true
 -- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
-_G.MSUF_BuildCastbarFrameElements = function() end
-local driven = assert(_G.MSUF_CreateCastBar("MSUF_TargetCastBar", "target"), "driver castbar missing")
+ns.Castbars.Frames.BuildCastbarFrameElements = function() end
+ns.Castbars.Config.Compile()
+local driven = assert(_G.MSUF.Castbars.Driver.CreateCastBar("MSUF_TargetCastBar", "target"), "driver castbar missing")
 driven.statusBar = NewWidget("StatusBar")
 driven.castText = NewWidget("FontString")
 local function FireCast(event) driven.scripts.OnEvent(driven, event, "target") end

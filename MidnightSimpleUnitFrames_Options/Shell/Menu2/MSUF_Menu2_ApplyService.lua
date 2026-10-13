@@ -231,7 +231,7 @@ end
 local function ApplyUnitCastbar(unit)
     unit = NormalizeCastbarUnit(unit)
     if not unit then return false end
-    _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    _G.MSUF_ApplyCastbarUnitAndSync(unit, true)
     return true
 end
 
@@ -333,7 +333,7 @@ did = true
 end
 
 local function ApplyAllCastbars()
-    _G.MSUF_ApplyAllCastbarsAndSync()
+    _G.MSUF_ApplyAllCastbarsAndSync(true)
     return true
 end
 
@@ -876,6 +876,7 @@ local function ApplyCastbarRuntime(opt)
 end
 
 local function QueueCastbarSettingsChanged(source)
+    MSUF.Castbars.Config.Invalidate()
     pendingCastbarSettingsChanged = true
     source = tostring(source or "menu")
     if pendingCastbarSettingsSource == nil then
@@ -890,7 +891,7 @@ local function FlushCastbarSettingsChanged()
     local source = pendingCastbarSettingsSource or "menu"
     pendingCastbarSettingsChanged = false
     pendingCastbarSettingsSource = nil
-    _G.MSUF_Castbars_OnSettingsChanged(source)
+    _G.MSUF_Castbars_OnSettingsChanged(source, true)
     return true
 end
 
@@ -1090,6 +1091,7 @@ function Apply.Quiesce(combat)
 end
 
 function Apply.RequestUnit(unit, reason, opts)
+    MSUF.Castbars.Config.Invalidate()
     unit = Apply.NormalizeUnit(unit)
     if not unit then return false end
 
@@ -1131,6 +1133,7 @@ function Apply.RequestUnit(unit, reason, opts)
 end
 
 function Apply.RequestGeneral(reason, opts)
+    MSUF.Castbars.Config.Invalidate()
     if not pendingGeneral then pendingGeneral = {} end
     pendingGeneral.reason = reason or pendingGeneral.reason or "MSUF2_GENERAL"
     local applyAll = not (opts and opts.applyAll == false)
@@ -1205,6 +1208,7 @@ function Apply.RequestGeneral(reason, opts)
 end
 
 function Apply.RequestColors(reason, scope)
+    MSUF.Castbars.Config.Invalidate()
     local globalScope = IsGlobalApplyScope(scope)
     if globalScope and PushVisualUpdates() then return true end
     return Apply.RequestGeneral(reason or "MSUF2_COLORS", {

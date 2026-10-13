@@ -873,7 +873,7 @@ local function RefreshArenaPreviewFrames()
 end
 
 local function BossCastbarPreview(index)
-  if index == 1 then return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 end
+  if index == 1 then return MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1 end
   return _G["MSUF_BossCastbarPreview" .. index]
 end
 

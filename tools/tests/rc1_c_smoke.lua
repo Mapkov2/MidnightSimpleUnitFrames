@@ -34,6 +34,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local core = root .. "/MidnightSimpleUnitFrames/"
 
 local function Check(condition, message)
@@ -256,7 +257,8 @@ end
 
 do
     _G.MSUF_DB = { general = { castbarShowGlow = true }, bars = { roundedFramesEnabled = true, roundedCastbars = true } }
-    _G.MSUF__castTimeGlobalRev = 1
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+    _G.MSUF.Castbars.Config.timeRevision = 1
     _G.MSUF_EnsureDB = function() end
     _G.issecretvalue = function() return false end
     _G.InCombatLockdown = function() return inCombat end
@@ -275,13 +277,15 @@ do
     local ApplyAll, Glow = ns.RoundedCastbarsApplyAll, _G.MSUF_ApplyCastbarGlowFade
     local function SetGlow(enabled)
         _G.MSUF_DB.general.castbarShowGlow = enabled
-        _G.MSUF__castTimeGlobalRev = _G.MSUF__castTimeGlobalRev + 1
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+        _G.MSUF.Castbars.Config.timeRevision = _G.MSUF.Castbars.Config.timeRevision + 1
     end
 
     -- 1. The overlay exists (a glowing cast before rounded was on), then the
     --    rounded castbar pass runs (MSUF.RoundedCastbarsApplyAll per castbar).
     local first = NewCastbar()
     _G.MSUF_PlayerCastbar = first
+    ns.Castbars.Frames.Register("player", nil, first)
     Glow(first, 0.5, 5)
     local overlay = Check(first.statusBar._msufGlowOverlay, "the glow overlay was not created")
     Check(overlay.shown and overlay.points.all == first.statusBar.fill, "the glow overlay does not cover the fill")
@@ -294,6 +298,7 @@ do
     ApplyAll(false)
     local second = NewCastbar()
     _G.MSUF_PlayerCastbar = second
+    ns.Castbars.Frames.Register("player", nil, second)
     ApplyAll(true)
     inCombat = true
     Glow(second, 0.5, 5)
@@ -311,6 +316,7 @@ do
     SetGlow(false)
     local third = NewCastbar()
     _G.MSUF_PlayerCastbar = third
+    ns.Castbars.Frames.Register("player", nil, third)
     ApplyAll(true)
     Check(third.statusBar._msufGlowOverlay == nil, "a glow overlay was built while the glow is off")
     SetGlow(true)
@@ -325,9 +331,11 @@ do
     SetGlow(false)
     local thirdB = NewCastbar()
     _G.MSUF_PlayerCastbar = thirdB
+    ns.Castbars.Frames.Register("player", nil, thirdB)
     ApplyAll(true)
     Check(thirdB.statusBar._msufGlowOverlay == nil, "a glow overlay was built while the glow is off")
     _G.MSUF_DB.general.castbarShowGlow = true
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     local refreshRoundedGlow = Check(ns.Castbars and ns.Castbars.RefreshRoundedGlow,
         "the rounded castbar module exports no glow refresh for the castbar texture pass")
     if refreshRoundedGlow then refreshRoundedGlow() end
@@ -339,10 +347,11 @@ do
     Check(overlay and SurfaceMasked(thirdB, overlay), "a first in-combat cast after switching the glow on is not masked")
     inCombat = false
     local coreSource = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua", "rb")):read("*a")
-    local textureFn = coreSource:match("local function UpdateCastbarTextures%(%)(.-)ExportPublic%(\"MSUF_UpdateCastbarTextures\"")
+    local textureFn = coreSource:match("local function UpdateCastbarTextures%(current%)(.-)Publish%(\"MSUF_UpdateCastbarTextures\"")
     Check(textureFn and textureFn:find("RefreshRoundedGlow", 1, true),
         "the castbar texture pass does not refresh the rounded glow overlay")
     _G.MSUF_PlayerCastbar = third
+    ns.Castbars.Frames.Register("player", nil, third)
     overlay = third.statusBar._msufGlowOverlay
     SetGlow(true)
 
@@ -357,6 +366,7 @@ do
     _G.MSUF_DB.bars.slantedCastbars = true
     local fourth = NewCastbar()
     _G.MSUF_PlayerCastbar = fourth
+    ns.Castbars.Frames.Register("player", nil, fourth)
     ApplyAll(true)
     overlay = Check(fourth.statusBar._msufGlowOverlay, "slanted castbar: no glow overlay")
     Check(SurfaceMasked(fourth, overlay), "slanted castbar: the glow overlay spills past the slanted surface")
@@ -364,6 +374,7 @@ do
     ApplyAll(false)
     Check(next(overlay.masks) == nil, "slanted off left the overlay masked")
     _G.MSUF_PlayerCastbar = nil
+    ns.Castbars.Frames.Register("player", nil, nil)
 end
 print("rc1_c_smoke B (DR1-2): castbar glow overlay masked on rounded and slanted castbars, unmasked when off")
 
@@ -433,6 +444,7 @@ do
     _G.MSUF_AuraSyncFrameStrata = function(frame, strata) frame:SetFrameStrata(strata) end
     _G.MSUF_RoundedUF_OnSpellIndicatorEdge = nil
     _G.MSUF_DB = { general = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
     local names = { target = "Alice", focus = "Dana" }
     local UF = { elements = {}, Layers = {} }

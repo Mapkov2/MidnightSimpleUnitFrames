@@ -87,20 +87,20 @@ local function RuntimeCastbarFrame(key)
         local bars = _G.MSUF_BossCastbars
         return (bars and bars[1])
             or _G.MSUF_BossCastbar1
-            or _G.MSUF_BossCastbarPreview
+            or MSUF.Castbars.Frames.Get("bossPreview")
             or _G.MSUF_BossCastbarPreview1
     elseif key == "arena" then
         local bars = _G.MSUF_ArenaCastbars
         return (bars and bars[1])
             or _G.MSUF_ArenaCastbar1
-            or _G.MSUF_ArenaCastbarPreview
+            or MSUF.Castbars.Frames.Get("arenaPreview")
             or _G.MSUF_ArenaCastbarPreview1
     elseif key == "player" then
-        return _G.MSUF_PlayerCastbar or _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbarPreview
+        return MSUF.Castbars.Frames.Get("player") or MSUF.Castbars.Frames.Get("playerPreview")
     elseif key == "target" then
-        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbarPreview
+        return MSUF.Castbars.Frames.Get("target") or MSUF.Castbars.Frames.Get("targetPreview")
     elseif key == "focus" then
-        return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbarPreview
+        return MSUF.Castbars.Frames.Get("focus") or MSUF.Castbars.Frames.Get("focusPreview")
     end
 end
 Castbar.RuntimeFrame = RuntimeCastbarFrame

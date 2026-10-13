@@ -1,4 +1,5 @@
 local root = assert(arg[1], "root required")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local Secret = {}
 local function fail() error("secret used in Lua") end
 local SecretMT={__add=fail,__sub=fail,__mul=fail,__div=fail,__lt=fail,__le=fail,__eq=fail,__tostring=fail}
@@ -60,11 +61,13 @@ local ns={Client={IsRetail=true},ExportPublic=function(k,v) _G[k]=v end,
     Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }}
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))("MSUF",ns)
 MSUF_DB={general={castbarShowLatency=false,castbarShowLatencyText=true}}
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 local player={statusBar=Frame(),latencyBar=Frame(),timeText=Frame()}
 MSUF_PlayerCastbar_UpdateLatencyZone(player,false,2)
 assert(player.latencyText.text=="43 ms" and player.latencyText.shown and not player.latencyBar.shown,
     "numeric network latency must stay independent from queue-window zone")
 MSUF_DB.general.castbarShowLatencyText=false
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 MSUF_PlayerCastbar_UpdateLatencyZone(player,false,2)
 assert(not player.latencyText.shown and reads==1,"disabled label read network stats or stayed visible")
 -- Restricted timestamps must be passed through to native geometry unchanged.
@@ -76,6 +79,7 @@ C_SpellBook={IsSpellKnownOrInSpellBook=function(spellID) return spellID == 6552 
 UnitClass=function() return "Warrior","WARRIOR" end
 MSUF_ShouldUseMSUFCastbar=function() return true end
 MSUF_DB={general={kickReadyShowTarget=true,kickReadyStyle="border",kickReadyTimeMarker=true,kickReadyTimeSegment=true}}
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF",ns)

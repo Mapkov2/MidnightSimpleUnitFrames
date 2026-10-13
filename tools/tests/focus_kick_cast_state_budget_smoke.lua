@@ -16,6 +16,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local printOnly = arg[2] == "print"
 
 local function Check(condition, message)
@@ -51,6 +52,7 @@ _G.C_Timer = { After = function(_, fn) pending[#pending + 1] = fn end }
 _G.InCombatLockdown = function() return false end
 _G.MSUF_SetFontChecked = function() return true end
 _G.MSUF_DB = { general = { enableFocusKickIcon = true }, focus = {} }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 -- The providers the icon calls; each loads before it in every TOC (Kernel
 -- Util and Libs, Runtime/MSUF_FontRegistry.lua, Castbars_Core, the castbar
 -- manager, the state driver, the interrupt-ready indicator).
@@ -68,11 +70,11 @@ _G.MSUF_FocusKickDriver_ForceUpdate = NoOp
 
 local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua"))("MidnightSimpleUnitFrames", ns)
-local apply = assert(_G.MSUF_FocusKick_ApplyCastState, "MSUF_FocusKick_ApplyCastState missing")
+local apply = assert(_G.MSUF.Castbars.FocusKick.FocusKick_ApplyCastState, "MSUF_FocusKick_ApplyCastState missing")
 
 local state = { active = true, icon = 136243, isNotInterruptible = false }
 apply(state)
-local icon = assert(_G.MSUF_FocusKickIcon, "focus kick icon not built")
+local icon = assert(_G.MSUF.Castbars.Frames.focusKick, "focus kick icon not built")
 
 -- Budget ----------------------------------------------------------------------
 -- Before the change: 871 instructions and 200 bytes (a font closure per call).
@@ -122,7 +124,7 @@ Check(Anchors(function() apply(state) end) > 0, "a cast state during a drag kept
 
 -- The interrupt shake moves the icon itself; a cast state in between
 -- re-anchors it, and the shake's last step restores the layout.
-_G.MSUF_FocusKick_PlayInterruptFeedback()
+_G.MSUF.Castbars.FocusKick.FocusKick_PlayInterruptFeedback()
 Check(Anchors(function() apply(state) end) > 0, "a cast state during the interrupt shake kept the shaken position")
 for _ = 1, 20 do
     local queued = pending

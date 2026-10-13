@@ -37,7 +37,7 @@ end
 
 local function GetBossCastbarFrame(index)
     if index == 1 then
-        return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1
+        return MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1
     end
     return _G["MSUF_BossCastbarPreview" .. index] or _G["MSUF_BossCastbar" .. index]
 end
@@ -125,11 +125,11 @@ end
 local function GetCastbarFrame(unit)
     local frame
     if unit == "player" then
-        frame = _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar
+        frame = MSUF.Castbars.Frames.Get("playerPreview") or MSUF.Castbars.Frames.Get("player")
     elseif unit == "target" then
-        frame = _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar
+        frame = MSUF.Castbars.Frames.Get("targetPreview") or MSUF.Castbars.Frames.Get("target")
     elseif unit == "focus" then
-        frame = _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
+        frame = MSUF.Castbars.Frames.Get("focusPreview") or MSUF.Castbars.Frames.Get("focus")
     elseif unit == "boss" then
         frame = GetBossCastbarFrame(1)
     elseif unit == "arena" then

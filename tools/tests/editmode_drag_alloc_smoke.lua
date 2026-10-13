@@ -194,6 +194,11 @@ for _, flavor in ipairs({ "Mainline", "Mists" }) do
         env["MSUF_ArenaCastbarPreview" .. i] = env["MSUF_ArenaCastbarPreview" .. i] or env.CreateFrame("Frame")
     end
     env.MSUF_BossCastbarPreview = env.MSUF_BossCastbarPreview1
+    for i = 1, 5 do
+        world.core.Castbars.Frames.Register("bossPreview", i, env["MSUF_BossCastbarPreview" .. i])
+        world.core.Castbars.Frames.Register("arenaPreview", i, env["MSUF_ArenaCastbarPreview" .. i])
+    end
+    world.core.Castbars.Config.Compile()
     for _, unit in ipairs({ "boss", "arena" }) do
         positioned = 0
         Check(env.MSUF_PositionCastbarPreviewUnit(unit) == true and positioned > 0,

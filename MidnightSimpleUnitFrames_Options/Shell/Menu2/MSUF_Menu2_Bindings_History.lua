@@ -1285,6 +1285,7 @@ local function RestoreHistoryProfile(activeDB, profileDB, reason)
         profileDB = MSUF.ProfileFields.StripExternal(owned)
     end
     DeepReplace(activeDB, profileDB)
+    MSUF.Castbars.Config.Invalidate()
     if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
     if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
     return true

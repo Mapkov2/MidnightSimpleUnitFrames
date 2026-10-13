@@ -9,7 +9,28 @@
 -- Usage (Lua 5.1):
 --   local PoolNamespace = assert(loadfile(root .. "/tools/tests/castbar_pool_namespace.lua"))()
 --   local ns = PoolNamespace(root, 5)   -- arena slots; nil = the Mainline fallback 3
-return function(root, arenaSlots)
+local function BindFrames(ns, arenaSlots)
+    local frames, pools = ns.Castbars.Frames, ns.Castbars.Pools
+    for _, kind in ipairs({ "boss", "arena" }) do
+        local prefix = kind == "boss" and "MSUF_Boss" or "MSUF_Arena"
+        local live = _G[prefix .. "Castbars"]
+        pools.live[kind] = live
+        local count = kind == "boss" and 5 or (arenaSlots or 3)
+        for index = 1, count do
+            frames.Register(kind, index, (live and live[index]) or _G[prefix .. "Castbar" .. index])
+            local name = prefix .. "CastbarPreview" .. (kind == "boss" and index == 1 and "" or index)
+            frames.Register(kind .. "Preview", index, _G[name])
+        end
+    end
+end
+
+return function(root, arenaSlots, existing)
+    local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
+    if existing then
+        BindFrames(existing, arenaSlots)
+        return existing
+    end
+    local fakeBoss, fakeArena = _G.MSUF_BossCastbars, _G.MSUF_ArenaCastbars
     local saved = {
         CreateFrame = _G.CreateFrame,
         C_Timer = _G.C_Timer,
@@ -43,6 +64,17 @@ return function(root, arenaSlots)
     }) do
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/" .. file))("MidnightSimpleUnitFrames", ns)
     end
+    ns.Castbars.Pools.live.boss, ns.Castbars.Pools.live.arena = fakeBoss, fakeArena
+    for _, kind in ipairs({ "boss", "arena" }) do
+        local prefix = kind == "boss" and "MSUF_Boss" or "MSUF_Arena"
+        local count = kind == "boss" and 5 or (arenaSlots or 3)
+        for index = 1, count do
+            ns.Castbars.Frames.Register(kind, index, _G[prefix .. "Castbar" .. index])
+            local name = prefix .. "CastbarPreview" .. (kind == "boss" and index == 1 and "" or index)
+            ns.Castbars.Frames.Register(kind .. "Preview", index, _G[name])
+        end
+    end
+    BindFrames(ns, arenaSlots)
     _G.CreateFrame = saved.CreateFrame
     _G.C_Timer = saved.C_Timer
     _G.MSUF_EventBus_Register = saved.MSUF_EventBus_Register

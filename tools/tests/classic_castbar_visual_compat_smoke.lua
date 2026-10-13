@@ -1,4 +1,5 @@
 local root = assert(arg[1], "repository root argument missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local callbacks = {}
 local namespace = {
@@ -55,6 +56,7 @@ local general = {
     castbarSparkOverflow = true,
 }
 _G.MSUF_DB = { general = general }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 _G.MSUF_TargetCastbar = frame
 _G.MSUF_BossCastbars = { frame }
 _G.MSUF_ArenaCastbars = { frame }
@@ -72,7 +74,7 @@ _G.MSUF_RefreshCastbarFrame = function(target)
 end
 _G.MSUF_ApplyCastbarVisualsForUnit = function(unit)
     assert(unit == "target" or unit == "boss1" or unit == "arena1", "unexpected visual unit")
-    _G.MSUF_RefreshCastbarFrame(frame, unit, general)
+    _G.MSUF.Castbars.Visuals.RefreshCastbarFrame(frame, unit, general)
     -- Mirrors the shared Core local spark pass which runs after RefreshFrame.
     frame.spark:SetSize(16, frame:GetHeight() * 2.1)
     return "shared-result"
@@ -110,10 +112,12 @@ end
 local compatPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua"
 assert(loadfile(compatPath))("MidnightSimpleUnitFrames", namespace)
 
-local inset = assert(_G.MSUF_ClassicCastbar_GetOutlineInset)(frame, general)
+namespace.Castbars.Pools.live.boss = _G.MSUF_BossCastbars
+namespace.Castbars.Pools.live.arena = _G.MSUF_ArenaCastbars
+local inset = assert(_G.MSUF.Castbars.Style.ClassicCastbar_GetOutlineInset)(frame, general)
 assert(inset == 2, "6px Classic castbar did not retain a 2px drawable inner surface")
 
-_G.MSUF_ClassicCastbar_ApplySparkVisual(frame, general)
+_G.MSUF.Castbars.Style.ClassicCastbar_ApplySparkVisual(frame, general)
 assert(spark.texture == "Interface\\CastingBar\\UI-CastingBar-Spark",
     "Classic castbar did not use Blizzard's Classic spark texture")
 assert(spark.texCoord[1] == 0 and spark.texCoord[2] == 1
@@ -124,11 +128,11 @@ assert(spark.shown == true and spark.width == 16 and math.abs(spark.height - 4.2
 assert(spark.point and spark.point[3] == "RIGHT", "normal fill spark lost the moving right edge")
 
 statusBar.reverse = true
-_G.MSUF_ClassicCastbar_ApplySparkVisual(frame, general)
+_G.MSUF.Castbars.Style.ClassicCastbar_ApplySparkVisual(frame, general)
 assert(spark.point and spark.point[3] == "LEFT", "reverse fill spark lost the moving left edge")
 
 general.castbarSparkOverflow = false
-_G.MSUF_ClassicCastbar_ApplySparkVisual(frame, general)
+_G.MSUF.Castbars.Style.ClassicCastbar_ApplySparkVisual(frame, general)
 assert(spark.height == 2, "non-overflow spark did not match the inner statusbar height")
 
 general.castbarSparkOverflow = true
@@ -153,6 +157,7 @@ previewSpark.height = 12.6
 local bossPreview = { height = 6, statusBar = statusBar, spark = previewSpark }
 function bossPreview:GetHeight() return self.height end
 _G.MSUF_BossCastbarPreview = bossPreview
+namespace.Castbars.Frames.Register("bossPreview", 1, bossPreview)
 callbacks.Castbars("boss1")
 assert(math.abs(previewSpark.height - 4.2) < 0.001,
     "the first boss castbar preview bypassed the final Classic spark geometry")
@@ -163,7 +168,7 @@ assert(math.abs(spark.height - 4.2) < 0.001,
     "arena table castbar bypassed the final Classic spark geometry")
 
 general.castbarShowSpark = false
-_G.MSUF_ClassicCastbar_ApplySparkVisual(frame, general)
+_G.MSUF.Castbars.Style.ClassicCastbar_ApplySparkVisual(frame, general)
 assert(spark.shown == false, "disabled Classic spark remained visible")
 
 for _, tocName in ipairs({ "Vanilla", "Mists", "TBC" }) do

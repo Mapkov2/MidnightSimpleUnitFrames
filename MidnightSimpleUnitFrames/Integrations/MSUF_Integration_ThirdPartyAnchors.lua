@@ -313,6 +313,7 @@ function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision, position)
         RememberCooldownLayoutOrigin(db)
     end
     db.general.anchorToCooldown = enabled
+    MSUF.Castbars.Config.Invalidate()
 
     local providerId = MSUF.GetAutomaticCooldownAnchorProvider()
     if rememberDecision ~= false and providerId then RememberCooldownConsent(providerId, enabled) end

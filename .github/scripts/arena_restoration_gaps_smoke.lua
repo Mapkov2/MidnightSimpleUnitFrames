@@ -104,16 +104,20 @@ local scaleRuntime = Read(SCALE_RUNTIME)
 -- Reason: the collector walks the frame-global name list, so the contract needs
 -- that list and the walker; the two doubles stand in for the core-frame
 -- enumerator and the group-frame gate, neither of which this harness builds.
-local scaleGlobals = Slice.Table(scaleRuntime, "local MSUF_SCALE_FRAME_GLOBALS =", SCALE_RUNTIME)
+local scaleGlobals = Slice.Table(scaleRuntime, "local CASTBAR_SCALE_KINDS =", SCALE_RUNTIME)
 local scaleCollector = Slice.Function(scaleRuntime, "local function CollectMsufScaleFrames", SCALE_RUNTIME)
 local scaleHarness = [[
+local MSUF = _G.MSUF
 local function ForEachCoreFrame() return true end
 local function IsGroupFrameScaleEnabled() return true end
 ]] .. scaleGlobals .. "\n" .. scaleCollector .. [[
 
 return CollectMsufScaleFrames
 ]]
-local collectScaleFrames = assert(compile(scaleHarness, "Arena UI scale collector harness"))()
+local collectScaleFrames
+local function CompileScaleCollector()
+    collectScaleFrames = assert(compile(scaleHarness, "Arena UI scale collector harness"))()
+end
 
 local function NewFrame(label)
     return { label = label, SetScale = function() end }
@@ -134,6 +138,8 @@ for index = 4, 5 do
 end
 _G.MSUF_ArenaCastbarPreview = arenaPreview[1]
 
+local ns = assert(loadfile("tools/tests/castbar_pool_namespace.lua"))()(".", _G.MSUF_MAX_ARENA_FRAMES)
+CompileScaleCollector()
 AssertVisitedExactlyOnce(
     collectScaleFrames(),
     { arenaLive[1], arenaLive[2], arenaLive[3], arenaPreview[1], arenaPreview[2], arenaPreview[3] },
@@ -151,6 +157,8 @@ local roundedWalker = Slice.Function(roundedCastbars, "local function ForEachCas
 local roundedApplyAll = Slice.Function(roundedCastbars, "local function ApplyAll", ROUNDED_CASTBARS)
 local roundedHarness = [[
 local MSUF = ...
+local Frames = MSUF.Castbars.Frames
+local Config = MSUF.Castbars.Config
 local roundedRuntimeActive = false
 local applied, cleared = {}, {}
 local function SettingEnabled() return true end
@@ -189,6 +197,7 @@ local expectedArenaFrames5 = {}
 for index = 1, 5 do expectedArenaFrames5[#expectedArenaFrames5 + 1] = arenaLive5[index] end
 for index = 1, 5 do expectedArenaFrames5[#expectedArenaFrames5 + 1] = arenaPreview5[index] end
 
+PoolNamespace(".", 5, ns)
 AssertVisitedExactlyOnce(collectScaleFrames(), expectedArenaFrames5, "5-slot UI scale collector")
 
 local applyAllRoundedCastbars5, appliedRounded5, clearedRounded5 =

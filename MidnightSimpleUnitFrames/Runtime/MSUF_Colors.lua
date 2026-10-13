@@ -216,6 +216,7 @@ local function _PushCastbarVisuals_Flush()
 end
 
 PushVisualUpdates = function()
+    MSUF.Castbars.Config.Invalidate()
     local auras = MSUF.MSUF_Auras3
     if auras then auras.InvalidateNativeVisualInputs() end
     if InCombat() then return DeferVisualFlushUntilCombatEnds("color") end
@@ -229,6 +230,7 @@ PushVisualUpdates = function()
 end
 
 PushCastbarVisualUpdates = function()
+    MSUF.Castbars.Config.Invalidate()
     if InCombat() then return DeferVisualFlushUntilCombatEnds("castbar") end
     if _castbarPushPending then return end
     _castbarPushPending = true

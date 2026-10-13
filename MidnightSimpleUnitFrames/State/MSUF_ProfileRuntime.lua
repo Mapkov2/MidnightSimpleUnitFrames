@@ -59,8 +59,8 @@ local function MSUF_ProfileIO_RunFrameScaleApply()
     _G.MSUF_ApplyMsufScale(MSUF_ProfileIO_SafeMSUFScale())
 end
 local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
-    _G.MSUF_Castbars_OnSettingsChanged(reason)
-    _G.MSUF_ApplyAllCastbarsAndSync()
+    _G.MSUF_Castbars_OnSettingsChanged(reason, true)
+    _G.MSUF_ApplyAllCastbarsAndSync(true)
 end
 
 --- The coordinated UF apply already owns unit-frame text, while the explicit
@@ -140,6 +140,7 @@ end
 --- Do not reorder or rename the string-named globals here without checking
 --- every consumer: providers load later in the core TOC and are required.
 MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
+    MSUF.Castbars.Config.Invalidate()
     reason = reason or "PROFILE_APPLY"
     if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
         return

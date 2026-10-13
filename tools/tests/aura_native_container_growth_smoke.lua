@@ -180,6 +180,7 @@ _G.C_Timer = { After = Noop }
 -- The real runtime -----------------------------------------------------------------------
 local A3 = {}
 local MSUF = { MSUF_Auras3 = A3, UF = {}, Auras3RuntimeFactories = {},
+    Castbars = { Config = { Invalidate = function() end } },
     ExportPublic = function(name, value) _G[name] = value end,
     MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return { placed = {} } end,
 }

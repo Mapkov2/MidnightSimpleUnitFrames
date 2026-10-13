@@ -20,6 +20,7 @@
 --   Contract:   the client fact is read once at file load in each gated file.
 -- Run with Lua 5.1 and the repo root as arg 1.
 local root = assert(arg[1], "repo root required"):gsub("\\", "/")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 
 local BRIDGE_FILE = "MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Bridge.lua"
 local INTERRUPT_FILE = "MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"
@@ -119,6 +120,7 @@ local function LoadBridge(withGamepad)
         _G[name] = nil
     end
     _G.MSUF_DB = { general = {} }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.CastingBarFrame = nil
     _G.PlayerCastingBarFrame = NewCastbar("PlayerCastingBarFrame", true)
     _G.GamepadPlayerCastingBarFrame = withGamepad and NewCastbar("GamepadPlayerCastingBarFrame") or nil
@@ -200,6 +202,7 @@ local function ResolveInterrupt(client, classToken, knownSpell)
     InstallCommonGlobals()
     _G.MSUF_KickReady_GetSpellID = nil
     _G.MSUF_DB = { general = { kickReadyShowTarget = true } }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.MSUF_ShouldUseMSUFCastbar = function() return true end
     _G.UnitClass = function() return classToken, classToken end
     -- This fixture tests client spell-table selection with its selected spell learned.
@@ -241,6 +244,7 @@ local function GCDRegistered(client, spellAPI)
     InstallCommonGlobals()
     _G.MSUF_GCDBar_IsSupported = nil
     _G.MSUF_DB = { general = { showGCDBar = true } }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     _G.C_Spell = spellAPI
     assert(loadfile(root .. "/" .. GCD_FILE))("MidnightSimpleUnitFrames", Namespace(client))
     local driver
@@ -290,8 +294,10 @@ local function ShownTickMarkers(client, spellID, custom)
     InstallCommonGlobals()
     _G.MSUF_PlayerChannelHasteMarkers_Update = nil
     _G.MSUF_DB = { general = { castbarShowChannelTicks = true }, player = { castbar = {} } }
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     if custom then
         _G.MSUF_DB.general.castbarAccentLastTick = true
+        if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
         _G.MSUF_DB.player.castbar = { channelTickUseCustom = true, channelTickCount = 3, channelTickPosPct = { 80, 20, 40 } }
     end
     _G.IsPlayerSpell = function() return false end
@@ -301,7 +307,7 @@ local function ShownTickMarkers(client, spellID, custom)
     function statusBar:GetWidth() return 200 end
     function statusBar:HookScript() end
     local frame = { unit = "player", MSUF_isChanneled = true, _msufActiveSpellID = spellID, statusBar = statusBar }
-    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    _G.MSUF.Castbars.ChannelTicks.PlayerChannelHasteMarkers_Update(frame, true)
     local shown = 0
     for _, marker in ipairs(frame._msufPlayerChannelHasteMarkers or {}) do
         if marker.shown then shown = shown + 1 end
@@ -353,17 +359,20 @@ do
     local shown, frame = ShownTickMarkers(RETAIL, 15407, true)
     local markers = frame._msufPlayerChannelHasteMarkers
     _G.MSUF_DB.general.castbarUnifiedDirection = true
-    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+    _G.MSUF.Castbars.ChannelTicks.PlayerChannelHasteMarkers_Update(frame, true)
     Check(shown == 3 and markers[1].width == 3 and markers[1].color[2] == .72 and markers[3].width == 2,
         "last tick accent must use latest position in an unsorted custom list")
     -- The default direction drains the channel toward its anchor: the edge
     -- reaches the nearest position (20%) last.
     _G.MSUF_DB.general.castbarUnifiedDirection = nil
-    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+    _G.MSUF.Castbars.ChannelTicks.PlayerChannelHasteMarkers_Update(frame, true)
     Check(markers[2].width == 3 and markers[2].color[2] == .72 and markers[1].width == 2,
         "a draining channel must accent the position its edge reaches last")
     _G.MSUF_DB.general.castbarAccentLastTick = false
-    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
+    _G.MSUF.Castbars.ChannelTicks.PlayerChannelHasteMarkers_Update(frame, true)
     Check(markers[1].width == 2 and markers[1].color[2] == 1 and markers[2].width == 2,
         "tick accent did not reset on reused texture")
 end

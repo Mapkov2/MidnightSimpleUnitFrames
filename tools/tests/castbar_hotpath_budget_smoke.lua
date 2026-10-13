@@ -71,8 +71,8 @@ local world = World.New(root, "timer", { pools = true })
 -- the pools take when the EventBus declines a subscription).
 world.busRefuses = true
 world.exists.boss2, world.exists.boss3, world.exists.boss4, world.exists.boss5 = true, true, true, true
-_G.MSUF_ApplyBossCastbarsEnabled()
-_G.MSUF_ApplyArenaCastbarsEnabled()
+_G.MSUF.Castbars.Pools.ApplyBossCastbarsEnabled()
+_G.MSUF.Castbars.Pools.ApplyArenaCastbarsEnabled()
 
 local function LifecycleFrame(event)
     for index = 1, #world.frames do
@@ -90,7 +90,7 @@ end
 
 -- Manager tick: one target Lua-fill cast, one rendered frame per operation.
 local target = world:Driver("target")
-local manager = assert(_G.MSUF_CastbarManager, "castbar manager missing")
+local manager = assert(_G.MSUF.Castbars.Manager.CastbarManager, "castbar manager missing")
 Measure("manager tick: target cast", function()
     world:StartCast("target", "Fireball", 600, 7)
     world:Fire(target, "UNIT_SPELLCAST_START")

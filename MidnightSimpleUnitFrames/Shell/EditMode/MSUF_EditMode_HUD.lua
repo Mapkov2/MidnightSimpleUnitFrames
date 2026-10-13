@@ -593,6 +593,7 @@ local function BuildToolsCluster()
                 setter(enabled, true)
             else
                 db.general.anchorToCooldown = enabled
+                MSUF.Castbars.Config.Invalidate()
             end
             if tracked then undo.CommitChange() end
             SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
@@ -627,6 +628,7 @@ local function BuildToolsCluster()
                 setter(false, true)
             else
                 db.general.anchorToCooldown = false
+                MSUF.Castbars.Config.Invalidate()
             end
             if tracked then undo.CommitChange() end
             SetActive(cdmBtn, false)

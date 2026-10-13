@@ -1,26 +1,22 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
--- Castbars/MSUF_CastbarAnchors.lua
---
--- Pure castbar layout logic: positioning (ClearAllPoints/SetPoint), sizing
--- (SetWidth/SetHeight) and the "width source" sync machinery that keeps a
--- castbar's width matched to another frame (the MSUF unitframe, or a Cooldown
--- Viewer container). No combat-path/secret reads happen here.
---
--- This file was previously shipped minified (single-letter names, one statement
--- per line). It has been de-minified for maintainability; behavior is unchanged.
---
--- "Width source" overview:
---   A unit's castbar can either use a manually configured width, or match the
---   width of another frame ("unitframe" / "essential" / "utility"). When a
---   match is configured we hook the source frame's size/show/hide events and
---   re-apply the castbar size whenever the source changes. Because the source
---   frame may not exist yet at login, a bounded retry schedule keeps trying to
---   install the hooks. All of this is deferred out of combat.
+-- Pure geometry and width-source hooks, with bounded retries for late providers outside combat.
+-- Manual/unitframe/cooldown width precedence and provider lifecycle: Castbars/README.md.
 
 local _G = _G
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarAnchors.lua").Castbars
+local Config = Castbars.Config
+local Anchors = Castbars.Anchors
+local Backend = Castbars.Backend
+local Bridge = Castbars.Bridge
+local Core = Castbars.Core
+local Frames = Castbars.Frames
+local Manager = Castbars.Manager
+local Previews = Castbars.Previews
+local PublicAPI = Castbars.PublicAPI
+local Style = Castbars.Style
+local Visuals = Castbars.Visuals
+local Publish = PublicAPI.Publish
 
 --- Every provider this file calls is addon code: State defaults, Kernel Util,
 --- the unit-frame factory and the Edit Mode castbar popup load before it;
@@ -91,9 +87,7 @@ local SyncWidthSourceLifecycle
 -- Forward declaration (assigned far below; referenced by the sync machinery).
 local ApplyCastbarEffectiveSizeUnit
 
-------------------------------------------------------------------------
 -- Small helpers
-------------------------------------------------------------------------
 
 -- Round half away from zero.
 local function Round(value)
@@ -106,11 +100,11 @@ end
 
 local function GeneralDB()
     Later("MSUF_EnsureDB")()
-    return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    return (Config.Read().general) or {}
 end
 
 local function CastbarFrameInset(frame, g)
-    return tonumber(Later("MSUF_GetCastbarOutlineInset")(frame, g)) or 0
+    return tonumber(Style.GetCastbarOutlineInset(frame, g)) or 0
 end
 
 local function GetUnitFrames()
@@ -140,7 +134,7 @@ end
 
 -- Whether the MSUF castbar should be used for this unit (vs disabled/Blizzard).
 local function ShouldUseMSUFCastbar(unit, g)
-    local fn = _G.MSUF_ShouldUseMSUFCastbar
+    local fn = Backend.ShouldUseMSUFCastbar
     if type(fn) == "function" then
         return fn(unit, g) == true
     end
@@ -176,9 +170,7 @@ local function SetHeight(frame, height)
     end
 end
 
-------------------------------------------------------------------------
 -- Frame lookups
-------------------------------------------------------------------------
 
 -- The MSUF unitframe object for a unit (handles boss1..boss5 indexing).
 local function GetCoreUnitframe(unit)
@@ -368,7 +360,7 @@ end
 local function ConfiguredWidthSource(g, unit)
     local def = UNIT_CASTBAR[NormalizeUnit(unit)]
     if not def then return nil end
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local shouldUse = Backend.ShouldUseMSUFCastbar
     if type(shouldUse) == "function" then
         if shouldUse(NormalizeUnit(unit), g) ~= true then return nil end
     elseif g and g[def.enable] == false then
@@ -426,14 +418,12 @@ local function GetCastbarUnitframeBottomInset(unit, targetFrame)
     return UnitframeNormalBorderInsetForTarget(frame, source, targetFrame)
 end
 
-------------------------------------------------------------------------
 -- Desired size
-------------------------------------------------------------------------
 
 -- Resolve the castbar (width, height) for a unit. Manual values win, then the
 -- width source, then (non-player, non-detached) the unitframe width, then the
 -- global castbar size, then the provided fallbacks.
-function MSUF_GetCastbarDesiredSize(unit, g, bar, fallbackW, fallbackH)
+function Anchors.GetCastbarDesiredSize(unit, g, bar, fallbackW, fallbackH)
     local normalized = NormalizeUnit(unit)
     local def = UNIT_CASTBAR[normalized]
     g = g or GeneralDB()
@@ -467,9 +457,7 @@ function MSUF_GetCastbarDesiredSize(unit, g, bar, fallbackW, fallbackH)
     return w, h, preserveWidth
 end
 
-------------------------------------------------------------------------
 -- Width-source signatures (skip redundant re-anchors)
-------------------------------------------------------------------------
 
 --- The pool module of a castbar kind (boss, arena), nil for single bars. The
 --- pools load after this file; every caller runs later.
@@ -594,9 +582,7 @@ local function WidthSourceNeedsReanchor(g, unit)
     return changed
 end
 
-------------------------------------------------------------------------
 -- Width-source sync machinery
-------------------------------------------------------------------------
 
 local function FlushWidthSourceSync()
     widthSourceQueued = false
@@ -650,7 +636,7 @@ local function QueueWidthSourceSync()
     if widthSourceQueued then return end
     widthSourceQueued = true
 
-    local runNext = _G.MSUF_Castbars_RunNextFrame
+    local runNext = Bridge.Castbars_RunNextFrame
     if type(runNext) == "function" then
         runNext(FlushWidthSourceSync)
     else
@@ -799,7 +785,7 @@ end
 
 -- Public entry: refresh width-source hooks (and optionally re-anchor) for a unit
 -- or, when unit is nil, all units. keepSignature avoids clearing cached sigs.
-function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
+function Anchors.UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     g = g or GeneralDB()
     -- Cooldown-kind castbars share the central source observer instead of
     -- installing duplicate hooks. Its generation fastpath makes unchanged
@@ -875,7 +861,7 @@ do
         end
         widthSourcePendingAfterCombat = false
         local g = GeneralDB()
-        MSUF_UpdateCastbarWidthSourceSync(g, nil, true)
+        Anchors.UpdateCastbarWidthSourceSync(g, nil, true)
         QueueWidthSourceSync()
     end)
 
@@ -910,9 +896,7 @@ do
     widthSourceBoot:RegisterEvent("PLAYER_LOGIN")
 end
 
-------------------------------------------------------------------------
 -- Sizing helpers
-------------------------------------------------------------------------
 
 -- Apply only outer geometry and empower-tick height. Visuals owns icon/text
 -- layout, while Castbars_Core owns the spark follower.
@@ -950,12 +934,12 @@ end
 
 --- The player castbar and its preview take the full size and layout.
 local function ApplyPlayerCastbarEffectiveSize(g)
-    local frame = _G.MSUF_PlayerCastbar
-    local preview = _G.MSUF_PlayerCastbarPreview
+    local frame = Frames.player
+    local preview = Frames.playerPreview
     local target = frame or preview
     if not target then return false end
 
-    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, target, 250, 18)
+    local w, h, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, target, 250, 18)
     if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
     return true
@@ -965,9 +949,9 @@ end
 --- not built (castbar off, not created yet) gets nil, never the other unit's bar.
 local function TargetFocusCastbar(unit)
     if unit == "target" then
-        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, _G.MSUF_TargetCastbarPreview
+        return Frames.target, Frames.targetPreview
     end
-    return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, _G.MSUF_FocusCastbarPreview
+    return Frames.focus, Frames.focusPreview
 end
 
 --- Target and focus: the live bar gets its outer size (the status bar keeps
@@ -979,7 +963,7 @@ local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
 
     local fallbackW = (target.GetWidth and target:GetWidth()) or 240
     local fallbackH = (target.GetHeight and target:GetHeight()) or 18
-    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
+    local w, h, preserveWidth = Anchors.GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
 
     if frame and SetOuterSize(frame, w, h) and frame.statusBar then
         local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
@@ -997,7 +981,7 @@ local function ApplyPoolCastbarEffectiveSize(pool, g)
         if frame then
             local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
             local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-            local w, h = MSUF_GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
+            local w, h = Anchors.GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
             if SetOuterSize(frame, w, h) then
                 applied = true
                 if frame.ApplyLayout then frame:ApplyLayout() end
@@ -1058,15 +1042,13 @@ local function RefreshCastbarCooldownWidthSource(sourceName)
     return applied
 end
 
-------------------------------------------------------------------------
 -- Re-anchor entry points
-------------------------------------------------------------------------
 
 -- Hide a castbar (and its preview) when the unit's MSUF castbar is disabled.
 local function HideCastbar(frame, preview)
     if frame then
         frame:SetScript("OnUpdate", nil)
-        if frame.timeText and _G.MSUF_IsCastTimeEnabled(frame) then
+        if frame.timeText and Manager.IsCastTimeEnabled(frame) then
             _G.MSUF_SetTextIfChanged(frame.timeText, "")
         end
         if frame.latencyBar then frame.latencyBar:Hide() end
@@ -1078,7 +1060,7 @@ end
 -- Shared re-anchor for the Target and Focus castbars.
 local function ReanchorTargetOrFocusCastbarBase(unit)
     _G.MSUF_EnsureDB()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local g = Config.Read().general or {}
     local frame, preview = TargetFocusCastbar(unit)
     if not frame then return end
 
@@ -1100,8 +1082,8 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
             offsetX + GetCastbarAutoAnchorOffsetX(g, unit, frame), offsetY)
     end
 
-    MSUF_UpdateCastbarWidthSourceSync(g, unit, true)
-    local width, desiredHeight, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, frame,
+    Anchors.UpdateCastbarWidthSourceSync(g, unit, true)
+    local width, desiredHeight, preserveWidth = Anchors.GetCastbarDesiredSize(unit, g, frame,
         (frame.GetWidth and frame:GetWidth()) or 240,
         (frame.GetHeight and frame:GetHeight()) or 18)
 
@@ -1111,7 +1093,7 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
     SetHeight(frame, desiredHeight)
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth) end
 
-    local positionPreview = unit == "target" and _G.MSUF_PositionTargetCastbarPreview or _G.MSUF_PositionFocusCastbarPreview
+    local positionPreview = unit == "target" and Previews.PositionTargetCastbarPreview or Previews.PositionFocusCastbarPreview
     if preview and positionPreview then positionPreview() end
     return frame, preview, g
 end
@@ -1120,8 +1102,8 @@ local function RefreshCastbarVisualFollowers(frame, unit, general)
     if not frame then return end
     -- Castbars/MSUF_CastbarVisuals.lua owns the refresh (the Classic compat
     -- wraps it); its detail-layout fallback never ran after the file loaded.
-    Later("MSUF_RefreshCastbarFrame")(frame)
-    Later("MSUF_ApplyCastbarSparkVisual")(frame, general)
+    Visuals.RefreshCastbarFrame(frame)
+    Core.ApplyCastbarSparkVisual(frame, general)
 end
 
 local function ReanchorTargetCastBarBase()
@@ -1132,13 +1114,13 @@ local function ReanchorFocusCastBarBase()
     return ReanchorTargetOrFocusCastbarBase("focus")
 end
 
-function MSUF_ReanchorTargetCastBar()
+function Anchors.ReanchorTargetCastBar()
     local frame, preview, general = ReanchorTargetCastBarBase()
     RefreshCastbarVisualFollowers(frame, "target", general)
     RefreshCastbarVisualFollowers(preview, "target", general)
 end
 
-function MSUF_ReanchorFocusCastBar()
+function Anchors.ReanchorFocusCastBar()
     local frame, preview, general = ReanchorFocusCastBarBase()
     RefreshCastbarVisualFollowers(frame, "focus", general)
     RefreshCastbarVisualFollowers(preview, "focus", general)
@@ -1146,55 +1128,55 @@ end
 
 local function ReanchorPlayerCastBarBase()
     _G.MSUF_EnsureDB()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local g = Config.Read().general or {}
 
-    if not (_G.MSUF_ShouldUseBlizzardCastbar and _G.MSUF_ShouldUseBlizzardCastbar("player", g))
-        and _G.MSUF_HideBlizzardPlayerCastbar then
-        _G.MSUF_HideBlizzardPlayerCastbar()
+    if not (Backend.ShouldUseBlizzardCastbar and Backend.ShouldUseBlizzardCastbar("player", g))
+        and Previews.HideBlizzardPlayerCastbar then
+        Previews.HideBlizzardPlayerCastbar()
     end
 
     if not ShouldUseMSUFCastbar("player", g) then
-        local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+        local applyPlayerState = Manager.PlayerCastbar_ApplyBackendState
         if type(applyPlayerState) == "function" then applyPlayerState() end
-        HideCastbar(_G.MSUF_PlayerCastbar, _G.MSUF_PlayerCastbarPreview)
+        HideCastbar(Frames.player, Frames.playerPreview)
         return
     end
 
-    local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+    local applyPlayerState = Manager.PlayerCastbar_ApplyBackendState
     if type(applyPlayerState) == "function" then
         applyPlayerState()
     else
-        MSUF_InitSafePlayerCastbar()
+        Manager.InitSafePlayerCastbar()
     end
 
     local anchorFrame = GetUnitframe("player")
-    if not _G.MSUF_PlayerCastbar or (not g.castbarPlayerDetached and not anchorFrame) then
+    if not Frames.player or (not g.castbarPlayerDetached and not anchorFrame) then
         return
     end
 
     local offsetX = Round(g.castbarPlayerOffsetX or 0)
     local offsetY = Round(g.castbarPlayerOffsetY or 5)
     if g.castbarPlayerDetached then
-        SetPoint(_G.MSUF_PlayerCastbar, "CENTER", UIParent, "CENTER", offsetX, offsetY)
+        SetPoint(Frames.player, "CENTER", UIParent, "CENTER", offsetX, offsetY)
     else
-        SetPoint(_G.MSUF_PlayerCastbar, "BOTTOM", anchorFrame, "TOP", offsetX, offsetY)
+        SetPoint(Frames.player, "BOTTOM", anchorFrame, "TOP", offsetX, offsetY)
     end
 
-    MSUF_UpdateCastbarWidthSourceSync(g, "player", true)
-    local width, height, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, _G.MSUF_PlayerCastbar, 250, 18)
-    ApplyPlayerCastbarSizeAndLayout(_G.MSUF_PlayerCastbar, g, width, height, preserveWidth)
+    Anchors.UpdateCastbarWidthSourceSync(g, "player", true)
+    local width, height, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, Frames.player, 250, 18)
+    ApplyPlayerCastbarSizeAndLayout(Frames.player, g, width, height, preserveWidth)
 
     -- Keep the preview size 1:1 with the real bar (show/hide handled elsewhere).
-    if _G.MSUF_PlayerCastbarPreview then
-        ApplyPlayerCastbarSizeAndLayout(_G.MSUF_PlayerCastbarPreview, g, width, height, preserveWidth)
+    if Frames.playerPreview then
+        ApplyPlayerCastbarSizeAndLayout(Frames.playerPreview, g, width, height, preserveWidth)
     end
-    if _G.MSUF_PlayerCastbarPreview and _G.MSUF_PositionPlayerCastbarPreview then
-        _G.MSUF_PositionPlayerCastbarPreview()
+    if Frames.playerPreview and Previews.PositionPlayerCastbarPreview then
+        Previews.PositionPlayerCastbarPreview()
     end
-    return _G.MSUF_PlayerCastbar, _G.MSUF_PlayerCastbarPreview, g
+    return Frames.player, Frames.playerPreview, g
 end
 
-function MSUF_ReanchorPlayerCastBar()
+function Anchors.ReanchorPlayerCastBar()
     local frame, preview, general = ReanchorPlayerCastBarBase()
     RefreshCastbarVisualFollowers(frame, "player", general)
     RefreshCastbarVisualFollowers(preview, "player", general)
@@ -1214,38 +1196,40 @@ local function ReanchorPoolCastBar(kind)
     Later("MSUF_SyncCastbarPositionPopup")(kind)
 end
 
-function MSUF_ReanchorBossCastBar()
+function Anchors.ReanchorBossCastBar()
     ReanchorPoolCastBar("boss")
 end
 
-function MSUF_ReanchorArenaCastBar()
+function Anchors.ReanchorArenaCastBar()
     ReanchorPoolCastBar("arena")
 end
 
-------------------------------------------------------------------------
 -- _G exports
-------------------------------------------------------------------------
-ExportPublic("MSUF_ReanchorTargetCastBar", MSUF_ReanchorTargetCastBar)
-ExportPublic("MSUF_ReanchorFocusCastBar", MSUF_ReanchorFocusCastBar)
-ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)
-ExportPublic("MSUF_ReanchorFocusCastBarBase", ReanchorFocusCastBarBase)
-ExportPublic("MSUF_NormalizeCastbarWidthSource", NormalizeWidthSourceKind)
-ExportPublic("MSUF_NormalizePlayerCastbarWidthSource", NormalizeWidthSourceKind)
-ExportPublic("MSUF_GetCastbarWidthSourceKey", function(unit)
+Publish("MSUF_ReanchorTargetCastBar", Anchors.ReanchorTargetCastBar)
+Publish("MSUF_ReanchorFocusCastBar", Anchors.ReanchorFocusCastBar)
+Anchors.ReanchorTargetCastBarBase = ReanchorTargetCastBarBase
+Anchors.ReanchorFocusCastBarBase = ReanchorFocusCastBarBase
+Anchors.NormalizeCastbarWidthSource = NormalizeWidthSourceKind
+Publish("MSUF_NormalizeCastbarWidthSource", Anchors.NormalizeCastbarWidthSource)
+Anchors.NormalizePlayerCastbarWidthSource = NormalizeWidthSourceKind
+Publish("MSUF_NormalizePlayerCastbarWidthSource", Anchors.NormalizePlayerCastbarWidthSource)
+Anchors.GetCastbarWidthSourceKey = function(unit)
     local def = UNIT_CASTBAR[NormalizeUnit(unit)]
     return def and def.match
-end)
-ExportPublic("MSUF_GetCastbarUnitframeWidthSource", GetUnitframeWidthSource)
-ExportPublic("MSUF_GetCastbarAutoAnchorOffsetX", GetCastbarAutoAnchorOffsetX)
-ExportPublic("MSUF_GetCastbarUnitframeBottomInset", GetCastbarUnitframeBottomInset)
-ExportPublic("MSUF_GetCastbarDesiredSize", MSUF_GetCastbarDesiredSize)
-ExportPublic("MSUF_UpdateCastbarWidthSourceSync", MSUF_UpdateCastbarWidthSourceSync)
-ExportPublic("MSUF_ApplyCastbarEffectiveSizeUnit", ApplyCastbarEffectiveSizeUnit)
-ExportPublic("MSUF_RefreshCastbarCooldownWidthSource", RefreshCastbarCooldownWidthSource)
-ExportPublic("MSUF_ApplyPlayerCastbarSizeAndLayout", ApplyPlayerCastbarSizeAndLayout)
-ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
-ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)
-ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)
-ExportPublic("MSUF_ReanchorArenaCastBar", MSUF_ReanchorArenaCastBar)
+end
+Publish("MSUF_GetCastbarWidthSourceKey", Anchors.GetCastbarWidthSourceKey)
+Anchors.GetCastbarUnitframeWidthSource = GetUnitframeWidthSource
+Anchors.GetCastbarAutoAnchorOffsetX = GetCastbarAutoAnchorOffsetX
+Anchors.GetCastbarUnitframeBottomInset = GetCastbarUnitframeBottomInset
+Publish("MSUF_GetCastbarDesiredSize", Anchors.GetCastbarDesiredSize)
+Publish("MSUF_UpdateCastbarWidthSourceSync", Anchors.UpdateCastbarWidthSourceSync)
+Anchors.ApplyCastbarEffectiveSizeUnit = ApplyCastbarEffectiveSizeUnit
+Anchors.RefreshCastbarCooldownWidthSource = RefreshCastbarCooldownWidthSource
+Publish("MSUF_RefreshCastbarCooldownWidthSource", Anchors.RefreshCastbarCooldownWidthSource)
+Anchors.ApplyPlayerCastbarSizeAndLayout = ApplyPlayerCastbarSizeAndLayout
+Publish("MSUF_ReanchorPlayerCastBar", Anchors.ReanchorPlayerCastBar)
+Anchors.ReanchorPlayerCastBarBase = ReanchorPlayerCastBarBase
+Publish("MSUF_ReanchorBossCastBar", Anchors.ReanchorBossCastBar)
+Publish("MSUF_ReanchorArenaCastBar", Anchors.ReanchorArenaCastBar)
 
-ExportPublic("MSUF_CastbarFrameInset", CastbarFrameInset)
+Anchors.CastbarFrameInset = CastbarFrameInset

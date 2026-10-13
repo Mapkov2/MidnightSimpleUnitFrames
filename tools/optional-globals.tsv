@@ -36,3 +36,4 @@ MSUF_UpdateAbsorbBarTextures	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Te
 MSUF_UpdateAllFonts	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateAllFonts_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateCastbarTextures	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh during the core load leaves the castbars to their own first apply
+MSUF_DB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	SavedVariables can be absent until profile initialization; Config reads them only at an apply/login boundary.

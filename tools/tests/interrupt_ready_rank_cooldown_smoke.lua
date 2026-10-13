@@ -19,6 +19,7 @@
 -- Forever) as arguments.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local flavor = arg[2] or "Vanilla"
 local ranked = flavor == "Vanilla" or flavor == "TBC" or flavor == "Forever"
 
@@ -70,6 +71,7 @@ UIParent = CreateFrame("Frame")
 C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
 MSUF_ShouldUseMSUFCastbar = function() return true end
 MSUF_DB = { general = { kickReadyShowTarget = true, kickReadyStyle = "box" } }
+if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
 -- Spell data the fixture knows: name and cooldown category per spell ID.
 local SPELLS = {

@@ -58,7 +58,7 @@ env.MSUF_KickReady_RefreshAll()
 world:Advance(0.5)
 for index = #world.errors, 1, -1 do world.errors[index] = nil end
 
-local target = assert(env.MSUF_TargetCastBar, "target castbar missing")
+local target = assert(env.MSUF.Castbars.Frames.Get("target"), "target castbar missing")
 local boss = assert(env.MSUF_BossCastbars and env.MSUF_BossCastbars[1], "boss castbar missing")
 local gcdDriver = assert(world:Named("MSUF_GCDBarDriver"), "GCD driver missing")
 local readyFrame = assert(world:Named("MSUF_InterruptReady_EventFrame"), "interrupt-ready event frame missing")
