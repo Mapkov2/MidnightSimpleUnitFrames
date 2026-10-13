@@ -1,5 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_EditMode_Core.lua"/>
+    <Script file="MSUF_EditMode_DragDriver.lua"/>
+    <Script file="MSUF_EditMode_Kinds.lua"/>
     <Script file="MSUF_EditMode_Registry.lua"/>
     <Script file="MSUF_EditMode_State.lua"/>
     <Script file="MSUF_EditMode_Undo.lua"/>

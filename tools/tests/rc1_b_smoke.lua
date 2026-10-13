@@ -422,6 +422,7 @@ local function PagePreviewWorld()
     namespace.MSUF_Auras3 = A3
     G._G = G
     setmetatable(G, { __index = _G })
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, namespace, G)
     local function Load(relative)
         local chunk = assert(loadfile(root .. "/" .. relative))
         setfenv(chunk, G)

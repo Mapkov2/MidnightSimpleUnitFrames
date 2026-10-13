@@ -143,8 +143,15 @@ Check(pairScans == 0, "the repaired DB did not return to the scan-free path")
 ---------------------------------------------------------------------------
 -- Measurements
 ---------------------------------------------------------------------------
+-- Reserve a bounded, unrelated live argument area before collection. Lua 5.1
+-- shrinks the running VM stack during a full collect; the load graph's previous
+-- high-water mark otherwise moves a 4 KB stack resize into this sample. Boolean
+-- slots keep that capacity live without retaining ANY measured workload string.
+-- Both samples collect fully, so temporary strings are recreated and charged.
+local capacity = {}
+for i = 1, 192 do capacity[i] = false end
 local results = {}
-local function MeasureOnce(fn)
+local function MeasureOnce(fn, ...)
     local ticks = 0
     local function Tick() ticks = ticks + 1 end
     collectgarbage("collect")
@@ -163,16 +170,13 @@ local function MeasureOnce(fn)
     return ticks, kb
 end
 
--- repeatable: the case leaves the state it found (a settle), so it runs twice
--- and keeps the smaller reading. The full collect before each run can shrink
--- Lua 5.1's string table; regrowing it then lands in whichever run crosses the
--- next power of two, which depends on how many strings the whole tree holds,
--- not on the measured path. A resize happens at most once per pair, so the
--- minimum is the path's own cost.
+-- Preserve the original minimum-of-two policy with collection before BOTH
+-- repeats. The allocation controls also require each cold/steady sample to
+-- reject table, temporary, unique and repeated-string mutations individually.
 local function Measure(case, fn, repeatable)
-    local ticks, kb = MeasureOnce(fn)
+    local ticks, kb = MeasureOnce(fn, unpack(capacity))
     if repeatable then
-        local ticks2, kb2 = MeasureOnce(fn)
+        local ticks2, kb2 = MeasureOnce(fn, unpack(capacity))
         if ticks2 < ticks then ticks = ticks2 end
         if kb2 < kb then kb = kb2 end
     end
@@ -225,8 +229,8 @@ local raidChildren = 0
 GF.ForEachHeader("raid", function(header) raidChildren = raidChildren + #h:Children(header) end)
 Check(raidChildren >= 20 and GF.FrameForUnit("raid20") ~= nil, "the raid did not build twenty styled frames")
 -- Warm the unchanged-roster path before measuring its steady-state cost.
--- This keeps one-time VM growth out of the allocation budget; the repeat
--- inside Measure keeps a string-table resize out of it.
+-- Both measured repeats still collect fully; the unrelated argument fixture
+-- isolates VM stack capacity, never the workload's temporary string storage.
 h:Event("GROUP_ROSTER_UPDATE")
 h:RunTimers()
 Measure("raid_settle", function()

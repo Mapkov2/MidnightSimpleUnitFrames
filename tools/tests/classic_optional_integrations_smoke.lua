@@ -31,7 +31,7 @@ ns.ExportPublic = function(name, value) _G[name] = value end
 InCombatLockdown = function() return false end
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, flavor, ns, {
-    "Kernel/MSUF_Require.lua", "Locales/MSUF_Localization.lua", "Kernel/MSUF_Util.lua",
+    "Kernel/MSUF_Require.lua", "Locales/MSUF_Localization.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
 })
 MSUF_DB = { general = {} }
 MSUF_ActiveProfile = "Default"
@@ -46,6 +46,7 @@ CreateFrame = function()
     return { RegisterEvent = function() end, UnregisterEvent = function() end,
         UnregisterAllEvents = function() end, SetScript = function() end }
 end
+assert(loadfile(repo .. "/tools/tests/editmode_prerequisites.lua"))().Install(repo, ns)
 load("Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
 for _, name in ipairs({ "Grid2", "Details", "Dominos", "Danders", "Blizzard" }) do
     load("Shell/EditMode/MSUF_EditMode_" .. name .. ".lua")

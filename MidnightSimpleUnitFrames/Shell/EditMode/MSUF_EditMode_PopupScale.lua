@@ -73,21 +73,11 @@ local function CursorPositionInUIParent()
 end
 
 local function FrameScaleToUIParent(frame)
-    local frameScale = frame and frame.GetEffectiveScale and (frame:GetEffectiveScale() or 1) or 1
-    local uiScale = UIParent and UIParent.GetEffectiveScale and (UIParent:GetEffectiveScale() or 1) or 1
-    if frameScale <= 0 then frameScale = 1 end
-    if uiScale <= 0 then uiScale = 1 end
-    local ratio = frameScale / uiScale
-    return ratio > 0 and ratio or 1
+    local ratio = MSUF.Geometry.ScaleRatio(frame, "popup")
+    return ratio
 end
 
-local function FrameRectToUIParent(frame)
-    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
-    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (l and r and t and b) then return nil end
-    local ratio = FrameScaleToUIParent(frame)
-    return l * ratio, r * ratio, t * ratio, b * ratio
-end
+local FrameRectToUIParent = MSUF.Geometry.PopupRect
 
 local function ClampVisualIntoScreen(left, top, visualW, visualH)
     if not (UIParent and UIParent.GetWidth and UIParent.GetHeight) then return left, top end
@@ -301,7 +291,7 @@ function EM2.AttachPopupScaleGrip(frame)
             uiTop = uiTop or (top * currentScale),
         }
         frame._msufEM2PendingScale = currentScale
-        grip:SetScript("OnUpdate", update)
+        MSUF.EditModeKinds.Attach("subframe", grip, update)
         update()
     end
 
@@ -309,7 +299,7 @@ function EM2.AttachPopupScaleGrip(frame)
         local state = frame._msufEM2ScaleDrag
         frame._msufEM2FinishingScale = true
         if state then update() end
-        grip:SetScript("OnUpdate", nil)
+        MSUF.EditModeKinds.Detach(grip)
         frame._msufEM2ScaleDrag = nil
         HideScaleProxy(frame)
         if apply and state then

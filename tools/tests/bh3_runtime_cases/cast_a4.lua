@@ -23,6 +23,7 @@ if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.C
 -- Load the real shared predicates without replacing this fixture's visual providers.
 local utilityNS = { ExportPublic = function(_, value) return value end }
 local previousMSUF = _G.MSUF
+assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, utilityNS)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
 _G.MSUF = previousMSUF
 ns.Util = utilityNS.Util

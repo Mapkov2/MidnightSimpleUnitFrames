@@ -110,6 +110,22 @@ end
 
 
 local drag = modules.Drag(config, layout, IsEditModeActive, IsConfigBlocked, RequestUnitFrameMenuPreview)
+-- Aura groups already own capture, lane writes, history and release. Bind
+-- those real lifecycle methods; applyDrag uses the group's hosted callback.
+local function BeginAuraStrategy(group)
+    if drag.BeginAuraGroupDrag(group) then return group end
+end
+local function FinishAuraStrategy(group)
+    return drag.EndAuraGroupDrag(group, "LeftButton", true)
+end
+MSUF.EditModeKinds.Bind("aura", BeginAuraStrategy, nil, FinishAuraStrategy)
+MSUF.EditModeKinds.aura.history = function(_, key, cfg)
+    return "aura", cfg.historyKey or cfg._msufA3Unit or key:sub(6)
+end
+MSUF.EditModeKinds.aura.openPopup = function(_, key, group)
+    if group and group._msufA3Unit then return drag.OpenAuraGroupPopup(group) end
+    return MSUF.EditModeController.Popups.Open(key, group)
+end
 local PromoteRuntimeLayout = drag.PromoteRuntimeLayout
 local preview = modules.Preview(config, layout, drag, IsBossScope, ForEachBossUnit,
     EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)

@@ -13,6 +13,8 @@ end
 local EM2 = _G.MSUF_EM2
 if type(EM2) ~= "table" then EM2 = {} end
 PublishCompat("MSUF_EM2", EM2)
+MSUF.EditModeController = EM2
+EM2.Kinds = MSUF.EditModeKinds
 
 local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
@@ -29,17 +31,8 @@ EM2.VERSION = "2.0.0"
 --- profile offsets stay untouched until the user edits a field; then the
 --- requested visual delta is translated back into the existing anchor's local
 --- scale. Mirrored left/right elements therefore report equal magnitudes.
-local function EditFrameRectToUI(frame)
-    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
-    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (left and right and top and bottom) then return nil end
-    local frameScale = frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale()) or 1
-    local uiScale = UIParent and UIParent.GetEffectiveScale and tonumber(UIParent:GetEffectiveScale()) or 1
-    if not frameScale or frameScale <= 0 then frameScale = 1 end
-    if not uiScale or uiScale <= 0 then uiScale = 1 end
-    local ratio = frameScale / uiScale
-    return left * ratio, right * ratio, top * ratio, bottom * ratio, frameScale, uiScale
-end
+EM2.Geometry = MSUF.Geometry
+local EditFrameRectToUI = MSUF.Geometry.EditRect
 
 local function EditScreenCenter()
     local left, right, top, bottom = EditFrameRectToUI(UIParent)
@@ -312,9 +305,7 @@ function Util.WirePopupFocus(btn, getKey, component, source, slot)
     return btn
 end
 
-function Util.Round(n)
-    return n + (2^52 + 2^51) - (2^52 + 2^51)
-end
+Util.Round = MSUF.Geometry.RoundEven
 
 function Util.UnitSectionForComponent(component)
     if not component or component == "frame" or component == "layout" or component == "bounds" or component == "size" then return "frame_basics" end

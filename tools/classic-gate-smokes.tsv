@@ -677,3 +677,9 @@ clients+Forever	lua	tools/tests/profile_legacy_precedence_smoke.lua	{root/} {fla
 -	lua	tools/tests/group_text_return_contract_smoke.lua	{root}	Group text return contract, UTF-8 and strict secrets
 -	lua	tools/tests/group_text_math_owner_smoke.lua	{root}	Group return-value math owners and required provider readiness
 -	lua	tools/tests/group_text_required_helpers_smoke.lua	{root}	Required group text fields name missing dependencies on real client load orders
+-	lua	tools/tests/editmode_entry_funnel_smoke.lua	{root}	Edit Mode entry funnel or Options-unloaded behaviour failed
+-	lua	tools/tests/editmode_geometry_position_parity_smoke.lua	{root}	Edit Mode stored or typed position rounding drifted
+-	lua	tools/tests/editmode_drag_driver_lifecycle_smoke.lua	{root}	Edit Mode drag driver lifecycle failed
+-	lua	tools/tests/editmode_strategy_engine_lifecycle_smoke.lua	{root}	Real Edit Mode strategy engine lifecycles failed
+-	python	tools/tests/group_roster_allocation_controls_smoke.py	{root}	Roster allocation cold and steady controls failed
+clients+Forever	lua	tools/tests/castbar_namespace_schema_boot_smoke.lua	{root/} {flavor}	Castbar namespace publication lost shared schema: {flavor}

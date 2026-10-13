@@ -22,7 +22,7 @@ if type(RunEach) ~= "function" then
     end
 end
 
-local bus = { handlers = {} }
+local bus = { handlers = {}, internalEvents = {} }
 local driver = CreateFrame("Frame")
 driver:Hide()
 bus.driver = driver
@@ -88,7 +88,7 @@ end
 --- Rebuild the driver's event registration when unit filters change. For unit
 --- events this is the only place that talks to RegisterUnitEvent.
 local function RefreshDriverRegistration(event, ev)
-    if not ev then return end
+    if not ev or bus.internalEvents[event] then return end
     if not ev.unitEvent then
         if not driver:IsEventRegistered(event) then driver:RegisterEvent(event) end
         return
@@ -128,13 +128,13 @@ end
 local function MaybeUnregister(event)
     local ev = bus.handlers[event]
     if not ev then
-        if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+        if not bus.internalEvents[event] and driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
         return
     end
     if ev.dirty then Compact(ev) end
     if #ev.list == 0 then
         bus.handlers[event] = nil
-        if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+        if not bus.internalEvents[event] and driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
     elseif ev.unitEvent then
         RefreshDriverRegistration(event, ev)
     end
@@ -220,11 +220,36 @@ local function Deliver(_, handler, event, ...)
         callback(event, ...)
     end
 end
+-- Internal state delivery is superseded by a nested publication. The native
+-- dispatcher below keeps its original fast path and instruction count.
+local function DeliverInternal(index, handler, ev, revision, event, ...)
+    if ev.revision ~= revision or bus.handlers[event] ~= ev then return end
+    return Deliver(index, handler, event, ...)
+end
+
+function bus:Publish(event, ...)
+    local ev = bus.handlers[event]
+    if not ev then return end
+    local list = ev.list
+    -- A native event returns to the client dispatcher. Internal publishers
+    -- must also finish their own lifecycle after a subscriber raises.
+    if self.internalEvents[event] then
+        ev.revision = (ev.revision or 0) + 1
+        return RunEach(list, DeliverInternal, ev, ev.revision, event, ...)
+    end
+    if #list == 1 then return Deliver(1, list[1], event, ...) end
+    RunEach(list, Deliver, event, ...)
+end
+
+function bus:DefineEvent(event)
+    self.internalEvents[event] = true
+end
+
+-- Native dispatch retains its instruction budget; internal publication is a cold path.
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
     if not ev then return end
     local list = ev.list
-    -- One subscriber has no neighbours to isolate: skip the protected range.
     if #list == 1 then return Deliver(1, list[1], event, ...) end
     RunEach(list, Deliver, event, ...)
 end)

@@ -84,6 +84,7 @@ local function Load()
     _G.MSUF_MarkFontApplyFailed = NoOp
     _G.MSUF_FocusKickDriver_ForceUpdate = NoOp
     local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua"))("MidnightSimpleUnitFrames", ns)
     return ns

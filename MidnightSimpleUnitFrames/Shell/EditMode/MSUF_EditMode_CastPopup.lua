@@ -68,24 +68,18 @@ local function DefaultOffsets(unit)
 end
 
 local function OffsetKeys(unit)
-    if unit == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY" end
-    if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end
-    local pre = Prefix(unit)
-    if pre then return pre .. "OffsetX", pre .. "OffsetY" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    if fields then return fields.x, fields.y end
 end
 
 local function WidthKey(unit)
-    if unit == "boss" then return "bossCastbarWidth" end
-    if unit == "arena" then return "arenaCastbarWidth" end
-    local pre = Prefix(unit)
-    if pre then return pre .. "BarWidth" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    return fields and fields.w
 end
 
 local function HeightKey(unit)
-    if unit == "boss" then return "bossCastbarHeight" end
-    if unit == "arena" then return "arenaCastbarHeight" end
-    local pre = Prefix(unit)
-    if pre then return pre .. "BarHeight" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    return fields and fields.h
 end
 
 local function WidthSourceKey(unit)
@@ -94,19 +88,13 @@ local function WidthSourceKey(unit)
         local key = fn(unit)
         if key then return key end
     end
-    if unit == "player" then return "castbarPlayerMatchWidth" end
-    if unit == "target" then return "castbarTargetMatchWidth" end
-    if unit == "focus" then return "castbarFocusMatchWidth" end
-    if unit == "boss" then return "bossCastbarMatchWidth" end
-    if unit == "arena" then return "arenaCastbarMatchWidth" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    return fields and fields.match
 end
 
 local function DetachedKey(unit)
-    if unit == "player" then return "castbarPlayerDetached" end
-    if unit == "target" then return "castbarTargetDetached" end
-    if unit == "focus" then return "castbarFocusDetached" end
-    if unit == "boss" then return "bossCastbarDetached" end
-    if unit == "arena" then return "arenaCastbarDetached" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    return fields and fields.detached
 end
 
 local function ManualWidth(g, unit)

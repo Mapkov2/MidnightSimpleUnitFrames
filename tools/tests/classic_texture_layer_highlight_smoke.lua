@@ -30,6 +30,7 @@ local namespace = {
 -- Kernel/MSUF_Util.lua loads before the runtime in every TOC and provides the
 -- combat-state source the layer visibility asks.
 for _, relative in ipairs({
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua",
     "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua",
     "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua",
     "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua",

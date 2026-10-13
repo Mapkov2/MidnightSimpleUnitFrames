@@ -108,8 +108,8 @@ local function MSUF_SetMSUFEditModeDirect(active, unitKey)
     if tryCloseExternal and tryCloseExternal() then
         return true
     end
-    if active then EM2.State.Enter(unitKey)
-    else EM2.State.Exit("direct") end
+    if active then MSUF.EditMode.Open(unitKey)
+    else MSUF.EditMode.Close("direct") end
     return true
 end
 ExportPublic("MSUF_SetMSUFEditModeDirect", MSUF_SetMSUFEditModeDirect)
@@ -522,22 +522,9 @@ local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
     db.general = db.general or {}
     local g = db.general
 
-    local detachedKey, oxKey, oyKey
-    if unit == "boss" then
-        detachedKey = "bossCastbarDetached"
-        oxKey = "bossCastbarOffsetX"
-        oyKey = "bossCastbarOffsetY"
-    elseif unit == "arena" then
-        detachedKey = "arenaCastbarDetached"
-        oxKey = "arenaCastbarOffsetX"
-        oyKey = "arenaCastbarOffsetY"
-    else
-        local prefix = _G.MSUF_GetCastbarPrefix and _G.MSUF_GetCastbarPrefix(unit)
-        if not prefix then return end
-        detachedKey = prefix .. "Detached"
-        oxKey = prefix .. "OffsetX"
-        oyKey = prefix .. "OffsetY"
-    end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    if not fields then return end
+    local detachedKey, oxKey, oyKey = fields.detached, fields.x, fields.y
 
     local wantDetached = (anchored == false)
     if (g[detachedKey] == true) == wantDetached then return end

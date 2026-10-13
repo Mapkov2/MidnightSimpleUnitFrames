@@ -37,13 +37,20 @@ end
 -- Finds a local function by name through the upvalue chain of `fn`.
 local function FindUpvalue(fn, name, seen)
     seen = seen or {}
-    if type(fn) ~= "function" or seen[fn] then return nil end
+    if (type(fn) ~= "function" and type(fn) ~= "table") or seen[fn] then return nil end
     seen[fn] = true
+    if type(fn) == "table" then
+        for _, value in pairs(fn) do
+            local found = FindUpvalue(value, name, seen)
+            if found then return found end
+        end
+        return nil
+    end
     for i = 1, 255 do
         local upName, value = debug.getupvalue(fn, i)
         if not upName then break end
         if upName == name then return value end
-        local found = type(value) == "function" and FindUpvalue(value, name, seen)
+        local found = (type(value) == "function" or type(value) == "table") and FindUpvalue(value, name, seen)
         if found then return found end
     end
 end
@@ -52,6 +59,7 @@ end
 -- The Edit Mode layout family (Grid, Snap, Nudge, then the drag ticker) in
 -- its MSUF_EditMode.xml order.
 local function LoadLayoutFamily(addon, namespace)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, namespace)
     local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode.xml", "rb"))
     local xml = handle:read("*a")
     handle:close()

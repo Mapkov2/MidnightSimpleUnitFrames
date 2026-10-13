@@ -4,6 +4,7 @@
 --- 1px guide lines at snap points.
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 
+local _, MSUF = ...
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -161,19 +162,7 @@ local function ShowHGuide(y)
     g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y)
 end
 
-local function GetFrameEdgesUI(frame)
-    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
-        return nil
-    end
-    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (l and r and t and b) then return nil end
-    local uiScale = UIParent:GetEffectiveScale() or 1
-    if uiScale == 0 then uiScale = 1 end
-    local frameScale = frame.GetEffectiveScale and (frame:GetEffectiveScale() or uiScale) or uiScale
-    local ratio = frameScale / uiScale
-    l, r, t, b = l * ratio, r * ratio, t * ratio, b * ratio
-    return l, (l + r) * 0.5, r, b, (b + t) * 0.5, t
-end
+local GetFrameEdgesUI = MSUF.Geometry.Edges
 --- The drag ticker measures movers with the same edges.
 Snap.GetFrameEdgesUI = GetFrameEdgesUI
 

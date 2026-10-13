@@ -522,6 +522,17 @@ end
 local function DependencyChunk(path, ...)
     if path:match("/MSUFUnitFrames/init%.lua$") then return originalLoadfile(path, ...) end
     local source = Read(path)
+    local product = path:find("MidnightSimpleUnitFrames/", 1, true) or path:find("MidnightSimpleUnitFrames_Options/", 1, true)
+    if product and (source:find("MSUF.Geometry", 1, true) or source:find("MSUF.Castbars.UNIT_CASTBAR", 1, true)
+        or source:find("MSUF.EditModeKinds", 1, true)) then
+        local chunk, message = originalLoadfile(path, ...)
+        if not chunk then return nil, message end
+        return function(addon, namespace)
+            assert(originalLoadfile("tools/tests/editmode_prerequisites.lua"))().Install(".", namespace, nil, originalLoadfile)
+            PrepareSharedDependencies(path, namespace)
+            return chunk(addon, namespace)
+        end
+    end
     local direct = NeedsDirectContracts(source)
     if not direct and not (path:match("MSUF_UF_Shared%.lua$") or path:match("MSUF_UF_Group_Config%.lua$")
         or path:match("MSUF_EditMode_Core%.lua$") or path:match("MSUF_AnchorPicker%.lua$")
@@ -738,6 +749,11 @@ end
 function Loader.Install()
     InstallSetFontChecked()
     InstallBoundary()
+    local geometryNS = {}
+    assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua")))(
+        "MidnightSimpleUnitFrames", geometryNS)
+    _G.MSUF_RoundOffset = geometryNS.Geometry.RoundOffset
+    _G.MSUF_UF_FrameRectToUI = geometryNS.Geometry.VisibleRect
     -- Pure shared rules are provided by earlier TOC owners. Standalone
     -- consumers get the exact source bodies, without loading unrelated UI.
     for _, rule in ipairs({
@@ -747,7 +763,6 @@ function Loader.Install()
         { "Auras3/MSUF_Auras3_Core.lua", "TableHasAnyKey", "MSUF_AuraTableHasAnyKey" },
         { "UnitFrames/Engine/Group/MSUF_UF_Group_SpellRegistry.lua", "CopyTable", "MSUF_GF_CopySpellConfig" },
         { "Kernel/MSUF_Util.lua", "IsGlobalCooldownAnchorEnabled", "MSUF_GlobalCooldownAnchorEnabled", "local CooldownAnchorSupported = function() return _G.MSUF_CooldownAnchorSupported() end\n" },
-        { "Kernel/MSUF_Util.lua", "RoundOffset", "MSUF_RoundOffset" },
         { "Castbars/MSUF_CastbarAnchors.lua", "CastbarFrameInset", "MSUF_CastbarFrameInset" },
         { "Castbars/MSUF_CastbarUtils.lua", "CastTimeUnitKey", "MSUF_CastTimeUnitKey" },
         { "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua", "ClampEdgeSize", "MSUF_ClampRoundedEdgeSize" },
@@ -774,7 +789,6 @@ function Loader.Install()
 
         { "Auras3/MSUF_Auras3_Core.lua", "NormalizeDebuffTypeBorderMode", "MSUF_NormalizeAuraDebuffTypeBorderMode" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "PointFraction", "MSUF_UF_PointFraction" },
-        { "Kernel/MSUF_Util.lua", "FrameRectToUI", "MSUF_UF_FrameRectToUI" },
         { "Auras3/MSUF_Auras3_Core.lua", "NormalizeDispelBorderMode", "MSUF_NormalizeLegacyDispelBorderMode" },
         { "Auras3/MSUF_Auras3_Core.lua", "ReadParentFrameStrata", "MSUF_AuraReadParentFrameStrata", "local function AuraStrataIsSecret(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
         { "Auras3/MSUF_Auras3_Core.lua", "SyncFrameStrata", "MSUF_AuraSyncFrameStrata", "local function AuraStrataIsSecret(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },

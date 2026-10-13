@@ -1265,20 +1265,7 @@ end
 ExportPublic("MSUF_ClampCheckboxText", MSUF_ClampCheckboxText)
 
 -- Shared coordinate conversion must precede both Edit Mode and UF engine loading.
-local function FrameRectToUI(frame)
-  if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
-    return nil
-  end
-  if frame.IsShown and not frame:IsShown() then return nil end
-  local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-  if not (l and r and t and b) then return nil end
-  local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
-  local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-  if not fS or fS == 0 then fS = 1 end
-  if not uiS or uiS == 0 then uiS = 1 end
-  local ratio = fS / uiS
-  return l * ratio, r * ratio, t * ratio, b * ratio
-end
+local FrameRectToUI = MSUF.Geometry.VisibleRect
 U.FrameRectToUI = FrameRectToUI
 ExportPublic("MSUF_UF_FrameRectToUI", FrameRectToUI)
 
@@ -1321,10 +1308,7 @@ end
 U.IsPlayerInCombat = IsPlayerInCombat
 ExportPublic("MSUF_IsPlayerInCombat", IsPlayerInCombat)
 
-local function RoundOffset(value)
-    value = tonumber(value) or 0
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
+local RoundOffset = MSUF.Geometry.RoundOffset
 U.RoundOffset = RoundOffset
 ExportPublic("MSUF_RoundOffset", RoundOffset)
 

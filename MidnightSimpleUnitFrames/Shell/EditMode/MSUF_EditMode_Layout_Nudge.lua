@@ -58,8 +58,8 @@ end
 
 local function GetCastbarOffsetKeys(unit)
     if not unit then return nil, nil end
-    if unit == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY" end
-    if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end
+    local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
+    if fields then return fields.x, fields.y end
     local fn = _G.MSUF_GetCastbarPrefix
     if type(fn) ~= "function" then return nil, nil end
     local prefix = fn(unit)

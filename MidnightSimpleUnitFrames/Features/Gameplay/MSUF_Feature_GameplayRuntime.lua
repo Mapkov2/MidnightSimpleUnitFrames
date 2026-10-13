@@ -150,41 +150,11 @@ local function SyncGameplayPanel()
 end
 
 local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues)
-    local x, y = frame:GetCenter()
-    if not (x and y) then return end
-
-    -- GetCenter reports each region in its own effective-scale space. Anchoring to a scaled
-    -- unit frame therefore needs both centers converted through screen pixels into the moving
-    -- frame's space (the space SetPoint offsets are applied in), or the stored offsets drift
-    -- and the next re-anchor jumps the frame.
-    local frameScale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
-    if not frameScale or frameScale <= 0 then frameScale = 1 end
-
-    local ax, ay = UIParent:GetCenter()
-    local anchorScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or frameScale
-    if anchor and anchor.GetCenter then
-        local tx, ty = anchor:GetCenter()
-        if tx and ty then
-            ax, ay = tx, ty
-            anchorScale = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or anchorScale
-        end
-    end
-    if not (ax and ay) then return end
-    if not anchorScale or anchorScale <= 0 then anchorScale = frameScale end
-
-    local dx = ((x * frameScale) - (ax * anchorScale)) / frameScale
-    local dy = ((y * frameScale) - (ay * anchorScale)) / frameScale
-    if roundValues ~= false then
-        dx, dy = RoundInt(dx), RoundInt(dy)
-    end
-    db[xKey], db[yKey] = dx, dy
+    return MSUF.EditModeKinds.gameplay:applyDrag(frame, db, xKey, yKey, anchor, roundValues, RoundInt)
 end
 
 local function BeginGameplayDrag(frame, label, source)
-    SelectNudgeFrame(frame, true)
-    BeginHistory(frame, label, source)
-    frame._msufDragging = true
-    frame:StartMoving()
+    MSUF.EditModeKinds.gameplay:beginDrag(frame, label, source, SelectNudgeFrame, BeginHistory)
 end
 
 local function CanAltDrag(g, lockKey, clickThroughKey)
@@ -577,8 +547,7 @@ EnsureCombatStateText = function()
         end)
 
         stateFrame:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            self._msufDragging = nil
+            if not MSUF.EditModeKinds.EndGameplayDrag(self) then return end
 
             local db = GameplayDefaults()
             StoreCenteredOffset(self, db, "combatStateOffsetX", "combatStateOffsetY")
@@ -899,8 +868,7 @@ local function CreateCombatTimerFrame()
     end)
 
     combatFrame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        self._msufDragging = nil
+        if not MSUF.EditModeKinds.EndGameplayDrag(self) then return end
 
         local db = GameplayDefaults()
         local anchorFrame = GetCombatTimerAnchorFrame(db)

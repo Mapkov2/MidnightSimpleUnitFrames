@@ -49,6 +49,7 @@ local function Check(condition, message)
 end
 
 local function Load(relative, namespace)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, namespace)
     local chunk = assert(loadfile(root .. "/" .. relative))
     chunk("MidnightSimpleUnitFrames", namespace)
 end

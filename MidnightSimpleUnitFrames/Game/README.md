@@ -176,3 +176,8 @@ CVar turns off, so the module re-asserts it after that CVar changes and on every
 apply. A target change only re-reads the range of checked hands, a haste proc
 does nothing unless a weapon was equipped or removed, and spell-state events are
 registered only for classes with next-swing attacks.
+
+Gameplay native drags join Edit Mode session teardown on every client. Cancel,
+combat and close stop held movement before restoring settings; late releases
+leave coordinates and history intact. Ordinary release keeps native cache and
+slider sync. See [engine lifecycle details](../../docs/EDITMODE_ENGINE_DELTA.md).

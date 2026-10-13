@@ -24,6 +24,7 @@ end
 
 function Fixture.Install(root, ns, menu)
     ns = ns or {}
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns)
     if type(ns.Require) ~= "function" or type(ns.Optional) ~= "function" then
         -- The shipped file also publishes _G.MSUF when it is unset; a fixture
         -- that never had one keeps it unset.

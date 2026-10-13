@@ -163,7 +163,7 @@ end
 
 local function AuraGroupDragOnUpdate(me, elapsed)
     if not me._dragging then
-        me:SetScript("OnUpdate", nil)
+        MSUF.EditModeKinds.Detach(me)
         if me.SetOnUpdateMode then me:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
         return
     end
@@ -218,7 +218,7 @@ local function StopAuraPendingDrag(group)
     pendingAuraDragStartX = nil
     pendingAuraDragStartY = nil
     if pendingAuraDragFrame then
-        pendingAuraDragFrame:SetScript("OnUpdate", nil)
+        MSUF.EditModeKinds.Detach(pendingAuraDragFrame)
         pendingAuraDragFrame:Hide()
     end
 end
@@ -234,7 +234,7 @@ local function StopAuraDragCapture(group)
     if group and activeAuraDragGroup and activeAuraDragGroup ~= group then return end
     activeAuraDragGroup = nil
     if auraDragCaptureFrame then
-        auraDragCaptureFrame:SetScript("OnUpdate", nil)
+        MSUF.EditModeKinds.Detach(auraDragCaptureFrame)
         auraDragCaptureFrame:Hide()
     end
 end
@@ -255,7 +255,7 @@ local function EnsureAuraDragCaptureFrame()
         if handler then handler(target, button) end
     end)
     auraDragCaptureFrame:SetScript("OnHide", function(self)
-        self:SetScript("OnUpdate", nil)
+        MSUF.EditModeKinds.Detach(self)
     end)
     auraDragCaptureFrame:Hide()
     return auraDragCaptureFrame
@@ -268,7 +268,7 @@ local function StartAuraDragCapture(group)
     if capture.SetFrameLevel then
         capture:SetFrameLevel(math_max(1500, (group.GetFrameLevel and (group:GetFrameLevel() or 0) or 0) + 200))
     end
-    capture:SetScript("OnUpdate", function(_, elapsed)
+    MSUF.EditModeKinds.Attach("aura", capture, function(_, elapsed)
         local target = activeAuraDragGroup
         if target and target._dragging then
             AuraGroupDragOnUpdate(target, elapsed)
@@ -292,7 +292,7 @@ local function QueueAuraPendingDrag(group, button)
     pendingAuraDragStartY = cy
 
     local frame = EnsureAuraPendingDragFrame()
-    frame:SetScript("OnUpdate", function()
+    MSUF.EditModeKinds.Attach("aura", frame, function()
         local target = pendingAuraDragGroup
         if not target then
             StopAuraPendingDrag()
@@ -368,7 +368,7 @@ BeginAuraGroupDrag = function(self, fromMotion)
     self._snapHH = (t - b) * 0.5
 
     if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
-    self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
+    MSUF.EditModeKinds.Attach("aura", self, AuraGroupDragOnUpdate)
     StartAuraDragCapture(self)
     return true
 end
@@ -389,7 +389,7 @@ local function EndAuraGroupDrag(self, button, suppressClick)
 
     local moved = self._dragMoved == true or self._dragStartedByMotion == true
     self._dragging = false
-    self:SetScript("OnUpdate", nil)
+    MSUF.EditModeKinds.Detach(self)
     StopAuraDragCapture(self)
     if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
     self._dragAuras = nil

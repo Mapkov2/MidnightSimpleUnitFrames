@@ -158,6 +158,7 @@ local function NewWorld(arenaSlots)
         Translate = function(text) return LOCALE[text] or text end,
     }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns)
     for _, file in ipairs(LOAD_ORDER) do
         assert(loadfile(root .. "/" .. CASTBARS .. file))("MidnightSimpleUnitFrames", ns)
     end

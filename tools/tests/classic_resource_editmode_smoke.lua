@@ -4,6 +4,7 @@ local root = assert(arg[1], "repo root missing")
 -- The Edit Mode layout family (Grid, Snap, Nudge, then the drag ticker) in
 -- its MSUF_EditMode.xml order.
 local function LoadLayoutFamily(addon, namespace)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, namespace)
     local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode.xml", "rb"))
     local xml = handle:read("*a")
     handle:close()

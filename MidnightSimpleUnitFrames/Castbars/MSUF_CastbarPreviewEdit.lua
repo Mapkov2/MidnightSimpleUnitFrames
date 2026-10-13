@@ -10,55 +10,7 @@ local PublicAPI = Castbars.PublicAPI
 local Utils = Castbars.Utils
 local Publish = PublicAPI.Publish
 
-local UNIT_CONFIG = {
-    player = {
-        w = "castbarPlayerBarWidth",
-        h = "castbarPlayerBarHeight",
-        x = "castbarPlayerOffsetX",
-        y = "castbarPlayerOffsetY",
-        dx = 0,
-        dy = 5,
-        test = "MSUF_SetPlayerCastbarTestMode",
-    },
-    target = {
-        w = "castbarTargetBarWidth",
-        h = "castbarTargetBarHeight",
-        x = "castbarTargetOffsetX",
-        y = "castbarTargetOffsetY",
-        dx = 65,
-        dy = -15,
-        test = "MSUF_SetTargetCastbarTestMode",
-    },
-    focus = {
-        w = "castbarFocusBarWidth",
-        h = "castbarFocusBarHeight",
-        x = "castbarFocusOffsetX",
-        y = "castbarFocusOffsetY",
-        fallbackX = "castbarTargetOffsetX",
-        fallbackY = "castbarTargetOffsetY",
-        dx = 65,
-        dy = -15,
-        test = "MSUF_SetFocusCastbarTestMode",
-    },
-    boss = {
-        w = "bossCastbarWidth",
-        h = "bossCastbarHeight",
-        x = "bossCastbarOffsetX",
-        y = "bossCastbarOffsetY",
-        dx = 0,
-        dy = 0,
-        test = "MSUF_SetBossCastbarTestMode",
-    },
-    arena = {
-        w = "arenaCastbarWidth",
-        h = "arenaCastbarHeight",
-        x = "arenaCastbarOffsetX",
-        y = "arenaCastbarOffsetY",
-        dx = 0,
-        dy = 0,
-        test = "MSUF_SetArenaCastbarTestMode",
-    },
-}
+local UNIT_CONFIG = MSUF.Castbars.UNIT_CASTBAR
 local CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL = 0.05
 
 local GeneralDB = Utils.EnsureCastbarGeneralDB
@@ -203,7 +155,7 @@ end
 local function PreviewDragUpdate(unit, config)
     return function(dragFrame, elapsed)
         if not dragFrame.isDragging then
-            dragFrame:SetScript("OnUpdate", nil)
+            MSUF.EditModeKinds.Detach(dragFrame)
             return
         end
 
@@ -333,7 +285,7 @@ local function PreviewMouseDown(unit, config)
             self._snapHH = (top - bottom) * 0.5 * frameScale / uiScale
         end
 
-        self:SetScript("OnUpdate", PreviewDragUpdate(unit, config))
+        MSUF.EditModeKinds.Attach("castbar", self, PreviewDragUpdate(unit, config))
     end
 end
 
@@ -348,7 +300,7 @@ local function PreviewMouseUp(unit)
         local moved = self.dragMoved
         if self.isDragging then
             self.isDragging = false
-            self:SetScript("OnUpdate", nil)
+            MSUF.EditModeKinds.Detach(self)
             self._msufPreviewApplyAcc = nil
             self._msufPopupSyncAcc = nil
 

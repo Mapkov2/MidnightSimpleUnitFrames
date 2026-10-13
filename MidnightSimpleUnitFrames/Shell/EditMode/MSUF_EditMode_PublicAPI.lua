@@ -28,11 +28,7 @@ local function Finite(value)
         and value > -math.huge and value < math.huge
 end
 
-local function Round(value)
-    value = tonumber(value)
-    if not value then return nil end
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
+local Round = MSUF.Geometry.RoundOptional
 
 local function Copy(value, seen, depth)
     local kind = type(value)
@@ -595,11 +591,9 @@ function External.GetInspectorValues(key)
         if x ~= nil then return record.label, x, y, width, height end
     end
     if frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom then
-        local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+        local left, right, top, bottom, height = MSUF.Geometry.Rect(frame, "inspector")
         if left and right and top and bottom then
-            local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
-            local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
-            local ratio = uiScale ~= 0 and frameScale / uiScale or 1
+            local ratio = 1
             --- Fallback when Core's shared geometry helper is unavailable:
             --- use the same center-facing horizontal edge as native elements.
             local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
@@ -617,7 +611,7 @@ function External.GetInspectorValues(key)
             return record.label,
                 Round(x),
                 Round(top * ratio - screenH * 0.5),
-                Round(uiRight - uiLeft), Round((top - bottom) * ratio)
+                Round(uiRight - uiLeft), Round(height)
         end
     end
     if record.getInspectorValues then

@@ -232,6 +232,8 @@ function World.New(root, backend, options)
     -- Load the real shared predicates without replacing this fixture's visual providers.
     local utilityNS = { ExportPublic = function(_, value) return value end }
     local previousMSUF = _G.MSUF
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, utilityNS)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
     _G.MSUF = previousMSUF
     ns.Util = utilityNS.Util

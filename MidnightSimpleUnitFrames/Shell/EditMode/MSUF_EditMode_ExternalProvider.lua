@@ -12,17 +12,8 @@ EM2.ExternalProviders = External
 
 local providers = External.providers or {}
 External.providers = providers
-local CASTBAR_FIELDS = {
-    player = { x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight" },
-    target = { x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight" },
-    focus  = { x = "castbarFocusOffsetX",  y = "castbarFocusOffsetY",  w = "castbarFocusBarWidth",  h = "castbarFocusBarHeight" },
-    boss   = { x = "bossCastbarOffsetX",   y = "bossCastbarOffsetY",   w = "bossCastbarWidth",       h = "bossCastbarHeight" },
-    arena  = { x = "arenaCastbarOffsetX",   y = "arenaCastbarOffsetY",   w = "arenaCastbarWidth",      h = "arenaCastbarHeight" },
-}
-local CASTBAR_ENABLE_FIELDS = {
-    player = "enablePlayerCastbar", target = "enableTargetCastbar",
-    focus = "enableFocusCastbar", boss = "enableBossCastbar", arena = "enableArenaCastbar",
-}
+local CASTBAR_FIELDS = MSUF.Castbars.UNIT_CASTBAR
+
 
 local General = _G.MSUF_GetGeneralDB
 
@@ -31,17 +22,7 @@ local function InCombat()
         or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) == true
 end
 
-local function FrameRectToUI(frame)
-    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
-    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (left and right and top and bottom) then return nil end
-    local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
-    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
-    if not frameScale or frameScale == 0 then frameScale = 1 end
-    if not uiScale or uiScale == 0 then uiScale = 1 end
-    local ratio = frameScale / uiScale
-    return left * ratio, right * ratio, top * ratio, bottom * ratio
-end
+local FrameRectToUI = MSUF.Geometry.ExternalRect
 
 local function FrameCenterUI(frame)
     local left, right, top, bottom = FrameRectToUI(frame)
@@ -121,7 +102,7 @@ function Controller:IsCastbarConfigEnabled(unit)
     if not fields or type(general) ~= "table" or general.castbarPlayerPreviewEnabled == false then return false end
     local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
     if type(shouldUse) == "function" then return shouldUse(unit, general) == true end
-    return general[CASTBAR_ENABLE_FIELDS[unit]] ~= false
+    return general[fields.enable] ~= false
 end
 
 function Controller:IsSessionReady()
@@ -702,4 +683,24 @@ function External.CreateElementRegistrar(API, OWNER, registered)
         if ok then registered[element.id] = true end
         return ok == true
     end
+end
+
+local Adapters = { definitions = {} }
+EM2.Adapters = Adapters
+
+function Adapters.Define(definition)
+    if type(definition) ~= "table" or type(definition.owner) ~= "string"
+        or type(definition.setting) ~= "string" then return nil end
+    local existing = Adapters.definitions[definition.owner]
+    if existing then return existing.instance end
+    local instance = definition.build(definition.probe)
+    if not instance then return nil end
+    Adapters.definitions[definition.owner] = { definition = definition, instance = instance }
+    External.ActivateAtLogin(function()
+        local general = General()
+        return general == nil or general[definition.setting] ~= false
+    end, function()
+        return definition.listen(instance)
+    end, definition.addon)
+    return instance
 end

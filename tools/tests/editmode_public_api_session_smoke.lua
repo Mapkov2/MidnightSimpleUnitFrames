@@ -29,6 +29,7 @@ local ns = {
     ExportPublic = function(name, value) _G[name] = value; return value end,
     ReportError = function() end,
 }
+assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua"))("MidnightSimpleUnitFrames", ns)
 local API, External = assert(_G.MSUF_EditModeAPI), assert(_G.MSUF_EM2.ExternalElements)

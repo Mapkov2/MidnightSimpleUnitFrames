@@ -396,7 +396,7 @@ do
             overlay:EnableMouse(true)
         else
             overlay:EnableMouse(false)
-            overlay:SetScript("OnUpdate", nil)
+            MSUF.EditModeKinds.Detach(overlay)
             if overlay.SetOnUpdateMode then overlay:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
             overlay._msufDragging = nil
             overlay:Hide()
@@ -502,12 +502,12 @@ do
             _BeginHistory(self, "TotemFrame position", "gameplay:totems:position")
 
             if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
-            self:SetScript("OnUpdate", _DragOnUpdate)
+            MSUF.EditModeKinds.Attach("gameplay", self, _DragOnUpdate)
         end)
         overlay:SetScript("OnMouseUp", function(self, button)
             if button ~= "LeftButton" then return end
             self._msufDragging = nil
-            self:SetScript("OnUpdate", nil)
+            MSUF.EditModeKinds.Detach(self)
             if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
             _SelectNudgeFrame(self, true)
 

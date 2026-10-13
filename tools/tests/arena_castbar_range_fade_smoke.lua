@@ -41,6 +41,7 @@ MSUF.Secrets = { IsNil = function(v) return v == nil end, NotSecret = function()
 
 local function Load(rel) assert(loadfile(CORE .. rel))("MidnightSimpleUnitFrames", MSUF) end
 Load("Kernel/MSUF_Require.lua")
+Load("Shell/EditMode/MSUF_EditMode_Geometry.lua")
 Load("Kernel/MSUF_Util.lua")
 Load("UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua")
 Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")

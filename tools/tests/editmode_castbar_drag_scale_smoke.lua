@@ -150,7 +150,7 @@ local function Drag(ratio, mode)
         _G.MSUF.Castbars.PreviewEdit.SetupCastbarPreviewEditHandlers(castBar, "player")
         castBar.scripts.OnMouseDown(castBar, "LeftButton")
         cursorX, cursorY = startCX + MOVE_X, startCY + MOVE_Y
-        castBar.scripts.OnUpdate(castBar, 0.06)
+        assert(tickerFrame.scripts.OnUpdate)(tickerFrame, 0.06)
         castBar.isDragging = false
     end
     return general.castbarPlayerOffsetX, general.castbarPlayerOffsetY - 5, castBar.cx - startCX, castBar.cy - startCY

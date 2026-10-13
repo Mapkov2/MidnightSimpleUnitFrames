@@ -139,7 +139,17 @@ local spec = {
     end,
 }
 
-local controller = External.Register(spec)
+local controller = EM2.Adapters.Define({
+    owner = PROVIDER_ID,
+    setting = "ellesmereEditModeIntegration",
+    addon = "EllesmereUI",
+    probe = EllesmereAPI,
+    build = function(probe)
+        spec.GetAPI = probe
+        return External.Register(spec)
+    end,
+    listen = function() return External.SetEnabled(PROVIDER_ID, true) end,
+})
 if not controller then return end
 
 ExportPublic("MSUF_EllesmereEditMode_IsAvailable", function()
@@ -163,8 +173,3 @@ end)
 ExportPublic("MSUF_EllesmereEditMode_ClearMoveState", function()
     return External.ClearMoveState(PROVIDER_ID)
 end)
-
-local function Activate()
-    return External.SetEnabled(PROVIDER_ID, true)
-end
-External.ActivateAtLogin(function() return controller:IsEnabled() end, Activate, "EllesmereUI")

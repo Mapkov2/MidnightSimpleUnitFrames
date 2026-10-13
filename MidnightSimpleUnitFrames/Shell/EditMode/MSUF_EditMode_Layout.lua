@@ -2,7 +2,6 @@
 --- Resolves each element's anchor, applies drags to units, castbars, group
 --- frames, resources and external elements, and batches the idle mover and
 --- toolbar syncs. Loads last of the layout family (Grid, Snap, Nudge).
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
@@ -43,6 +42,8 @@ end
 
 local Ticker = {}
 EM2.Ticker = Ticker
+local Kinds = MSUF.EditModeKinds
+local Driver = MSUF.EditModeDragDriver
 
 local format = string.format
 
@@ -694,18 +695,7 @@ local function OnUpdate(self, elapsed)
         snapCX = ClampCenterAxis(snapCX, d.halfW, screenW)
         snapCY = ClampCenterAxis(snapCY, d.halfH, screenH)
 
-        local positioned
-        if d.externalPublicElement then
-            positioned = ApplyPublicExternalDragPosition(d, snapCX, snapCY, "preview")
-        elseif d.isSubframe then
-            positioned = ApplySubframeDragPosition(d, snapCX, snapCY, sc)
-        elseif d.isCastbar then
-            positioned = ApplyCastbarDragPosition(d, snapCX, snapCY, sc)
-        elseif d.isGroupFrame then
-            positioned = ApplyGroupDragPosition(d, snapCX, snapCY)
-        else
-            positioned = ApplyUnitDragPosition(d, snapCX, snapCY, sc)
-        end
+        local positioned = d.strategy:applyDrag(d, snapCX, snapCY, sc, "preview")
         --- The mover is only feedback. Never let it outrun the real preview or
         --- leave a detached overlay behind when a protected/runtime move fails.
         if not positioned then return end
@@ -766,9 +756,59 @@ local function OnUpdate(self, elapsed)
         end
         NotifyFocusDuringDrag(d, elapsed)
     else
-        self:SetScript("OnUpdate", nil)
-        self:Hide()
+        Driver.Detach(self)
         ScheduleDirtyFlush(0)
+    end
+end
+
+local function BuildPublicDrag(mover, key, cfg, bar, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
+    local external = EM2.ExternalElements
+    local externalStartState = external and type(external.CaptureState) == "function"
+        and external.CaptureState(key) or nil
+    if externalStartState == nil then return false end
+    return {
+        mover = mover,
+        key = key,
+        cfg = cfg,
+        bar = bar,
+        offPX = mCX * uiScale - cursorPX,
+        offPY = mCY * uiScale - cursorPY,
+        startCX = mCX,
+        startCY = mCY,
+        startCenterPX = mCX * uiScale,
+        startCenterPY = mCY * uiScale,
+        halfW = (mR - mL) * 0.5,
+        halfH = (mT - mB) * 0.5,
+        screenW = UIParent:GetWidth(),
+        screenH = UIParent:GetHeight(),
+        focusNotifyAcc = 0.05,
+        snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false,
+        uiScale = uiScale,
+        externalPublicElement = true,
+        externalStartState = externalStartState,
+    }
+end
+
+local function ApplyDragStart(drag, start, isSubframe, uiScale)
+    if type(start) == "table" then
+        local centerX = tonumber(start.centerX)
+        local centerY = tonumber(start.centerY)
+        if centerX then
+            drag.startCX = centerX
+            drag.startCenterPX = centerX * uiScale
+        end
+        if centerY then
+            drag.startCY = centerY
+            drag.startCenterPY = centerY * uiScale
+        end
+        drag.unitStartX = tonumber(start.offsetX) or drag.unitStartX
+        drag.unitStartY = tonumber(start.offsetY) or drag.unitStartY
+        if isSubframe then
+            drag.subframeStartX = tonumber(start.offsetX) or drag.subframeStartX
+            drag.subframeStartY = tonumber(start.offsetY) or drag.subframeStartY
+        end
+        drag.castbarStartX = tonumber(start.castbarX) or drag.castbarStartX
+        drag.castbarStartY = tonumber(start.castbarY) or drag.castbarStartY
     end
 end
 
@@ -792,7 +832,7 @@ local function BuildDrag(mover, key, cfg, start)
     local cursorPX, cursorPY = GetCursorPosition()
     if type(cursorPX) ~= "number" or type(cursorPY) ~= "number" then return false end
 
-    local mL, mCX, mR, mB, mCY, mT = GetFrameEdgesUI(mover)
+    local mL, mCX, mR, mB, mCY, mT = Kinds.For(key, cfg, bar):bounds(mover)
     if not mL and mover.GetLeft and mover.GetRight and mover.GetTop and mover.GetBottom then
         mL, mR, mT, mB = mover:GetLeft(), mover:GetRight(), mover:GetTop(), mover:GetBottom()
         if mL and mR and mT and mB then
@@ -803,31 +843,7 @@ local function BuildDrag(mover, key, cfg, start)
     if not (mL and mCX and mR and mB and mCY and mT) then return false end
 
     if externalPublicElement then
-        local external = EM2.ExternalElements
-        local externalStartState = external and type(external.CaptureState) == "function"
-            and external.CaptureState(key) or nil
-        if externalStartState == nil then return false end
-        return {
-            mover = mover,
-            key = key,
-            cfg = cfg,
-            bar = bar,
-            offPX = mCX * uiScale - cursorPX,
-            offPY = mCY * uiScale - cursorPY,
-            startCX = mCX,
-            startCY = mCY,
-            startCenterPX = mCX * uiScale,
-            startCenterPY = mCY * uiScale,
-            halfW = (mR - mL) * 0.5,
-            halfH = (mT - mB) * 0.5,
-            screenW = UIParent:GetWidth(),
-            screenH = UIParent:GetHeight(),
-            focusNotifyAcc = 0.05,
-            snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false,
-            uiScale = uiScale,
-            externalPublicElement = true,
-            externalStartState = externalStartState,
-        }
+        return BuildPublicDrag(mover, key, cfg, bar, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
     end
 
     local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
@@ -942,36 +958,91 @@ local function BuildDrag(mover, key, cfg, start)
         usesECV      = usesECV,
         ecvFrame     = ecvFrame,
     }
-    if type(start) == "table" then
-        local centerX = tonumber(start.centerX)
-        local centerY = tonumber(start.centerY)
-        if centerX then
-            drag.startCX = centerX
-            drag.startCenterPX = centerX * uiScale
-        end
-        if centerY then
-            drag.startCY = centerY
-            drag.startCenterPY = centerY * uiScale
-        end
-        drag.unitStartX = tonumber(start.offsetX) or drag.unitStartX
-        drag.unitStartY = tonumber(start.offsetY) or drag.unitStartY
-        if isSubframe then
-            drag.subframeStartX = tonumber(start.offsetX) or drag.subframeStartX
-            drag.subframeStartY = tonumber(start.offsetY) or drag.subframeStartY
-        end
-        drag.castbarStartX = tonumber(start.castbarX) or drag.castbarStartX
-        drag.castbarStartY = tonumber(start.castbarY) or drag.castbarStartY
-    end
+    ApplyDragStart(drag, start, isSubframe, uiScale)
     return drag
 end
 
+local function ScheduleMoverSyncAfterDrag()
+    C_Timer.After(0.06, function()
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end)
+end
+
+local function FinishUnitDrag(d)
+    ApplySettingsForKeySafe(d.key)
+    ScheduleMoverSyncAfterDrag()
+    if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
+    if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
+    return true
+end
+
+local function FinishSubframeDrag(d, cx, cy, uiScale)
+    ApplySubframeDragPosition(d, cx, cy, uiScale)
+    if type(d.cfg.commitSubframePosition) == "function" then d.cfg.commitSubframePosition() end
+    ScheduleMoverSyncAfterDrag()
+    if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    RefreshUFPreview("EM2_RESOURCE_DRAG_END", d.cfg.resourceUnit or "player")
+    return true
+end
+
+local function FinishCastbarDrag(d)
+    MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)
+    ScheduleMoverSyncAfterDrag()
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
+    return true
+end
+
+local function FinishGroupDrag(d, cx, cy)
+    if d.conf then
+        ApplyGroupDragPosition(d, cx, cy)
+        if d.bar and not IsConfigCombatLocked() then
+            d.bar._msufDragActive = false
+            if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
+            if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
+        end
+    end
+    if not IsConfigCombatLocked() then RefreshGroupGeometryScoped(d.groupKind) end
+    ScheduleMoverSyncAfterDrag()
+    MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    return true
+end
+
+local function ApplyExternalStrategy(d, cx, cy, _, phase)
+    return ApplyPublicExternalDragPosition(d, cx, cy, phase or "preview")
+end
+
+local function FinishExternalDrag(d, cx, cy)
+    local moved = ApplyPublicExternalDragPosition(d, cx, cy, "commit")
+    if not moved then
+        local external = EM2.ExternalElements
+        if external and type(external.RestoreHistoryState) == "function" then
+            external.RestoreHistoryState({ key = d.key, data = d.externalStartState })
+        end
+    end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    return moved
+end
+
+Kinds.Bind("unit", BuildDrag, ApplyUnitDragPosition, FinishUnitDrag)
+Kinds.Bind("stacked", BuildDrag, ApplyUnitDragPosition, FinishUnitDrag)
+Kinds.Bind("castbar", BuildDrag, ApplyCastbarDragPosition, FinishCastbarDrag)
+Kinds.Bind("subframe", BuildDrag, ApplySubframeDragPosition, FinishSubframeDrag)
+Kinds.Bind("group", BuildDrag, ApplyGroupDragPosition, FinishGroupDrag)
+Kinds.Bind("external", BuildDrag, ApplyExternalStrategy, FinishExternalDrag)
+
 function Ticker.BeginDrag(mover, key, cfg)
     if not tickerActive or activeDrag or not tickerFrame then return false end
-    local drag = BuildDrag(mover, key, cfg)
+    local drag = Kinds.For(key, cfg):beginDrag(mover, key, cfg)
     if not drag then return false end
     activeDrag = drag
     SetActiveDragFlags(drag, true)
-    tickerFrame:SetScript("OnUpdate", OnUpdate)
+    Driver.Attach(tickerFrame, OnUpdate)
     tickerFrame:Show()
     return true
 end
@@ -980,7 +1051,7 @@ end
 --- methods reuse the exact native MSUF anchor math without starting a second
 --- OnUpdate or exposing its private drag state.
 function Ticker.BeginExternalDrag(mover, key, cfg, start)
-    local drag = BuildDrag(mover, key, cfg, start)
+    local drag = Kinds.For(key, cfg):beginDrag(mover, key, cfg, start)
     if not drag then return nil end
     SetActiveDragFlags(drag, true)
     return drag
@@ -990,16 +1061,7 @@ function Ticker.ApplyExternalDrag(drag)
     if not drag or (IsConfigCombatLocked and IsConfigCombatLocked()) then return false end
     local _, centerX, _, _, centerY = GetFrameEdgesUI(drag.mover)
     if centerX == nil or centerY == nil then return false end
-    if drag.externalPublicElement then
-        return ApplyPublicExternalDragPosition(drag, centerX, centerY, "preview")
-    elseif drag.isSubframe then
-        return ApplySubframeDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
-    elseif drag.isCastbar then
-        return ApplyCastbarDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
-    elseif drag.isGroupFrame then
-        return ApplyGroupDragPosition(drag, centerX, centerY)
-    end
-    return ApplyUnitDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
+    return drag.strategy:applyDrag(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1, "preview")
 end
 
 function Ticker.EndExternalDrag(drag, applyFinal)
@@ -1032,71 +1094,12 @@ function Ticker.EndDrag()
         or abs(cy * uiScale - (d.startCenterPY or cy * uiScale)) > 0.5
 
     if moved then
-        if d.externalPublicElement then
-            if not ApplyPublicExternalDragPosition(d, cx, cy, "commit") then
-                local external = EM2.ExternalElements
-                if external and type(external.RestoreHistoryState) == "function" then
-                    external.RestoreHistoryState({ key = d.key, data = d.externalStartState })
-                end
-                moved = false
-            end
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then
-                EM2.Focus.NotifyPositionChanged(d.key, true)
-            end
-        elseif d.isGroupFrame and d.conf then
-            ApplyGroupDragPosition(d, cx, cy)
-            if d.bar and not IsConfigCombatLocked() then
-                d.bar._msufDragActive = false
-                if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
-                if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
-            end
-        end
-        --- Offsets already written by OnUpdate. Just finalize pipeline.
-        if d.externalPublicElement then
-            -- The provider callback already applied and persisted the final
-            -- position. It remains the sole owner of its frame and saved data.
-        elseif d.isSubframe then
-            ApplySubframeDragPosition(d, cx, cy, uiScale)
-            if type(d.cfg.commitSubframePosition) == "function" then d.cfg.commitSubframePosition() end
-            C_Timer.After(0.06, function()
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end)
-            if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
-            RefreshUFPreview("EM2_RESOURCE_DRAG_END", d.cfg.resourceUnit or "player")
-        elseif d.isCastbar then
-            MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)
-            C_Timer.After(0.06, function()
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end)
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
-            RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
-        elseif d.isGroupFrame then
-            if not IsConfigCombatLocked() then
-                RefreshGroupGeometryScoped(d.groupKind)
-            end
-            C_Timer.After(0.06, function()
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end)
-            MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
-        else
-            ApplySettingsForKeySafe(d.key)
-            C_Timer.After(0.06, function()
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end)
-            if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
-            if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
-            RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
-        end
+        moved = d.strategy:commit(d, cx, cy, uiScale) ~= false
         if moved then NotifyGuidedEditModeMoved(d.key) end
     end
 
     if tickerFrame then
-        tickerFrame:SetScript("OnUpdate", nil)
-        tickerFrame:Hide()
+        Driver.Detach(tickerFrame)
     end
     ScheduleDirtyFlush(0)
     return moved
@@ -1122,16 +1125,14 @@ end
 function Ticker.Start()
     if activeDrag then SetActiveDragFlags(activeDrag, false) end
     if not tickerFrame then
-        tickerFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent))
-        tickerFrame:Hide()
+        tickerFrame = Driver.GetFrame()
     end
     tickerActive = true
     activeDrag = nil
     idleMoverDirty = true
     idleHUDDirty = true
     dirtyFlushGeneration = dirtyFlushGeneration + 1
-    tickerFrame:SetScript("OnUpdate", nil)
-    tickerFrame:Hide()
+    Driver.Detach(tickerFrame)
     ScheduleDirtyFlush(0)
 end
 
@@ -1168,8 +1169,5 @@ function Ticker.Stop(commitHeldDrag)
     dirtyFlushScheduled = false
     dirtyFlushGeneration = dirtyFlushGeneration + 1
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides(true) end
-    if tickerFrame then
-        tickerFrame:SetScript("OnUpdate", nil)
-        tickerFrame:Hide()
-    end
+    Kinds.Clear()
 end

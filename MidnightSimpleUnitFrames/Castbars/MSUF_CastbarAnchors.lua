@@ -40,13 +40,7 @@ local unitFramesCache
 
 -- Per-unit castbar DB keys + default anchor offsets (dx/dy used when the saved
 -- offset is missing).
-local UNIT_CASTBAR = {
-    player = { w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", detached = "castbarPlayerDetached", match = "castbarPlayerMatchWidth", enable = "enablePlayerCastbar", dx = 0,  dy = 5   },
-    target = { w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", detached = "castbarTargetDetached", match = "castbarTargetMatchWidth", enable = "enableTargetCastbar", dx = 65, dy = -15 },
-    focus  = { w = "castbarFocusBarWidth",  h = "castbarFocusBarHeight",  x = "castbarFocusOffsetX",  y = "castbarFocusOffsetY",  detached = "castbarFocusDetached",  match = "castbarFocusMatchWidth",  enable = "enableFocusCastbar",  dx = 65, dy = -15 },
-    boss   = { w = "bossCastbarWidth",       h = "bossCastbarHeight",      x = "bossCastbarOffsetX",   y = "bossCastbarOffsetY",   detached = "bossCastbarDetached",   match = "bossCastbarMatchWidth",   enable = "enableBossCastbar",   dx = 0,  dy = 0   },
-    arena  = { w = "arenaCastbarWidth",      h = "arenaCastbarHeight",     x = "arenaCastbarOffsetX",  y = "arenaCastbarOffsetY",  detached = "arenaCastbarDetached",  match = "arenaCastbarMatchWidth",  enable = "enableArenaCastbar",  dx = 0,  dy = 0   },
-}
+local UNIT_CASTBAR = MSUF.Castbars.UNIT_CASTBAR
 
 -- Valid width-source kinds.
 local WIDTH_SOURCE_KINDS = { unitframe = true, essential = true, utility = true }
@@ -90,13 +84,7 @@ local ApplyCastbarEffectiveSizeUnit
 -- Small helpers
 
 -- Round half away from zero.
-local function Round(value)
-    value = tonumber(value) or 0
-    if value >= 0 then
-        return floor(value + 0.5)
-    end
-    return ceil(value - 0.5)
-end
+local Round = MSUF.Geometry.RoundOffset
 
 local function GeneralDB()
     Later("MSUF_EnsureDB")()

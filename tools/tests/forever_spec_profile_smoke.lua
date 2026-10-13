@@ -129,7 +129,7 @@ function namespace.ExportPublic(name, value)
 end
 manifest.LoadSelected(repo, spec.toc, namespace, {
     "State/MSUF_FirstLoad.lua",
-    "Kernel/MSUF_Require.lua", "Kernel/MSUF_Util.lua",
+    "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
 })
@@ -333,7 +333,7 @@ else
         -- The real provider captures callable references once during loading.
         C_SpecializationInfo = nil
         InstallDeprecatedGlobals()
-        manifest.LoadSelected(repo, spec.toc, namespace, { "Kernel/MSUF_Util.lua" })
+        manifest.LoadSelected(repo, spec.toc, namespace, { "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua" })
         Check(MSUF_GetPlayerSpecID() == 66, "legacy specialization alias fallback changed")
         Check(LoadGameplayHelpers()() == 66, "legacy gameplay specialization fallback changed")
         BuildSpecializations()

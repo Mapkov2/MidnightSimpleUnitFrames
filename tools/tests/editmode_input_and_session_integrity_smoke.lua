@@ -7,6 +7,7 @@ local function Check(ok, message)
     if not ok then failures[#failures + 1] = message end
 end
 local function Load(env, ns, path)
+    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns, env)
     local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))
     setfenv(chunk, env)
     return chunk("MidnightSimpleUnitFrames", ns)

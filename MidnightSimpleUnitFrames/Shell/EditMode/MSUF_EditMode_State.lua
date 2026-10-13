@@ -16,6 +16,8 @@ local SharedHistoryService = Util.SharedHistoryService
 
 local State = {}
 EM2.State = State
+MSUF.EditMode = State
+if MSUF.EventBus then MSUF.EventBus:DefineEvent("EDITMODE_STATE") end
 local ENTER_DEFER_DELAY = 0.03
 
 --- Internal state
@@ -41,6 +43,13 @@ local function SyncLegacy()
     if st then
         st.active  = previewActive
         st.unitKey = unitKey
+    end
+end
+
+-- Subscribers may open or close another session; notify only after synchronous work finishes.
+local function PublishState()
+    if MSUF.EventBus then
+        MSUF.EventBus:Publish("EDITMODE_STATE", active, unitKey, provider, externalPreviewSuspended)
     end
 end
 
@@ -114,6 +123,7 @@ function State.SetUnitKey(key)
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(key, nil, nil, { source = "state", syncState = false })
     end
+    PublishState()
 end
 
 function State.SetPopupOpen(open)
@@ -201,7 +211,15 @@ local function StopLogoIntro()
     end
 end
 
+local function RestoreGameplayAnchors()
+    local timer = MSUF.MSUF_Gameplay_ApplyCombatTimerAnchorFn
+    local gameplayState = MSUF.MSUF_Gameplay_ApplyCombatStatePosition
+    if timer then timer() end
+    if gameplayState then gameplayState() end
+end
+
 local function RestoreRuntimeAfterEditModeExit()
+    RestoreGameplayAnchors()
     --- The arena preview writes synthetic opponent data into the real arena
     --- buttons; its owner strips that data (combat-safe) and re-applies the
     --- arena visibility, alpha, aura and castbar-preview lanes.
@@ -294,11 +312,14 @@ function State.Enter(key, opts)
             unitKey = key
             SyncLegacy()
             EM2.OnUnitChanged(key)
+            PublishState()
         end
         return true
     end
     if not EnsureDB() then return end
 
+    -- Reentry supersedes deferred exit work; reconcile against the current profile.
+    RestoreGameplayAnchors()
     StartEditSession(requestedProvider)
 
     active  = true
@@ -396,6 +417,7 @@ function State.Enter(key, opts)
             if ownsNativeShell and EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
         end)
     end)
+    PublishState()
     return true
 end
 
@@ -492,6 +514,7 @@ function State.Exit(source)
         if api and type(api._EndSession) == "function" then api._EndSession("save") end
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    PublishState()
 end
 
 --- Profile boundary (MSUF.ProfileRuntime.BeforeMutation): profile storage is
@@ -582,6 +605,7 @@ function State.CancelAll()
         if api and type(api._EndSession) == "function" then api._EndSession("discard") end
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    PublishState()
 end
 
 --- EllesmereUI owns the unlock shell but keeps MSUF's preview transaction open.
@@ -590,6 +614,7 @@ end
 --- discarding the MSUF database snapshot.
 function State.SuspendExternalPreview()
     if not active or provider ~= "ellesmere" or externalPreviewSuspended then return false end
+    if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
     local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
     if type(suspendBridge) == "function" then
         suspendBridge()
@@ -603,12 +628,14 @@ function State.SuspendExternalPreview()
     NotifyListeners()
     HardHideEditModePreviews()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    PublishState()
     return true
 end
 
 function State.ResumeExternalPreview()
     if not active or provider ~= "ellesmere" or not externalPreviewSuspended then return false end
     if IsConfigCombatLocked() then return false end
+    RestoreGameplayAnchors()
     externalPreviewSuspended = false
     SyncLegacy()
     PublishCompat("MSUF_UnitPreviewActive", true)
@@ -626,6 +653,7 @@ function State.ResumeExternalPreview()
     local resumeBridge = _G.MSUF_EllesmereEditMode_ResumePreview
     if type(resumeBridge) == "function" then resumeBridge() end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    PublishState()
     return true
 end
 
@@ -703,3 +731,7 @@ function EM2.OnUnitChanged(key)
     if EM2.Movers and EM2.Movers.RefreshSelection then EM2.Movers.RefreshSelection(key) end
     if EM2.Focus  and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "state", syncState = false }) end
 end
+
+-- Legacy entry names and the namespace funnel share the same lifecycle.
+State.Open = State.Enter
+State.Close = State.Exit

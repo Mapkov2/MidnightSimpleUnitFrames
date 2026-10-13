@@ -1,6 +1,7 @@
 --- Namespace ownership and the complete castbar compatibility boundary.
 local _, MSUF = ...
-local Castbars = {}
+-- The shared key schema loads first; keep its namespace and table identity.
+local Castbars = MSUF.Castbars or {}
 MSUF.Castbars = Castbars
 Castbars.Anchors = {}
 Castbars.Backend = {}

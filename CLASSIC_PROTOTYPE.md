@@ -1078,6 +1078,14 @@ The popup's Anchor class and Sync class controls keep those two relationships
 independent. Manual width changes select the matching manual width source.
 No mover is shown for an embedded or unavailable bar.
 
+Edit Mode shares Geometry, the UNIT_CASTBAR schema, eight element strategies
+and one dormant drag driver. Each owner callback uses native isolated dispatch;
+nested internal state publication invalidates superseded deliveries without
+changing native EventBus dispatch. Aura and Gameplay strategies use their real
+engines' release/history paths. Held native Gameplay drags are stopped before
+Cancel/combat/close restore, and late releases cannot write position or history. See [Edit Mode engine delta](docs/EDITMODE_ENGINE_DELTA.md)
+for the allocation sampler's collected cold/steady controls and live checks.
+
 - Vanilla, TBC and Forever: Rogue and Cat Form combo points, five uncharged pips.
 - Mists: combo points, runes, Holy Power, Chi, Arcane Charges, Shadow Orbs,
   Soul Shards, Burning Embers, Demonic Fury and Eclipse. Previews use the Mists

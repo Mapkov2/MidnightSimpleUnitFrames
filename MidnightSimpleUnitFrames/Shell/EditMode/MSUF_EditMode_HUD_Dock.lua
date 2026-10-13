@@ -555,7 +555,7 @@ end
 StopDockDrag = function()
     if not hudFrame then return end
     DockUI.drag = nil
-    hudFrame:SetScript("OnUpdate", nil)
+    MSUF.EditModeKinds.Detach(hudFrame)
     if DockUI.grip then DockUI.grip._dockDragging = nil end
     local state = EnsureDockState()
     local nearestDock, nearestDistance = NearestDockEdge()
@@ -590,7 +590,7 @@ DockUI.BeginDrag = function()
         frameX = frameX - parentX,
         frameY = frameY - parentY,
     }
-    hudFrame:SetScript("OnUpdate", UpdateDockDrag)
+    MSUF.EditModeKinds.Attach("gameplay", hudFrame, UpdateDockDrag)
     return true
 end
 

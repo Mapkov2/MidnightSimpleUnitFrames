@@ -430,8 +430,7 @@ local function CreateMover(key, cfg)
         if externalHistoryStarted then
             self._msufHistoryDrag = true
         else
-            local historyCategory = cfg.historyCategory or (cfg.popupType == "castbar" and "castbar" or "unit")
-            local historyKey = cfg.historyKey or (cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key)
+            local historyCategory, historyKey = MSUF.EditModeKinds.For(key, cfg):history(key, cfg)
             self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
         end
 
@@ -506,7 +505,7 @@ local function CreateMover(key, cfg)
         if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "mover" }) end
         if EM2.Popups and EM2.Popups.Open then
-            EM2.Popups.Open(key, self)
+            MSUF.EditModeKinds.For(key, cfg):openPopup(key, self)
         elseif EM2.Focus and EM2.Focus.NotifyPositionChanged then
             EM2.Focus.NotifyPositionChanged(key)
         end

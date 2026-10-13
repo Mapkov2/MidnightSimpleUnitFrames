@@ -252,7 +252,10 @@ function Fixture.Attach(root, ns, original, env)
     env = env or _G
     env.MSUF, env.MSUF_NS = ns, ns
     if ns._castbarFixtureAttached then return end
-    local existing = ns.Castbars
+    -- Publication reuses the namespace but initializes fresh submodules. Keep
+    -- the fixture's module references before those fields are replaced.
+    local existing = {}
+    for name, value in pairs(ns.Castbars or {}) do existing[name] = value end
     local legacyBackend = ns.MSUF_CastbarBackend
     local legacyRuntime = env.MSUF_CastbarRuntime
     local initialTextureRevision = env.MSUF_CastbarStyleRevision

@@ -64,6 +64,8 @@ Locales\zhTW.lua
 # ---------------------------------------------------------------
 # KERNEL / STATE / UI PRIMITIVES
 # ---------------------------------------------------------------
+Shell\EditMode\MSUF_EditMode_Geometry.lua
+Shell\EditMode\MSUF_EditMode_Schema.lua
 Kernel\MSUF_Util.lua
 Kernel\MSUF_Keybinds.lua
 State\MSUF_StateHelpers.lua

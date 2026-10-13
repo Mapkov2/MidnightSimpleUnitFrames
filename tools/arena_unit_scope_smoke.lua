@@ -103,7 +103,18 @@ Check(profiles:find("alphaExcludePredictionBars = true", 1, true)
 
 -- 4) Castbars ------------------------------------------------------------------
 local anchors = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarAnchors.lua")
-Check(anchors:find('arena  = { w = "arenaCastbarWidth"', 1, true),
+local schema = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Schema.lua")
+local schemaNS = {}
+assert(loadfile("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Schema.lua"))("MidnightSimpleUnitFrames", schemaNS)
+for field, expected in pairs({
+    w = "arenaCastbarWidth", h = "arenaCastbarHeight", x = "arenaCastbarOffsetX", y = "arenaCastbarOffsetY",
+    match = "arenaCastbarMatchWidth", detached = "arenaCastbarDetached", enable = "enableArenaCastbar",
+    test = "MSUF_SetArenaCastbarTestMode",
+}) do
+    Check(schemaNS.Castbars.UNIT_CASTBAR.arena[field] == expected, "Arena castbar schema drift: " .. field)
+end
+Check(anchors:find("local UNIT_CASTBAR = MSUF.Castbars.UNIT_CASTBAR", 1, true)
+        and schema:find('arena = {\n        w = "arenaCastbarWidth"', 1, true),
     "UNIT_CASTBAR lost the arenaCastbar* key family")
 Check(anchors:find('"player", "target", "focus", "boss", "arena"', 1, true),
     "CASTBAR_UNITS no longer syncs the arena castbars")
@@ -188,13 +199,7 @@ Check(showTime == false and showTargetName == true,
 
 local previewEdit = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviewEdit.lua")
 for _, marker in ipairs({
-    'w = "arenaCastbarWidth"',
-    'h = "arenaCastbarHeight"',
-    'x = "arenaCastbarOffsetX"',
-    'y = "arenaCastbarOffsetY"',
-    -- No reanchor name: Castbars_Core's MSUF_ApplyCastbarUnitAndSync applies
-    -- every unit (the pinned MSUF_ReanchorArenaCastBar never existed).
-    'test = "MSUF_SetArenaCastbarTestMode"',
+    'local UNIT_CONFIG = MSUF.Castbars.UNIT_CASTBAR',
     'or (unit == "arena" and "arenaCastbarTestMode")',
 }) do
     Check(previewEdit:find(marker, 1, true),
@@ -204,11 +209,12 @@ end
 local castPopup = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_CastPopup.lua")
 for _, marker in ipairs({
     'arena = "MSUF_SetArenaCastbarTestMode"',
-    'if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end',
-    'if unit == "arena" then return "arenaCastbarWidth" end',
-    'if unit == "arena" then return "arenaCastbarHeight" end',
-    'if unit == "arena" then return "arenaCastbarMatchWidth" end',
-    'if unit == "arena" then return "arenaCastbarDetached" end',
+    'local fields = MSUF.Castbars.UNIT_CASTBAR[unit]',
+    'if fields then return fields.x, fields.y end',
+    'return fields and fields.w',
+    'return fields and fields.h',
+    'return fields and fields.match',
+    'return fields and fields.detached',
     -- The popup re-applies through MSUF_ApplyCastbarUnitAndSync, which owns
     -- the per-unit reanchor (MSUF_ReanchorArenaCastBar for arena).
     'MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)',
@@ -231,9 +237,9 @@ for _, marker in ipairs({
 end
 
 local externalProvider = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
-Check(externalProvider:find('arena  = { x = "arenaCastbarOffsetX",   y = "arenaCastbarOffsetY",   w = "arenaCastbarWidth",      h = "arenaCastbarHeight" }', 1, true),
+Check(externalProvider:find('local CASTBAR_FIELDS = MSUF.Castbars.UNIT_CASTBAR', 1, true),
     "external Edit Mode providers do not expose Arena castbar geometry")
-Check(externalProvider:find('arena = "enableArenaCastbar"', 1, true),
+Check(externalProvider:find('return general[fields.enable] ~= false', 1, true),
     "external Edit Mode providers do not honor Arena castbar enablement")
 
 -- Boss and arena share one page-preview path over their pool preview objects
