@@ -1,6 +1,6 @@
 -- The retired Assistant's saved data is removed once and never travels.
 --
--- 1. State/MSUF_RetiredData.lua, booted with the client's real core graph,
+-- 1. The full settle/migrate/bind/login lifecycle, booted with the real core graph,
 --    clears profile.assistant in every profile (and in a legacy root MSUF_DB),
 --    MSUF_GlobalDB.assistant* and MSUF_GlobalDB.global.assistant* when this
 --    addon's ADDON_LOADED arrives, keeps every other key, stamps the account
@@ -16,7 +16,7 @@
 --
 -- Usage: lua tools/tests/retired_assistant_data_smoke.lua <repoRoot> [flavor]
 local root, flavor = assert(arg[1], "repository root required"), arg[2] or "Mainline"
-local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local Corpus = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 
 local failures = {}
 local function Check(condition, message)
@@ -28,38 +28,22 @@ local function History()
 end
 
 local function NewWorld()
-    local w = World.New(root, flavor)
-    local ns = w.core
-    local load = w.LoadFile
-    function w:LoadFile(path, addon, namespace)
-        if path:match("/State/MSUF_Profiles.lua$") then
-            -- The real storage and normalization pipeline; the frame renderers
-            -- a profile apply would reach are outside this test.
-            ns.ProfileRuntime.Apply = function()
-                if ns.ProfileVariants then ns.ProfileVariants.ResolveCurrent() end
-                if ns.ProfileSync then ns.ProfileSync.Activate(); ns.ProfileSync.RefreshEvents() end
-            end
-        end
-        return load(self, path, addon, namespace)
-    end
-    w:Boot()
-    local failure = w:FirstFailure()
-    assert(not failure, failure and (failure.file .. ": " .. failure.message))
-    return w
+    return Corpus.NewWorld(root, flavor, "Tester-Realm")
 end
 
 local function FireAddonLoaded(w, name)
-    local bus = w.core.EventBus
-    local handler = bus and bus.driver and bus.driver:GetScript("OnEvent")
-    assert(handler, "the EventBus driver has no OnEvent handler")
-    handler(bus.driver, "ADDON_LOADED", name)
+    if name == "MidnightSimpleUnitFrames" then
+        Corpus.Login(w, {})
+    else
+        w:FireEvent("ADDON_LOADED", name)
+    end
 end
 
 local function Subscribed(w)
     local ev = w.core.EventBus.handlers.ADDON_LOADED
     if not ev then return false end
     for _, handler in ipairs(ev.list) do
-        if handler.key == "MSUF_RETIRED_ASSISTANT_DATA" and handler.fn and not handler.dead then return true end
+        if handler.key == "MSUF_LIFECYCLE_BIND" and handler.fn and not handler.dead then return true end
     end
     return false
 end
@@ -71,11 +55,12 @@ do
     local w = NewWorld()
     local env = w.env
     Check(Subscribed(w), "the cleanup does not wait for ADDON_LOADED")
-    env.MSUF_DB = { assistant = History(), general = { keep = 1 } }
+    env.MSUF_DB = { _msufProfileSchema = 600, assistant = History(), general = { keep = 1 } }
+    local legacy = env.MSUF_DB
     env.MSUF_GlobalDB = {
         profiles = {
-            Default = { assistant = History(), player = { width = 150 } },
-            Raid = { assistant = History(), target = { height = 40 } },
+            Default = { _msufProfileSchema = 600, assistant = History(), player = { width = 150 } },
+            Raid = { _msufProfileSchema = 600, assistant = History(), target = { height = 40 } },
         },
         char = { ["Tester-Realm"] = { activeProfile = "Default" } },
         global = { firstLoad6 = true, assistantNoMatch = { total = 3 }, assistantQueuedChanges = { 1 } },
@@ -97,7 +82,7 @@ do
     FireAddonLoaded(w, "MidnightSimpleUnitFrames")
     Check(gdb.profiles.Default.assistant == nil and gdb.profiles.Raid.assistant == nil,
         "profile.assistant survived in a stored profile")
-    Check(env.MSUF_DB.assistant == nil and env.MSUF_DB.general.keep == 1,
+    Check(legacy.assistant == nil and legacy.general.keep == 1,
         "the legacy root MSUF_DB kept its assistant data or lost other keys")
     Check(gdb.profiles.Default.player.width == 150 and gdb.profiles.Raid.target.height == 40,
         "the cleanup touched profile settings")
@@ -106,7 +91,7 @@ do
     end
     Check(gdb.global.assistantNoMatch == nil and gdb.global.assistantQueuedChanges == nil,
         "MSUF_GlobalDB.global kept the Assistant's no-match or queued-change log")
-    Check(gdb.global.firstLoad6 == true and gdb.analytics.kept == true and gdb.char["Tester-Realm"].activeProfile == "Default",
+    Check(type(gdb.global.firstLoad6) == "table" and gdb.analytics.kept == true and gdb.char["Tester-Realm"].activeProfile == "Default",
         "the cleanup removed account data that is not the Assistant's")
     Check(gdb.clickCoreProfilerLast == nil and gdb.cpTraceArm == nil,
         "the retired profilers' saved report or armed trace survived the SavedVariables load")
@@ -125,7 +110,7 @@ do
     local w = NewWorld()
     w.env.MSUF_GlobalDB = nil
     FireAddonLoaded(w, "MidnightSimpleUnitFrames")
-    Check(w.env.MSUF_GlobalDB == nil, "the cleanup created SavedVariables on a fresh install")
+    Check(w.core.Lifecycle.Bound and w.env.MSUF_DB.assistant == nil, "fresh startup did not bind a clean profile")
 end
 
 ---------------------------------------------------------------------------
@@ -138,7 +123,7 @@ do
     env.InCombatLockdown = function() return false end
     env.IsInInstance = function() return false, "none" end
     env.IsInGroup = function() return false end
-    env.MSUF_DB = { general = {}, player = { width = 150 } }
+    env.MSUF_DB = { _msufProfileSchema = 600, general = {}, player = { width = 150 } }
     env.MSUF_GlobalDB = { profiles = {}, char = {} }
     FireAddonLoaded(w, "MidnightSimpleUnitFrames")
     env.MSUF_InitProfiles()

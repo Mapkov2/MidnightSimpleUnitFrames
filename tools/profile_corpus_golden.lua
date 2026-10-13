@@ -524,7 +524,10 @@ end
 
 -- ADDON_LOADED with the saved globals, then PLAYER_LOGIN and the next frame.
 function Corpus.Login(world, saved)
-    world:LoadSavedVariables("MidnightSimpleUnitFrames", saved)
+    -- The native client isolates every frame's ADDON_LOADED handler too.
+    -- Keep failures observable through NoteError, as for PLAYER_LOGIN below.
+    for name, value in pairs(saved or {}) do rawset(world.env, name, value) end
+    Dispatch(world, "ADDON_LOADED", "MidnightSimpleUnitFrames", false)
     Dispatch(world, "PLAYER_LOGIN")
     RunFrameTimers(world)
     InstallFrameIsolation(world)

@@ -35,6 +35,9 @@ Game\Shared\Initialize.lua
 Kernel\MSUF_Bootstrap.lua
 Kernel\MSUF_Boundary.lua
 Kernel\MSUF_Require.lua
+Kernel\MSUF_EventBus.lua
+Kernel\MSUF_Scheduler.lua
+Kernel\MSUF_Lifecycle.lua
 Kernel\MSUF_SuiteLink.lua
 State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
@@ -80,11 +83,10 @@ State\MSUF_ProfileSync.lua
 State\MSUF_ProfileVariantEditor.lua
 State\MSUF_ProfileVariantsRuntime.lua
 State\MSUF_ProfileNormalize.lua
+State\MSUF_ProfileBinding.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua
-Kernel\MSUF_EventBus.lua
-Kernel\MSUF_Scheduler.lua
 Shell\UI\MSUF_Widgets.lua
 Shell\UI\MSUF_MapkoSkin.lua
 Shell\UI\MSUF_AnchorPicker.lua

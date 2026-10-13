@@ -36,8 +36,9 @@ if mode == "locale" then
     local name, profile = world.core.ResolveStartupProfile(global, saved, "Tester-Realm")
     assert(name == "Default" and profile == Default)
     global.global.defaultProfileForNewChars="A"
-    name, profile = world.core.ResolveStartupProfile(global, saved, "Tester-Realm")
+    name, profile = world.core.ResolveStartupProfile(global, saved, "Newcomer-Realm")
     assert(name == "A" and profile == A)
+    assert(global.char["Tester-Realm"].activeProfile == "Default", "the new-character default changed an existing binding")
     global.char["Tester-Realm"]={activeProfile="Missing"}
     name, profile = world.core.ResolveStartupProfile(global, saved, "Tester-Realm")
     assert(name == "Missing" and profile == Default, "repair donor differs from locale donor")

@@ -69,9 +69,10 @@ local function Run(flavor)
     Check(savedGlobal.profiles.Legacy == nil and savedGlobal.ignoredPre6Profiles
         and savedGlobal.ignoredPre6Profiles.Legacy == legacy,
         flavor .. ": the unversioned 5.x profile was not archived on ADDON_LOADED")
-    Check(savedGlobal.ignoredPre6Profiles.__standalone == standalone and rawget(env, "MSUF_DB") == nil,
-        flavor .. ": the standalone 5.x profile was not archived on ADDON_LOADED")
-    Check(savedGlobal.profiles.Current == current and savedGlobal.char["Tester-Realm"].activeProfile == nil
+    Check(savedGlobal.ignoredPre6Profiles.__standalone == standalone
+        and env.MSUF_DB == savedGlobal.profiles.Default and env.MSUF_DB ~= standalone,
+        flavor .. ": the standalone 5.x profile was not archived before explicit binding on ADDON_LOADED")
+    Check(savedGlobal.profiles.Current == current and savedGlobal.char["Tester-Realm"].activeProfile == "Default"
         and savedGlobal.char["Tester-Realm"].specProfileMap[1] == "Current"
         and savedGlobal.global.defaultProfileForNewChars == nil,
         flavor .. ": the archive did not retire exactly the stale bindings")

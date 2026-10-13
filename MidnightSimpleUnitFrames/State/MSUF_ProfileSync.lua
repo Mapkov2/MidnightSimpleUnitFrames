@@ -293,7 +293,7 @@ function Sync.RefreshEvents()
     if not enabled and not logoutFrame then return end
     if not logoutFrame then
         logoutFrame=CreateFrame("Frame")
-        logoutFrame:SetScript("OnEvent",function() Sync.Flush() end)
+        logoutFrame:SetScript("OnEvent",function() if MSUF_DB ~= nil then Sync.Flush() end end)
     end
     logoutFrame:UnregisterAllEvents()
     if enabled then logoutFrame:RegisterEvent("PLAYER_LOGOUT") end

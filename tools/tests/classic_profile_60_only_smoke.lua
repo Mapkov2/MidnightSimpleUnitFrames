@@ -39,6 +39,8 @@ local policyChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSU
 policyChunk("MidnightSimpleUnitFrames", namespace)
 MSUF_GlobalDB, MSUF_DB = savedGlobalDB, savedProfileDB
 widgets:FireEvent("ADDON_LOADED", "MidnightSimpleUnitFrames", false)
+-- This isolated policy fixture hosts State without the Kernel lifecycle.
+namespace.FirstLoad6.SettleSavedVariables(true)
 
 assert(MSUF_GlobalDB.profiles.Current == currentProfile, "schema-600 profile was not preserved")
 assert(MSUF_GlobalDB.profiles.Legacy == nil, "unversioned 5.x profile remained active")

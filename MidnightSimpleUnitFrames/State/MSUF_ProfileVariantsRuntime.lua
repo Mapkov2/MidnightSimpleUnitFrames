@@ -29,6 +29,7 @@ function Variants.RequestApply(reason, force)
 end
 local function Event(_,event,unit)
     if event=="PLAYER_LOGOUT" then
+        if MSUF_DB == nil then return end
         -- The overlay and an unsaved recording come off the profile first,
         -- MSUF settings before any provider (Suite) code: an error in a later
         -- step must never save an overlay or a recording as the base.

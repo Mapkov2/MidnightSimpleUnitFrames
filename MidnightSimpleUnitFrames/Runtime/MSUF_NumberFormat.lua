@@ -184,14 +184,5 @@ else
     _G.MSUF_NumberFormat = NF
 end
 
---- SavedVariables are not readable while this file executes, so the first
---- resolve waits for login. Everything before that runs on GAME, which is also
---- the default.
-local loginFrame = _G.CreateFrame and _G.CreateFrame("Frame")
-if loginFrame then
-    loginFrame:RegisterEvent("PLAYER_LOGIN")
-    loginFrame:SetScript("OnEvent", function(self)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        NF.Refresh()
-    end)
-end
+-- Kernel/MSUF_Lifecycle.lua refreshes after binding, then after login's spec
+-- selection and variants. File-load consumers keep the provisional GAME style.

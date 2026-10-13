@@ -194,13 +194,13 @@ local NPC_COLOR_DEFAULTS = {
 
 local dbInitialized = false
 
---- Config can be asked for specs before every module has finished loading.
---- EnsureDB centralizes that bootstrap without making the hot dispatch layer
---- know about profile initialization. State/MSUF_Profiles.lua and
---- State/MSUF_Defaults.lua load ahead of this file in every core TOC.
+--- The real client binds at ADDON_LOADED. Standalone config fixtures still
+--- bootstrap through State when they host this module without the lifecycle.
 local function EnsureDB()
   if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
-    MSUF.Require("MSUF_InitProfiles", "UnitFrames/Engine/MSUF_UF_Config.lua")()
+    if not MSUF.Lifecycle or not MSUF.Lifecycle.Bound then
+      MSUF.Require("MSUF_InitProfiles", "UnitFrames/Engine/MSUF_UF_Config.lua")()
+    end
     MSUF.Require("MSUF_EnsureDB", "UnitFrames/Engine/MSUF_UF_Config.lua")()
     dbInitialized = true
   end

@@ -500,7 +500,8 @@ if type(MSUF.RegisterLocaleCallback) == "function" then
     MSUF.RegisterLocaleCallback("MSUF_Auras3_DurationFormatter", function()
         A3.InvalidateNativeVisualInputs()
         _durationFormatterCache = nil
-        if type(A3.RequestApply) == "function" then A3.RequestApply() end
+        -- Locale finalizes before frames spawn. Their normal login apply
+        -- consumes these invalidated inputs without an early group build.
     end)
 end
 

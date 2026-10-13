@@ -326,18 +326,17 @@ local function SettleSavedVariables(loadedNow)
     SettleLifecycleState()
 end
 
-if type(_G.CreateFrame) == "function" then
-    local loader = _G.CreateFrame("Frame")
-    loader:RegisterEvent("ADDON_LOADED")
-    loader:SetScript("OnEvent", function(self, _, loaded)
-        if loaded ~= addonName then return end
-        self:UnregisterEvent("ADDON_LOADED")
-        SettleSavedVariables(true)
-    end)
-end
-
 local FirstLoad = MSUF.FirstLoad6 or {}
 MSUF.FirstLoad6 = FirstLoad
+function FirstLoad.SettleSavedVariables(loadedNow)
+    SettleSavedVariables(loadedNow)
+    -- The legacy value remains private install/migration evidence. Consumers
+    -- get no runtime alias until Kernel's explicit bind phase publishes it.
+    if loadedNow then MSUF_DB = nil end
+end
+function FirstLoad.GetLegacyProfileDB()
+    return ProfilePolicy.AcceptsProfile(rawProfileDB) and rawProfileDB or nil
+end
 
 -- Session-only guard on top of the persisted status. It keeps the scene hidden
 -- for the rest of this session even if the persisted status is restored to

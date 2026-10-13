@@ -10,12 +10,11 @@
 -- runs once, when this addon's SavedVariables arrive; the export, copy and
 -- import paths in State/MSUF_Profiles.lua drop profile.assistant as well, so a
 -- string made by an older build cannot bring it back.
-local addonName, MSUF = ...
+local _, MSUF = ...
 if type(MSUF) ~= "table" then return end
 
 local STAMP = "_msufRetiredAssistantDataCleared_v1"
 local PREFIX = "assistant"
-local BUS_KEY = "MSUF_RETIRED_ASSISTANT_DATA"
 
 local function ClearPrefixedKeys(store)
     for key in pairs(store) do
@@ -45,10 +44,6 @@ local function ClearRetiredAssistantData()
             if type(profile) == "table" then profile.assistant = nil end
         end
     end
-    -- Before the profile system binds a character, MSUF_DB can still be the
-    -- legacy root table that would seed the first profile.
-    local activeDB = rawget(_G, "MSUF_DB")
-    if type(activeDB) == "table" then activeDB.assistant = nil end
     ClearPrefixedKeys(globalDB)
     if type(global) ~= "table" then
         global = {}
@@ -63,7 +58,7 @@ MSUF.ClearRetiredAssistantData = ClearRetiredAssistantData
 -- The built-in profilers were removed in favour of disposable external traces.
 -- Their last report and armed trace state stayed in the account table. This
 -- ran at the load of Kernel/MSUF_Util.lua, before the client had loaded the
--- SavedVariables, so it never saw them; it runs on every ADDON_LOADED instead,
+-- SavedVariables, so it never saw them; the lifecycle runs it at ADDON_LOADED,
 -- because an older build on the same account can write them again.
 local function ClearRetiredProfilerData()
     local globalDB = AccountDB()
@@ -74,10 +69,3 @@ local function ClearRetiredProfilerData()
 end
 MSUF.ClearRetiredProfilerData = ClearRetiredProfilerData
 
-local bus = MSUF.EventBus
-bus:Register("ADDON_LOADED", BUS_KEY, function(_, loadedName)
-    if loadedName ~= addonName then return end
-    bus:Unregister("ADDON_LOADED", BUS_KEY)
-    ClearRetiredProfilerData()
-    ClearRetiredAssistantData()
-end)

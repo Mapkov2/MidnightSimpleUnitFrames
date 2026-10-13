@@ -38,7 +38,8 @@ end
 world:Boot()
 local failure = world:FirstFailure()
 assert(not failure, failure and failure.message)
-env.MSUF_InitProfiles()
+-- SavedVariables bind before the client's later combat PLAYER_LOGIN.
+world:LoadSavedVariables("MidnightSimpleUnitFrames", {})
 env.MSUF_EnsureDB(true)
 local UF = assert(world.core.UF)
 local Factory = assert(UF.Factory)

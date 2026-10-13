@@ -549,6 +549,15 @@ known bugs or leftovers, each with its reason in the row.
 outside the core and Options addons reads, and who. It is evidence from a fixed set of local sources, not a
 census: absence from the ledger means none of the scanned sources reads the name, not that nobody does.
 
+The core TOCs declare both profile SavedVariables so every legacy standalone
+`MSUF_DB` loads reliably for the one-time migration. The startup lifecycle settles,
+migrates and binds at `ADDON_LOADED`; `MSUF_DB` remains the public profile alias
+through the session. Native logout handlers registered after login restore the
+variant base and flush profile synchronization before clearing that alias, so the
+client saves the profile pool only once in `MSUF_GlobalDB`. Spec auto-switching
+keeps its original `PLAYER_ENTERING_WORLD` phase. Locale finalization invalidates
+aura inputs; frame startup applies them without building group headers early.
+
 Scanned: the MSUF Suite, MapkoSkin and MidnightCooldownManager repositories, and every other addon installed
 under the author's WoW client folders (the first client folder holding a file wins; MSUF's own folders and
 installed copies of the repositories are skipped). Counted as a read: a bare global read the compiler sees,

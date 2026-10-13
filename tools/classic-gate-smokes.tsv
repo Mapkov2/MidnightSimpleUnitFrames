@@ -659,3 +659,7 @@ clients+Forever	lua	tools/tests/group_frame_overlay_shared_spec_smoke.lua	{root/
 clients+Forever	lua	tools/tests/uf_route_registry_smoke.lua	{root} {flavor}	Unit-frame declared route registry: {flavor}
 clients+Forever	lua	tools/tests/uf_surface_decorators_smoke.lua	{root} {flavor}	Unit-frame surface decorator lifecycle: {flavor}
 clients+Forever	lua	tools/tests/uf_surface_lifecycle_budget_smoke.lua	{root} {flavor}	Unit-frame original surface lifecycle budgets: {flavor}
+clients+Forever	lua	tools/tests/profile_binding_before_consumers_smoke.lua	{root/} {flavor}	Character binding precedes every SavedVariables and login consumer: {flavor}
+clients+Forever	lua	tools/tests/profile_startup_phase_smoke.lua	{root/} {flavor}	Startup preserves spec and group visual phases: {flavor}
+clients+Forever	lua	tools/tests/profile_savedvariables_logout_smoke.lua	{root/} {flavor}	Logout keeps the public alias until final serialization: {flavor}
+clients+Forever	lua	tools/tests/profile_legacy_precedence_smoke.lua	{root/} {flavor}	Legacy profile precedence adds no archive: {flavor}

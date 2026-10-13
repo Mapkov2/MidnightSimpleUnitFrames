@@ -178,12 +178,13 @@ local MSUF_ProfileIO_EnsureProfileMenuDefaults = Normalize.EnsureProfileMenuDefa
 local MSUF_ProfileIO_TranslateProfileToCurrent = Normalize.TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent = Normalize.TranslateProfilesToCurrent
 local MSUF_ProfileIO_NotifySuiteProfileChanged
-function MSUF_InitProfiles()
+function MSUF_InitProfiles(startup)
     if Variants and Variants.IsRecording() then return end
     -- A rebind to a different profile passes BeforeProfileSwitch below.
     PrepareProfileMutation(true)
     local previousActive = type(MSUF_ActiveProfile) == "string" and MSUF_ActiveProfile or nil
     local previousDB = type(MSUF_DB) == "table" and MSUF_DB or nil
+    local legacyDB = startup and startup.legacyDB or MSUF_DB
     local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     local charKey = MSUF_GetCharKey()
@@ -199,7 +200,7 @@ function MSUF_InitProfiles()
         active = nil
     end
     if not next(profiles) then
-        local base = MSUF_DB or {}
+        local base = legacyDB or {}
         profiles["Default"] = CopyTable(type(base) == "table" and base or {})
         if not active then
             active = "Default"
@@ -225,9 +226,11 @@ function MSUF_InitProfiles()
     if meta.defaultProfileForNewChars == "None" and type(profiles.None) ~= "table" then
         meta.defaultProfileForNewChars = nil
     end
-    local startupName, startupSource = MSUF.ResolveStartupProfile(MSUF_GlobalDB, MSUF_DB, charKey)
+    local startupName, startupSource = MSUF.ResolveStartupProfile(MSUF_GlobalDB, legacyDB, charKey)
     active = startupName
-    if type(profiles[active]) ~= "table" then
+    if startup and startup.profile then
+        profiles[active] = startup.profile
+    elseif type(profiles[active]) ~= "table" then
         profiles[active] = CopyTable(startupSource or {})
     end
     if hadEstablishedOwner and (previousActive~=active or previousDB~=profiles[active]) then
@@ -252,9 +255,11 @@ function MSUF_InitProfiles()
     MSUF_ProfileIO_RunEnsureDB(false, true)
     MSUF.NumberFormat.Refresh()
     if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
-    if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
-    if Variants then Variants.ResolveCurrent() end
-    if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
+    if not startup then
+        if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
+        if Variants then Variants.ResolveCurrent() end
+        if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
+    end
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
         ApplyProfileRuntime("PROFILE_INIT_REBIND", false)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_INIT_REBIND", active)
@@ -771,7 +776,6 @@ do
         f = _G.CreateFrame("Frame")
         ExportPublic("MSUF_SpecProfileEventFrame", f)
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
-        f:RegisterEvent("PLAYER_LOGIN")
         f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         f:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
         f:SetScript("OnEvent", function(_, event, arg1)

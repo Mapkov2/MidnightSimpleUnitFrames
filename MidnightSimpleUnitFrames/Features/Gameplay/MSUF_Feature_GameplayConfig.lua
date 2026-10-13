@@ -44,9 +44,10 @@ local function EnsureGameplayDefaults()
     -- Defaults are intentionally centralized so Menu2 and runtime all
     -- agree on missing-field behavior after profile import or version migration.
     -- State/MSUF_Profiles.lua and State/MSUF_Defaults.lua load ahead of this
-    -- file and own the profile binding and the SavedVariable. Resolve them at
-    -- use, so a fixture hosting this file must load them too.
-    if type(MSUF_DB) ~= "table" or type(_G.MSUF_ActiveProfile) ~= "string" then
+    -- file. The lifecycle already bound the real client at ADDON_LOADED;
+    -- standalone fixtures resolve their State providers at use.
+    if (not MSUF.Lifecycle or not MSUF.Lifecycle.Bound)
+        and (type(MSUF_DB) ~= "table" or type(_G.MSUF_ActiveProfile) ~= "string") then
         MSUF.Require("MSUF_InitProfiles", "Features/Gameplay/MSUF_Feature_GameplayConfig.lua")()
     end
     if type(MSUF_DB) ~= "table" then
