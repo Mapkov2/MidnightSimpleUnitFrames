@@ -8,6 +8,8 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
+L["Icon height (percent)"] = "Icon height (percent)"
+
 -- Reviewed Edit Mode, setup and client-capability labels.
 L["Player Name Position"] = "Player Name Position"
 L["Target Name Position"] = "Target Name Position"

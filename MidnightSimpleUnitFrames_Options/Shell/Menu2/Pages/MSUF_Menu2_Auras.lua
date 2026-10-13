@@ -1536,6 +1536,11 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
             NumberRow("Size", "size", "icon-size", 10, 80, 26,
                 function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
                 function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end),
+            NumberRow("Icon height (percent)", "heightPercent", "icon-height", 25, 200, 100,
+                function() return Model.ReadLaneStyleNumber(unit, kind, "iconHeightPercent", 100, 25, 200) end,
+                function(v)
+                    Model.WriteLaneStyleNumber(unit, kind, "iconHeightPercent", v, 25, 200)
+                    ApplyUnit(ctx, unit, "AURAS3_UNIT_HEIGHT") end),
             NumberRow("Per row", "perRow", "per-row", 1, 40, nil,
                 function() return Model.ReadLanePerRow(unit, kind) end,
                 function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end),

@@ -1662,7 +1662,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local cfg = type(configOrUnit) == "table" and configOrUnit or A3.ResolveUnitFrameConfig(configOrUnit)
     local lane = cfg and cfg.lanes and cfg.lanes[kind]
     if not lane then return nil end
-    return {
+    return A3.IconShape.PreviewGeometry({
         enabled = lane.enabled == true,
         num = lane.max,
         size = lane.size,
@@ -1694,7 +1694,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         durationBarHeight = lane.durationBarHeight,
         durationBarPosition = lane.durationBarPosition,
         durationBarDirection = lane.durationBarDirection,
-    }
+    }, lane)
 end
 
 function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)

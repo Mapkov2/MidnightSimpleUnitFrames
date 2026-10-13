@@ -520,12 +520,13 @@ local function IconGridCoord(index, perRow, vertical)
     local col = idx % per
     return col, (idx - col) / per
 end
-local function IconRect(anchor, laneW, laneH, size, x, y)
+local function IconRect(anchor, laneW, laneH, size, x, y, iconH)
     local laneAnchorX, laneAnchorY = AnchorOffset(anchor, laneW, laneH)
-    local iconAnchorX, iconAnchorY = AnchorOffset(anchor, size, size)
+    iconH = iconH or size
+    local iconAnchorX, iconAnchorY = AnchorOffset(anchor, size, iconH)
     local left = laneAnchorX + x - iconAnchorX
     local bottom = laneAnchorY + y - iconAnchorY
-    return left, bottom, left + size, bottom + size
+    return left, bottom, left + size, bottom + iconH
 end
 local function ResolvePreviewIconShape(requested, effective, runtimeSpec)
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -562,7 +563,9 @@ local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec, forcePre
     local perRow = metrics and metrics.perRow or ((isBuff and cfg.buffPerRow or cfg.debuffPerRow) or cfg.perRow)
     perRow = RuntimeRound(ClampNumber(perRow, 12, 1, 40))
     local shown = min(max(1, count), PREVIEW_ICONS)
-    local step = tonumber(metrics and metrics.step) or (size + spacing)
+    local iconH = tonumber(metrics and metrics.buttonHeight) or size
+    local step = tonumber(metrics and (metrics.stepX or metrics.step)) or (size + spacing)
+    local stepY = tonumber(metrics and metrics.stepY) or (iconH + spacing)
     local growthX, growthY, vertical, initialAnchor
     if metrics then
         growthX = tonumber(metrics.growthX) or 1
@@ -585,7 +588,7 @@ local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec, forcePre
     local iconMinX, iconMinY, iconMaxX, iconMaxY
     for i = 1, shown do
         local col, row = IconGridCoord(i, perRow, vertical)
-        local l, b, r, t = IconRect(initialAnchor, laneW, laneH, size, col * step * growthX + padX, row * step * growthY + padY)
+        local l, b, r, t = IconRect(initialAnchor, laneW, laneH, size, col * step * growthX + padX, row * stepY * growthY + padY, iconH)
         iconMinX = iconMinX and min(iconMinX, l) or l
         iconMinY = iconMinY and min(iconMinY, b) or b
         iconMaxX = iconMaxX and max(iconMaxX, r) or r
@@ -603,7 +606,7 @@ local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec, forcePre
         bottom = bottom,
         top = top,
         shown = shown,
-        size = size,
+        size = size, iconHeight = iconH,
         iconZoom = ClampNumber(metrics and metrics.iconZoom or (isBuff and cfg.buffIconZoom or cfg.debuffIconZoom), 100, 100, 200),
         iconShape = ResolvePreviewIconShape(
             metrics and metrics.requestedIconShape or (isBuff and cfg.buffRequestedIconShape or cfg.debuffRequestedIconShape),
@@ -1236,11 +1239,10 @@ local function CreateIcon(parent)
     return f
 end
 
-local function ApplyIconZoom(texture, zoom)
+local function ApplyIconZoom(texture, zoom, width, height)
     if not (texture and texture.SetTexCoord) then return end
     zoom = ClampNumber(zoom, 100, 100, 200)
-    local inset = MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom)
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    texture:SetTexCoord(MSUF.MSUF_Auras3.IconShape.IconTexCoords(zoom, width, height))
 end
 
 local function ForwardHandleScript(handle, scriptName, ...)
@@ -1698,7 +1700,9 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local textureKind = bounds.auraType or kind
     local textures = AURA_TEXTURES[textureKind] or AURA_TEXTURES.buff
     local size = max(8, S(bounds.size))
+    local iconH = S(bounds.iconHeight or bounds.size or 0)
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
+    local stepY = S((bounds.iconHeight or bounds.size or 0) + (bounds.spacing or 0))
     local stackSize = max(7, S(textCfg.stackSize or 14))
     local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
     -- Text state is lane-wide: anchors, scaled offsets, the resolved font and the
@@ -1748,13 +1752,13 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local targetDots = bounds.item and bounds.item.targetDots == true
         local auraState = PreviewAuraState(box, kind, i, icon, textCfg, targetDots)
         local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
-        icon:SetSize(size, size)
+        icon:SetSize(size, iconH)
         icon:ClearAllPoints()
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX + padX,
-            row * step * bounds.growthY + padY)
+            row * stepY * bounds.growthY + padY)
         local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
         icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
-        ApplyIconZoom(icon.tex, bounds.iconZoom)
+        ApplyIconZoom(icon.tex, bounds.iconZoom, size, iconH)
         if a3 and type(a3.ApplyAuraIconShape) == "function" then
             a3.ApplyAuraIconShape(icon, bounds.iconShape, nil, icon.bg, icon.tex, icon.swipe)
         end

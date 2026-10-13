@@ -418,8 +418,7 @@ local function PagePreviewWorld()
     end
     namespace.UF.GetFrame = function(unit) return namespace.UF.frames[unit] end
     G.MSUF_DB = { auras3 = { enabled = true, showBoss = true, showArena = true, shared = {}, perUnit = {} } }
-    local A3 = { CUSTOM_CONTAINER_COUNT = 4, PRESET_CUSTOM_CONTAINER_INDEX = 4,
-        IconShape = { IconZoomInset = function() return 0.07 end } }
+    local A3 = { CUSTOM_CONTAINER_COUNT = 4, PRESET_CUSTOM_CONTAINER_INDEX = 4 }
     namespace.MSUF_Auras3 = A3
     G._G = G
     setmetatable(G, { __index = _G })
@@ -428,6 +427,7 @@ local function PagePreviewWorld()
         setfenv(chunk, G)
         chunk("MidnightSimpleUnitFrames", namespace)
     end
+    Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua")
     for _, part in ipairs({ "Config", "Layout", "Drag", "Preview" }) do
         Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_" .. part .. ".lua")
     end

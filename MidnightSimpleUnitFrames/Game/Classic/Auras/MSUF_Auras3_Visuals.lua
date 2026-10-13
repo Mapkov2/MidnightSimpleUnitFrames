@@ -138,7 +138,7 @@ local function Enrich(lane, layout, shared, prefix, portraitShape, scope, appear
     lane.buttonWidth = lane.buttonWidth or lane.size
     lane.buttonHeight = lane.buttonHeight or lane.size
     lane.stepX = lane.stepX or lane.step
-    lane.stepY = lane.stepY or lane.step
+    lane.stepY = lane.stepY or lane.buttonHeight + lane.spacing
     return lane
 end
 
@@ -147,7 +147,12 @@ function V.EnrichUnitLane(lane, layout, sharedLayout, shared, kind, frameSpec)
     for key, value in pairs(type(sharedLayout) == "table" and sharedLayout or {}) do merged[key] = value end
     for key, value in pairs(type(layout) == "table" and layout or {}) do merged[key] = value end
     local prefix = kind == "debuff" and "debuff" or "buff"
-    return Enrich(lane, merged, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, lane.unit)
+    Enrich(lane, merged, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, lane.unit)
+    lane.buttonHeight = math_max(1, math_floor(lane.size
+        * Clamp(merged[prefix .. "IconHeightPercent"], 100, 25, 200) / 100 + .5))
+    lane.stepY = lane.buttonHeight + lane.spacing
+    lane.height = math_max(1, lane.rows * lane.buttonHeight + math_max(0, lane.rows - 1) * lane.spacing + 2 * lane.padding)
+    return lane
 end
 
 --- Tracked buffs and externals wear the Buff appearance, as on Retail
@@ -214,8 +219,9 @@ function V.ApplyButtonLayout(lane, button)
     local cfg = lane and lane.config
     if not (cfg and button) then return end
     local zoom = Clamp(cfg.iconZoom, 100, 100, 200)
-    local inset = Shape.IconZoomInset(zoom)
-    if button.Icon and button.Icon.SetTexCoord then button.Icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset) end
+    if button.Icon and button.Icon.SetTexCoord then
+        Shape.ApplyIconZoom(button.Icon, zoom, cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size)
+    end
     local shape = cfg.iconShape or Shape.RECTANGLE
     ApplyIconShape(button, shape, button.Cooldown, false, button.Icon)
     A3.ApplyIconStylePreview(button, cfg.iconStyle, math_min(cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size), shape)

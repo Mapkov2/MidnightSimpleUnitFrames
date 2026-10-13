@@ -7035,6 +7035,8 @@ L["Independent of Player Frame visibility"] = "Indipendente dalla visibilità de
 L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "Questa risorsa resta visibile quando le regole di visibilità nascondono il riquadro del giocatore. Le sue regole di occultamento automatico restano attive. La potenza del giocatore richiede una barra separata."
 L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "Gli indicatori di risorse autonomi possono restare visibili quando il giocatore è nascosto. I segni e le sovrapposizioni di mana usano ancora la barra delle risorse come riferimento per la posizione."
 
+L["Icon height (percent)"] = "Altezza icona (percentuale)"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

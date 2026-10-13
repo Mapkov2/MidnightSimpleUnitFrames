@@ -14,6 +14,28 @@ Shape.FOLLOW_PORTRAIT = "FOLLOW_PORTRAIT"
 function Shape.IconZoomInset(zoom)
     return math.max(0.07, (1 - 100 / zoom) * 0.5)
 end
+-- Center crop keeps square artwork undistorted in a rectangular aura slot.
+function Shape.IconTexCoords(zoom, width, height)
+    local inset = Shape.IconZoomInset(zoom or 100)
+    width, height = math_max(1, width or 1), math_max(1, height or width or 1)
+    if width == height then return inset, 1 - inset, inset, 1 - inset end
+    local x, y = (1 - 2 * inset) / 2, (1 - 2 * inset) / 2
+    if width > height then y = y * height / width else x = x * width / height end
+    return .5 - x, .5 + x, .5 - y, .5 + y
+end
+-- Geometry is compiled per lane; unchanged refreshes need no UV calculation.
+function Shape.ApplyIconZoom(texture, zoom, width, height)
+    if texture._msufA3IconZoomKey == zoom and texture._msufA3IconWidth == width
+        and texture._msufA3IconHeight == height then return end
+    texture._msufA3IconZoomKey = zoom
+    texture._msufA3IconWidth, texture._msufA3IconHeight = width, height
+    texture:SetTexCoord(Shape.IconTexCoords(zoom, width, height))
+end
+function Shape.PreviewGeometry(metrics, lane)
+    metrics.buttonWidth, metrics.buttonHeight = lane.buttonWidth, lane.buttonHeight
+    metrics.stepX, metrics.stepY = lane.stepX, lane.stepY
+    return metrics
+end
 Shape.MEDIA = {
     CIRCLE = {
         mask = Shape.MEDIA_ROOT .. "\\Media\\Masks\\circle_mask.tga",

@@ -82,12 +82,11 @@ local function CreateAuraPreviewIcon(parent)
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
 end
-local function ApplyAuraPreviewIconZoom(texture, zoom)
+local function ApplyAuraPreviewIconZoom(texture, zoom, width, height)
     if not (texture and texture.SetTexCoord) then return end
     zoom = tonumber(zoom) or 100
     if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-    local inset = A3.IconShape.IconZoomInset(zoom)
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, width, height))
 end
 local function ApplyAuraPreviewFont(fs, size)
     if not fs then return end
@@ -184,6 +183,29 @@ local function ApplySharedAppearanceStyleToPreview(cfg, kind)
     end
 end
 
+local function FitMiniAuraPreview(cfg, width, height)
+    local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
+    cfg.actualSize = max(cfg.allowTinyIconScale == true and 1 or 10, tonumber(cfg.size) or 24)
+    cfg.size = min(maxSize, cfg.actualSize)
+    cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
+    cfg.perRow = max(1, Round(cfg.perRow))
+    cfg.maxIcons = max(0, Round(cfg.maxIcons))
+    local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
+    cfg.columns = min(cfg.perRow, maxCols)
+    cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size * (cfg.heightPercent or 100) / 100 + cfg.spacing)))
+    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    cfg.rowsPerColumn = cfg.maxRows
+    cfg.columns = vertical and 1 or cfg.columns
+    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
+    cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
+    cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
+    cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
+    cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, cfg.size or 24))
+    cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+    cfg.durationBarPosition = cfg.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
+    cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
+    return cfg
+end
 local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local isGroup = IsGroupScope(scope)
     local cfg = {
@@ -272,6 +294,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         else
             cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
         end
+        cfg.heightPercent = lane and Model.ReadLaneStyleNumber(readScope, lane, "iconHeightPercent", 100, 25, 200)
+            or Model.ReadNumber(readScope, "iconHeightPercent", 100, 25, 200)
         cfg.iconZoom = lane and Model.ReadLaneStyleNumber(readScope, lane, "iconZoom", 100, 100, 200)
             or Model.ReadNumber(readScope, "iconZoom", 100, 100, 200)
         local configuredIconShape = type(Model.ReadSharedAppearanceIconShape) == "function"
@@ -336,27 +360,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             end
         end
     end
-    local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
-    cfg.actualSize = max(cfg.allowTinyIconScale == true and 1 or 10, tonumber(cfg.size) or 24)
-    cfg.size = min(maxSize, cfg.actualSize)
-    cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
-    cfg.perRow = max(1, Round(cfg.perRow))
-    cfg.maxIcons = max(0, Round(cfg.maxIcons))
-    local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    cfg.columns = min(cfg.perRow, maxCols)
-    cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
-    cfg.rowsPerColumn = cfg.maxRows
-    cfg.columns = vertical and 1 or cfg.columns
-    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
-    cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
-    cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
-    cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
-    cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, cfg.size or 24))
-    cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
-    cfg.durationBarPosition = cfg.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
-    cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
-    return cfg
+    return FitMiniAuraPreview(cfg, width, height)
 end
 local function ReadSharedSpecialAuraPreviewConfig(container, width, height)
     local playerDefensives = container == "playerDefensives"
@@ -459,7 +463,7 @@ local function ApplyPreviewIconStyle(icon, cfg, barOnly)
             else
                 B.SetTexture(borderPieces, texture)
             end
-            B.Apply(borderPieces, icon, edge, cfg.size, cfg.size, cr, cg, cb, ca, inset)
+            B.Apply(borderPieces, icon, edge, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100, cr, cg, cb, ca, inset)
         else
             if borderPieces then B.Hide(borderPieces) end
             if not border then
@@ -486,21 +490,21 @@ local function ApplyPreviewIconStyle(icon, cfg, barOnly)
         local base = cfg.styleBorderEnabled == true and (cfg.styleBorderThickness or 1) or 0
         local extent = (cfg.styleShadowSize or 4) + base
         local c = cfg.styleShadowColor
-        B.Apply(shadow, icon, extent * 2, cfg.size, cfg.size,
+        B.Apply(shadow, icon, extent * 2, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100,
             c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 0.8)
     elseif shadow then
         B.Hide(shadow)
     end
 end
 local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText, opts)
-    icon:SetSize(cfg.size, cfg.size)
+    icon:SetSize(cfg.size, cfg.size * (cfg.heightPercent or 100) / 100)
     icon:SetAlpha(tonumber(cfg.alpha) or 1)
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     local tex = isBuffIcon and buffTex or debuffTex
     local previewTextures = cfg.previewTextures
     local previewTexture = previewTextures and previewTextures[((index - 1) % max(1, #previewTextures)) + 1]
     icon.icon:SetTexture(previewTexture or tex[((index - 1) % #tex) + 1])
-    ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom)
+    ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100)
     if type(A3.ApplyAuraIconShape) == "function" then
         cfg.iconShape = A3.ApplyAuraIconShape(icon, cfg.iconShape, nil, icon.bg, icon.icon, icon.swipe)
     end
@@ -649,7 +653,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 rows = max(1, ceil(count / columns))
             end
             local naturalW = columns * naturalSize + max(0, columns - 1) * naturalGap
-            local naturalH = rows * naturalSize + max(0, rows - 1) * naturalGap
+            local naturalH = rows * naturalSize * (cfg.heightPercent or 100) / 100 + max(0, rows - 1) * naturalGap
             local fitScale = min(1, availableW / max(1, naturalW), availableH / max(1, naturalH))
             if zoomPan and zoomPan.Clamp then fitScale = zoomPan.Clamp(fitScale) end
             local scale = tonumber(box._manualZoom) or fitScale
@@ -663,7 +667,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             cfg.styleBorderThickness = max(0.5, (tonumber(cfg.styleBorderThickness) or 1) * scale)
             cfg.styleShadowSize = max(0.5, (tonumber(cfg.styleShadowSize) or 4) * scale)
             local totalW = columns * cfg.size + max(0, columns - 1) * cfg.spacing
-            local totalH = rows * cfg.size + max(0, rows - 1) * cfg.spacing
+            local totalH = rows * cfg.size * (cfg.heightPercent or 100) / 100 + max(0, rows - 1) * cfg.spacing
             local startX = (availableW - totalW) * 0.5
             local startY = -((availableH - totalH) * 0.5)
             local left = growth:find("LEFT", 1, true) ~= nil
@@ -684,7 +688,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                     icon:ClearAllPoints()
                     icon:SetPoint("TOPLEFT", contentHost, "TOPLEFT",
                         startX + col * (cfg.size + cfg.spacing),
-                        startY - row * (cfg.size + cfg.spacing))
+                        startY - row * (cfg.size * (cfg.heightPercent or 100) / 100 + cfg.spacing))
                     RenderPreviewIcon(icon, i, cfg, lane == "buff", false, opts)
                 else
                     HidePreviewIcon(icon)
@@ -716,8 +720,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 local startX = left and ((width or 300) - 10 - cfg.size) or 10
                 local startY = up and (-((height or 104) - 10 - cfg.size)) or -34
                 local step = cfg.size + cfg.spacing
+                local stepY = cfg.size * (cfg.heightPercent or 100) / 100 + cfg.spacing
                 icon:ClearAllPoints()
-                icon:SetPoint("TOPLEFT", box, "TOPLEFT", startX + col * step * (left and -1 or 1), startY + row * step * (up and 1 or -1))
+                icon:SetPoint("TOPLEFT", box, "TOPLEFT", startX + col * step * (left and -1 or 1), startY + row * stepY * (up and 1 or -1))
                 local isBuffIcon = lane and lane == "buff" or (not lane and i <= 7)
                 RenderPreviewIcon(icon, i, cfg, isBuffIcon, false, opts)
             else

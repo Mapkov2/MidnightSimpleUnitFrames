@@ -563,9 +563,13 @@ Update(target, refreshPayload)
 assert(buff.config.reorderOnUpdate == false and buff.visible > 1,
     "precondition: the target buff lane is not on the default sort")
 local refreshedButton = buff[buff.visibleByID[refreshed.auraInstanceID]]
+local oldZoom = buff.config.iconZoom
+buff.config.iconZoom = (oldZoom or 0) + .01
 local layoutTotal, layoutByName = CountWrites(function() visuals.ApplyButtonLayout(buff, refreshedButton) end)
 assert(layoutTotal >= 5 and layoutByName.SetTexCoord == 1 and layoutByName.SetReverse == 1,
     "precondition: a layout pass no longer writes the icon crop and swipe direction: " .. Describe(layoutByName))
+buff.config.iconZoom = oldZoom
+visuals.ApplyButtonLayout(buff, refreshedButton)
 local refreshTotal, refreshByName = CountWrites(function() Update(target, refreshPayload) end)
 assert((refreshByName.SetTexCoord or 0) == 0 and (refreshByName.SetReverse or 0) == 0
     and (refreshByName.SetSwipeTexture or 0) == 0 and refreshTotal <= 1,
@@ -593,7 +597,7 @@ local probeLane = { ownerFrame = owner, config = { size = 20, iconZoom = 100, ic
 local probeData = { auraInstanceID = 7, applications = 1 }
 local function ProbeLayoutWrites()
     local _, byName = CountWrites(function() visuals.UpdateButtonVisual(probeLane, probe, "target", probeData) end)
-    return byName.SetTexCoord or 0
+    return byName.SetReverse or 0
 end
 assert(ProbeLayoutWrites() == 1, "a button without a layout stamp was not laid out")
 assert(ProbeLayoutWrites() == 0, "an unchanged button was laid out again")

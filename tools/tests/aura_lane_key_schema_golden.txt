@@ -50,6 +50,7 @@ runtime.DEFAULT_SHARED.durationBarDisplay = "BAR_ONLY"
 runtime.DEFAULT_SHARED.durationBarHeight = 2
 runtime.DEFAULT_SHARED.durationBarPosition = "BOTTOM"
 runtime.DEFAULT_SHARED.growth = "RIGHT"
+runtime.DEFAULT_SHARED.iconHeightPercent = 100
 runtime.DEFAULT_SHARED.iconSize = 26
 runtime.DEFAULT_SHARED.iconZoom = 100
 runtime.DEFAULT_SHARED.maxBuffs = 12
@@ -296,6 +297,7 @@ runtime.LANE_SPECS.buff.durationBarPositionKey = "buffDurationBarPosition"
 runtime.LANE_SPECS.buff.filter = "HELPFUL"
 runtime.LANE_SPECS.buff.filterKey = "buffs"
 runtime.LANE_SPECS.buff.growthKey = "buffGrowthX"
+runtime.LANE_SPECS.buff.heightPercentKey = "buffIconHeightPercent"
 runtime.LANE_SPECS.buff.iconShapeKey = "buffIconShape"
 runtime.LANE_SPECS.buff.iconZoomKey = "buffIconZoom"
 runtime.LANE_SPECS.buff.layerKey = "buffLayer"
@@ -337,6 +339,7 @@ runtime.LANE_SPECS.debuff.durationBarPositionKey = "debuffDurationBarPosition"
 runtime.LANE_SPECS.debuff.filter = "HARMFUL"
 runtime.LANE_SPECS.debuff.filterKey = "debuffs"
 runtime.LANE_SPECS.debuff.growthKey = "debuffGrowthX"
+runtime.LANE_SPECS.debuff.heightPercentKey = "debuffIconHeightPercent"
 runtime.LANE_SPECS.debuff.iconShapeKey = "debuffIconShape"
 runtime.LANE_SPECS.debuff.iconZoomKey = "debuffIconZoom"
 runtime.LANE_SPECS.debuff.layerKey = "debuffLayer"
@@ -529,6 +532,7 @@ menu.DEFAULT_SHARED.buffFrameEffectType = "none"
 menu.DEFAULT_SHARED.buffGroupIconSize = 26
 menu.DEFAULT_SHARED.buffGroupOffsetX = 0
 menu.DEFAULT_SHARED.buffGroupOffsetY = 36
+menu.DEFAULT_SHARED.buffIconHeightPercent = 100
 menu.DEFAULT_SHARED.buffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.buffIconZoom = 100
 menu.DEFAULT_SHARED.buffLayer = 5
@@ -576,6 +580,7 @@ menu.DEFAULT_SHARED.debuffFrameEffectType = "none"
 menu.DEFAULT_SHARED.debuffGroupIconSize = 26
 menu.DEFAULT_SHARED.debuffGroupOffsetX = 0
 menu.DEFAULT_SHARED.debuffGroupOffsetY = 6
+menu.DEFAULT_SHARED.debuffIconHeightPercent = 100
 menu.DEFAULT_SHARED.debuffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.debuffIconZoom = 100
 menu.DEFAULT_SHARED.debuffLayer = 6
@@ -621,6 +626,7 @@ menu.DEFAULT_SHARED.filters.debuffs.raid = false
 menu.DEFAULT_SHARED.filters.debuffs.raidInCombat = false
 menu.DEFAULT_SHARED.filters.enabled = true
 menu.DEFAULT_SHARED.growth = "RIGHT"
+menu.DEFAULT_SHARED.iconHeightPercent = 100
 menu.DEFAULT_SHARED.iconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.iconSize = 26
 menu.DEFAULT_SHARED.iconZoom = 100
@@ -744,6 +750,7 @@ menu.LANE_STYLE_KEYS.buff.durationBarDirection = "buffDurationBarDirection"
 menu.LANE_STYLE_KEYS.buff.durationBarDisplay = "buffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.buff.durationBarHeight = "buffDurationBarHeight"
 menu.LANE_STYLE_KEYS.buff.durationBarPosition = "buffDurationBarPosition"
+menu.LANE_STYLE_KEYS.buff.iconHeightPercent = "buffIconHeightPercent"
 menu.LANE_STYLE_KEYS.buff.iconShape = "buffIconShape"
 menu.LANE_STYLE_KEYS.buff.iconZoom = "buffIconZoom"
 menu.LANE_STYLE_KEYS.buff.showCooldownSwipe = "buffShowCooldownSwipe"
@@ -771,6 +778,7 @@ menu.LANE_STYLE_KEYS.debuff.durationBarDirection = "debuffDurationBarDirection"
 menu.LANE_STYLE_KEYS.debuff.durationBarDisplay = "debuffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.debuff.durationBarHeight = "debuffDurationBarHeight"
 menu.LANE_STYLE_KEYS.debuff.durationBarPosition = "debuffDurationBarPosition"
+menu.LANE_STYLE_KEYS.debuff.iconHeightPercent = "debuffIconHeightPercent"
 menu.LANE_STYLE_KEYS.debuff.iconShape = "debuffIconShape"
 menu.LANE_STYLE_KEYS.debuff.iconZoom = "debuffIconZoom"
 menu.LANE_STYLE_KEYS.debuff.showCooldownSwipe = "debuffShowCooldownSwipe"
@@ -794,6 +802,7 @@ menu.LAYOUT_KEYS.buffDurationBarHeight = true
 menu.LAYOUT_KEYS.buffGroupIconSize = true
 menu.LAYOUT_KEYS.buffGroupOffsetX = true
 menu.LAYOUT_KEYS.buffGroupOffsetY = true
+menu.LAYOUT_KEYS.buffIconHeightPercent = true
 menu.LAYOUT_KEYS.buffIconZoom = true
 menu.LAYOUT_KEYS.buffLayer = true
 menu.LAYOUT_KEYS.buffSpacing = true
@@ -813,6 +822,7 @@ menu.LAYOUT_KEYS.debuffDurationBarHeight = true
 menu.LAYOUT_KEYS.debuffGroupIconSize = true
 menu.LAYOUT_KEYS.debuffGroupOffsetX = true
 menu.LAYOUT_KEYS.debuffGroupOffsetY = true
+menu.LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.LAYOUT_KEYS.debuffIconZoom = true
 menu.LAYOUT_KEYS.debuffLayer = true
 menu.LAYOUT_KEYS.debuffSpacing = true
@@ -822,6 +832,7 @@ menu.LAYOUT_KEYS.debuffStackTextSize = true
 menu.LAYOUT_KEYS.debuffStrata = true
 menu.LAYOUT_KEYS.debuffStylePadding = true
 menu.LAYOUT_KEYS.durationBarHeight = true
+menu.LAYOUT_KEYS.iconHeightPercent = true
 menu.LAYOUT_KEYS.iconSize = true
 menu.LAYOUT_KEYS.iconZoom = true
 menu.LAYOUT_KEYS.offsetX = true
@@ -936,6 +947,7 @@ menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.buffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.buffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.buffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetY = true
@@ -948,12 +960,14 @@ menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.debuffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffStylePadding = true
 menu.STYLE_LAYOUT_KEYS.durationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.iconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.iconZoom = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetY = true
@@ -1071,6 +1085,7 @@ route buffGroupOffsetX | shared:shared:read | player:player.layout player{overri
 route buffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route buffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
 route buffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route buffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route buffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route buffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route buffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
@@ -1122,6 +1137,7 @@ route debuffGroupOffsetX | shared:shared:read | player:player.layout player{over
 route debuffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route debuffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
 route debuffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route debuffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route debuffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route debuffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route debuffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
@@ -1148,6 +1164,7 @@ route durationBarDisplay | shared:shared:read | player:player.layoutShared playe
 route durationBarHeight | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route durationBarPosition | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true,overrideStyle=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true,overrideStyle=true}:read | target:target.layoutShared target{overrideSharedLayout=true,overrideStyle=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true,overrideStyle=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true,overrideStyle=true} boss2.layoutShared boss2{overrideSharedLayout=true,overrideStyle=true} boss3.layoutShared boss3{overrideSharedLayout=true,overrideStyle=true} boss4.layoutShared boss4{overrideSharedLayout=true,overrideStyle=true} boss5.layoutShared boss5{overrideSharedLayout=true,overrideStyle=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true,overrideStyle=true} arena2.layoutShared arena2{overrideSharedLayout=true,overrideStyle=true} arena3.layoutShared arena3{overrideSharedLayout=true,overrideStyle=true}:read
 route growth | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route iconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route iconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route iconSize | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route iconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
@@ -1207,6 +1224,7 @@ seeded.shared.buffFrameEffectType = "none"
 seeded.shared.buffGroupIconSize = 26
 seeded.shared.buffGroupOffsetX = 0
 seeded.shared.buffGroupOffsetY = 36
+seeded.shared.buffIconHeightPercent = 100
 seeded.shared.buffIconShape = "RECTANGLE"
 seeded.shared.buffIconZoom = 100
 seeded.shared.buffLayer = 5
@@ -1254,6 +1272,7 @@ seeded.shared.debuffFrameEffectType = "none"
 seeded.shared.debuffGroupIconSize = 26
 seeded.shared.debuffGroupOffsetX = 0
 seeded.shared.debuffGroupOffsetY = 6
+seeded.shared.debuffIconHeightPercent = 100
 seeded.shared.debuffIconShape = "RECTANGLE"
 seeded.shared.debuffIconZoom = 100
 seeded.shared.debuffLayer = 6
@@ -1299,6 +1318,7 @@ seeded.shared.filters.debuffs.raid = false
 seeded.shared.filters.debuffs.raidInCombat = false
 seeded.shared.filters.enabled = true
 seeded.shared.growth = "RIGHT"
+seeded.shared.iconHeightPercent = 100
 seeded.shared.iconShape = "RECTANGLE"
 seeded.shared.iconSize = 26
 seeded.shared.iconZoom = 100
@@ -1405,6 +1425,7 @@ menu.DEFAULT_SHARED.buffFrameEffectType = "none"
 menu.DEFAULT_SHARED.buffGroupIconSize = 26
 menu.DEFAULT_SHARED.buffGroupOffsetX = 0
 menu.DEFAULT_SHARED.buffGroupOffsetY = 36
+menu.DEFAULT_SHARED.buffIconHeightPercent = 100
 menu.DEFAULT_SHARED.buffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.buffIconZoom = 100
 menu.DEFAULT_SHARED.buffLayer = 5
@@ -1452,6 +1473,7 @@ menu.DEFAULT_SHARED.debuffFrameEffectType = "none"
 menu.DEFAULT_SHARED.debuffGroupIconSize = 26
 menu.DEFAULT_SHARED.debuffGroupOffsetX = 0
 menu.DEFAULT_SHARED.debuffGroupOffsetY = 6
+menu.DEFAULT_SHARED.debuffIconHeightPercent = 100
 menu.DEFAULT_SHARED.debuffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.debuffIconZoom = 100
 menu.DEFAULT_SHARED.debuffLayer = 6
@@ -1497,6 +1519,7 @@ menu.DEFAULT_SHARED.filters.debuffs.raid = false
 menu.DEFAULT_SHARED.filters.debuffs.raidInCombat = false
 menu.DEFAULT_SHARED.filters.enabled = true
 menu.DEFAULT_SHARED.growth = "RIGHT"
+menu.DEFAULT_SHARED.iconHeightPercent = 100
 menu.DEFAULT_SHARED.iconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.iconSize = 26
 menu.DEFAULT_SHARED.iconZoom = 100
@@ -1620,6 +1643,7 @@ menu.LANE_STYLE_KEYS.buff.durationBarDirection = "buffDurationBarDirection"
 menu.LANE_STYLE_KEYS.buff.durationBarDisplay = "buffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.buff.durationBarHeight = "buffDurationBarHeight"
 menu.LANE_STYLE_KEYS.buff.durationBarPosition = "buffDurationBarPosition"
+menu.LANE_STYLE_KEYS.buff.iconHeightPercent = "buffIconHeightPercent"
 menu.LANE_STYLE_KEYS.buff.iconShape = "buffIconShape"
 menu.LANE_STYLE_KEYS.buff.iconZoom = "buffIconZoom"
 menu.LANE_STYLE_KEYS.buff.showCooldownSwipe = "buffShowCooldownSwipe"
@@ -1647,6 +1671,7 @@ menu.LANE_STYLE_KEYS.debuff.durationBarDirection = "debuffDurationBarDirection"
 menu.LANE_STYLE_KEYS.debuff.durationBarDisplay = "debuffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.debuff.durationBarHeight = "debuffDurationBarHeight"
 menu.LANE_STYLE_KEYS.debuff.durationBarPosition = "debuffDurationBarPosition"
+menu.LANE_STYLE_KEYS.debuff.iconHeightPercent = "debuffIconHeightPercent"
 menu.LANE_STYLE_KEYS.debuff.iconShape = "debuffIconShape"
 menu.LANE_STYLE_KEYS.debuff.iconZoom = "debuffIconZoom"
 menu.LANE_STYLE_KEYS.debuff.showCooldownSwipe = "debuffShowCooldownSwipe"
@@ -1670,6 +1695,7 @@ menu.LAYOUT_KEYS.buffDurationBarHeight = true
 menu.LAYOUT_KEYS.buffGroupIconSize = true
 menu.LAYOUT_KEYS.buffGroupOffsetX = true
 menu.LAYOUT_KEYS.buffGroupOffsetY = true
+menu.LAYOUT_KEYS.buffIconHeightPercent = true
 menu.LAYOUT_KEYS.buffIconZoom = true
 menu.LAYOUT_KEYS.buffLayer = true
 menu.LAYOUT_KEYS.buffSpacing = true
@@ -1689,6 +1715,7 @@ menu.LAYOUT_KEYS.debuffDurationBarHeight = true
 menu.LAYOUT_KEYS.debuffGroupIconSize = true
 menu.LAYOUT_KEYS.debuffGroupOffsetX = true
 menu.LAYOUT_KEYS.debuffGroupOffsetY = true
+menu.LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.LAYOUT_KEYS.debuffIconZoom = true
 menu.LAYOUT_KEYS.debuffLayer = true
 menu.LAYOUT_KEYS.debuffSpacing = true
@@ -1698,6 +1725,7 @@ menu.LAYOUT_KEYS.debuffStackTextSize = true
 menu.LAYOUT_KEYS.debuffStrata = true
 menu.LAYOUT_KEYS.debuffStylePadding = true
 menu.LAYOUT_KEYS.durationBarHeight = true
+menu.LAYOUT_KEYS.iconHeightPercent = true
 menu.LAYOUT_KEYS.iconSize = true
 menu.LAYOUT_KEYS.iconZoom = true
 menu.LAYOUT_KEYS.offsetX = true
@@ -1812,6 +1840,7 @@ menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.buffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.buffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.buffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetY = true
@@ -1824,12 +1853,14 @@ menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.debuffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffStylePadding = true
 menu.STYLE_LAYOUT_KEYS.durationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.iconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.iconZoom = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetY = true
@@ -1945,6 +1976,7 @@ route buffGroupOffsetX | shared:shared:read | player:player.layout player{overri
 route buffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route buffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
 route buffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route buffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route buffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route buffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route buffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
@@ -1995,6 +2027,7 @@ route debuffGroupOffsetX | shared:shared:read | player:player.layout player{over
 route debuffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route debuffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
 route debuffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route debuffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route debuffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route debuffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route debuffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
@@ -2020,6 +2053,7 @@ route durationBarDisplay | shared:shared:read | player:player.layoutShared playe
 route durationBarHeight | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route durationBarPosition | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true,overrideStyle=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true,overrideStyle=true}:read | target:target.layoutShared target{overrideSharedLayout=true,overrideStyle=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true,overrideStyle=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true,overrideStyle=true} boss2.layoutShared boss2{overrideSharedLayout=true,overrideStyle=true} boss3.layoutShared boss3{overrideSharedLayout=true,overrideStyle=true} boss4.layoutShared boss4{overrideSharedLayout=true,overrideStyle=true} boss5.layoutShared boss5{overrideSharedLayout=true,overrideStyle=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true,overrideStyle=true} arena2.layoutShared arena2{overrideSharedLayout=true,overrideStyle=true} arena3.layoutShared arena3{overrideSharedLayout=true,overrideStyle=true}:read
 route growth | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true}:read
+route iconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
 route iconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route iconSize | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true}:read
 route iconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true}:read
@@ -2071,6 +2105,7 @@ seeded.shared.buffFrameEffectType = "none"
 seeded.shared.buffGroupIconSize = 26
 seeded.shared.buffGroupOffsetX = 0
 seeded.shared.buffGroupOffsetY = 36
+seeded.shared.buffIconHeightPercent = 100
 seeded.shared.buffIconShape = "RECTANGLE"
 seeded.shared.buffIconZoom = 100
 seeded.shared.buffLayer = 5
@@ -2118,6 +2153,7 @@ seeded.shared.debuffFrameEffectType = "none"
 seeded.shared.debuffGroupIconSize = 26
 seeded.shared.debuffGroupOffsetX = 0
 seeded.shared.debuffGroupOffsetY = 6
+seeded.shared.debuffIconHeightPercent = 100
 seeded.shared.debuffIconShape = "RECTANGLE"
 seeded.shared.debuffIconZoom = 100
 seeded.shared.debuffLayer = 6
@@ -2163,6 +2199,7 @@ seeded.shared.filters.debuffs.raid = false
 seeded.shared.filters.debuffs.raidInCombat = false
 seeded.shared.filters.enabled = true
 seeded.shared.growth = "RIGHT"
+seeded.shared.iconHeightPercent = 100
 seeded.shared.iconShape = "RECTANGLE"
 seeded.shared.iconSize = 26
 seeded.shared.iconZoom = 100
@@ -2273,6 +2310,7 @@ menu.DEFAULT_SHARED.buffFrameEffectType = "none"
 menu.DEFAULT_SHARED.buffGroupIconSize = 26
 menu.DEFAULT_SHARED.buffGroupOffsetX = 0
 menu.DEFAULT_SHARED.buffGroupOffsetY = 36
+menu.DEFAULT_SHARED.buffIconHeightPercent = 100
 menu.DEFAULT_SHARED.buffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.buffIconZoom = 100
 menu.DEFAULT_SHARED.buffLayer = 5
@@ -2320,6 +2358,7 @@ menu.DEFAULT_SHARED.debuffFrameEffectType = "none"
 menu.DEFAULT_SHARED.debuffGroupIconSize = 26
 menu.DEFAULT_SHARED.debuffGroupOffsetX = 0
 menu.DEFAULT_SHARED.debuffGroupOffsetY = 6
+menu.DEFAULT_SHARED.debuffIconHeightPercent = 100
 menu.DEFAULT_SHARED.debuffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.debuffIconZoom = 100
 menu.DEFAULT_SHARED.debuffLayer = 6
@@ -2365,6 +2404,7 @@ menu.DEFAULT_SHARED.filters.debuffs.raid = false
 menu.DEFAULT_SHARED.filters.debuffs.raidInCombat = false
 menu.DEFAULT_SHARED.filters.enabled = true
 menu.DEFAULT_SHARED.growth = "RIGHT"
+menu.DEFAULT_SHARED.iconHeightPercent = 100
 menu.DEFAULT_SHARED.iconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.iconSize = 26
 menu.DEFAULT_SHARED.iconZoom = 100
@@ -2488,6 +2528,7 @@ menu.LANE_STYLE_KEYS.buff.durationBarDirection = "buffDurationBarDirection"
 menu.LANE_STYLE_KEYS.buff.durationBarDisplay = "buffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.buff.durationBarHeight = "buffDurationBarHeight"
 menu.LANE_STYLE_KEYS.buff.durationBarPosition = "buffDurationBarPosition"
+menu.LANE_STYLE_KEYS.buff.iconHeightPercent = "buffIconHeightPercent"
 menu.LANE_STYLE_KEYS.buff.iconShape = "buffIconShape"
 menu.LANE_STYLE_KEYS.buff.iconZoom = "buffIconZoom"
 menu.LANE_STYLE_KEYS.buff.showCooldownSwipe = "buffShowCooldownSwipe"
@@ -2515,6 +2556,7 @@ menu.LANE_STYLE_KEYS.debuff.durationBarDirection = "debuffDurationBarDirection"
 menu.LANE_STYLE_KEYS.debuff.durationBarDisplay = "debuffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.debuff.durationBarHeight = "debuffDurationBarHeight"
 menu.LANE_STYLE_KEYS.debuff.durationBarPosition = "debuffDurationBarPosition"
+menu.LANE_STYLE_KEYS.debuff.iconHeightPercent = "debuffIconHeightPercent"
 menu.LANE_STYLE_KEYS.debuff.iconShape = "debuffIconShape"
 menu.LANE_STYLE_KEYS.debuff.iconZoom = "debuffIconZoom"
 menu.LANE_STYLE_KEYS.debuff.showCooldownSwipe = "debuffShowCooldownSwipe"
@@ -2538,6 +2580,7 @@ menu.LAYOUT_KEYS.buffDurationBarHeight = true
 menu.LAYOUT_KEYS.buffGroupIconSize = true
 menu.LAYOUT_KEYS.buffGroupOffsetX = true
 menu.LAYOUT_KEYS.buffGroupOffsetY = true
+menu.LAYOUT_KEYS.buffIconHeightPercent = true
 menu.LAYOUT_KEYS.buffIconZoom = true
 menu.LAYOUT_KEYS.buffLayer = true
 menu.LAYOUT_KEYS.buffSpacing = true
@@ -2557,6 +2600,7 @@ menu.LAYOUT_KEYS.debuffDurationBarHeight = true
 menu.LAYOUT_KEYS.debuffGroupIconSize = true
 menu.LAYOUT_KEYS.debuffGroupOffsetX = true
 menu.LAYOUT_KEYS.debuffGroupOffsetY = true
+menu.LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.LAYOUT_KEYS.debuffIconZoom = true
 menu.LAYOUT_KEYS.debuffLayer = true
 menu.LAYOUT_KEYS.debuffSpacing = true
@@ -2566,6 +2610,7 @@ menu.LAYOUT_KEYS.debuffStackTextSize = true
 menu.LAYOUT_KEYS.debuffStrata = true
 menu.LAYOUT_KEYS.debuffStylePadding = true
 menu.LAYOUT_KEYS.durationBarHeight = true
+menu.LAYOUT_KEYS.iconHeightPercent = true
 menu.LAYOUT_KEYS.iconSize = true
 menu.LAYOUT_KEYS.iconZoom = true
 menu.LAYOUT_KEYS.offsetX = true
@@ -2680,6 +2725,7 @@ menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.buffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.buffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.buffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetY = true
@@ -2692,12 +2738,14 @@ menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.debuffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffStylePadding = true
 menu.STYLE_LAYOUT_KEYS.durationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.iconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.iconZoom = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetY = true
@@ -2815,6 +2863,7 @@ route buffGroupOffsetX | shared:shared:read | player:player.layout player{overri
 route buffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route buffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
 route buffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route buffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route buffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route buffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route buffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
@@ -2865,6 +2914,7 @@ route debuffGroupOffsetX | shared:shared:read | player:player.layout player{over
 route debuffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route debuffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
 route debuffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route debuffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route debuffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route debuffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route debuffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
@@ -2890,6 +2940,7 @@ route durationBarDisplay | shared:shared:read | player:player.layoutShared playe
 route durationBarHeight | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route durationBarPosition | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true,overrideStyle=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true,overrideStyle=true}:read | target:target.layoutShared target{overrideSharedLayout=true,overrideStyle=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true,overrideStyle=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true,overrideStyle=true} boss2.layoutShared boss2{overrideSharedLayout=true,overrideStyle=true} boss3.layoutShared boss3{overrideSharedLayout=true,overrideStyle=true} boss4.layoutShared boss4{overrideSharedLayout=true,overrideStyle=true} boss5.layoutShared boss5{overrideSharedLayout=true,overrideStyle=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true,overrideStyle=true} arena2.layoutShared arena2{overrideSharedLayout=true,overrideStyle=true} arena3.layoutShared arena3{overrideSharedLayout=true,overrideStyle=true} arena4.layoutShared arena4{overrideSharedLayout=true,overrideStyle=true} arena5.layoutShared arena5{overrideSharedLayout=true,overrideStyle=true}:read
 route growth | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route iconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route iconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route iconSize | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route iconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
@@ -2941,6 +2992,7 @@ seeded.shared.buffFrameEffectType = "none"
 seeded.shared.buffGroupIconSize = 26
 seeded.shared.buffGroupOffsetX = 0
 seeded.shared.buffGroupOffsetY = 36
+seeded.shared.buffIconHeightPercent = 100
 seeded.shared.buffIconShape = "RECTANGLE"
 seeded.shared.buffIconZoom = 100
 seeded.shared.buffLayer = 5
@@ -2988,6 +3040,7 @@ seeded.shared.debuffFrameEffectType = "none"
 seeded.shared.debuffGroupIconSize = 26
 seeded.shared.debuffGroupOffsetX = 0
 seeded.shared.debuffGroupOffsetY = 6
+seeded.shared.debuffIconHeightPercent = 100
 seeded.shared.debuffIconShape = "RECTANGLE"
 seeded.shared.debuffIconZoom = 100
 seeded.shared.debuffLayer = 6
@@ -3033,6 +3086,7 @@ seeded.shared.filters.debuffs.raid = false
 seeded.shared.filters.debuffs.raidInCombat = false
 seeded.shared.filters.enabled = true
 seeded.shared.growth = "RIGHT"
+seeded.shared.iconHeightPercent = 100
 seeded.shared.iconShape = "RECTANGLE"
 seeded.shared.iconSize = 26
 seeded.shared.iconZoom = 100
@@ -3143,6 +3197,7 @@ menu.DEFAULT_SHARED.buffFrameEffectType = "none"
 menu.DEFAULT_SHARED.buffGroupIconSize = 26
 menu.DEFAULT_SHARED.buffGroupOffsetX = 0
 menu.DEFAULT_SHARED.buffGroupOffsetY = 36
+menu.DEFAULT_SHARED.buffIconHeightPercent = 100
 menu.DEFAULT_SHARED.buffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.buffIconZoom = 100
 menu.DEFAULT_SHARED.buffLayer = 5
@@ -3190,6 +3245,7 @@ menu.DEFAULT_SHARED.debuffFrameEffectType = "none"
 menu.DEFAULT_SHARED.debuffGroupIconSize = 26
 menu.DEFAULT_SHARED.debuffGroupOffsetX = 0
 menu.DEFAULT_SHARED.debuffGroupOffsetY = 6
+menu.DEFAULT_SHARED.debuffIconHeightPercent = 100
 menu.DEFAULT_SHARED.debuffIconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.debuffIconZoom = 100
 menu.DEFAULT_SHARED.debuffLayer = 6
@@ -3235,6 +3291,7 @@ menu.DEFAULT_SHARED.filters.debuffs.raid = false
 menu.DEFAULT_SHARED.filters.debuffs.raidInCombat = false
 menu.DEFAULT_SHARED.filters.enabled = true
 menu.DEFAULT_SHARED.growth = "RIGHT"
+menu.DEFAULT_SHARED.iconHeightPercent = 100
 menu.DEFAULT_SHARED.iconShape = "RECTANGLE"
 menu.DEFAULT_SHARED.iconSize = 26
 menu.DEFAULT_SHARED.iconZoom = 100
@@ -3358,6 +3415,7 @@ menu.LANE_STYLE_KEYS.buff.durationBarDirection = "buffDurationBarDirection"
 menu.LANE_STYLE_KEYS.buff.durationBarDisplay = "buffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.buff.durationBarHeight = "buffDurationBarHeight"
 menu.LANE_STYLE_KEYS.buff.durationBarPosition = "buffDurationBarPosition"
+menu.LANE_STYLE_KEYS.buff.iconHeightPercent = "buffIconHeightPercent"
 menu.LANE_STYLE_KEYS.buff.iconShape = "buffIconShape"
 menu.LANE_STYLE_KEYS.buff.iconZoom = "buffIconZoom"
 menu.LANE_STYLE_KEYS.buff.showCooldownSwipe = "buffShowCooldownSwipe"
@@ -3385,6 +3443,7 @@ menu.LANE_STYLE_KEYS.debuff.durationBarDirection = "debuffDurationBarDirection"
 menu.LANE_STYLE_KEYS.debuff.durationBarDisplay = "debuffDurationBarDisplay"
 menu.LANE_STYLE_KEYS.debuff.durationBarHeight = "debuffDurationBarHeight"
 menu.LANE_STYLE_KEYS.debuff.durationBarPosition = "debuffDurationBarPosition"
+menu.LANE_STYLE_KEYS.debuff.iconHeightPercent = "debuffIconHeightPercent"
 menu.LANE_STYLE_KEYS.debuff.iconShape = "debuffIconShape"
 menu.LANE_STYLE_KEYS.debuff.iconZoom = "debuffIconZoom"
 menu.LANE_STYLE_KEYS.debuff.showCooldownSwipe = "debuffShowCooldownSwipe"
@@ -3408,6 +3467,7 @@ menu.LAYOUT_KEYS.buffDurationBarHeight = true
 menu.LAYOUT_KEYS.buffGroupIconSize = true
 menu.LAYOUT_KEYS.buffGroupOffsetX = true
 menu.LAYOUT_KEYS.buffGroupOffsetY = true
+menu.LAYOUT_KEYS.buffIconHeightPercent = true
 menu.LAYOUT_KEYS.buffIconZoom = true
 menu.LAYOUT_KEYS.buffLayer = true
 menu.LAYOUT_KEYS.buffSpacing = true
@@ -3427,6 +3487,7 @@ menu.LAYOUT_KEYS.debuffDurationBarHeight = true
 menu.LAYOUT_KEYS.debuffGroupIconSize = true
 menu.LAYOUT_KEYS.debuffGroupOffsetX = true
 menu.LAYOUT_KEYS.debuffGroupOffsetY = true
+menu.LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.LAYOUT_KEYS.debuffIconZoom = true
 menu.LAYOUT_KEYS.debuffLayer = true
 menu.LAYOUT_KEYS.debuffSpacing = true
@@ -3436,6 +3497,7 @@ menu.LAYOUT_KEYS.debuffStackTextSize = true
 menu.LAYOUT_KEYS.debuffStrata = true
 menu.LAYOUT_KEYS.debuffStylePadding = true
 menu.LAYOUT_KEYS.durationBarHeight = true
+menu.LAYOUT_KEYS.iconHeightPercent = true
 menu.LAYOUT_KEYS.iconSize = true
 menu.LAYOUT_KEYS.iconZoom = true
 menu.LAYOUT_KEYS.offsetX = true
@@ -3550,6 +3612,7 @@ menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.buffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.buffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.buffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.buffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.buffStackTextOffsetY = true
@@ -3562,12 +3625,14 @@ menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffCooldownTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffDurationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.debuffIconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.debuffIconZoom = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextOffsetY = true
 menu.STYLE_LAYOUT_KEYS.debuffStackTextSize = true
 menu.STYLE_LAYOUT_KEYS.debuffStylePadding = true
 menu.STYLE_LAYOUT_KEYS.durationBarHeight = true
+menu.STYLE_LAYOUT_KEYS.iconHeightPercent = true
 menu.STYLE_LAYOUT_KEYS.iconZoom = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetX = true
 menu.STYLE_LAYOUT_KEYS.stackTextOffsetY = true
@@ -3685,6 +3750,7 @@ route buffGroupOffsetX | shared:shared:read | player:player.layout player{overri
 route buffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route buffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
 route buffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route buffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route buffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route buffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route buffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
@@ -3735,6 +3801,7 @@ route debuffGroupOffsetX | shared:shared:read | player:player.layout player{over
 route debuffGroupOffsetY | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route debuffGrowthX | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
 route debuffGrowthY | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route debuffIconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route debuffIconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route debuffIconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route debuffLayer | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
@@ -3760,6 +3827,7 @@ route durationBarDisplay | shared:shared:read | player:player.layoutShared playe
 route durationBarHeight | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route durationBarPosition | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true,overrideStyle=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true,overrideStyle=true}:read | target:target.layoutShared target{overrideSharedLayout=true,overrideStyle=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true,overrideStyle=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true,overrideStyle=true} boss2.layoutShared boss2{overrideSharedLayout=true,overrideStyle=true} boss3.layoutShared boss3{overrideSharedLayout=true,overrideStyle=true} boss4.layoutShared boss4{overrideSharedLayout=true,overrideStyle=true} boss5.layoutShared boss5{overrideSharedLayout=true,overrideStyle=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true,overrideStyle=true} arena2.layoutShared arena2{overrideSharedLayout=true,overrideStyle=true} arena3.layoutShared arena3{overrideSharedLayout=true,overrideStyle=true} arena4.layoutShared arena4{overrideSharedLayout=true,overrideStyle=true} arena5.layoutShared arena5{overrideSharedLayout=true,overrideStyle=true}:read
 route growth | shared:shared:read | player:player.layoutShared player{overrideSharedLayout=true}:read | pet:pet.layoutShared pet{overrideSharedLayout=true}:read | target:target.layoutShared target{overrideSharedLayout=true}:read | focus:focus.layoutShared focus{overrideSharedLayout=true}:read | boss:boss1.layoutShared boss1{overrideSharedLayout=true} boss2.layoutShared boss2{overrideSharedLayout=true} boss3.layoutShared boss3{overrideSharedLayout=true} boss4.layoutShared boss4{overrideSharedLayout=true} boss5.layoutShared boss5{overrideSharedLayout=true}:read | arena:arena1.layoutShared arena1{overrideSharedLayout=true} arena2.layoutShared arena2{overrideSharedLayout=true} arena3.layoutShared arena3{overrideSharedLayout=true} arena4.layoutShared arena4{overrideSharedLayout=true} arena5.layoutShared arena5{overrideSharedLayout=true}:read
+route iconHeightPercent | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
 route iconShape | shared:shared:read | player:-:unread | pet:-:unread | target:-:unread | focus:-:unread | boss:-:unread | arena:-:unread
 route iconSize | shared:shared:read | player:player.layout player{overrideLayout=true}:read | pet:pet.layout pet{overrideLayout=true}:read | target:target.layout target{overrideLayout=true}:read | focus:focus.layout focus{overrideLayout=true}:read | boss:boss1.layout boss1{overrideLayout=true} boss2.layout boss2{overrideLayout=true} boss3.layout boss3{overrideLayout=true} boss4.layout boss4{overrideLayout=true} boss5.layout boss5{overrideLayout=true}:read | arena:arena1.layout arena1{overrideLayout=true} arena2.layout arena2{overrideLayout=true} arena3.layout arena3{overrideLayout=true} arena4.layout arena4{overrideLayout=true} arena5.layout arena5{overrideLayout=true}:read
 route iconZoom | shared:shared:read | player:player.layout player{overrideLayout=true,overrideStyle=true}:read | pet:pet.layout pet{overrideLayout=true,overrideStyle=true}:read | target:target.layout target{overrideLayout=true,overrideStyle=true}:read | focus:focus.layout focus{overrideLayout=true,overrideStyle=true}:read | boss:boss1.layout boss1{overrideLayout=true,overrideStyle=true} boss2.layout boss2{overrideLayout=true,overrideStyle=true} boss3.layout boss3{overrideLayout=true,overrideStyle=true} boss4.layout boss4{overrideLayout=true,overrideStyle=true} boss5.layout boss5{overrideLayout=true,overrideStyle=true}:read | arena:arena1.layout arena1{overrideLayout=true,overrideStyle=true} arena2.layout arena2{overrideLayout=true,overrideStyle=true} arena3.layout arena3{overrideLayout=true,overrideStyle=true} arena4.layout arena4{overrideLayout=true,overrideStyle=true} arena5.layout arena5{overrideLayout=true,overrideStyle=true}:read
@@ -3811,6 +3879,7 @@ seeded.shared.buffFrameEffectType = "none"
 seeded.shared.buffGroupIconSize = 26
 seeded.shared.buffGroupOffsetX = 0
 seeded.shared.buffGroupOffsetY = 36
+seeded.shared.buffIconHeightPercent = 100
 seeded.shared.buffIconShape = "RECTANGLE"
 seeded.shared.buffIconZoom = 100
 seeded.shared.buffLayer = 5
@@ -3858,6 +3927,7 @@ seeded.shared.debuffFrameEffectType = "none"
 seeded.shared.debuffGroupIconSize = 26
 seeded.shared.debuffGroupOffsetX = 0
 seeded.shared.debuffGroupOffsetY = 6
+seeded.shared.debuffIconHeightPercent = 100
 seeded.shared.debuffIconShape = "RECTANGLE"
 seeded.shared.debuffIconZoom = 100
 seeded.shared.debuffLayer = 6
@@ -3903,6 +3973,7 @@ seeded.shared.filters.debuffs.raid = false
 seeded.shared.filters.debuffs.raidInCombat = false
 seeded.shared.filters.enabled = true
 seeded.shared.growth = "RIGHT"
+seeded.shared.iconHeightPercent = 100
 seeded.shared.iconShape = "RECTANGLE"
 seeded.shared.iconSize = 26
 seeded.shared.iconZoom = 100

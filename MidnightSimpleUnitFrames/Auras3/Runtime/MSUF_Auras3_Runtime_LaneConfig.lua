@@ -61,6 +61,8 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local zoomDefault = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
         spec.iconZoomKey, "iconZoom") or DEFAULT_SHARED.iconZoom
+    local iconHeight = Round(size * ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
+        spec.heightPercentKey, "iconHeightPercent", 100, 25, 200) / 100)
     local iconShapeSource = Shape.SharedValue(rootShared, kind)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ReadNumber(layout, nil, spec.spacingKey, DEFAULT_SHARED.spacing, 0, 64)
@@ -96,6 +98,8 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         requestedIconShape = requestedIconShape,
         spacing = spacing,
         step = size + spacing,
+        buttonWidth = size, buttonHeight = iconHeight,
+        stepX = size + spacing, stepY = iconHeight + spacing,
         perRow = Round(perRow),
         cols = cols,
         rows = rows,
@@ -103,7 +107,7 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         weaponEnchants = kind == "buff" and unit == "player"
             and ReadBool(rootShared, nil, "showWeaponEnchants", false),
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * iconHeight + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
         y = Round(ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
         anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor),
@@ -208,13 +212,8 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     if rawStrata == nil then rawStrata = source.strata end
     local nativeFilter = NormalizeNativeFilterString(source[spec.filterKey], spec.filter)
-    -- Blizzard applies exact spell-ID candidate filters only while the unit's
-    -- current identity supports that aura polarity: HELPFUL while assistable,
-    -- HARMFUL while non-assistable. Compile the access mode once so rare
-    -- identity events never inspect saved settings. The standard group debuff
-    -- blacklist is intentionally neutral: hiding that entire lane whenever a
-    -- friendly unit is assistable would be worse than Blizzard's exclude-only
-    -- 12.1 limitation. A future HARMFUL include-ID lane is handled correctly.
+    -- Compile exact-ID identity access once: HELPFUL assistable, HARMFUL hostile.
+    -- Exclude-only group debuffs stay neutral under Blizzard's 12.1 limitation.
     local hasIncludeIDs = candidateFilters and candidateFilters.includeSpellIDs ~= nil
     local hasExactIDs = hasIncludeIDs
         or candidateFilters and candidateFilters.excludeSpellIDs ~= nil

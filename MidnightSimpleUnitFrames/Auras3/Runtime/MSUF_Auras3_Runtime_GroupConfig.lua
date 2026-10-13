@@ -294,7 +294,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     if not lane then return nil end
     local debuffBorderMode = lane.showAuraSymbol == true and "SYMBOL"
         or lane.showAuraBorder == true and "BORDER" or "OFF"
-    return {
+    return Shape.PreviewGeometry({
         enabled = lane.enabled == true,
         num = lane.max,
         size = lane.size,
@@ -347,7 +347,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
             cooldownAnchor = lane.cooldownAnchor,
             debuffBorderMode = debuffBorderMode,
         },
-    }
+    }, lane)
 end
 
 --- Compiled shared Appearance style for preview surfaces.

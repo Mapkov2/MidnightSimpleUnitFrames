@@ -339,10 +339,7 @@ end
 local function ApplyAuraIconZoom(texture, lane)
     if not (texture and texture.SetTexCoord) then return end
     local zoom = ClampNumber(lane and lane.iconZoom, 100, 100, 200)
-    if texture._msufA3IconZoomKey == zoom then return end
-    texture._msufA3IconZoomKey = zoom
-    local inset = Shape.IconZoomInset(zoom)
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    Shape.ApplyIconZoom(texture, zoom, lane and (lane.buttonWidth or lane.size), lane and (lane.buttonHeight or lane.size))
 end
 
 local function AuraIconBaseOffset(parentFrame)

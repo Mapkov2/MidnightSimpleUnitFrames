@@ -273,11 +273,10 @@ local function LayoutPreviewDispelBorder(icon, cfg, index)
     border:Show()
 end
 
-local function ApplyIconZoom(texture, zoom)
+local function ApplyIconZoom(texture, zoom, width, height)
     if not (texture and texture.SetTexCoord) then return end
     zoom = Clamp(zoom, 100, 100, 200)
-    local inset = A3.IconShape.IconZoomInset(zoom)
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, width, height))
 end
 
 local function ApplyPreviewIconText(icon, unit, cfg, index)
@@ -483,12 +482,8 @@ local function CreateGroup(unit, kind)
     return group
 end
 
---- Edit Mode paints Custom Aura Full-Frame effects through the live renderer,
---- the single owner the frames and the Menu previews already use. The former
---- Edit-Mode-only copy drew Glow as four flat edges instead of the runtime's
---- radial halo, never animated Pulse and carried its own alpha, so the surface
---- you drag disagreed with the result you get. Layer and priority now come from
---- the same Layers.AuraEffectLevel call the live effect uses.
+--- Share the live renderer for matching Glow, Pulse, alpha and effect layers.
+--- The dragged preview uses the same Layers.AuraEffectLevel as live frames.
 local function ApplyEditModeCustomEffect(group, frame, item)
     local runtime = A3 and A3.SpellIndicators
     local owner = group and group._msufA3CustomEffectPreview
@@ -676,7 +671,9 @@ function EM.RefreshUnit(unit)
             end
             if shownIcons < 1 then shownIcons = 1 end
             local size = (metrics and metrics.size) or cfg.size
-            local step = (metrics and metrics.step) or (cfg.size + cfg.spacing)
+            local iconH = (metrics and metrics.buttonHeight) or size
+            local step = (metrics and (metrics.stepX or metrics.step)) or (cfg.size + cfg.spacing)
+            local stepY = (metrics and metrics.stepY) or (iconH + cfg.spacing)
             local perRow = (metrics and metrics.perRow) or cfg.perRow
             local fallback
             if not metrics then fallback = FallbackMetrics(cfg) end
@@ -706,7 +703,7 @@ function EM.RefreshUnit(unit)
             textCfg.iconShape = iconShape
             local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
                 .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
-                .. "\030" .. tostring(padding) .. "\030" .. tostring(iconStyle and iconStyle.signature)
+                .. "\030" .. tostring(padding) .. "\030" .. tostring(iconH) .. "\030" .. tostring(iconStyle and iconStyle.signature)
 
             if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
                 group._msufA3RefreshSignature = signature
@@ -732,15 +729,15 @@ function EM.RefreshUnit(unit)
                 local padX, padY = PaddingInset(initialAnchor, padding)
                 for i = 1, shownIcons do
                     local icon = EnsureIcon(group, i)
-                    icon:SetSize(size, size)
+                    icon:SetSize(size, iconH)
                     icon:ClearAllPoints()
                     local col, row = IconGridCoord(i, perRow, vertical)
                     local body = group.Body or group
-                    icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * step * growthY + padY)
+                    icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * stepY * growthY + padY)
                     if icon.Icon then
                         local entry = entries and entries[i]
                         icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
-                        ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom)
+                        ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom, size, iconH)
                     end
                     if type(A3.ApplyAuraIconShape) == "function" then
                         A3.ApplyAuraIconShape(icon, iconShape, nil, icon.Icon, icon.Shade, icon.Swipe)
