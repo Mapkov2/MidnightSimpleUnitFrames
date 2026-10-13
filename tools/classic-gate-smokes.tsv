@@ -300,6 +300,7 @@ clients	lua	tools/tests/menu2_explains_itself_smoke.lua	{root} {flavor}	Menu2 ex
 -	lua	tools/tests/group_layout_resolver_smoke.lua	{root}	Group layout resolver (tiers, solo centring, Edit Mode keys) smoke failed
 -	lua	tools/tests/group_layout_rules_smoke.lua	{root}	Group layout rules smoke failed
 -	lua	tools/tests/group_name_bar_smoke.lua	{root}	Group name bar smoke failed
+clients+Forever	lua	tools/tests/group_name_update_smoke.lua	{root} {flavor}	Group delayed and other-instance name update regression: {flavor}
 -	lua	tools/tests/group_frame_index_smoke.lua	{root}	Group frame index smoke failed
 -	lua	tools/tests/group_resize_scale_smoke.lua	{root}	Group resize scale smoke failed
 -	lua	tools/tests/group_menu_additional_page_smoke.lua	{root}	Group layout additional sections page smoke failed

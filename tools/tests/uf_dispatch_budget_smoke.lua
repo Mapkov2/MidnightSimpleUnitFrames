@@ -16,6 +16,11 @@
 -- Lua; on any interpreter the value events (health, power) must stay
 -- allocation-free (one table per dispatch would cost 16 KB or more).
 --
+-- 2026-10-13: group NameText now consumes unit-filtered UNIT_NAME_UPDATE to
+-- recover late/out-of-instance names. Mainline and Vanilla measure 1222k
+-- versus 920k with that name paint missing; the 1247k cap keeps 2% headroom.
+-- Only this useful name-event work changes the budget. Health/power/flags
+-- instructions stay unchanged; name-event allocation stays 0.05 KB.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -27,7 +32,7 @@ local BUDGETS = {
     UNIT_HEALTH = { 97, 1 },
     UNIT_MAXHEALTH = { 1419, 3 },
     UNIT_POWER_UPDATE = { 123, 1 },
-    UNIT_NAME_UPDATE = { 946, 1 },
+    UNIT_NAME_UPDATE = { 1247, 1 },
     UNIT_FLAGS = { 1241, 3 },
 }
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_NAME_UPDATE", "UNIT_FLAGS" }

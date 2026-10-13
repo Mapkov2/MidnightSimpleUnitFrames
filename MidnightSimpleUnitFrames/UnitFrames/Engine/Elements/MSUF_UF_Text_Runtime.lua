@@ -1906,7 +1906,9 @@ end
 
 function NameText.GetEvents(frame, spec)
   if spec and spec.scope == "group" then
-    return EMPTY_EVENTS
+    -- A bound roster slot can receive its native name after the first paint.
+    -- Keep recovery unit-filtered and independent of UnitExists.
+    return EventLists.NAME_EVENTS
   end
   local text = spec and spec.text
   if text and text.hideNameOnDeadOffline == true then
