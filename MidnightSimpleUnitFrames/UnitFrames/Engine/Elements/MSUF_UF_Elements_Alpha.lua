@@ -206,8 +206,6 @@ local function CastbarForUnit(unit)
   local bossCastbars = _G.MSUF_BossCastbars
   local castbar = (bossCastbars and bossCastbars[index])
     or _G["MSUF_BossCastbar" .. index]
-    or _G["MSUF_boss" .. index .. "CastBar"]
-    or _G["MSUF_Boss" .. index .. "CastBar"]
   if castbar then
     castbarCache[unit] = castbar
   end

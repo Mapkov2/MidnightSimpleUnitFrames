@@ -85,15 +85,14 @@ local function HideMSUFCastbar(unit)
   elseif unit == "focus" then
     HideFrame(_G.MSUF_FocusCastbar)
     HideFrame(_G.MSUF_FocusCastBar)
-  elseif unit == "boss" then
-    for i = 1, 10 do
-      HideFrame(_G["MSUF_boss" .. i .. "CastBar"])
-      HideFrame(_G["MSUF_Boss" .. i .. "CastBar"])
-    end
-  elseif unit == "arena" then
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-      HideFrame(_G["MSUF_arena" .. i .. "CastBar"])
-      HideFrame(_G["MSUF_Arena" .. i .. "CastBar"])
+  elseif unit == "boss" or unit == "arena" then
+    -- Every built bar of the pool (Castbars/MSUF_CastbarPools.lua).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local pool = pools and pools.kinds and pools.kinds[unit]
+    if pool then
+      for i = 1, pool.maxFrames do
+        HideFrame(pool.Bar(i))
+      end
     end
   end
 end

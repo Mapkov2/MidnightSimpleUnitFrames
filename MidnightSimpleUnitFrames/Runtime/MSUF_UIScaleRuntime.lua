@@ -102,7 +102,7 @@ local function CollectMsufScaleFrames()
         for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do add(_G.MSUF_ArenaCastbars[i]) end
     end
     for i = 1, 5 do
-        add(_G["MSUF_boss" .. i .. "CastBar"])
+        add(_G["MSUF_BossCastbar" .. i])
         add(_G["MSUF_BossCastbarPreview" .. (i == 1 and "" or i)])
     end
     for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do

@@ -628,3 +628,6 @@ clients+Forever	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/menu_pages_review_bugs_smoke.lua	{root} {flavor}	A menu page review fix drifted (shake default, ToT color, gated toggles, copy lists, apply modes): {flavor}
 clients+Forever	lua	tools/tests/text_decimals_legacy_migration_smoke.lua	{root} {flavor}	Legacy hpTextDecimals is not folded into healthTextDecimals: {flavor}
 clients	lua	tools/tests/classpower_ownership_notification_order_smoke.lua	{root} {flavor}	ClassPower ownership notification ordering failed
+-	lua	tools/tests/castbar_target_bar_never_borrows_focus_bar_smoke.lua	{root}	Castbar target/focus isolation smoke failed
+-	lua	tools/tests/unitframe_castbar_disable_hides_pool_bars_smoke.lua	{root}	Unit-frame castbar disable did not hide the boss/arena pool bars
+-	lua	tools/tests/boss_castbar_scale_and_range_alpha_use_pooled_bars_smoke.lua	{root}	Boss castbar scale and range alpha did not use the pooled bars

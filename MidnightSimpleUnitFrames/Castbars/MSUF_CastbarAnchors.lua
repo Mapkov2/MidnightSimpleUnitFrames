@@ -961,13 +961,19 @@ local function ApplyPlayerCastbarEffectiveSize(g)
     return true
 end
 
+--- The live bar and the preview of one target/focus unit. A unit whose bar is
+--- not built (castbar off, not created yet) gets nil, never the other unit's bar.
+local function TargetFocusCastbar(unit)
+    if unit == "target" then
+        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, _G.MSUF_TargetCastbarPreview
+    end
+    return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, _G.MSUF_FocusCastbarPreview
+end
+
 --- Target and focus: the live bar gets its outer size (the status bar keeps
 --- the icon's square), the preview the full layout.
 local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
-    local frame = (unit == "target"
-        and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar))
-        or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
-    local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
+    local frame, preview = TargetFocusCastbar(unit)
     local target = frame or preview
     if not target then return false end
 
@@ -1073,10 +1079,7 @@ end
 local function ReanchorTargetOrFocusCastbarBase(unit)
     _G.MSUF_EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    local frame = (unit == "target"
-        and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar))
-        or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
-    local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
+    local frame, preview = TargetFocusCastbar(unit)
     if not frame then return end
 
     if not ShouldUseMSUFCastbar(unit, g) then
