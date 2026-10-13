@@ -100,7 +100,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- in ten packs (largest selections Mainline koKR 16,971,902, TBC 14,846,998); no
         -- catalog was added. Locale-selective loading is being investigated as a
         -- follow-up to win this back.
-        assert(bytes < (suffix == "Mainline" and 16980000 or 14855000),
+        -- 2026-10-14 (7.0 wave 4 engine structure): Mainline 16,980,000 -> 17,010,000 and Classic
+        -- 14,855,000 -> 14,880,000 for the route/decorator, Auras3 host and lifecycle modules
+        -- (largest selections Mainline 16,990,107, TBC 14,862,303). Temporary: locale-selective
+        -- loading (W2-L, about 7.5 MB less per client) replaces these limits once proven in game.
+        assert(bytes < (suffix == "Mainline" and 17010000 or 14880000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
