@@ -437,6 +437,14 @@ local function ClearNameClip(frame)
   HideDots(frame._msufNameDotsFS)
 end
 
+local function ApplyDirectNameLayout(frame, text)
+  ClearNameClip(frame)
+  if not frame.nameText then return end
+  local width = text.directNameWidth or 0
+  frame.nameText:SetWidth(width)
+  frame.nameText._msufNameClipTextWidth = width
+end
+
 local function LayoutNameClip(clip, spec, text, width)
   if not clip then
     return
@@ -986,7 +994,7 @@ local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbS
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
-  "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
+  "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY", "directNameWidth",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
   "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftFontSize", "healthCenterFontSize", "healthRightFontSize", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthAbsorbIcon", "healthLeftAbsorbIcon", "healthCenterAbsorbIcon", "healthRightAbsorbIcon", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
@@ -1359,7 +1367,7 @@ function Text.Apply(frame, spec)
     LayoutName(frame.nameText, spec, text)
   end
   if directText then
-    ClearNameClip(frame)
+    ApplyDirectNameLayout(frame, text)
   else
     ApplyNameClip(frame, spec, text)
     -- The clip window and its side/center verdict only exist after

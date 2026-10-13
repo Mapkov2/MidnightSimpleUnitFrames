@@ -82,6 +82,7 @@ local DEFAULTS = {
 -- row. Legacy CDM/per-unit coordinates keep their original edge rules.
 local ECV_POSITION_RULES = {}
 for key in pairs(DEFAULTS) do ECV_POSITION_RULES[key] = { "CENTER", "CENTER", 0, 0 } end
+local ECV_TOP_EDGES = { player = { "TOPRIGHT", "TOPLEFT", -20, 0 }, target = { "TOPLEFT", "TOPRIGHT", 20, 0 } }
 local function CooldownRowEdge(general, selected)
   if selected == "CENTER" then return 0 end
   local db = Config.GetDB()
@@ -96,6 +97,11 @@ end
 function Config.CooldownAnchorRule(key, conf, general)
   local selected = general and general.cooldownAnchorPosition
   local named = conf and conf.anchorFrameName
+  -- Opt-in layouts follow the first cooldown row, independent of how many
+  -- additional rows the viewer currently needs for this class/spec.
+  if named == "EssentialCooldownViewer" and conf.cooldownAnchorFrameTop == true then
+    return ECV_TOP_EDGES[key] or ECV_ANCHORS[key]
+  end
   local target = conf and conf.anchorToUnitframe
   local followsGlobal = not named or named == ""
   followsGlobal = followsGlobal and (not target or target == "" or target == "GLOBAL" or target == "global" or target == "FREE")
@@ -1416,6 +1422,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
     CopyDirectTextLayout(text, conf)
+    text.directNameWidth = max(0, min(out.width, Number(conf.directNameWidth, 0)))
     local npcTypeNameColor = NPCTypeTextColorEnabled(text)
     if text.nameClassColor ~= true and text.nameNpcColor ~= true and text.nameNpcClassColor ~= true and not npcTypeNameColor then
       text.nameColor = nameCustomColor or text.directNameColor
@@ -1425,6 +1432,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   else
     text.nameColor = nameCustomColor
     ClearDirectTextLayout(text)
+    text.directNameWidth = nil
   end
   text.shortNumbers = general.useShortNumbers ~= false
   text.hidePercentSymbol = general.hidePercentSymbol == true
