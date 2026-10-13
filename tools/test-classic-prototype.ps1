@@ -1519,29 +1519,18 @@ if ($classicAuraCompileSource -match 'CustomAuraContainerTemplate|AURA_CONTAINER
     throw "Classic aura compiler must not depend on Blizzard_AuraContainer"
 }
 
-# Lua 5.1 compiles at most 200 locals and 60 upvalues per function, and a
-# function's registers (locals plus the temporaries of its largest expression)
-# may not exceed 250 stack slots ("function or expression too complex"). The
-# gate holds every file this repository writes or overrides to 190 locals per
-# function, 230 main-chunk stack slots and 56 upvalues, so a file reports
-# before it reaches the ceiling rather than after a sync makes it
-# uncompilable. Files already over the rule are listed below with a reason and
-# are pinned to the value they have today.
-$luaLocalBudget = 190
-$luaSlotBudget = 230
-$luaUpvalueBudget = 56
-$luaBudgetExceptions = [ordered]@{
-}
+# Lua 5.1 compiles at most 200 locals, 60 upvalues and 250 stack slots per
+# function. tools/quality_ratchet.py (run below as quality_ratchet_gate_smoke.py)
+# is the only authority for those limits and their margins; this script
+# only proves that every Lua file compiles.
 
-# luac takes a file list, so the syntax check and the budget listing each cost
-# one process per argument-length chunk instead of one process per file.
+# luac takes a file list, so the syntax check costs one process per
+# argument-length chunk instead of one process per file.
 function Invoke-LuacBatch {
     param(
         [Parameter(Mandatory = $true)][string]$LuacPath,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Files,
-        [switch]$Listing
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Files
     )
-    $stats = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::OrdinalIgnoreCase)
     $chunks = [Collections.Generic.List[object]]::new()
     $currentChunk = [Collections.Generic.List[string]]::new()
     $currentLength = 0
@@ -1562,36 +1551,16 @@ function Invoke-LuacBatch {
         $startInfo.UseShellExecute = $false
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
-        $options = @("-p")
-        if ($Listing) { $options = @("-l", "-p") }
-        $startInfo.Arguments = (@($options) + @($chunk | ForEach-Object { '"' + $_ + '"' })) -join ' '
+        $startInfo.Arguments = (@("-p") + @($chunk | ForEach-Object { '"' + $_ + '"' })) -join ' '
         $process = [Diagnostics.Process]::Start($startInfo)
-        $currentFile = $null
-        while ($null -ne ($line = $process.StandardOutput.ReadLine())) {
-            if (-not $Listing) { continue }
-            if ($line.StartsWith("main <", [StringComparison]::Ordinal)) {
-                # luac wraps several files in a synthetic "(luac)" main chunk.
-                $close = $line.IndexOf(":0,0>", [StringComparison]::Ordinal)
-                $candidate = if ($close -gt 6) { $line.Substring(6, $close - 6) } else { "" }
-                $currentFile = if ($candidate -ceq "(luac)" -or $candidate -ceq "") { $null } else { $candidate }
-                if ($currentFile) { $stats[$currentFile] = [pscustomobject]@{ MainLocals = -1; MainSlots = -1; MaxLocals = 0; MaxUpvalues = 0 } }
-                continue
-            }
-            if ($null -eq $currentFile) { continue }
-            if ($line -match '^(\d+)\+? params, (\d+) slots, (\d+) upvalues, (\d+) locals') {
-                $entry = $stats[$currentFile]
-                if ($entry.MainLocals -lt 0) { $entry.MainLocals = [int]$Matches[4]; $entry.MainSlots = [int]$Matches[2] }
-                if ([int]$Matches[4] -gt $entry.MaxLocals) { $entry.MaxLocals = [int]$Matches[4] }
-                if ([int]$Matches[3] -gt $entry.MaxUpvalues) { $entry.MaxUpvalues = [int]$Matches[3] }
-            }
-        }
+        $null = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) {
-            return [pscustomobject]@{ ExitCode = $process.ExitCode; Error = $stderr.Trim(); Chunk = [string[]]@($chunk); Stats = $stats }
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Error = $stderr.Trim(); Chunk = [string[]]@($chunk) }
         }
     }
-    return [pscustomobject]@{ ExitCode = 0; Error = ""; Chunk = [string[]]@(); Stats = $stats }
+    return [pscustomobject]@{ ExitCode = 0; Error = ""; Chunk = [string[]]@() }
 }
 
 # $luac and $lua were resolved and version-checked by the tool preflight; a
@@ -1610,80 +1579,6 @@ if ($luac) {
         throw "Lua 5.1 syntax failed in a batch that no single file reproduces: $($syntax.Error)"
     }
     Write-Host "Lua 5.1 syntax: $($luaFiles.Count) files passed"
-
-    $budgetRelativePaths = [string[]]@(
-        @($ownedAddonPaths) + @($overrideBaseBlobs.Keys) |
-            Where-Object { $_.EndsWith(".lua", [StringComparison]::OrdinalIgnoreCase) } |
-            Sort-Object -Unique
-    )
-    $budgetFullPaths = [string[]]@($budgetRelativePaths | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) })
-    $budget = Invoke-LuacBatch -LuacPath $luac.Source -Files $budgetFullPaths -Listing
-    if ($budget.ExitCode -ne 0) {
-        throw "Lua 5.1 budget listing failed: $($budget.Error)"
-    }
-    foreach ($exceptionPath in $luaBudgetExceptions.Keys) {
-        if ([Array]::IndexOf($budgetRelativePaths, $exceptionPath) -lt 0) {
-            throw "Lua 5.1 budget exception names no Classic-owned or override Lua file: $exceptionPath"
-        }
-    }
-    $budgetMeasured = [Collections.Generic.List[object]]::new()
-    for ($index = 0; $index -lt $budgetRelativePaths.Count; $index++) {
-        $relativePath = $budgetRelativePaths[$index]
-        if (-not $budget.Stats.ContainsKey($budgetFullPaths[$index])) {
-            throw "Lua 5.1 budget: main-chunk header not found for $relativePath"
-        }
-        $measured = $budget.Stats[$budgetFullPaths[$index]]
-        if ($measured.MainLocals -lt 0) {
-            throw "Lua 5.1 budget: main-chunk header not found for $relativePath"
-        }
-        $localCeiling = $luaLocalBudget
-        $slotCeiling = $luaSlotBudget
-        $upvalueCeiling = $luaUpvalueBudget
-        $exception = $null
-        if ($luaBudgetExceptions.Contains($relativePath)) {
-            $exception = $luaBudgetExceptions[$relativePath]
-            $localCeiling = [Math]::Max($luaLocalBudget, [int]$exception.Locals)
-            if ($exception.Contains("Slots")) { $slotCeiling = [Math]::Max($luaSlotBudget, [int]$exception.Slots) }
-            $upvalueCeiling = [Math]::Max($luaUpvalueBudget, [int]$exception.Upvalues)
-        }
-        if ($measured.MainLocals -gt $localCeiling) {
-            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
-            throw "Lua 5.1 local budget exceeded: $relativePath has $($measured.MainLocals) main-chunk locals; budget $localCeiling of Lua's 200$why"
-        }
-        # Every function's local count is held to the main-chunk budget too.
-        if ($measured.MaxLocals -gt $localCeiling) {
-            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
-            throw "Lua 5.1 local budget exceeded: $relativePath has a function with $($measured.MaxLocals) locals; budget $localCeiling of Lua's 200$why"
-        }
-        if ($measured.MainSlots -gt $slotCeiling) {
-            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
-            throw "Lua 5.1 stack budget exceeded: $relativePath main chunk uses $($measured.MainSlots) stack slots; budget $slotCeiling of Lua's 250 (split the widest call or table constructor)$why"
-        }
-        if ($measured.MaxUpvalues -gt $upvalueCeiling) {
-            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
-            throw "Lua 5.1 upvalue budget exceeded: $relativePath has a function with $($measured.MaxUpvalues) upvalues; budget $upvalueCeiling of Lua's 60$why"
-        }
-        $budgetMeasured.Add([pscustomobject]@{
-            Path = $relativePath
-            MainLocals = $measured.MainLocals
-            MainSlots = $measured.MainSlots
-            MaxUpvalues = $measured.MaxUpvalues
-            IsException = [bool]$exception
-        })
-    }
-    Write-Host "Lua 5.1 budgets: $($budgetRelativePaths.Count) Classic-owned and override files within $luaLocalBudget locals per function, $luaSlotBudget main-chunk stack slots and $luaUpvalueBudget upvalues; $($luaBudgetExceptions.Count) recorded exceptions"
-    foreach ($offender in @($budgetMeasured | Sort-Object -Property MainLocals -Descending | Select-Object -First 5)) {
-        $mark = if ($offender.IsException) { " [exception]" } else { "" }
-        Write-Host "    locals  $($offender.MainLocals)/$luaLocalBudget $($offender.Path)$mark"
-    }
-    foreach ($offender in @($budgetMeasured | Sort-Object -Property MainSlots -Descending | Select-Object -First 5)) {
-        $mark = if ($offender.IsException) { " [exception]" } else { "" }
-        Write-Host "    slots   $($offender.MainSlots)/$luaSlotBudget $($offender.Path)$mark"
-    }
-    foreach ($offender in @($budgetMeasured | Sort-Object -Property MaxUpvalues -Descending | Select-Object -First 5)) {
-        $mark = if ($offender.IsException) { " [exception]" } else { "" }
-        Write-Host "    upvals  $($offender.MaxUpvalues)/$luaUpvalueBudget $($offender.Path)$mark"
-    }
 }
 
 if ($lua) {

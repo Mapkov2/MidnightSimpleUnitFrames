@@ -7,9 +7,12 @@ Usage (from the repo root; Python 3.12 and the Lua 5.1 luac):
   python tools/quality_ratchet.py --report [--top N]
 
 Product files measured. Suite: every MSUF_Suite*/ addon. Classic:
-MidnightSimpleUnitFrames/ and MidnightSimpleUnitFrames_Options/. Skipped:
-Libs/ and the data and generated files the allowlist JSON declares ("data_files": glob ->
-reason; the Suite's size_exempt list counts too). A file never leaves measurement by what it
+MidnightSimpleUnitFrames/ and MidnightSimpleUnitFrames_Options/. Skipped: vendor libraries under
+Libs/ (only the folders a profile names in "own_libs", Classic: Libs/MSUFUnitFrames, are MSUF code
+and are measured) and the data and generated files the allowlist JSON declares ("data_files":
+glob -> reason; the Suite's size_exempt list counts too). A data file is measured for the four
+compiler-limit metrics only (main_locals, max_locals, max_upvalues, max_slots) and must stay
+within the profile limits (an allowlist entry can cover one). A file never leaves measurement by what it
 says about itself: a header comment declares nothing, and a file the baseline measured that is
 still on disk but no longer measured fails the check (and blocks --update) until the declaration
 is removed or --accept-regressions says the move is deliberate. The repo profile is picked from
@@ -17,22 +20,48 @@ the folders under the root; --profile suite|classic forces it.
 
 Metrics per file (lower is better for every one). Two kinds:
 
-SIZE metrics measure how much a file holds. Ordinary work grows them, so they have headroom:
+SIZE metrics measure how much a file holds. Ordinary work grows them, so they have headroom.
+This tool is the only place that holds the Lua 5.1 compiler limits (the gate has no second rule):
   lines            line count
-  max_function     longest function in lines (luac 5.1 listing)
-  main_locals      locals in the main chunk (luac 5.1 listing; Lua caps it at 200)
+  max_function     longest function in lines (luac 5.1 listing; a factory wrapper is a module, see below)
+  main_locals      locals of the module scope: the main chunk, or the factory wrapper that holds the
+                   module body (Lua caps a function at 200 active locals)
+  max_locals       most locals of any other function (same cap)
   max_upvalues     most upvalues of any function (Lua caps it at 60)
+  max_slots        most stack slots (registers) of any function, the main chunk and wrappers included
+                   (Lua caps it at 250: "function or expression too complex")
   A size metric with a profile limit (Suite: lines 810, max_function 72, main_locals 150;
-  Classic: main_locals 160, max_upvalues 45, max_function 150) fails an existing file only when
-  the new value is above max(baseline, limit): a file under its limit may grow up to it, a file
-  already over its limit may not grow past its baseline. A size metric without a profile limit
-  (Suite max_upvalues, Classic lines) is report-only: measured, printed and baselined, never a
-  failure. The limits apply to every measured file (Classic: owned or not).
+  Classic: main_locals 160, max_locals 160, max_upvalues 45, max_slots 230, max_function 150)
+  fails an existing file only when the new value is above max(baseline, limit): a file under its
+  limit may grow up to it, a file already over its limit may not grow past its baseline. A size
+  metric without a profile limit (Suite max_upvalues, max_locals and max_slots, Classic lines) is
+  report-only: measured, printed and baselined, never a failure. The limits apply to every
+  measured file (Classic: owned or not). --report prints the headroom to the hard Lua limits.
+
+Factory wrappers. Many modules are one function that the loader calls once:
+  MSUF.Auras3RuntimeFactories.Identity = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
+  function Factories.Containers(A3, Model, Schema, Common, Storage)
+  return function(deps)
+A top-level function in that registration form is a MODULE, not a function, when it covers at
+least 80 percent of the file and holds at least 2 nested functions that make up a quarter of its
+body. A module is not measured as one function: max_function and long_functions look at the
+functions inside it, and its own locals count as main_locals, because Lua compiles the wrapper as
+one function with its own 200-local and 60-upvalue caps. Its own body (its lines minus the lines
+of the functions nested in it) is measured as a function of its own, so a long function cannot
+hide behind a few closures. A `local function BuildPage(...)`, a registration function that is
+mostly statements, or one that covers a smaller part of the file stays a function. `do ... end` scopes are no function in luac and need no rule.
 
 DEFECT metrics count things that are always worth removing, so they stay strict ratchets: any
-increase over the baseline fails.
-  g_reads         `_G.name`, `_G[...]` and rawget(_G, ...) reads (writes are not counted)
+increase over the baseline fails, with the file, the counts before and after, the lines and the
+remedy in the message (for the four located metrics the lines are the ones this working tree
+added according to `git diff HEAD`, else the first ones).
+  g_reads          `_G.name`, `_G[...]` and rawget(_G, ...) reads (writes are not counted)
   type_guards      `type(x) == "function"` and `~=` guards
+  fallback_lambdas `local X = MSUF.Y or function(...)` headers: a lookup that falls back to an inline
+                   stub (PixelLayoutRegion, ExportPublic, issecretvalue ...), also as a table field
+  client_guards    nil guards on the client model that Game/Shared/Initialize.lua always builds first:
+                   `MSUF.Client and ...`, `MSUF.Client ~= nil`, `not MSUF.Client`, `MSUF.Client or {}`,
+                   `type(MSUF.Client) == "table"`, `if MSUF.Client then`
   semicolon_lines  lines holding a statement-level `;` (a table field `;` is not one)
   long_lines       lines longer than 160 characters
   long_functions   functions longer than the profile limit (Suite 72, Classic 150 lines)
@@ -47,10 +76,12 @@ and metric whose "max" covers the new value, with a "reason" and a "date". A fil
 the baseline does not know is measured against the limits of the repo profile
 (Suite: 810 lines, 72-line functions, 150 locals; Classic owned files: 160 locals,
 45 upvalues, 150-line functions; both: no `;` statements, no line over 160
-characters, clone share at most 1 percent). An entry covers a new file the same way.
+characters, no fallback lambda, no client guard, clone share at most 1 percent).
+An entry covers a new file the same way.
 Improvements pass and are counted: a defect metric that shrank, or a size metric that fell
 below a baseline that was over its limit. Check exits 1 on any failure and always ends
-with one summary line.
+with one summary line. A baseline without a column this tool measures fails with the order to
+rebaseline; --update accepts it.
 
 Update. Recomputes every metric and rewrites the baseline. It refuses while a
 regression has no valid allowlist entry or a file left measurement (--accept-regressions
@@ -67,6 +98,8 @@ names the Lua 5.1 luac; the check never runs without one.
 """
 
 import argparse
+import collections
+import concurrent.futures
 import fnmatch
 import hashlib
 import json
@@ -86,30 +119,62 @@ SUITE_STRUCTURE_ALLOWLIST = "tools/tests/suite_structure_allowlist.json"
 LONG_LINE = 160
 WINDOW = 6
 CLONE_SHARE_NEW_FILE = 0.01
-METRICS = ("lines", "max_function", "main_locals", "max_upvalues", "g_reads", "type_guards",
-           "semicolon_lines", "long_lines", "long_functions", "clone_windows")
-SIZE_METRICS = ("lines", "max_function", "main_locals", "max_upvalues")
+WRAPPER_SHARE = 0.8
+WRAPPER_MIN_FUNCTIONS = 2
+WRAPPER_FUNCTION_SHARE = 0.25
+METRICS = ("lines", "max_function", "main_locals", "max_locals", "max_upvalues", "max_slots", "g_reads",
+           "type_guards", "fallback_lambdas", "client_guards", "semicolon_lines", "long_lines",
+           "long_functions", "clone_windows")
+SIZE_METRICS = ("lines", "max_function", "main_locals", "max_locals", "max_upvalues", "max_slots")
 DEFECT_METRICS = tuple(metric for metric in METRICS if metric not in SIZE_METRICS)
+# What the Lua 5.1 compiler refuses (LUAI_MAXVARS, LUAI_MAXUPVALUES, MAXSTACK); the profile limits sit below.
+HARD_LIMITS = {"main_locals": 200, "max_locals": 200, "max_upvalues": 60, "max_slots": 250}
+LIMIT_METRICS = tuple(HARD_LIMITS)
 PROFILES = {
     "suite": {
         "marker": "MSUF_Suite",
         "addon": lambda name: name.startswith("MSUF_Suite"),
         "function_limit": 72,
         "limits": {"lines": 810, "max_function": 72, "main_locals": 150, "semicolon_lines": 0,
-                   "long_lines": 0, "long_functions": 0},
+                   "long_lines": 0, "long_functions": 0, "fallback_lambdas": 0, "client_guards": 0},
         "owned_list": None,
+        "own_libs": (),
     },
     "classic": {
         "marker": "MidnightSimpleUnitFrames",
         "addon": lambda name: name in ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options"),
         "function_limit": 150,
-        "limits": {"main_locals": 160, "max_upvalues": 45, "max_function": 150, "semicolon_lines": 0,
-                   "long_lines": 0, "long_functions": 0},
+        "limits": {"main_locals": 160, "max_locals": 160, "max_upvalues": 45, "max_slots": 230,
+                   "max_function": 150, "semicolon_lines": 0, "long_lines": 0, "long_functions": 0,
+                   "fallback_lambdas": 0, "client_guards": 0},
         "owned_list": "tools/classic-owned-addon-paths.txt",
         "override_list": "tools/classic-retail-overrides.tsv",
+        "own_libs": ("MSUFUnitFrames",),
     },
 }
 DATA_NOTE = "data_files"
+REMEDIES = {
+    "max_function": "split the function; a factory wrapper counts its own body (its lines outside the nested functions) and each function inside it",
+    "main_locals": "Lua caps a function at 200 locals; group related locals in one table or split the module",
+    "max_locals": "Lua caps a function at 200 locals; group related locals in one table or split the function",
+    "max_upvalues": "Lua caps a function at 60 upvalues; pass shared state in one table or split the function",
+    "max_slots": "Lua caps a function at 250 stack slots; split the widest call, table constructor or function",
+    "g_reads": "resolve the dependency once at load with MSUF.Require(name, file) (hard) or MSUF.Optional(name), "
+               "or use the module table; do not read _G",
+    "type_guards": "bind a function that must exist with MSUF.Require at load; keep a type check for "
+                   "values the caller supplies",
+    "fallback_lambdas": "bind the provider with local X = MSUF.Require(\"MSUF_X\", \"<this file>\") (it fails loudly "
+                        "when the provider is missing) or MSUF.Optional for a truly optional one; an inline stub "
+                        "hides a broken load order and drifts from the real function",
+    "client_guards": "MSUF.Client is built by Game/Shared/Initialize.lua before any other file in every TOC: read "
+                     "MSUF.Client.<fact> directly without a nil check, and let test fixtures load the real bootstrap",
+    "semicolon_lines": "write one statement per line",
+    "long_lines": "wrap the line below %d characters" % LONG_LINE,
+    "long_functions": "split the function; a factory wrapper counts its own body (its lines outside the nested functions) and each function inside it",
+    "clone_windows": "reuse the existing code instead of copying it",
+}
+LOCATED = ("g_reads", "type_guards", "fallback_lambdas", "client_guards")
+SHOWN_LINES = 6
 
 
 # ------------------------------------------------------------------ luac
@@ -132,29 +197,39 @@ def find_luac(explicit=None):
 
 
 HEADER = re.compile(r"^(main|function) <(.+):(\d+),(\d+)> \(")
-INFO = re.compile(r"^(\d+)\+? params?, (\d+) slots?, (\d+) upvalues?, (\d+) locals?")
+INFO = re.compile(r"^(\d+)\+? params?, (\d+) slots?, (\d+) upvalues?, (\d+) locals?, (\d+) constants?, "
+                  r"(\d+) functions?")
 CHUNK_CHARS = 24000
+LUAC_WORKERS = 4
+Fn = collections.namedtuple("Fn", "start end slots upvalues locals kids")
+
+
+def luac_chunks(rels):
+    """The files split for parallel luac runs: at least LUAC_WORKERS chunks (when there are files enough) and
+    never a command line beyond CHUNK_CHARS. Files are dealt round-robin so that the big ones spread out."""
+    total = sum(len(rel) + 1 for rel in rels)
+    count = max(-(-total // CHUNK_CHARS), min(LUAC_WORKERS, len(rels)), 1)
+    return [rels[index::count] for index in range(count)]
+
+
+def luac_run(luac, root, chunk):
+    """(listing facts, error text, exit status) of one luac -l -p run over a chunk of files."""
+    with subprocess.Popen([luac, "-l", "-p"] + chunk, cwd=str(root), stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, bufsize=1 << 20) as process:
+        found = parse_listing(process.stdout.read())
+        error = process.stderr.read().decode("utf-8", "replace").strip()
+        return found, error, process.wait()
 
 
 def luac_facts(luac, root, rels):
-    """{rel: (main_locals, max_upvalues, [function line spans])} from luac -l -p.
-    Files are passed in chunks; luac then lists every file's main chunk by name."""
+    """{rel: [Fn]} from luac -l -p: every function of the file in luac's order (the main chunk first,
+    then each function before the functions nested in it). Files are passed in chunks that run side by
+    side; luac then lists every file's main chunk by name."""
     facts = {}
-    chunks, current, size = [], [], 0
-    for rel in rels:
-        if current and size + len(rel) + 1 > CHUNK_CHARS:
-            chunks.append(current)
-            current, size = [], 0
-        current.append(rel)
-        size += len(rel) + 1
-    if current:
-        chunks.append(current)
-    for chunk in chunks:
-        with subprocess.Popen([luac, "-l", "-p"] + chunk, cwd=str(root), stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, bufsize=1 << 20) as process:
-            found = parse_listing(process.stdout)
-            error = process.stderr.read().decode("utf-8", "replace").strip()
-            status = process.wait()
+    chunks = luac_chunks(rels)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+        runs = list(pool.map(lambda chunk: luac_run(luac, root, chunk), chunks))
+    for chunk, (found, error, status) in zip(chunks, runs):
         if status != 0:
             for rel in chunk:
                 run = subprocess.run([luac, "-p", rel], cwd=str(root), capture_output=True, text=True,
@@ -169,34 +244,112 @@ def luac_facts(luac, root, rels):
     return facts
 
 
-def parse_listing(stream):
-    facts, current, kind, info_seen = {}, None, None, True
-    for raw in stream:
-        if raw[:1] == b"\t":
-            continue
-        line = raw.decode("utf-8", "replace").rstrip("\r\n")
+LISTING_LINE = re.compile(rb"^(?:(?:main|function) <[^\r\n]*|\d+\+? params?, [^\r\n]*)", re.M)
+
+
+def parse_listing(data):
+    """{file: [Fn]} of one luac listing (bytes). A header line is followed by the instructions
+    (tab-indented, never matched here) and then the line with the slot, upvalue, local and
+    nested-function counts. One regex pass picks those two kinds of line out of megabytes of code."""
+    facts, current, pending = {}, None, None
+    for found in LISTING_LINE.finditer(data):
+        line = found.group(0).decode("utf-8", "replace")
         header = HEADER.match(line)
         if header:
-            kind = header.group(1)
-            info_seen = False
-            if kind == "main":
+            pending = None
+            if header.group(1) == "main":
                 name = header.group(2)
-                current = None if name.startswith("=(luac)") or name == "(luac)" else name
+                current = None if name.startswith("=(luac)") or name == "(luac)" else name.replace("\\", "/")
                 if current is not None:
-                    current = current.replace("\\", "/")
-                    facts[current] = [0, 0, []]
-            elif current is not None:
-                facts[current][2].append(int(header.group(4)) - int(header.group(3)) + 1)
+                    facts[current] = []
+            if current is not None:
+                pending = (int(header.group(3)), int(header.group(4)))
             continue
-        if info_seen or current is None:
+        if pending is None:
             continue
         info = INFO.match(line)
         if info:
-            info_seen = True
-            if kind == "main":
-                facts[current][0] = int(info.group(4))
-            facts[current][1] = max(facts[current][1], int(info.group(3)))
+            facts[current].append(Fn(pending[0], pending[1], int(info.group(2)), int(info.group(3)),
+                                     int(info.group(4)), int(info.group(6))))
+            pending = None
     return facts
+
+
+# ------------------------------------------------------------------ function shape
+WRAPPER_FORM = re.compile(r"^\s*(?:function\s+[A-Za-z_]\w*(?:\s*[.:]\s*[A-Za-z_]\w*)+\s*\("
+                          r"|return\s+function\s*\("
+                          r"|[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*|\s*\[[^\]\n]*\])+\s*=\s*function\s*\()")
+
+
+def tree_parents(funcs):
+    """Index of each function's parent. luac lists a function before the functions nested in it and
+    states how many it nests, which is the whole tree."""
+    parents, stack = [None] * len(funcs), []
+    for index, fn in enumerate(funcs):
+        while stack and stack[-1][1] == 0:
+            stack.pop()
+        if stack:
+            parents[index] = stack[-1][0]
+            stack[-1][1] -= 1
+        stack.append([index, fn.kids])
+    return parents
+
+
+def span_of(fn):
+    return fn.end - fn.start + 1
+
+
+def find_wrappers(funcs, parents, code, lines):
+    """Indexes of the factory wrappers (see the module docstring)."""
+    candidates = [index for index in range(1, len(funcs))
+                  if parents[index] == 0 and span_of(funcs[index]) >= WRAPPER_SHARE * lines]
+    if not candidates:
+        return []
+    code_lines = code.split("\n")
+    found = []
+    for index in candidates:
+        fn = funcs[index]
+        if not 1 <= fn.start <= len(code_lines) or not WRAPPER_FORM.match(code_lines[fn.start - 1]):
+            continue
+        nested = [span_of(other) for position, other in enumerate(funcs) if parents[position] == index]
+        if len(nested) >= WRAPPER_MIN_FUNCTIONS and sum(nested) >= WRAPPER_FUNCTION_SHARE * span_of(fn):
+            found.append(index)
+    return found
+
+
+def function_shape(funcs, code, lines, function_limit):
+    """({metric: value}, [wrapper facts], [longest functions]) of one file from its luac functions."""
+    parents = tree_parents(funcs)
+    wrappers = find_wrappers(funcs, parents, code, lines)
+    modules = {0, *wrappers}
+    spans = [(span_of(fn), fn.start, fn.end) for index, fn in enumerate(funcs) if index not in modules]
+    wrapper_facts = []
+    for index in wrappers:
+        fn = funcs[index]
+        nested = [span_of(other) for position, other in enumerate(funcs) if parents[position] == index]
+        own = max(span_of(fn) - sum(nested), 0)
+        spans.append((own, fn.start, fn.end))
+        wrapper_facts.append((fn.start, fn.end, span_of(fn), fn.locals, fn.slots, own, max(nested)))
+    spans.sort(reverse=True)
+    shape = {
+        "max_function": spans[0][0] if spans else 0,
+        "long_functions": sum(1 for span, _, _ in spans if span > function_limit),
+        "main_locals": max(funcs[index].locals for index in modules),
+        "max_locals": max((fn.locals for index, fn in enumerate(funcs) if index not in modules), default=0),
+        "max_upvalues": max(fn.upvalues for fn in funcs),
+        "max_slots": max(fn.slots for fn in funcs),
+    }
+    return shape, wrapper_facts, spans[:3]
+
+
+def limit_shape(funcs):
+    """The four compiler-limit metrics of a file that is measured for nothing else (a data file)."""
+    return {
+        "main_locals": funcs[0].locals,
+        "max_locals": max((fn.locals for fn in funcs[1:]), default=0),
+        "max_upvalues": max(fn.upvalues for fn in funcs),
+        "max_slots": max(fn.slots for fn in funcs),
+    }
 
 
 # ------------------------------------------------------------------ source scan
@@ -205,6 +358,18 @@ G_NAME = re.compile(r"(?<![\w.])_G\s*\.\s*[A-Za-z_]\w*(\s*=(?!=))?")
 G_INDEX = re.compile(r"(?<![\w.])_G\s*\[[^\]\n]*\](\s*=(?!=))?")
 G_RAWGET = re.compile(r"\brawget\s*\(\s*_G\b")
 TYPE_GUARD = re.compile(r"\btype\s*\([^\n]{0,200}?\)\s*[=~]=\s*\"function\"|\"function\"\s*[=~]=\s*type\s*\(")
+LOOKUP = r"[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*|\s*\[[^\]\n]*\])*"
+OR_FUNCTION = re.compile(r"\bor\s+function\s*\(")
+FALLBACK_HEAD = re.compile(
+    r"(?:\blocal\s+|[{,]\s*)[A-Za-z_]\w*\s*=\s*\(?\s*(?:type\s*\([^()\n]*\)\s*[=~]=\s*\"function\"\s+and\s+)?"
+    + LOOKUP + r"\s+$")
+FALLBACK_REACH = 240
+CLIENT_WORD = re.compile(r"(?<!\w)Client\b(?!\s*[.\[(:])")
+SELECT_TAIL = re.compile(r"select\s*\(\s*2\s*,\s*\.\.\.\s*\)$")
+CLIENT_AFTER_NIL = re.compile(r"\s+(?:and|or)\b|\s*[=~]=\s*nil\b")
+CLIENT_BEFORE_NOT = re.compile(r"\bnot\s+\(?\s*$")
+CLIENT_BEFORE_TYPE = re.compile(r"\btype\s*\(\s*$")
+CLIENT_BEFORE_IF = re.compile(r"\b(?:if|elseif)\s+\(?\s*$")
 STRUCTURE = re.compile(r"\b(?:function|if|do|repeat|end|until)\b|[{};]")
 TRIVIAL = {"end", "else", "end)", "end,", "}", "},", "})", "return", "do", "then", "))", "),", ")", "{"}
 WHITESPACE = re.compile(r"\s+")
@@ -273,11 +438,62 @@ def semicolon_lines(code):
     return len(lines)
 
 
-def count_g_reads(code):
-    reads = 0
-    for pattern in (G_NAME, G_INDEX):
-        reads += sum(1 for match in pattern.finditer(code) if match.group(1) is None)
-    return reads + len(G_RAWGET.findall(code))
+def g_read_offsets(code):
+    offsets = [match.start() for pattern in (G_NAME, G_INDEX) for match in pattern.finditer(code)
+               if match.group(1) is None]
+    return offsets + [match.start() for match in G_RAWGET.finditer(code)]
+
+
+def type_guard_offsets(code):
+    return [match.start() for match in TYPE_GUARD.finditer(code)]
+
+
+def fallback_lambda_offsets(code):
+    """Offsets of the `or function(` of every `local X = lookup or function(` (also `X = lookup or function(` as
+    a table field): the head is checked only in front of each `or function(`, which keeps the scan cheap."""
+    return [match.start() for match in OR_FUNCTION.finditer(code)
+            if FALLBACK_HEAD.search(code, max(0, match.start() - FALLBACK_REACH), match.start())]
+
+
+def client_reference_start(code, position):
+    """Where the reference that ends in `Client` at `position` begins (`Client`, `MSUF.Client`, `a.b.Client`,
+    `select(2, ...).Client`), or None when it hangs off anything else (`f().Client`)."""
+    start = position
+    while start > 0 and code[start - 1] == ".":
+        end = start - 1
+        begin = end
+        while begin > 0 and (code[begin - 1].isalnum() or code[begin - 1] == "_"):
+            begin -= 1
+        if begin < end:
+            start = begin
+            continue
+        select = SELECT_TAIL.search(code, max(0, end - 40), end)
+        return select.start() if select else None
+    return start
+
+
+def client_guard_offsets(code):
+    """Offsets of every use of the client table as a value that may be nil: the reference is followed by
+    and/or or a comparison with nil, or preceded by `not`, `type(`, `if` or `elseif`. A read of a member
+    (`MSUF.Client.IsForever`) is no guard."""
+    offsets = []
+    if "Client" not in code:
+        return offsets
+    for match in CLIENT_WORD.finditer(code):
+        start = client_reference_start(code, match.start())
+        if start is None:
+            continue
+        after = code[match.end():match.end() + 24]
+        before = code[max(0, start - 24):start]
+        if (CLIENT_AFTER_NIL.match(after) or CLIENT_BEFORE_NOT.search(before)
+                or (CLIENT_BEFORE_TYPE.search(before) and re.match(r"\s*\)", after))
+                or (CLIENT_BEFORE_IF.search(before) and re.match(r"\s*\)?\s*then\b", after))):
+            offsets.append(start)
+    return offsets
+
+
+OFFSETS = {"g_reads": g_read_offsets, "type_guards": type_guard_offsets,
+           "fallback_lambdas": fallback_lambda_offsets, "client_guards": client_guard_offsets}
 
 
 def normalized_lines(plain):
@@ -294,19 +510,72 @@ def window_hashes(kept):
             for i in range(len(kept) - WINDOW + 1)]
 
 
-def analyze_source(text):
-    """Metrics that need only the source: ({metric: value}, window hashes)."""
+def scan_source(text):
+    """Metrics that need only the source: ({metric: value}, window hashes, code)."""
     text = text.replace("\r\n", "\n").lstrip("\ufeff")
     code, plain = strip_source(text)
     raw_lines = text.split("\n")
     metrics = {
         "lines": text.count("\n") + (0 if text.endswith("\n") or not text else 1),
-        "g_reads": count_g_reads(code),
-        "type_guards": len(TYPE_GUARD.findall(code)),
+        "g_reads": len(g_read_offsets(code)),
+        "type_guards": len(type_guard_offsets(code)),
+        "fallback_lambdas": len(fallback_lambda_offsets(code)),
+        "client_guards": len(client_guard_offsets(code)),
         "semicolon_lines": semicolon_lines(code),
         "long_lines": sum(1 for line in raw_lines if len(line) > LONG_LINE),
     }
-    return metrics, window_hashes(normalized_lines(plain))
+    return metrics, window_hashes(normalized_lines(plain)), code
+
+
+def analyze_source(text):
+    """Metrics that need only the source: ({metric: value}, window hashes)."""
+    metrics, hashes, _ = scan_source(text)
+    return metrics, hashes
+
+
+def locate(root, rel, metric):
+    """1-based line numbers of the occurrences a located defect metric counts in a file."""
+    text = (root / rel).read_bytes().decode("utf-8", "replace").replace("\r\n", "\n").lstrip("\ufeff")
+    code, _ = strip_source(text)
+    return sorted({code.count("\n", 0, offset) + 1 for offset in OFFSETS[metric](code)})
+
+
+def added_lines(root, rel):
+    """Line numbers this working tree added to a file (git diff against HEAD), or None when git cannot say."""
+    try:
+        run = subprocess.run(["git", "diff", "--no-color", "--unified=0", "HEAD", "--", rel], cwd=str(root),
+                             capture_output=True, text=True, errors="replace")
+    except OSError:
+        return None
+    if run.returncode != 0:
+        return None
+    lines = set()
+    for hunk in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", run.stdout, re.M):
+        start, count = int(hunk.group(1)), int(hunk.group(2) or 1)
+        lines.update(range(start, start + count))
+    return lines
+
+
+def format_lines(found, fresh):
+    """The lines of a failure: the ones this working tree added when git knows them, else the first ones."""
+    shown, label = (fresh, "added at line") if fresh else (found, "at line")
+    if not shown:
+        return ""
+    return "; %s%s %s%s" % (label, "s" if len(shown) > 1 else "", ", ".join(str(n) for n in shown[:SHOWN_LINES]),
+                            " and %d more" % (len(shown) - SHOWN_LINES) if len(shown) > SHOWN_LINES else "")
+
+
+def make_locator(root):
+    """where(rel, metric) for evaluate(): the lines of a located defect metric, called for a failure only."""
+    added = {}
+
+    def where(rel, metric):
+        found = locate(root, rel, metric)
+        if rel not in added:
+            added[rel] = added_lines(root, rel) or set()
+        return format_lines(found, [number for number in found if number in added[rel]])
+
+    return where
 
 
 # ------------------------------------------------------------------ file selection
@@ -328,12 +597,17 @@ def declared_data(root, profile_name, allowlist):
 def product_files(root, profile, data_patterns):
     """(measured rel paths, excluded {rel: reason}) of the profile's addons."""
     measured, excluded = [], {}
+    own_libs = set(profile.get("own_libs", ()))
     for addon in sorted(os.listdir(root)):
         folder = root / addon
         if not profile["addon"](addon) or not folder.is_dir():
             continue
         for dirpath, dirs, names in os.walk(folder):
-            dirs[:] = sorted(d for d in dirs if d != "Libs")
+            if os.path.basename(dirpath) == "Libs":
+                # Vendor libraries are not measured; the folders the profile owns are MSUF code.
+                dirs[:] = sorted(d for d in dirs if d in own_libs)
+                continue
+            dirs[:] = sorted(dirs)
             for name in sorted(names):
                 if not name.endswith(".lua"):
                     continue
@@ -356,19 +630,23 @@ def detect_profile(root):
 
 
 def measure(root, profile_name, allowlist, luac):
+    """(results, window counts, excluded, clone locations, details, data limits) of the profile's files.
+    The data limits are the compiler-limit metrics of the declared data files."""
     profile = PROFILES[profile_name]
     rels, excluded = product_files(root, profile, declared_data(root, profile_name, allowlist))
-    facts = luac_facts(luac, root, rels)
-    results, window_counts, locations = {}, {}, {}
+    results, window_counts, locations, details, scanned = {}, {}, {}, {}, {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        # luac runs in other processes while this one reads and scans the sources.
+        listing = pool.submit(luac_facts, luac, root, rels + sorted(excluded))
+        for rel in rels:
+            scanned[rel] = scan_source((root / rel).read_bytes().decode("utf-8", "replace"))
+        facts = listing.result()
     for rel in rels:
-        text = (root / rel).read_bytes().decode("utf-8", "replace")
-        metrics, hashes = analyze_source(text)
-        spans = facts[rel][2]
-        metrics["main_locals"] = facts[rel][0]
-        metrics["max_upvalues"] = facts[rel][1]
-        metrics["max_function"] = max(spans) if spans else 0
-        metrics["long_functions"] = sum(1 for span in spans if span > profile["function_limit"])
+        metrics, hashes, code = scanned[rel]
+        shape, wrappers, longest = function_shape(facts[rel], code, metrics["lines"], profile["function_limit"])
+        metrics.update(shape)
         results[rel] = metrics
+        details[rel] = {"wrappers": wrappers, "longest": longest}
         window_counts[rel] = len(hashes)
         for index, digest in enumerate(hashes):
             locations.setdefault(digest, []).append((rel, index))
@@ -378,7 +656,8 @@ def measure(root, profile_name, allowlist, luac):
         if len(places) > 1:
             for rel, _ in places:
                 results[rel]["clone_windows"] += 1
-    return results, window_counts, excluded, locations
+    data_limits = {rel: limit_shape(facts[rel]) for rel in sorted(excluded)}
+    return results, window_counts, excluded, locations, details, data_limits
 
 
 def clone_partners(locations, rel, count=3):
@@ -413,11 +692,13 @@ def write_baseline(path, baseline):
 
 
 def read_baseline(path):
+    """({file: {metric: value}}, metrics this tool measures that the baseline has no column for)."""
     if not path.is_file():
-        return None
+        return None, []
     data = json.loads(path.read_text(encoding="utf-8"))
     names = data["metrics"]
-    return {rel: dict(zip(names, values)) for rel, values in data["files"].items()}
+    return ({rel: dict(zip(names, values)) for rel, values in data["files"].items()},
+            [metric for metric in METRICS if metric not in names])
 
 
 def allowlist_state(allowlist, known_files):
@@ -477,14 +758,23 @@ def size_limit(profile, metric):
     return profile["limits"].get(metric) if metric in SIZE_METRICS else None
 
 
-def evaluate(results, window_counts, baseline, allowlist, profile, owned, locations=None):
-    """(failures, improved files, new files, stale entries) of one check."""
+def evaluate(results, window_counts, baseline, allowlist, profile, owned, locations=None, where=None,
+             data_limits=None):
+    """(failures, improved files, new files, stale entries) of one check. `where(rel, metric)` names the
+    lines of a located defect metric; it is only called for a failure. A data file has no baseline: it
+    stays within the profile limits of the compiler-limit metrics."""
     allowed = {(e["file"], e["metric"]): e["max"] for e in allowlist.get("allowed", [])
                if isinstance(e.get("max"), int)}
     failures, improved, new, used = [], [], [], set()
 
     def partners(rel):
         return "; shares windows with " + clone_partners(locations, rel) if locations else ""
+
+    def lines_of(rel, metric):
+        return where(rel, metric) if where is not None and metric in LOCATED else ""
+
+    def remedy(metric):
+        return ". Remedy: " + REMEDIES[metric] if metric in REMEDIES else ""
 
     def covered(rel, metric, value):
         ceiling = allowed.get((rel, metric))
@@ -502,15 +792,18 @@ def evaluate(results, window_counts, baseline, allowlist, profile, owned, locati
             if enforce:
                 for metric, limit in profile["limits"].items():
                     if values[metric] > limit and not covered(rel, metric, values[metric]):
-                        failures.append("%s: new file has %s %d (limit %d)" % (rel, metric, values[metric], limit))
+                        failures.append("%s: new file has %s %d (limit %d)%s%s"
+                                        % (rel, metric, values[metric], limit, lines_of(rel, metric), remedy(metric)))
                 share = values["clone_windows"] - int(window_counts[rel] * CLONE_SHARE_NEW_FILE)
                 if share > 0 and not covered(rel, "clone_windows", values["clone_windows"]):
-                    failures.append("%s: new file has %d clone windows of %d (limit %d percent)%s"
+                    failures.append("%s: new file has %d clone windows of %d (limit %d percent)%s%s"
                                     % (rel, values["clone_windows"], window_counts[rel],
-                                       int(CLONE_SHARE_NEW_FILE * 100), partners(rel)))
+                                       int(CLONE_SHARE_NEW_FILE * 100), partners(rel), remedy("clone_windows")))
             continue
         better = False
         for metric in METRICS:
+            if metric not in before:
+                continue
             limit = size_limit(profile, metric)
             if metric in SIZE_METRICS:
                 # A size metric may grow up to its limit; it fails above max(baseline, limit). One
@@ -520,20 +813,26 @@ def evaluate(results, window_counts, baseline, allowlist, profile, owned, locati
                     continue
                 if values[metric] > max(before[metric], limit):
                     if not covered(rel, metric, values[metric]):
-                        failures.append("%s: %s %d is worse than the baseline %d (+%d) and above the limit %d"
+                        failures.append("%s: %s %d is worse than the baseline %d (+%d) and above the limit %d%s"
                                         % (rel, metric, values[metric], before[metric],
-                                           values[metric] - before[metric], limit))
+                                           values[metric] - before[metric], limit, remedy(metric)))
                 elif values[metric] < before[metric] and before[metric] > limit:
                     better = True
             elif values[metric] > before[metric]:
                 if not covered(rel, metric, values[metric]):
-                    failures.append("%s: %s %d is worse than the baseline %d (+%d)%s"
+                    failures.append("%s: %s %d is worse than the baseline %d (+%d)%s%s%s"
                                     % (rel, metric, values[metric], before[metric], values[metric] - before[metric],
-                                       partners(rel) if metric == "clone_windows" else ""))
+                                       partners(rel) if metric == "clone_windows" else "", lines_of(rel, metric),
+                                       remedy(metric)))
             elif values[metric] < before[metric]:
                 better = True
         if better:
             improved.append(rel)
+    for rel in sorted(data_limits or {}):
+        for metric in LIMIT_METRICS:
+            limit, value = profile["limits"].get(metric), data_limits[rel][metric]
+            if limit is not None and value > limit and not covered(rel, metric, value):
+                failures.append("%s: data file has %s %d (limit %d)%s" % (rel, metric, value, limit, remedy(metric)))
     stale = sorted(set(allowed) - used)
     return failures, improved, new, stale
 
@@ -548,6 +847,16 @@ def worst(results, metric, count):
     return [(rel, values[metric]) for rel, values in ranked[:count] if values[metric] > 0]
 
 
+def area_of(rel):
+    """The part of the product a file belongs to, for the per-area summary."""
+    parts = rel.split("/")
+    if parts[0] == "MidnightSimpleUnitFrames_Options":
+        return "Menu2" if parts[1:3] == ["Shell", "Menu2"] else "Options"
+    if parts[0] == "MidnightSimpleUnitFrames":
+        return parts[1] if len(parts) > 2 else "(addon root)"
+    return parts[0]
+
+
 def ownership_tags(root, profile, results):
     """Classic only: O owned, P override of a Retail file, M exact Retail mirror."""
     owned = owned_paths(root, profile)
@@ -560,20 +869,64 @@ def ownership_tags(root, profile, results):
     return {rel: "O" if rel in owned else "P" if rel in overrides else "M" for rel in results}
 
 
-def print_report(results, excluded, top, profile, tags):
+def print_headroom(results, data_limits=None):
+    print("headroom to the hard Lua 5.1 limits (hard limit minus the value; the profile limit keeps a margin;"
+          " %d data files included):" % len(data_limits or {}))
+    measured = {**results, **(data_limits or {})}
+    for metric, hard in HARD_LIMITS.items():
+        ranked = sorted(measured.items(), key=lambda item: (-item[1][metric], item[0]))[:3]
+        text = ", ".join("%d %s" % (hard - values[metric], rel.rsplit("/", 1)[-1]) for rel, values in ranked)
+        print("  %-13s hard %-3d tightest: %s" % (metric, hard, text))
+
+
+def print_areas(results, details, function_limit):
+    print("per area (files, longest function, functions above the limit, factory wrappers):")
+    areas = {}
+    for rel, values in results.items():
+        area = areas.setdefault(area_of(rel), {"files": 0, "long": 0, "wrappers": 0, "max": (0, "")})
+        area["files"] += 1
+        area["long"] += values["long_functions"]
+        area["wrappers"] += len(details[rel]["wrappers"])
+        area["max"] = max(area["max"], (values["max_function"], rel))
+    ordered = sorted(areas.items(), key=lambda item: (-item[1]["max"][0], item[0]))
+    for name, area in ordered:
+        print("  %-14s %4d files  longest %4d  >%d: %3d  wrappers %2d  %s"
+              % (name, area["files"], area["max"][0], function_limit, area["long"], area["wrappers"],
+                 area["max"][1].rsplit("/", 1)[-1] if area["max"][0] else ""))
+
+
+def print_report(results, excluded, top, profile, tags, details=None, data_limits=None):
     print("files measured: %d (excluded as data or generated: %d)" % (len(results), len(excluded)))
     summed = totals(results)
-    print("totals: " + ", ".join("%s=%d" % (metric, summed[metric]) for metric in METRICS if metric != "max_function"
-                                 and metric != "max_upvalues" and metric != "main_locals"))
+    print("totals: " + ", ".join("%s=%d" % (metric, summed[metric]) for metric in METRICS
+                                 if metric not in SIZE_METRICS or metric == "lines"))
     mark = (lambda rel: " [%s]" % tags[rel] if rel in tags else "")
     report_only = [metric for metric in SIZE_METRICS if metric not in profile["limits"]]
     print("report-only size metrics (measured and baselined, never a failure): %s" % (", ".join(report_only) or "none"))
+    if details is not None:
+        wrappers = [(rel, wrapper) for rel in sorted(details) for wrapper in details[rel]["wrappers"]]
+        print("factory wrappers measured as modules, not as functions: %d (their inner functions count)" % len(wrappers))
+        for rel, (start, end, span, wrapper_locals, slots, own, inner) in sorted(
+                wrappers, key=lambda item: -item[1][2])[:top]:
+            print("  %5d lines, %3d locals, %3d slots  %s:%d  (own body %d lines, longest function inside %d)"
+                  % (span, wrapper_locals, slots, rel, start, own, inner))
+        heavy = [(rel, wrapper[5]) for rel, wrapper in wrappers if wrapper[5] > profile["function_limit"]]
+        print("wrappers whose own body is above the function limit: %d%s"
+              % (len(heavy), "".join("\n  %5d  %s" % (own, rel) for rel, own in sorted(heavy, key=lambda i: -i[1]))))
     print("files above the limits%s:" % (" (O owned, P override, M Retail mirror)" if tags else ""))
     for metric, limit in profile["limits"].items():
         over = sorted(rel for rel, values in results.items() if values[metric] > limit)
         owned_over = [rel for rel in over if tags.get(rel) == "O"] if tags else over
         print("  %-16s > %-4d %3d files%s" % (metric, limit, len(over),
                                               " (%d owned)" % len(owned_over) if tags else ""))
+    print_headroom(results, data_limits)
+    if details is not None:
+        longest = sorted(((span, rel, start, end) for rel in details for span, start, end in details[rel]["longest"]),
+                         reverse=True)[:top]
+        print("longest functions:")
+        for span, rel, start, end in longest:
+            print("  %6d  %s:%d-%d%s" % (span, rel, start, end, mark(rel)))
+        print_areas(results, details, profile["function_limit"])
     for metric in METRICS:
         print("worst %s:" % metric)
         for rel, value in worst(results, metric, top):
@@ -609,14 +962,16 @@ def main(argv=None):
     baseline_path = Path(args.baseline) if args.baseline else root / "tools" / BASELINE_NAME
     allowlist_path = Path(args.allowlist) if args.allowlist else root / "tools" / ALLOWLIST_NAME
     allowlist = load_json(allowlist_path, {})
-    results, window_counts, excluded, locations = measure(root, profile_name, allowlist, find_luac(args.luac))
+    results, window_counts, excluded, locations, details, data_limits = measure(
+        root, profile_name, allowlist, find_luac(args.luac))
 
     if args.report:
-        print_report(results, excluded, args.top, profile, ownership_tags(root, profile, results))
+        print_report(results, excluded, args.top, profile, ownership_tags(root, profile, results), details,
+                     data_limits)
         return 0
 
-    baseline = read_baseline(baseline_path)
-    valid, malformed, orphans = allowlist_state(allowlist, set(results))
+    baseline, missing_columns = read_baseline(baseline_path)
+    valid, malformed, orphans = allowlist_state(allowlist, set(results) | set(data_limits))
     owned = owned_paths(root, profile)
     entries = len(allowlist.get("allowed", []))
     if baseline is None:
@@ -624,9 +979,13 @@ def main(argv=None):
             print("FAIL no baseline at %s; create it with --update" % baseline_path)
             return 1
         baseline = {}
+    if missing_columns and not args.update:
+        print("FAIL the baseline has no column for %s; this tool measures more than the baseline records. "
+              "Rebaseline deliberately with --update" % ", ".join(missing_columns))
+        return 1
 
     failures, improved, new, stale = evaluate(results, window_counts, baseline, {"allowed": valid}, profile, owned,
-                                              locations)
+                                              locations, make_locator(root), data_limits)
     failures = failures + vanished_files(root, baseline, results, excluded)
     if args.update:
         if malformed:
