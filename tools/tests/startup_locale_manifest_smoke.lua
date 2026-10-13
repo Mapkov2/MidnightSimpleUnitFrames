@@ -91,7 +91,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- W1-2 uses 11,946 LF bytes of this shared allowance on Mainline/Forever
         -- and 1,988 on Classic; measured totals are Mainline/koKR 16,914,674 and
         -- TBC/enUS 14,787,444. No additional package budget increase is needed.
-        assert(bytes < (suffix == "Mainline" and 16925000 or 14805000),
+        -- 2026-10-13 (7.0 wave 2 duty met): kernel/media/UF-library dead code removed and the
+        -- compact changelog moved to the Options addon (largest selections Mainline koKR
+        -- 16,761,021, TBC 14,636,117), so the wave-1 allowance is withdrawn and both limits
+        -- return to the 6.50 values 16,905,000 / 14,785,000; no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16905000 or 14785000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
