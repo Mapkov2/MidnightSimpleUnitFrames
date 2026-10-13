@@ -1200,7 +1200,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         return conf
     end
     local function ApplyStatusTextColors()
-        M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false })
+        M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = StatusTextUnit() })
     end
     LabelAt(statusText, "Color for a single text indicator on one frame. Unset indicators follow that frame's font color.",
         12, -8, statusTextW - 28, "GameFontHighlightSmall", T.colors.muted)
@@ -1538,7 +1538,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local gradientStrength = SliderAt(ctx, appearance, "Health strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
@@ -1555,6 +1555,10 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         ApplyUnitframeColorWithReload()
     end, "appearance.gradient.reset")
     local gradientEditControls = { gradientStrength, gradientStopsLabel, gradientLow, gradientMid, gradientHigh, gradientReset }
+    if M.AddTooltip then
+        M.AddTooltip(gradientStrength, "Health strength",
+            "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", { hook = true, labelHit = true })
+    end
     refreshBarModeControls = function()
         local mode = CurrentBarMode()
         local gradientMode = mode == "gradient"

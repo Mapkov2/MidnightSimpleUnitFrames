@@ -110,6 +110,9 @@ local BARS_SCOPE_KEYS = KSW [[
     frameBarShape slantedBarDirection aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
 ]]
+-- The scope-table keys a Bars scope owns. Copy To reads this set so the values the
+-- Custom settings flag (hlOverride) gates travel with the flag.
+M.BarsScopeKeys = BARS_SCOPE_KEYS
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture

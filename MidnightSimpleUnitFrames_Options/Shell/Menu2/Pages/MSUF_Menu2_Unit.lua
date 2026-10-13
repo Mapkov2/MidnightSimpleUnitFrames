@@ -345,7 +345,7 @@ AppendCombinedFields(COPY_TEXT_FIELDS, "direct", WL [[Name HealthLeft HealthCent
     WL [[Point RelativePoint OffsetX OffsetY Color]])
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil,
     "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "stateIconsTestMode statusIconsTestMode stateIconsAlpha statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
 --- are the deliberate exception: they are copied with Frame settings but stay owned by
@@ -766,7 +766,7 @@ end
 local function ConfirmCopyToAll(callback)
     if type(callback) ~= "function" then return end
     M.ShowPrompt("MSUF2_COPY_TO_ALL_CONFIRM", {
-        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."),
+        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target/Arena/Pet Target."),
         onAccept = callback,
     })
 end

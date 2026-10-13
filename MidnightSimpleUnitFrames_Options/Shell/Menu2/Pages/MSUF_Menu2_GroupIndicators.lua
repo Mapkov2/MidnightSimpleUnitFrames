@@ -1241,7 +1241,6 @@ local function InsertSpellAt(siCfg, specKey, trackable, auraName, targetSlot)
     targetSlot = max(1, min(#order, tonumber(targetSlot) or from))
     if from == targetSlot then return end
     table.remove(order, from)
-    if targetSlot > from then targetSlot = targetSlot - 1 end
     table.insert(order, targetSlot, auraName)
 end
 local function SetSpellTileBorder(tile, selected, color, scale, alpha)

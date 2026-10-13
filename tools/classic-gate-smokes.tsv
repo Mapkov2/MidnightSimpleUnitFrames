@@ -623,3 +623,7 @@ clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {fla
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} snapshot	Edit Mode input and session integrity snapshot failed
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} danders	Edit Mode input and session integrity danders failed
 clients+Forever	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} {flavor}	Menu preview drifted from the live element it stands for: {flavor}
+clients+Forever	lua	tools/tests/menu_group_copy_to_gated_smoke.lua	{root} {flavor}	Group Copy To left the Bars values behind the Custom settings flag or switched a frame provider: {flavor}
+clients+Forever	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} {flavor}	Colors page status text repaint, picker opacity, strength label or preview apply drifted: {flavor}
+clients+Forever	lua	tools/tests/menu_pages_review_bugs_smoke.lua	{root} {flavor}	A menu page review fix drifted (shake default, ToT color, gated toggles, copy lists, apply modes): {flavor}
+clients+Forever	lua	tools/tests/text_decimals_legacy_migration_smoke.lua	{root} {flavor}	Legacy hpTextDecimals is not folded into healthTextDecimals: {flavor}

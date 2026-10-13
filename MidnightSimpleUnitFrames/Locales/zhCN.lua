@@ -2630,6 +2630,7 @@ L["Color HP bar (Class Color mode only)"] = "为生命条着色（仅职业颜�
 L["Copy from %s"] = "从 %s 复制"
 L["Copy Settings"] = "复制设置"
 L["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."] = "将这些设置复制到所有单位框体？\n\n这会覆盖玩家/目标/焦点/首领/宠物/目标的目标/焦点目标上的现有设置。"
+L["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target/Arena/Pet Target."] = "将这些设置复制到所有单位框体？\n\n这会覆盖玩家/目标/焦点/首领/宠物/目标的目标/焦点目标/竞技场/宠物目标上的现有设置。"
 L["CTRL: held - click to anchor!"] = "CTRL：已按住 - 点击以锚定！"
 L["CTRL: not held"] = "CTRL：未按住"
 L["Current custom anchor: %s"] = "当前自定义锚点：%s"

@@ -524,6 +524,17 @@
    "evidence": "7.0 package W2-UF: zero readers by name in both MSUF addons, tools, .github, the Suite, MapkoSkin, MidnightCooldownManager and tools/public-globals.tsv (searched 2026-10-13); the Rounded unit-highlight fields behind the removed hooks were never written since 6.0.",
    "reason": "Unreferenced global exports of the Rounded effect, the preview animation and the alpha element; the in-addon behaviour they fronted has no caller, so no feature or setting changes.",
    "date": "2026-10-13"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: opt_colors | Appearance > Gradient | Gradient strength | slider | general.gradientStrength | id/opt_colors/menu2.opt.colors.advanced.appearance.gradient.strength",
+    "main: opt_colors | Appearance > Gradient | Gradient strength | slider | general.gradientStrength | id/opt_colors/menu2.opt.colors.advanced.appearance.gradient.strength"
+   ],
+   "basis": "moved",
+   "evidence": "MSUF 7.0 package W1-6: Colors > Appearance > Gradient now reads 'Health strength', the label Bars > Textures & Gradient already gives the same setting (opt_colors row 'Health strength').",
+   "reason": "The slider writes general.gradientStrength, the Bars shade-overlay strength; the health-gradient colouring has no strength, so the old name promised something else. Same control id and setting key, relabelled.",
+   "date": "2026-10-13"
   }
  ]
 }

@@ -574,12 +574,13 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         end
     end
     local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
-    local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason, afterSet)
+    -- refresh: a master switch that gates other controls re-runs the page refreshers.
+    local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason, afterSet, refresh)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
             function() return ReadScopeBool(key, defaultValue) end,
             function(v)
                 WriteScopeBool(key, v)
-                ApplyUnit(ctx, unit, reason)
+                ApplyUnit(ctx, unit, reason, refresh == true)
                 -- Switches are discrete writes. Compile/apply the new value
                 -- before repainting so Menu and Edit Mode observe one state.
                 -- ApplyService itself defers this flush during combat.
@@ -658,7 +659,7 @@ local function BuildUnitStyleFrameBasics(StyleState)
             "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
         if stealableLane then
             local stealableEnabled = BindStyleSwitch(frameBasics, "Mark Stealable Buffs", basicsRightX, -140,
-                basicsCol, "showStealable", false, "AURAS3_STEALABLE_MARKER")
+                basicsCol, "showStealable", false, "AURAS3_STEALABLE_MARKER", nil, true)
             stealableStyleControl = BindStyleDropdown(frameBasics, "Stealable Marker Style", basicsRightX, -174,
                 M.AURA_STEALABLE_STYLE_VALUES, basicsCol,
                 function()

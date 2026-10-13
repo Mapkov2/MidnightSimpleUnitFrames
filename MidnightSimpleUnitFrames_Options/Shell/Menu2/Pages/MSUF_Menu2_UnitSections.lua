@@ -214,6 +214,8 @@ local function NormalizeToTInlineColorMode(value)
     if TOT_INLINE_COLOR_VALUES[value] then return value end
     return TOT_INLINE_COLOR_AUTO
 end
+-- The stored choice, also while NPC colours are off (the option is then disabled, so NPC cannot be newly
+-- picked): the runtime, the colour picker and the preview keep using it, and the page never rewrites it.
 local function ToTInlineColorDropdownValue(conf)
     return NormalizeToTInlineColorMode(conf and conf.totInlineColorMode)
 end
@@ -1366,11 +1368,6 @@ local function BuildInlineText(ctx, builder, unit)
     RefreshInlineControlState = function()
         local conf = GetConf("targettarget")
         local enabled = GetConf("targettarget").showToTInTargetName == true
-        local npcAvailable = ToTInlineNPCColorAvailable()
-        if conf.totInlineColorMode == TOT_INLINE_COLOR_NPC and not npcAvailable then
-            conf.totInlineColorMode = TOT_INLINE_COLOR_AUTO
-            ApplyToTInline("MSUF2_TOT_INLINE_COLOR_AUTO", true, true)
-        end
         local isCustom = ToTInlineSeparatorDropdownValue(conf) == TOT_INLINE_CUSTOM_SEPARATOR
         SetControlsEnabled(totInlineBaseControls, enabled)
         SetControlEnabled(customSep, enabled and isCustom)

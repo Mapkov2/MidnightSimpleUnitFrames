@@ -63,7 +63,7 @@ local function BuildBehaviorSection(PageState, secBuilder)
         if syncLastTick then syncLastTick() end
     end
     local behaviorControls = BuildCastControlSpecs(behavior, {
-        { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
+        { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", true, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
         { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH",
             function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
         { "slider", "Interrupt display duration (sec)", leftX, -126, 320, 0, 5, 0.1, "castbarInterruptFeedbackDuration", 0.5, "MSUF2_CASTBAR_INTERRUPT_DURATION", nil, {

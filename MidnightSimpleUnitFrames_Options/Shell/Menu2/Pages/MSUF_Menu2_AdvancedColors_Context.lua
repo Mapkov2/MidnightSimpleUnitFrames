@@ -115,14 +115,22 @@ local function ContextDBRowsState(rowKeys, keys, apply)
         end,
     }
 end
+-- The picker's colour wheel sends no opacity (a is nil). The stored opacity stays
+-- then; the default only fills in a colour that never had one.
+local function StoredColorAlpha(getName, prefix, dr, dg, db, default)
+    local _, _, _, apiAlpha = ApiRGB(getName, dr, dg, db)
+    local _, _, _, storedAlpha = GeneralRGB(prefix, dr, dg, db)
+    return tonumber(apiAlpha) or storedAlpha or default
+end
 local function ContextStoredApi(id, label, getName, setName, prefix, dr, dg, db, da, apply, applyAfterSet)
     local keys = { prefix .. "R", prefix .. "G", prefix .. "B" }
     if da ~= nil then keys[#keys + 1] = prefix .. "A" end
     local target = ContextTarget(id, label,
         function() return ApiRGB(getName, dr, dg, db) end,
         function(r, g, b, a)
-            local ok = ApiSetRGB(setName, r, g, b, type(a) == "number" and a or da)
-            if not ok then SetGeneralRGB(prefix, r, g, b, type(a) == "number" and a or da) end
+            local alpha = type(a) == "number" and a or StoredColorAlpha(getName, prefix, dr, dg, db, da)
+            local ok = ApiSetRGB(setName, r, g, b, alpha)
+            if not ok then SetGeneralRGB(prefix, r, g, b, alpha) end
             if not ok or applyAfterSet == true then
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
@@ -198,7 +206,7 @@ local function ContextApiOrGeneral(id, label, getName, setName, prefix, dr, dg, 
             return GeneralRGB(prefix, dr, dg, db)
         end,
         function(r, g, b, a)
-            local nextAlpha = type(a) == "number" and a or alpha
+            local nextAlpha = type(a) == "number" and a or StoredColorAlpha(getName, prefix, dr, dg, db, alpha)
             local ok = nextAlpha ~= nil and ApiCall(setName, r, g, b, nextAlpha) or ApiCall(setName, r, g, b)
             if not ok then
                 SetGeneralRGB(prefix, r, g, b, nextAlpha)
@@ -866,11 +874,11 @@ local function RegisterCastContextFactories()
             end,
             function(r, g, b)
                 conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = r, g, b
-                M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false })
+                M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit })
             end)
         local state = ContextStoredState(function() return conf end,
             { prefix .. "ColorR", prefix .. "ColorG", prefix .. "ColorB" },
-            function() M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false }) end)
+            function() M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit }) end)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)

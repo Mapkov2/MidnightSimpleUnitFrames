@@ -445,10 +445,12 @@ end
 --- raidManagerMode joins them for a different reason: it is already identical in all
 --- three scopes by construction (see SetSyncedValue), so copying it would only ever be
 --- a no-op that pretends the value is per scope.
+--- enabled and blizzardFallbackMode switch a header on or off and need the reload
+--- prompt SetFrameProvider shows, so they are set per scope on the page, never copied.
 local GF_COPY_EXCLUDE = M.KeySetFromWords [[
     offsetX offsetY point positionMode positionMigrationCount _hlMigrated
     anchorMode anchorPoint anchorToFrame customAnchorFrame attachGap attachOffset
-    raidManagerMode
+    raidManagerMode enabled blizzardFallbackMode
 ]]
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
@@ -458,7 +460,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
+    { key = "general", label = "Basics", keys = WL [[showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
@@ -577,6 +579,40 @@ local function CopyGroupSpellIndicatorStyle(srcKind, dstKind)
     if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(dstConf) end
     return true
 end
+--- The Highlight & Aggro category copies the scope's Custom settings flag (hlOverride,
+--- prefix hl). The Bars values that flag gates (heal prediction, absorb, outline and
+--- highlight thickness, gradients) have to arrive with it: the destination otherwise
+--- reads its own seeded values under the new flag. Texture, fill and shape keys belong
+--- to the Health & Bars and Basics categories. A source without the flag changes none
+--- of the destination's stored values; they are inert under the flag it copies.
+local GF_BARS_GATED_COPY_SKIP = M.KeySetFromWords [[
+    hpPowerTextOverride barTextureOverride barTexture barBackgroundTexture barBgTexture
+    frameBarShape slantedBarDirection powerSmoothFill powerChunkedFill
+]]
+-- Read through the same hlOverride gate (UF.ConfigScopedValue) but not part of the Bars scope reset set.
+local GF_BARS_GATED_COPY_EXTRA = WL [[absorbBarTexture healAbsorbBarTexture]]
+local GF_GRADIENT_OWNERSHIP_KEYS = WL [[gradientOverride gradientOverrideVersion gradientOverrideKeys]]
+local function CopyGroupBarsGatedValues(srcConf, dstConf)
+    if srcConf.hlOverride ~= true then return end
+    for key in pairs(M.BarsScopeKeys) do
+        if not GF_BARS_GATED_COPY_SKIP[key] then dstConf[key] = DeepCopy(srcConf[key]) end
+    end
+    for i = 1, #GF_BARS_GATED_COPY_EXTRA do
+        local key = GF_BARS_GATED_COPY_EXTRA[i]
+        dstConf[key] = DeepCopy(srcConf[key])
+    end
+    for i = 1, #GF_GRADIENT_OWNERSHIP_KEYS do
+        local key = GF_GRADIENT_OWNERSHIP_KEYS[i]
+        dstConf[key] = DeepCopy(srcConf[key])
+    end
+    -- The gradient marks name every value the scope's gradient owns (power directions, gradient colours, ...):
+    -- exactly those travel, whatever else the source stores.
+    local owned = srcConf.gradientOverrideKeys
+    if type(owned) ~= "table" then return end
+    for key in pairs(owned) do
+        if type(key) == "string" and not GF_COPY_EXCLUDE[key] then dstConf[key] = DeepCopy(srcConf[key]) end
+    end
+end
 local function CopyGroupSettings(srcKind, dstKind, scopes)
     local srcConf = Conf(srcKind)
     local dstConf = Conf(dstKind)
@@ -632,6 +668,7 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
         dstConf.frameBarShape = srcConf.frameBarShape
         dstConf.slantedBarDirection = srcConf.slantedBarDirection
     end
+    if scopes.highlight then CopyGroupBarsGatedValues(srcConf, dstConf) end
     if scopes.health then
         -- Texture ownership as GF.ResolveBarTexture reads it: an explicit flag travels as is,
         -- a texture the source shows through Custom settings becomes explicit, and no flag

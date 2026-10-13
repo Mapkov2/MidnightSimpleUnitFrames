@@ -553,6 +553,11 @@ local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile) then return true end
     if MSUF_ProfileIO_HasFormerResourceExtras(profile.bars) then return true end
+    -- A stored legacy hpTextDecimals still reaches the runtime; stamped profiles fold it in too.
+    for i = 1, #MSUF_PROFILEIO_TEXT_SCOPE_KEYS do
+        local scope = profile[MSUF_PROFILEIO_TEXT_SCOPE_KEYS[i]]
+        if type(scope) == "table" and scope.hpTextDecimals ~= nil then return true end
+    end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
         local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
         if type(scope) == "table"

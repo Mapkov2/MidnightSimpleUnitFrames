@@ -363,6 +363,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         iconZoom = true,
         showTooltip = true,
         alpha = true,
+        stylePadding = true,
         debuffTypeBorderMode = true,
         showStacks = true,
         stackSize = true,

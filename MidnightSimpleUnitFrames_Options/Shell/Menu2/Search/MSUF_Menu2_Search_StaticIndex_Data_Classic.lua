@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "33CAFAF7A992F2ED3D44B03141EC9F0DF28D13F5EE97FD32D18E5CB12C3810E8"
+Search.StaticIndexSourceSha256 = "48051E171EE3F181634C1F54D6EE031A9BB7C0C65AEAAE0F28A230701B26BC5D"
 Search.StaticIndexRecordCount = 3851
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
@@ -919,7 +919,6 @@ opt_colors	Friendly NPC class colors on HP bars (Class Color mode only)	toggle	g
 opt_colors	Full	color			Full > Resource	full	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eclass%2Epower%2Efull%2Eresource%2Ecolor	colors_class_power			full full resource opt colors advanced class power full resource color opt colors color
 opt_colors	Full resource color	toggle			Full > Resource	full resource color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eclass%2Epower%2Efull%2Eresource%2Eenabled	colors_class_power			full resource color full resource opt colors advanced class power full resource enabled opt colors toggle
 opt_colors	Global font color	color	general.customFontColor		Global > Font	global font color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eapi%2Eset%2Eglobal%2Efont%2Ecolor	colors_font			global font color global font opt colors advanced api set global font color opt colors color general customfontcolor
-opt_colors	Gradient strength	slider	general.gradientStrength		Appearance > Gradient	gradient strength	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eappearance%2Egradient%2Estrength	colors_appearance			gradient strength appearance gradient opt colors advanced appearance gradient strength opt colors slider general gradientstrength
 opt_colors	Gray out mobs tagged by others	toggle	general.tapDeniedGray		Tap > Denied	gray out mobs tagged by others	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Etap%2Edenied%2Egray	colors_unit			gray out mobs tagged by others tap denied opt colors advanced npc tap denied gray opt colors toggle general tapdeniedgray
 opt_colors	Group Border Color	color			Color > Group	group border color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egroup%2Eframe%2Ecolor%2Egroup%2Eborder	colors_group_frames_highlights			group border color color group opt colors advanced group frame color group border opt colors color
 opt_colors	Group border opacity	slider			Group > Border	group border opacity	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egroup%2Eframe%2Ealpha%2Egroup%2Eborder%2Ea	colors_group_frames_highlights			group border opacity group border opt colors advanced group frame alpha group border a opt colors slider
@@ -929,6 +928,7 @@ opt_colors	Health bar color	color			Frame > Health	health bar color	idopt_color
 opt_colors	Health color fallback	dropdown			Health > Fallback	health color fallback	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egroup%2Eframe%2Ehealth%2Efallback%2Emode	colors_group_frames_background			health color fallback health fallback opt colors advanced group frame health fallback mode opt colors dropdown
 opt_colors	Health gradient color	color			Gradient > Health	health gradient color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Ebar%2Egradient%2Ehealth%2Ecolor	colors_bar_gradients			health gradient color gradient health opt colors advanced bar gradient health color opt colors color
 opt_colors	Health loss glow	color			Health > Loss	health loss glow	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Ebar%2Ehealth%2Eloss%2Ecolor	colors_bar_colors			health loss glow health loss opt colors advanced bar health loss color opt colors color
+opt_colors	Health strength	slider	general.gradientStrength		Appearance > Gradient	health strength	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eappearance%2Egradient%2Estrength	colors_appearance			health strength appearance gradient opt colors advanced appearance gradient strength opt colors slider general gradientstrength
 opt_colors	High	color	general.healthGradientHigh		Health > Gradient	high	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egeneral%2Ehealth%2Egradient%2Ehigh	colors_appearance			high health gradient opt colors advanced general health gradient high opt colors color general healthgradienthigh
 opt_colors	High threat	color			Threat > Curve	high threat	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Ehigh	colors_status_text			high threat threat curve opt colors advanced threat curve high opt colors color
 opt_colors	Hunter	color	classColors.HUNTER		Bar > Token	hunter	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Eclass%2Ebar%2Etoken%2Ehunter	colors_classes			hunter bar token opt colors advanced class bar token hunter opt colors color classcolors hunter

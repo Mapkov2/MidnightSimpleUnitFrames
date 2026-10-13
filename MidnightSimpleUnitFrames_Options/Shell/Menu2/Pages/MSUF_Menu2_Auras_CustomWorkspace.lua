@@ -764,7 +764,7 @@ end
         local controls = {}
         local master = BindSwitch(ctx, section, "Enable filters", 24, -40, colW,
             function() return item.filters.enabled ~= false end,
-            function(value) item.filters.enabled = value == true; Apply("AURAS3_CUSTOM_FILTER_ENABLE") end,
+            function(value) item.filters.enabled = value == true; Apply("AURAS3_CUSTOM_FILTER_ENABLE", true) end,
             AuraControlMeta(ctx, "custom-container.filters.enabled"))
         local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -40, colW,
             function() return item.filters.hidePermanent == true end,
@@ -1035,7 +1035,7 @@ local function BuildCustomAppearanceTool(C)
         local stack = b:CollapsibleSection(CustomStyleSectionId(index, "stack"), "Stack Count", 130, false)
         local stackCol, stackX, StackNumber = StyleGrid(stack)
         BindSwitch(ctx, stack, "Stack count", stackX(1), -42, stackCol, function() return item.placed.showStacks ~= false end,
-            function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end,
+            function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS", true) end,
             AuraControlMeta(ctx, "custom-container.appearance.stack-count"))
         GateControls(function() return item.placed.showStacks ~= false end, {
             StackNumber("Stack size", 1, -76, 6, 40, "stackSize", 14),
@@ -1071,10 +1071,10 @@ local function BuildCustomAppearanceTool(C)
         end
         local cdCol, cdX, CdNumber = StyleGrid(cooldown)
         BindSwitch(ctx, cooldown, "Cooldown text", cdX(1), -42, cdCol, function() return item.placed.showCooldown ~= false end,
-            function(value) item.placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN") end,
+            function(value) item.placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN", true) end,
             AuraControlMeta(ctx, "custom-container.appearance.cooldown-text"))
         BindSwitch(ctx, cooldown, "Cooldown swipe", cdX(2), -42, cdCol, function() return item.placed.showCooldownSwipe ~= false end,
-            function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end,
+            function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE", true) end,
             AuraControlMeta(ctx, "custom-container.appearance.cooldown-swipe"))
         local customDecimal = CdNumber("Decimals below sec", 4, -76, 0, 30, "cooldownDecimalSeconds", 3)
         AddTooltip(customDecimal, "Cooldown text format",

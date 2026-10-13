@@ -567,6 +567,13 @@ local function NormalizeTextScope(scope, groupScope, spec, inferFontOverride)
     changed = CopyIfMissing(scope, "textLeft", "hpTextLeft") or changed
     changed = CopyIfMissing(scope, "textCenter", "hpTextCenter") or changed
     changed = CopyIfMissing(scope, "textRight", "hpTextRight") or changed
+    -- healthTextDecimals replaced hpTextDecimals, yet the unit and group runtimes still OR
+    -- both. Fold a stored legacy value in once, so the toggle can turn decimals off again.
+    if scope.hpTextDecimals ~= nil then
+        if scope.hpTextDecimals == true then scope.healthTextDecimals = true end
+        scope.hpTextDecimals = nil
+        changed = true
+    end
     if groupScope then
         changed = CopyIfMissing(scope, "textDelimiter", "hpTextSeparator") or changed
         changed = CopyIfMissing(scope, "powerTextDelimiter", "powerTextSeparator") or changed
