@@ -519,6 +519,45 @@ a row names something nothing reads or writes any more, exactly like
 until someone reviews it; `Kind` `defect` and `vestigial` mark reads that are
 known bugs or leftovers, each with its reason in the row.
 
+### Public globals ledger
+
+`tools/public-globals.tsv` records which exported global names and which fields of exported tables something
+outside the core and Options addons reads, and who. It is evidence from a fixed set of local sources, not a
+census: absence from the ledger means none of the scanned sources reads the name, not that nobody does.
+
+Scanned: the MSUF Suite, MapkoSkin and MidnightCooldownManager repositories, and every other addon installed
+under the author's WoW client folders (the first client folder holding a file wins; MSUF's own folders and
+installed copies of the repositories are skipped). Counted as a read: a bare global read the compiler sees,
+`_G.NAME`, `_G["NAME"]`, `rawget(_G, "NAME")`, `getglobal("NAME")` and a quoted MSUF-looking name. A field
+read off a local that holds an exported table (`local host = _G.MSUF_NS ... host.MSUF_Auras3`,
+`local menu = assert(_G.MSUF2)`, a small accessor function) is a `nsfield` row such as `MSUF_NS.L` or
+`MSUF2.Undo`, kept only when a source line writes the field or a booted client holds it. A quoted prefix that
+can build exported names (`"MSUF_boss" .. i`) is a `dynamic` row. Besides readers, the ledger lists what the
+client itself looks up (`SLASH_*`, `BINDING_*`, Bindings.xml actions, XML names and the `function=` and
+`mixin=` names of XML attributes, `UISpecialFrames`, AddonCompartment functions), the SavedVariables
+`MSUF_DB` and `MSUF_GlobalDB`, and the names an `Integrations/` bridge publishes for other addons (those have
+no reader found and are kept as a designed surface). Columns are `name`, `kind`, `exporter`, `consumers`,
+`readers`, `addons`, `evidence`, `clients` and `note`.
+
+Not covered: names built from computed strings (`_G[prefix .. x]` with a prefix the code does not spell),
+addons that are not installed on the author's machine, user macros and key bindings, reads of fields through
+a local the scanner cannot resolve to a table, registry tables read with a computed key
+(`MSUF_UnitFrames[unit]` is guarded by the table row and the literal-key rows only), fields of frames
+(`MSUF_player.Background`), and the Options addon, which ships with the core. A name that only a run-time
+export site can publish is found through the sites `--write` lists, not through a booted client alone.
+
+`tools/public_globals_ledger.py` checks the ledger by default and needs nothing outside the repository: the
+file is well formed, every evidence class is backed by a consumer entry, every ledgered name has an exporter
+in the source and every ledgered field a line that writes it. Only code vouches for a name; one left in a
+comment or a string does not. A failure names the readers that would break. `--write` rebuilds the ledger
+from the local external sources, `--refresh-exporters` re-reads exporters and clients after a refactor, and
+`--inventory` prints every name the source text exports and the run-time export sites.
+`tools/tests/public_globals_smoke.lua` boots each client and asserts that every ledgered name and field is
+present after login with the recorded kind (a stubbed client, not the game);
+`tools/tests/public_globals_ledger_smoke.py` runs the check and proves both halves, the scanner and the
+outside-reader scan can fail. A refactor that renames or moves a ledgered name or field must update the
+ledger in the same change.
+
 ### Owned shadows
 
 A shadow is an `O` file that is a whole-file Classic copy of a Retail file; a
