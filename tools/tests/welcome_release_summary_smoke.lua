@@ -18,7 +18,11 @@ local function Load(interface, version)
         ExportPublic = function() end,
         Translate = function(text) return text end,
         GetAddonVersion = function() return version end,
-        Client = { Interface = interface },
+        Client = {
+            Interface = interface,
+            IsRetail = interface == 16001 or (interface and interface >= 100000) or false,
+            IsForever = interface == 16001,
+        },
     }
     local env = setmetatable({}, { __index = _G })
     env.CreateFrame = nil
@@ -36,6 +40,17 @@ local function Summary(lines)
 end
 
 local welcome = Load(120105, "6.50")
+local greeting = welcome.GetLines(false)
+Check(greeting[1]:find("v6.50", 1, true) and not greeting[1]:lower():find("beta", 1, true),
+    "Retail release title must show v6.50 without beta")
+for _, case in ipairs({
+    { 120007, "12.0.7" }, { 120100, "12.1" }, { 120105, "12.1.5" }, { 120200, "12.2" },
+    { 16001, "1.60" }, { 11509, "1.15" }, { 20506, "2.5" }, { 50504, "5.5" },
+}) do
+    local lines = Load(case[1], "6.50").GetLines(false)
+    Check(lines[2]:find("Welcome to Patch " .. case[2] .. "|r", 1, true),
+        "wrong welcome patch for interface " .. case[1] .. ": " .. lines[2])
+end
 local line = Summary(welcome.GetLines(false))
 Check(line ~= nil, "12.1.5 with 6.50: the greeting has no release summary")
 if line then
