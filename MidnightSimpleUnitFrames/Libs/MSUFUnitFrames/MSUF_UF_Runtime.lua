@@ -185,6 +185,12 @@ function UF.ApplyDirty()
   if InCombat() then return false end
   local factory = UF.Factory
   if not (factory and factory.Apply) then return false end
+  -- A combat login deferred the whole lifecycle, including the spawn-only seeds.
+  if factory.spawnPending then
+    if not factory.SpawnAll() then return false end
+    for unit in pairs(UF.pendingApply) do UF.pendingApply[unit] = nil end
+    return true
+  end
   local any = false
   for unit in pairs(UF.pendingApply) do
     UF.pendingApply[unit] = nil

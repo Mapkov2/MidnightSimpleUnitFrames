@@ -131,7 +131,9 @@ local function ReadGroupRole(frame, unit)
     and frame._msufGroupRoleDispatchUnit == unit then
     return frame._msufGroupRoleDispatchValue
   end
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
+  if not NotSecretValue(role) then role = nil end
   if token then
     frame._msufGroupRoleDispatchToken = token
     frame._msufGroupRoleDispatchUnit = unit
@@ -152,8 +154,9 @@ local function GroupAggroModeAllowsRole(mode, role)
 end
 
 local function GroupAggroModeAllows(frame, unit, mode)
-  return GroupAggroModeAllowsRole(mode,
-    GroupAggroModeNeedsRole(mode) and ReadGroupRole(frame, unit) or nil)
+  if not GroupAggroModeNeedsRole(mode) then return true end
+  local role = ReadGroupRole(frame, unit)
+  return GroupAggroModeAllowsRole(mode, role)
 end
 
 -- Visible secure group children already own an exact RegisterUnitEvent token.

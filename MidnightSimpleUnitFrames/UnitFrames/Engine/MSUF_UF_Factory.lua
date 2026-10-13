@@ -1176,7 +1176,10 @@ local function ApplyOne(unit, config, applyMask)
 end
 
 function Factory.SpawnAll(applyMask)
-  if InCombat() then return DeferApply(nil) end
+  if InCombat() then
+    Factory.spawnPending = true
+    return DeferApply(nil)
+  end
   local config = ResolveConfig(true)
   if not config then return false end
   -- Config.Refresh() above resolves the active profile. Highlight.lua loads
@@ -1201,6 +1204,8 @@ function Factory.SpawnAll(applyMask)
   -- Optional focus-tracker modules load before the active profile is selected.
   Dep("MSUF_FocusKickDriver_ForceUpdate")()
   Dep("MSUF_KickReady_RefreshAll")()
+  Dep("MSUF_ArenaTrinkets_RefreshLayout")(nil)
+  Factory.spawnPending = nil
   return true
 end
 

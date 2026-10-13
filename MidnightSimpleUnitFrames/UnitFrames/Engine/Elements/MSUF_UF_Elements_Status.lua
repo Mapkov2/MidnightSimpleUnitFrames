@@ -1329,11 +1329,12 @@ local function UpdatePowerRoleVisibility(frame, status)
   local c = frame._c
   local gf = MSUF and MSUF.GF
   local role = status and status.roleValue
+  if issecretvalue(role) == true then role = nil end
   if not role then
     if gf and type(gf.GetUnitGroupRole) == "function" then
       role = gf.GetUnitGroupRole(unit)
     else
-      role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or "DAMAGER"
+      if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
     end
   end
   if issecretvalue(role) == true then
@@ -1376,7 +1377,8 @@ function Runtime.UpdateRole(frame, status)
   local unit = frame and frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState, frame)
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
   if issecretvalue(role) == true then role = nil end
   if role == "NONE" then role = nil end
   if status then status.roleValue = role end
