@@ -30,9 +30,7 @@ local MSUF = {
          ForEachFrame = function() end, pendingElementRefreshes = {}, pendingApply = {}, unitOrder = {} },
   ExportPublic = function(name, v) _G[name] = v; return v end,
 }
-MSUF.UF.GetService = function(name)
-  if name == "ProfileScopedCache" then return function() return bucket end end
-end
+_G.MSUF_GetProfileScopedCache = function() return bucket end
 assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua"))("MidnightSimpleUnitFrames", MSUF)
 
 -- Session 1: provider present, arena frames stacked 50 px apart below it.

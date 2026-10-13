@@ -399,7 +399,6 @@ local function SyncZoneFrame(frame, spec)
   local wanted = next(zoneFrames) ~= nil
   if wanted == zoneEventsRegistered then return end
   local register, unregister = _G.MSUF_EventBus_Register, _G.MSUF_EventBus_Unregister
-  if type(register) ~= "function" or type(unregister) ~= "function" then return end
   SetZoneEvents(ZONE_EVENTS, wanted, register, unregister)
   if type(C_Housing and C_Housing.IsInsideHouseOrPlot) == "function" then
     SetZoneEvents(HOUSING_PLOT_EVENTS, wanted, register, unregister)

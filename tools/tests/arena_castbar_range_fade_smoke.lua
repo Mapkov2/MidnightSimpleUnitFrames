@@ -23,6 +23,9 @@ local function NewRegion(name)
   function region:GetAlpha() return self.alpha end
   return region
 end
+-- The shared EventBus is outside this fixture: subscriptions are accepted and nothing is delivered.
+_G.MSUF_EventBus_Register = function() return true end
+_G.MSUF_EventBus_Unregister = function() end
 _G.CreateFrame = function() return NewRegion("anon") end
 
 local UF = { elements = {} }

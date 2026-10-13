@@ -67,6 +67,9 @@ local function Measure(label, setup, operation)
 end
 
 local world = World.New(root, "timer", { pools = true })
+-- The pool lifecycle handler is measured through its private frame (the path
+-- the pools take when the EventBus declines a subscription).
+world.busRefuses = true
 world.exists.boss2, world.exists.boss3, world.exists.boss4, world.exists.boss5 = true, true, true, true
 _G.MSUF_ApplyBossCastbarsEnabled()
 _G.MSUF_ApplyArenaCastbarsEnabled()

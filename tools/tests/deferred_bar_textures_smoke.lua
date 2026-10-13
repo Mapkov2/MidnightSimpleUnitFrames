@@ -3,7 +3,7 @@
 -- Runtime/MSUF_TextureRuntime.lua replaces MSUF_UpdateAllBarTextures with a
 -- deferred wrapper once the immediate pass is published. A unit scope marks
 -- its frames dirty for the UF apply commit. A call without a scope (the LSM
--- texture migration in Kernel/MSUF_Libs.lua and Media/MSUF_Media.lua) and a
+-- texture migration in Kernel/MSUF_Libs.lua) and a
 -- group scope have no dirty-frame route: the wrapper only scheduled an empty
 -- commit, so the new texture never reached the bars until something else
 -- repainted them. Pinned here on each client's real load graph:

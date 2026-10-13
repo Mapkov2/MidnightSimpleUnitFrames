@@ -7,9 +7,7 @@ MidnightSimpleUnitFrames	line	## X-MSUF-IconPack-Name: UX Pro
 MidnightSimpleUnitFrames	line	## X-MSUF-IconFolder: Media\Icons\UXPro
 MidnightSimpleUnitFrames	line	## X-MSUF-HasMidnightSuffix: 1
 MidnightSimpleUnitFrames	line	## X-MSUF-UFCore: MidnightSimpleUnitFrames
-MidnightSimpleUnitFrames	line	## X-MSUF-UnitFrames: MidnightSimpleUnitFramesUF
 MidnightSimpleUnitFrames	line	## X-MSUF-UnitFrames-Prefix: MSUF
-MidnightSimpleUnitFrames	line	## X-MSUF-UnitFrames-LegacyGlobals: 1
 MidnightSimpleUnitFrames	line	## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 MidnightSimpleUnitFrames	line	## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
 MidnightSimpleUnitFrames	line	## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter

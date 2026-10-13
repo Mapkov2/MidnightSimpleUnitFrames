@@ -878,6 +878,7 @@ local function CompileStatus(configRelative, namespace, db)
     local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
     -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
     load("Kernel/MSUF_Require.lua")
+    load("Kernel/MSUF_EventBus.lua")
     load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")

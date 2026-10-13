@@ -494,16 +494,9 @@ end
 local _MSUF_StatusbarMediaRefreshPending = false
 local _MSUF_StatusIconMediaRefreshPending = false
 local _MSUF_FontMediaRefreshPending = false
-local _MSUF_LSMFontMediaChangedInCombat = false
-local _MSUF_LSMCombatFrame
-local _MSUF_LSMCallbackActive = false
-local _MSUF_LSMMediaCounts = { font = 0, statusbar = 0, background = 0, msuf_statusicon = 0 }
 local _MSUF_BundledMediaRegistrationPending = false
 
 local RegisterBundledFonts
-local RegisterLSMCallback
-local UnregisterLSMCallback
-local EnsureLSMCombatFrame
 
 local function IsCombatLocked()
     return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
@@ -562,8 +555,11 @@ local function RefreshMediaGroupVisuals(statusbars)
     end
 end
 
--- One coalesced flush owns all changed media kinds. Combat deferral has one
--- event listener; flags are cleared by each owner before it calls consumers.
+-- One coalesced flush owns all changed media kinds, and it is the only combat
+-- deferral for media: the LibSharedMedia callback stays registered for the whole
+-- session and records what changed through the pending flags; while the player
+-- is in combat the flush parks behind one PLAYER_REGEN_ENABLED listener and runs
+-- once afterwards. Flags are cleared by each owner before it calls consumers.
 local mediaRefreshFrame
 local mediaRefreshQueued = false
 local function FlushMediaRefresh()
@@ -578,6 +574,8 @@ local function FlushMediaRefresh()
         return
     end
     if mediaRefreshFrame then mediaRefreshFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
+    -- Bundled media that could not register in combat; it raises its own flags.
+    if _MSUF_BundledMediaRegistrationPending then RegisterBundledFonts() end
     local statusbars, icons = _MSUF_StatusbarMediaRefreshPending, _MSUF_StatusIconMediaRefreshPending
     if statusbars then RunStatusbarMediaRefresh() end
     if icons then RunStatusIconMediaRefresh() end
@@ -594,25 +592,6 @@ local function ScheduleMediaRefresh()
     else
         _G.C_Timer.After(0, FlushMediaRefresh)
     end
-end
-
-local function CountLSMMediaType(LSM, mediatype)
-    if not (LSM and type(LSM.HashTable) == "function") then return 0 end
-    local media = LSM:HashTable(mediatype)
-    if type(media) ~= "table" then return 0 end
-    local count = 0
-    for _ in pairs(media) do
-        count = count + 1
-    end
-    return count
-end
-
-local function SnapshotLSMMediaCounts(LSM)
-    LSM = LSM or MSUF.LSM
-    _MSUF_LSMMediaCounts.font = CountLSMMediaType(LSM, "font")
-    _MSUF_LSMMediaCounts.statusbar = CountLSMMediaType(LSM, "statusbar")
-    _MSUF_LSMMediaCounts.background = CountLSMMediaType(LSM, "background")
-    _MSUF_LSMMediaCounts.msuf_statusicon = CountLSMMediaType(LSM, "msuf_statusicon")
 end
 
 --- Menu2 lists LibSharedMedia fonts live when a font dropdown opens, so a newly
@@ -643,115 +622,21 @@ local function RefreshStatusIconMedia()
     ScheduleMediaRefresh()
 end
 
-local function RefreshChangedMediaAfterCombat()
-    local LSM = MSUF.LSM
-    local fontCount = CountLSMMediaType(LSM, "font")
-    local statusbarCount = CountLSMMediaType(LSM, "statusbar")
-    local backgroundCount = CountLSMMediaType(LSM, "background")
-    local statusIconCount = CountLSMMediaType(LSM, "msuf_statusicon")
-    local fontChanged = fontCount ~= _MSUF_LSMMediaCounts.font
-    local statusbarChanged = statusbarCount ~= _MSUF_LSMMediaCounts.statusbar
-    local statusIconChanged = backgroundCount ~= _MSUF_LSMMediaCounts.background
-        or statusIconCount ~= _MSUF_LSMMediaCounts.msuf_statusicon
-        or statusbarChanged
-
-    _MSUF_LSMMediaCounts.font = fontCount
-    _MSUF_LSMMediaCounts.statusbar = statusbarCount
-    _MSUF_LSMMediaCounts.background = backgroundCount
-    _MSUF_LSMMediaCounts.msuf_statusicon = statusIconCount
-
-    if fontChanged or _MSUF_LSMFontMediaChangedInCombat then
-        _MSUF_LSMFontMediaChangedInCombat = false
-        MSUF_SeedLSMFontAssets(LSM)
-        RefreshFontMedia(nil, true)
-    end
-    if statusbarChanged then
-        RefreshStatusbarMedia()
-    end
-    if statusIconChanged then
-        RefreshStatusIconMedia()
-    end
-end
-
+--- Every registration is handled the same way, in or out of combat: the refresh
+--- requests below park behind the flush's single combat listener, so media a
+--- mod registers mid-combat is applied once, right after combat.
 local function OnLSMRegistered(_, mediatype, key)
-    local registeredFontPath
     if mediatype == "font" then
-        -- Record the path before the combat early-return. Registered media is
-        -- cold-path metadata and lets the post-combat refresh bypass a stale
-        -- negative file probe without doing any combat hotpath work.
-        registeredFontPath = MSUF_GetLSMFontAsset(MSUF.LSM, key)
-    end
-    if IsCombatLocked() then
-        if mediatype == "font" then _MSUF_LSMFontMediaChangedInCombat = true end
-        ExportPublic("MSUF_LSM_CombatRefreshPending", true)
-        if UnregisterLSMCallback then
-            UnregisterLSMCallback()
-        end
-        local frame = EnsureLSMCombatFrame and EnsureLSMCombatFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        end
-        return
-    end
-
-    if mediatype == "font" then
-        RefreshFontMedia(key, false, registeredFontPath)
+        -- The registered path is recorded first: registered media is cold-path
+        -- metadata and lets the refresh bypass a stale negative file probe. A
+        -- font that arrives in combat refreshes unconditionally afterwards.
+        RefreshFontMedia(key, IsCombatLocked(), MSUF_GetLSMFontAsset(MSUF.LSM, key))
     elseif mediatype == "statusbar" then
         RefreshStatusbarMedia()
         RefreshStatusIconMedia()
     elseif mediatype == "background" or mediatype == "msuf_statusicon" then
         RefreshStatusIconMedia()
     end
-    SnapshotLSMMediaCounts(MSUF.LSM)
-end
-
-UnregisterLSMCallback = function()
-    if not _MSUF_LSMCallbackActive then return true end
-    local LSM = MSUF.LSM
-    if LSM and type(LSM.UnregisterCallback) == "function" then
-        LSM.UnregisterCallback(LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT)
-    end
-    _MSUF_LSMCallbackActive = false
-    ExportPublic("MSUF_LSM_CallbackActive", false)
-    return true
-end
-
-RegisterLSMCallback = function()
-    local LSM = MSUF.LSM
-    if not (LSM and type(LSM.RegisterCallback) == "function") then return false end
-    if IsCombatLocked() then return false end
-    if _MSUF_LSMCallbackActive then return true end
-
-    LSM.RegisterCallback(LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
-
-    _MSUF_LSMCallbackActive = true
-    ExportPublic("MSUF_LSM_CallbackActive", true)
-    return true
-end
-
-EnsureLSMCombatFrame = function()
-    if _MSUF_LSMCombatFrame or type(_G.CreateFrame) ~= "function" then
-        return _MSUF_LSMCombatFrame
-    end
-    local frame = _G.CreateFrame("Frame")
-    frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    frame:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_REGEN_DISABLED" then
-            UnregisterLSMCallback()
-            return
-        end
-        if event ~= "PLAYER_REGEN_ENABLED" or IsCombatLocked() then return end
-
-        if _MSUF_BundledMediaRegistrationPending and RegisterBundledFonts then
-            RegisterBundledFonts()
-        end
-        RegisterLSMCallback()
-        RefreshChangedMediaAfterCombat()
-        ExportPublic("MSUF_LSM_CombatRefreshPending", nil)
-    end)
-    _MSUF_LSMCombatFrame = frame
-    return frame
 end
 
 local function EnsureLSMCallbacks()
@@ -759,9 +644,7 @@ local function EnsureLSMCallbacks()
     if not LSM then return end
     MSUF_SeedLSMFontAssets(LSM)
     ExportPublic("MSUF_LSM_CallbacksRegistered", true)
-    EnsureLSMCombatFrame()
-    SnapshotLSMMediaCounts(LSM)
-    RegisterLSMCallback()
+    LSM.RegisterCallback(LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
 end
 
 --- Shared statusbar texture choices for Menu2 dropdowns.
@@ -873,10 +756,8 @@ RegisterBundledFonts = function()
     if IsCombatLocked() then
         _MSUF_BundledMediaRegistrationPending = true
         ExportPublic("MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED", true)
-        local frame = EnsureLSMCombatFrame and EnsureLSMCombatFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        end
+        -- Parks the media flush behind PLAYER_REGEN_ENABLED; it registers the bundle.
+        ScheduleMediaRefresh()
         return
     end
 
@@ -990,7 +871,6 @@ RegisterBundledFonts = function()
     _G.C_Timer.After(0, MigrateLegacyBarKeys)
 
     ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", true)
-    SnapshotLSMMediaCounts(LSM)
     if wasDeferred then
         RefreshFontMedia(nil, true)
         RefreshStatusbarMedia()

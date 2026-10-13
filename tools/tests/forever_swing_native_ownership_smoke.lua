@@ -191,7 +191,8 @@ _G.C_Spell = { GetSpellName = function() return nil end, IsCurrentSpell = functi
 
 local ns = { Client = { IsForever = true } }
 ns.ExportPublic = function(key, value) _G[key] = value end
-ns.LSM = { Fetch = function() return nil end, List = function() return {} end, HashTable = function() return {} end }
+ns.LSM = { Fetch = function() return nil end, List = function() return {} end, HashTable = function() return {} end,
+    RegisterCallback = function() end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua"))("MSUF", ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF", ns)
 _G.MSUF_DB = {}

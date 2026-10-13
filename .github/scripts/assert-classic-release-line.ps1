@@ -124,7 +124,7 @@ try {
     $sha.Dispose()
 }
 foreach ($relativePath in @(
-    "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua",
+    "MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua",
     "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua"
 )) {
     $payload = [IO.File]::ReadAllText((Join-Path $RepositoryRoot $relativePath))

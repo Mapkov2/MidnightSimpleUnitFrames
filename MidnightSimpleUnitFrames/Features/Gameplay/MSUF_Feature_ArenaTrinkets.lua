@@ -558,32 +558,19 @@ local function HandleEvent(event, arg1, arg2, arg3)
     end
 end
 
-local eventFrame
 local mistsLogWired = false
 local mistsLogLive = false
 local cooldownEventLive = false
 local COOLDOWN_EVENT = "ARENA_COOLDOWNS_UPDATE"
 local COOLDOWN_KEY = "MSUF_ARENA_TRINKET_COOLDOWN"
 
---- Subscribes or releases one event on the private frame or the EventBus.
---- Answers false when neither route exists; the caller then keeps its flag.
+--- Subscribes or releases one event on the EventBus.
 local function SetSubscribed(event, key, wanted)
-    if eventFrame then
-        if wanted then
-            eventFrame:RegisterEvent(event)
-        else
-            eventFrame:UnregisterEvent(event)
-        end
-        return true
-    end
-    local busCall = wanted and _G.MSUF_EventBus_Register or _G.MSUF_EventBus_Unregister
-    if type(busCall) ~= "function" then return false end
     if wanted then
-        busCall(event, key, HandleEvent)
+        _G.MSUF_EventBus_Register(event, key, HandleEvent)
     else
-        busCall(event, key)
+        _G.MSUF_EventBus_Unregister(event, key)
     end
-    return true
 end
 
 --- Mists only. The combat-log fallback is subscribed while the player is inside
@@ -593,7 +580,7 @@ end
 --- those repeat calls comparison-only.
 SyncMistsCombatLog = function(wanted)
     if not mistsLogWired or wanted == mistsLogLive then return end
-    if not SetSubscribed("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG", wanted) then return end
+    SetSubscribed("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG", wanted)
     mistsLogLive = wanted
 end
 
@@ -610,7 +597,7 @@ SyncCooldownSubscription = function()
         wanted = instanceType == nil or instanceType == "arena" or instanceType == "pvp"
     end
     if wanted == cooldownEventLive then return end
-    if not SetSubscribed(COOLDOWN_EVENT, COOLDOWN_KEY, wanted) then return end
+    SetSubscribed(COOLDOWN_EVENT, COOLDOWN_KEY, wanted)
     cooldownEventLive = wanted
 end
 
@@ -630,18 +617,9 @@ local function WireEvents()
     mistsLogWired = IS_MISTS
 
     local register = _G.MSUF_EventBus_Register
-    if type(register) == "function" then
-        for index = 1, #events do
-            register(events[index][1], events[index][2], HandleEvent)
-        end
-        return
+    for index = 1, #events do
+        register(events[index][1], events[index][2], HandleEvent)
     end
-
-    eventFrame = CreateFrame("Frame")
-    eventFrame:SetScript("OnEvent", function(_, event, ...)
-        HandleEvent(event, ...)
-    end)
-    for index = 1, #events do eventFrame:RegisterEvent(events[index][1]) end
 end
 
 -- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose

@@ -16,9 +16,7 @@
 ## X-MSUF-IconFolder: Media\Icons\UXPro
 ## X-MSUF-HasMidnightSuffix: 1
 ## X-MSUF-UFCore: MidnightSimpleUnitFrames
-## X-MSUF-UnitFrames: MidnightSimpleUnitFramesUF
 ## X-MSUF-UnitFrames-Prefix: MSUF
-## X-MSUF-UnitFrames-LegacyGlobals: 1
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 ## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
 ## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
@@ -67,7 +65,6 @@ Locales\zhTW.lua
 Kernel\MSUF_Util.lua
 Kernel\MSUF_Keybinds.lua
 State\MSUF_StateHelpers.lua
-State\MSUF_Changelog.lua
 State\MSUF_AuraDefaults.lua
 State\Defaults\MSUF_Defaults_Shell.lua
 State\Defaults\MSUF_Defaults_Bars.lua

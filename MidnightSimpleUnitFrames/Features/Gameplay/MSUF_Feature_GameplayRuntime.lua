@@ -29,19 +29,11 @@ local SelectNudgeFrame, SetupArrowNudge = GameplayHelpers.SelectNudgeFrame, Game
 local RefreshKeyboardNudge, ReleaseKeyboardNudge = GameplayHelpers.RefreshKeyboardNudge, GameplayHelpers.ReleaseKeyboardNudge
 
 local ScheduleOnce = _G.MSUF_ScheduleOnce
-local EventBus_Register = _G.MSUF_EventBus_Register
-local EventBus_Unregister = _G.MSUF_EventBus_Unregister
+local BusRegister = _G.MSUF_EventBus_Register
+local BusUnregister = _G.MSUF_EventBus_Unregister
 local RegisterModule = MSUF.MSUF_RegisterModule
 local ApplyGameplayNow
 local SyncGameplaySpecEvents
-
-local function BusRegister(...)
-    if type(EventBus_Register) == "function" then EventBus_Register(...) end
-end
-
-local function BusUnregister(...)
-    if type(EventBus_Unregister) == "function" then EventBus_Unregister(...) end
-end
 
 local function RefreshGameplayKeyboardNudge(frame)
     if not frame then return end

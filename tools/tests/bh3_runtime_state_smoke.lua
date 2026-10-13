@@ -68,7 +68,7 @@ Check("MT8-A1", function()
 end)
 Check("CX1-08", function()
     local hides=0;local tip={IsForbidden=function() return false end,IsShown=function() return true end,Hide=function() hides=hides+1 end}
-    local fn=Compile(Slice("Runtime/MSUF_UnitTooltips.lua", "local function MSUF_ClearTrackedGameTooltip", "if _G.GameTooltip and").."return MSUF_ClearTrackedGameTooltip",{_G={GameTooltip=tip}})()
+    local fn=Compile(Slice("Runtime/MSUF_UnitTooltips.lua", "local function MSUF_ClearTrackedGameTooltip", "-- Hooked once at file load").."return MSUF_ClearTrackedGameTooltip",{_G={GameTooltip=tip}})()
     local owner={};fn(owner,false);fn(owner,true);assert(hides==0,"unowned tooltip hidden")
     tip._msufUnitTooltipOwner=owner;fn({},false);assert(hides==0);fn(owner,false);assert(hides==1)
 end)

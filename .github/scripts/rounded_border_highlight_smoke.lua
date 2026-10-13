@@ -208,6 +208,10 @@ local function LoadEngine(relativePath)
   return chunk("MidnightSimpleUnitFrames", MSUF)
 end
 
+-- The engine core classifies events through the real EventBus (loaded on its own namespace).
+local busNS = { ExportPublic = function(_, value) return value end }
+assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_EventBus.lua"))("MidnightSimpleUnitFrames", busNS)
+MSUF.EventBus = busNS.EventBus
 LoadEngine("MSUF_UF_Metadata.lua")
 LoadEngine("MSUF_UF_Core.lua")
 assert(loadfile(libraryRoot .. "MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)

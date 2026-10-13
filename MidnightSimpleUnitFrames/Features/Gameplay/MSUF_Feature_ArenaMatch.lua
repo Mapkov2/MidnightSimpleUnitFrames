@@ -401,7 +401,7 @@ local function SyncStealthOverlays()
 end
 
 ------------------------------------------------------------------------
--- Event wiring (EventBus preferred; direct frame fallback)
+-- Event wiring (EventBus)
 ------------------------------------------------------------------------
 
 local function HandleArenaMatchEvent(event, arg1, arg2)
@@ -457,28 +457,15 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     end
 end
 
-local eventFrame
 local function WireEvents()
     local register = _G.MSUF_EventBus_Register
-    if type(register) == "function" then
-        register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_MATCH_PREP", HandleArenaMatchEvent)
-        if HAS_PVP_MATCH_STATE_CHANGED then
-            register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)
-        end
-        register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_MATCH_OPPONENT", HandleArenaMatchEvent)
-        register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_MATCH_WORLD", HandleArenaMatchEvent)
-        register("PLAYER_REGEN_ENABLED", "MSUF_ARENA_MATCH_REGEN", HandleArenaMatchEvent)
-        return
+    register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_MATCH_PREP", HandleArenaMatchEvent)
+    if HAS_PVP_MATCH_STATE_CHANGED then
+        register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)
     end
-    eventFrame = eventFrame or CreateFrame("Frame")
-    eventFrame:SetScript("OnEvent", function(_, event, ...)
-        HandleArenaMatchEvent(event, ...)
-    end)
-    eventFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
-    if HAS_PVP_MATCH_STATE_CHANGED then eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED") end
-    eventFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
-    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_MATCH_OPPONENT", HandleArenaMatchEvent)
+    register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_MATCH_WORLD", HandleArenaMatchEvent)
+    register("PLAYER_REGEN_ENABLED", "MSUF_ARENA_MATCH_REGEN", HandleArenaMatchEvent)
 end
 
 -- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose

@@ -145,6 +145,7 @@ ns.LSM={
     Fetch=function(_,kind,key) return kind=="statusbar" and textures[key] or nil end,
     List=function(_,kind) return kind=="statusbar" and {"MSUF Smooth","Custom"} or {} end,
     HashTable=function(_,kind) return kind=="statusbar" and textures or {} end,
+    RegisterCallback=function() end,
 }
 ns.ExportPublic=function(key,value) _G[key]=value end
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua"))("MSUF",ns)
@@ -153,11 +154,11 @@ _G.MSUF_DB={}
 chunk("MSUF",ns)
 local swing=assert(ns.SwingTimer)
 assert(swing.GetEnabled(), "migrate existing native master switch")
-assert(not ns.MSUF_GetModule("SwingTimers").__msufEnabled and not named.MSUF_SwingTimer_main,
+assert(not ns.MSUF_ModulesByKey.SwingTimers.__msufEnabled and not named.MSUF_SwingTimer_main,
     "registration and a checked saved preference do not start the module")
 assert(driver.events.PLAYER_ENTERING_WORLD, "login must arrange its own module start")
 event("PLAYER_ENTERING_WORLD")
-assert(ns.MSUF_GetModule("SwingTimers").__msufEnabled, "world entry starts the saved-enabled module without any menu action")
+assert(ns.MSUF_ModulesByKey.SwingTimers.__msufEnabled, "world entry starts the saved-enabled module without any menu action")
 assert(not native, "native manager must stop receiving swings")
 local main,off,ranged=named.MSUF_SwingTimer_main,named.MSUF_SwingTimer_off,named.MSUF_SwingTimer_ranged
 assert(main:IsShown() and off:IsShown() and not ranged:IsShown(), "both hands by default")
@@ -432,7 +433,7 @@ event("PLAYER_ENTERING_WORLD")
 assert(next(disabledDriver.events)==nil and not disabledDriver.scripts.OnEvent,
     "disabled login removes the one-shot startup handler")
 assert(#objects==beforeWorldObjects, "disabled login does not build bars, bindings or formatters")
-assert(not disabledNS.MSUF_GetModule("SwingTimers").__msufEnabled)
+assert(not disabledNS.MSUF_ModulesByKey.SwingTimers.__msufEnabled)
 assert(disabledNS.SwingTimer.SetEnabled(true) and driver==disabledDriver,
     "enabling later reuses the startup driver")
 assert(driver.events.PLAYER_SWING and named.MSUF_SwingTimer_main:IsShown() and not native)

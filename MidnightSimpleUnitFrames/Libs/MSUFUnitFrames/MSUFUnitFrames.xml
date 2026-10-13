@@ -7,5 +7,4 @@
   <Script file="MSUF_UF_Core.lua"/>
   <Script file="MSUF_UF_Runtime.lua"/>
   <Script file="api.lua"/>
-  <Script file="finalize.lua"/>
 </Ui>

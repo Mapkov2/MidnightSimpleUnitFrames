@@ -1,7 +1,8 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 full changelog page with direct links from release highlights to the
--- owning Menu2 controls. Full history is bundled only with the LoD Options
--- addon; core keeps its compact changelog payload for the menu.
+-- owning Menu2 controls. Both payloads (the compact State/MSUF_Changelog.lua
+-- and the full history) are bundled with the LoD Options addon; core parses no
+-- changelog at login.
 local _, MSUF = ...
 MSUF = MSUF or {}
 

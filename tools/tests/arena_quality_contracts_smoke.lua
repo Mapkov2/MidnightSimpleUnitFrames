@@ -101,22 +101,20 @@ local function NewWorld(options)
     end
     _G.issecretvalue = function() return false end
 
-    if options.bus ~= false then
-        _G.MSUF_EventBus_Register = function(event, key, fn)
-            W.registerCalls[event] = (W.registerCalls[event] or 0) + 1
-            if W.refusals[event] then return false end
-            W.bus[event] = W.bus[event] or {}
-            W.bus[event][key] = fn
-            if options.busAnswersNil then return nil end
-            return true
-        end
-        _G.MSUF_EventBus_Unregister = function(event, key)
-            W.unregisterCalls[event] = (W.unregisterCalls[event] or 0) + 1
-            local keyed = W.bus[event]
-            if not keyed then return end
-            keyed[key] = nil
-            if next(keyed) == nil then W.bus[event] = nil end
-        end
+    _G.MSUF_EventBus_Register = function(event, key, fn)
+        W.registerCalls[event] = (W.registerCalls[event] or 0) + 1
+        if W.refusals[event] then return false end
+        W.bus[event] = W.bus[event] or {}
+        W.bus[event][key] = fn
+        if options.busAnswersNil then return nil end
+        return true
+    end
+    _G.MSUF_EventBus_Unregister = function(event, key)
+        W.unregisterCalls[event] = (W.unregisterCalls[event] or 0) + 1
+        local keyed = W.bus[event]
+        if not keyed then return end
+        keyed[key] = nil
+        if next(keyed) == nil then W.bus[event] = nil end
     end
 
     function W.Fire(event, ...)
@@ -165,8 +163,8 @@ end
 -- 1. Mists trinket combat log
 --------------------------------------------------------------------------------
 
--- options: flavor ("Mists", "TBC", "Mainline", "Vanilla"), bus (false = no
--- EventBus), supportsArena (false = Client.SupportsUnit answers false).
+-- options: flavor ("Mists", "TBC", "Mainline", "Vanilla"), supportsArena
+-- (false = Client.SupportsUnit answers false).
 local function LoadTrinkets(options)
     local W = NewWorld(options)
     W.instanceType, W.instanceCalls, W.matchCalls, W.logInfoCalls, W.now = "none", 0, 0, 0, 50
@@ -291,28 +289,6 @@ Contract("Mists combat log follows the arena instance", function()
         "Mists did not subscribe the combat log again for the next arena")
 end)
 
-Contract("Mists combat log without the EventBus", function()
-    local W = LoadTrinkets({ flavor = "Mists", bus = false })
-    local frames = W.EventFrames()
-    assert(#frames == 1, "expected one private event frame, found " .. #frames)
-    local events = frames[1].events
-    -- PLAYER_LOGIN runs the first sync once the SavedVariables exist. The
-    -- cooldown response event follows the instance like the combat log.
-    assert(CountKeys(events) == 4 and events.ARENA_OPPONENT_UPDATE and events.ARENA_CROWD_CONTROL_SPELL_UPDATE
-        and events.PLAYER_ENTERING_WORLD and events.PLAYER_LOGIN,
-        "the private frame must start with three arena events, PLAYER_LOGIN and no combat log")
-    assert(W.Burst(50) == 0, "the private frame handled combat-log events in the open world")
-    W.Enter("arena")
-    assert(events[LOG_EVENT] == true and W.Burst(50) == 50 and W.logInfoCalls == 50,
-        "the private frame did not take the combat log inside an arena")
-    assert(events.ARENA_COOLDOWNS_UPDATE == true, "the private frame did not take ARENA_COOLDOWNS_UPDATE inside an arena")
-    W.Enter("none")
-    assert(events[LOG_EVENT] == nil and W.Burst(50) == 0 and W.logInfoCalls == 50,
-        "the private frame kept the combat log after leaving the arena")
-    assert(events.ARENA_COOLDOWNS_UPDATE == nil, "the private frame kept ARENA_COOLDOWNS_UPDATE after leaving the arena")
-    assert(#W.EventFrames() == 1, "a second event frame was created")
-end)
-
 Contract("TBC and Midnight trinket events are unchanged", function()
     for _, case in ipairs({
         { flavor = "TBC", extra = nil },
@@ -364,7 +340,7 @@ local LIFECYCLE_EVENTS = {
     "PVP_MATCH_STATE_CHANGED",
 }
 
--- options: bus / busAnswersNil (see NewWorld), matchStateEvent (false = the
+-- options: busAnswersNil (see NewWorld), matchStateEvent (false = the
 -- client has no PVP_MATCH_STATE_CHANGED), casting (true = every arena unit
 -- exists with an active cast).
 local function LoadArenaCastbars(options)
@@ -572,16 +548,10 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
     assert(#frames == 1 and frames[1].events.PVP_MATCH_STATE_CHANGED == nil
         and denylisted.registerCalls.PVP_MATCH_STATE_CHANGED == nil,
         "the arena lifecycle asked the event table instead of MSUF.Client.SupportsEvent")
-
-    -- No EventBus at all keeps the private frame, as before.
-    local busless = LoadArenaCastbars({ bus = false })
-    frames = busless.EventFrames()
-    assert(#frames == 1 and CountKeys(frames[1].events) == #LIFECYCLE_EVENTS,
-        "a client without the EventBus lost its private lifecycle frame")
 end)
 
 if #failures > 0 then
     for index = 1, #failures do io.stderr:write("FAIL ", failures[index], "\n") end
     os.exit(1)
 end
-print("arena quality contracts smoke: ok (6 contracts)")
+print("arena quality contracts smoke: ok (5 contracts)")

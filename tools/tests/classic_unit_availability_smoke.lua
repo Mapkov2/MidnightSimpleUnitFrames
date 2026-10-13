@@ -14,6 +14,13 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     _G.WOW_PROJECT_ID = ({ Vanilla = 2, TBC = 5, Mists = 19, Mainline = 1 })[flavor]
     _G.MAX_ARENA_ENEMIES = nil
     local ns = {}
+    -- The engine core classifies events through the real EventBus (loaded on its own namespace).
+    local busNS = { ExportPublic = function(_, value) return value end }
+    local createFrame = _G.CreateFrame
+    _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
+    assert(loadfile(core .. "Kernel/MSUF_EventBus.lua"))("MSUF", busNS)
+    _G.CreateFrame = createFrame
+    ns.EventBus = busNS.EventBus
     assert(loadfile(core .. "Game/Shared/Initialize.lua"))("MSUF", ns)
     assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MSUF", ns)
     assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))("MSUF", ns)

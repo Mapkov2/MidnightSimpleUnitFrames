@@ -32,7 +32,7 @@ do
     end
 
     local function MSUF_TargetSoundDriver_Disable()
-        if driverEnabled and EventBusUnregister then
+        if driverEnabled then
             EventBusUnregister("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND")
         end
         driverEnabled = false
@@ -87,12 +87,11 @@ do
         if driverEnabled then
             return true
         end
-        if not EventBusRegister
-            or not EventBusRegister(
-                "PLAYER_TARGET_CHANGED",
-                "MSUF_TARGET_SOUND",
-                MSUF_TargetSoundDriver_OnTargetChanged
-            ) then
+        if not EventBusRegister(
+            "PLAYER_TARGET_CHANGED",
+            "MSUF_TARGET_SOUND",
+            MSUF_TargetSoundDriver_OnTargetChanged
+        ) then
             return false
         end
         driverEnabled = true
@@ -118,7 +117,5 @@ do
     -- so that read built a throwaway profile and always saw the default (off).
     -- PLAYER_LOGIN is the first event with the saved profile; later profile
     -- changes re-apply through State/MSUF_ProfileRuntime.lua.
-    if EventBusRegister then
-        EventBusRegister("PLAYER_LOGIN", "MSUF_TARGET_SOUND_LOGIN", MSUF_TargetSoundDriver_ApplySetting, nil, true)
-    end
+    EventBusRegister("PLAYER_LOGIN", "MSUF_TARGET_SOUND_LOGIN", MSUF_TargetSoundDriver_ApplySetting, nil, true)
 end

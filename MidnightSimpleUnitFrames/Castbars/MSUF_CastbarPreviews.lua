@@ -463,8 +463,7 @@ local function InstallPoolPreviewEventDriver()
     if _G.MSUF_BossPreviewEventDriver then return end
     ExportPublic("MSUF_BossPreviewEventDriver", true)
 
-    local register = _G.MSUF_EventBus_Register
-    if type(register) ~= "function" then return end
+    local register = Require("MSUF_EventBus_Register", FILE)
 
     local events = {
         "INSTANCE_ENCOUNTER_ENGAGE_UNIT",

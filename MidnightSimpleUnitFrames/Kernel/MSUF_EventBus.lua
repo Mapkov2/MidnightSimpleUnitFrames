@@ -3,9 +3,10 @@
 --- MSUF_EventBus_Unregister(event, key)
 --- MSUF_EventBus_UnregisterAll(keyPrefix)
 ---
---- This keeps shared runtime events on one hidden driver frame. UNIT_* events
---- are registered with the union of requested unit filters so modules do not
---- each create their own event frame for the same traffic.
+--- This keeps shared runtime events on one hidden driver frame. Unit events
+--- (UNIT_* and the NONPREFIX_UNIT_EVENTS below) are registered with the union
+--- of requested unit filters so modules do not each create their own event
+--- frame for the same traffic. A unit event needs a unit filter.
 local _, MSUF = ...
 MSUF = MSUF or {}
 local type, pairs = type, pairs
@@ -26,9 +27,20 @@ local driver = CreateFrame("Frame")
 driver:Hide()
 bus.driver = driver
 
+-- Unit events whose first payload is a unit token although the name has no
+-- UNIT_ prefix. The unit-frame engine classifies its frame subscriptions with
+-- the same list (bus.IsUnitEvent), so a filter on one of these reaches
+-- RegisterUnitEvent instead of being dropped.
+local NONPREFIX_UNIT_EVENTS = {
+    INCOMING_RESURRECT_CHANGED = true,
+    -- AFK/DND flag edges for one unit despite the PLAYER_ prefix.
+    PLAYER_FLAGS_CHANGED = true,
+}
+
 local function IsUnitEvent(event)
-    return type(event) == "string" and event:sub(1, 5) == "UNIT_"
+    return type(event) == "string" and (event:sub(1, 5) == "UNIT_" or NONPREFIX_UNIT_EVENTS[event] == true)
 end
+bus.IsUnitEvent = IsUnitEvent
 
 local function NormalizeUnitFilter(unitFilter)
     if type(unitFilter) == "string" then
@@ -73,7 +85,7 @@ local function BuildUnitList(ev)
     return list
 end
 
---- Rebuild the driver's event registration when unit filters change. For UNIT_*
+--- Rebuild the driver's event registration when unit filters change. For unit
 --- events this is the only place that talks to RegisterUnitEvent.
 local function RefreshDriverRegistration(event, ev)
     if not ev then return end

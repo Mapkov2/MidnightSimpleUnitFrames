@@ -611,10 +611,6 @@ def scan_toc(rel, text, exports):
         entry = exports.setdefault(match.group(1), Entry(match.group(1)))
         entry.kinds.add("function")
         entry.contract.append(("AddonCompartment", lines.of(match.start()), rel))
-    # The framework publishes itself under the global the TOC names.
-    for match in re.finditer(r"^##[ \t]*X-MSUF-UnitFrames:[ \t]*(%s)" % NAME, text, re.M):
-        entry = exports.setdefault(match.group(1), Entry(match.group(1)))
-        entry.add(RANK["toc"], rel, lines.of(match.start()), "toc", "table")
 
 
 def finish_contracts(exports):

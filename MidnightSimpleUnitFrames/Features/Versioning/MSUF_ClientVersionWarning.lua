@@ -98,31 +98,13 @@ local function Init()
     if not IsLegacyClient() then return end
     wired = true
 
-    local bus = MSUF.MSUF_EventBus or _G.MSUF_EventBus
-    if bus and type(bus.Register) == "function" then
-        bus:Register("PLAYER_ENTERING_WORLD", KEY .. "_PEW", function()
-            if _G.C_Timer and _G.C_Timer.After then
-                _G.C_Timer.After(1.5, Show)
-            else
-                Show()
-            end
-        end, nil, true)
-        return
-    end
-
-    --- Fallback only: drops both the event and the script so the frame is inert
-    --- once it has fired.
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:SetScript("OnEvent", function(self)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        self:SetScript("OnEvent", nil)
+    MSUF.MSUF_EventBus:Register("PLAYER_ENTERING_WORLD", KEY .. "_PEW", function()
         if _G.C_Timer and _G.C_Timer.After then
             _G.C_Timer.After(1.5, Show)
         else
             Show()
         end
-    end)
+    end, nil, true)
 end
 
 Init()

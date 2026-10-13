@@ -138,7 +138,7 @@ try {
     $changelogHash.Dispose()
 }
 $stagedChangelogPaths = @(
-    (Join-Path $stagePath "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua"),
+    (Join-Path $stagePath "$optionsAddonName/State/MSUF_Changelog.lua"),
     (Join-Path $stagePath "$optionsAddonName/State/MSUF_ChangelogFull.lua")
 )
 foreach ($stagedChangelogPath in $stagedChangelogPaths) {

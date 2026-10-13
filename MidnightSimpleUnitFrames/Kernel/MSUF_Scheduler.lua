@@ -1,6 +1,18 @@
 --- MSUF_Scheduler.lua - central next-frame scheduler
 --- Replaces scattered C_Timer.After(0, ...) runtime deferrals with keyed,
 --- deduped scheduling. Secret-safe: no protected/secret API reads here.
+---
+--- Two keyed policies, deliberately different (pinned by
+--- tools/tests/scheduler_pending_key_policy_smoke.lua):
+---   * RunNextFrame / ScheduleOnce: the FIRST function queued for a key wins.
+---     While the key is pending, further calls are ignored whatever function
+---     they pass; the key is free again once the callback has been taken from
+---     the queue (before it runs), so a callback can queue its own key again.
+---     The key defaults to the function, so one function queued twice runs once.
+---   * ScheduleAfter: the LAST function and the LAST deadline win (debounce).
+---     Every call replaces the pending function and moves the deadline.
+--- The two keep separate tables: one key can be pending in both, and
+--- IsScheduled / CancelScheduled only see ScheduleAfter work.
 
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS or {})
@@ -80,6 +92,7 @@ function FlushNextFrame()
     frame:SetScript("OnUpdate", nil)
 end
 
+-- First function wins: a key that is already pending keeps its function.
 local function QueueNextFrame(key, fn)
     if pending[key] then return end
 
@@ -94,11 +107,14 @@ local function QueueNextFrame(key, fn)
     end
 end
 
+--- Next-frame run deduped by the function itself (the key is fn).
 function Scheduler.RunNextFrame(fn)
     assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     QueueNextFrame(fn, fn)
 end
 
+--- Next-frame run deduped by key; the first function queued for a pending key
+--- is the one that runs (see the policy note at the top of this file).
 function Scheduler.ScheduleOnce(key, fn)
     assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     key = key or fn
@@ -162,8 +178,9 @@ local function RunDelayed(key)
 end
 
 --- Schedule fn under key after delay seconds. A second call for the same key
---- replaces both the pending function and its deadline, which is the debounce
---- shape most C_Timer.After callers hand-rolled with a guard flag.
+--- replaces both the pending function and its deadline (the last call wins),
+--- which is the debounce shape most C_Timer.After callers hand-rolled with a
+--- guard flag. This is the opposite of ScheduleOnce, whose first function wins.
 function Scheduler.ScheduleAfter(key, delay, fn)
     assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     key = key or fn

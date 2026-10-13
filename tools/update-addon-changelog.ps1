@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$ChangelogPath = "CHANGELOG.md",
-    [string]$OutputPath = "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua",
+    [string]$OutputPath = "MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua",
     [string]$Version,
     [string]$PreviousVersion,
     [string]$DashboardChangelogPath,
@@ -521,7 +521,7 @@ $script:StalePayloads = New-Object System.Collections.Generic.List[string]
 Write-ChangelogLua -Entries $selected -DestinationPath $outputFullPath -PublicName "MSUF_Changelog" `
     -PreviousVersionOverride $PreviousVersion
 
-$defaultOutputPath = Resolve-RepoPath -Path "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua"
+$defaultOutputPath = Resolve-RepoPath -Path "MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua"
 $effectiveFullOutputPath = $FullOutputPath
 if ([string]::IsNullOrWhiteSpace($effectiveFullOutputPath) -and
     $outputFullPath.Equals($defaultOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {

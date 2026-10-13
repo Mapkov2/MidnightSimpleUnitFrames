@@ -230,7 +230,7 @@ check(re.search(r"Assistant\.(?:Resume|Quiesce)|MSUF_Assistant", support) is Non
 # Shipped text must not point players at a feature that no longer exists. The
 # changelog payloads are release history and may name it.
 ADVERT = re.compile(r"(?i)\bin-game assistant\b|\bthe assistant (?:can|will|helps)\b|\bmsuf assistant\b")
-HISTORY = {CORE + "/State/MSUF_Changelog.lua", OPTIONS + "/State/MSUF_ChangelogFull.lua"}
+HISTORY = {OPTIONS + "/State/MSUF_Changelog.lua", OPTIONS + "/State/MSUF_ChangelogFull.lua"}
 listed = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", CORE, OPTIONS], stdout=subprocess.PIPE)
 adverts = []
 for relative in sorted(name for name in listed.stdout.decode("utf-8").split("\0") if name.endswith(".lua")):

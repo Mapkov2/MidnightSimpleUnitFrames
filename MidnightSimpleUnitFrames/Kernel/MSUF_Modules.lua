@@ -1,14 +1,12 @@
 --- MSUF_Modules.lua
---- Lightweight module registry + lifecycle manager for Midnight Simple Unit Frames.
+--- Lightweight module registry + enable/disable pass for Midnight Simple Unit Frames.
 ---
 --- Modules register Enable/Disable/IsEnabled hooks here. The registry owns
 --- ordering, late registration and the idempotent enable/disable pass
 --- (MSUF_ApplyModules), which State/MSUF_Profiles.lua runs after every profile
---- apply and menu actions run after ownership changes. RefreshSettings,
---- Shutdown, GetModule, ToggleModule and ListModules are exported companions
---- without in-addon callers. There is no Init phase: a module that needs login
---- work wires it at file load (see Features/Versioning). Individual modules
---- still own their runtime behavior.
+--- apply and menu actions run after ownership changes. There is no Init phase:
+--- a module that needs login work wires it at file load (see
+--- Features/Versioning). Individual modules still own their runtime behavior.
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
@@ -41,8 +39,7 @@ end
 --- Public: Register a module.
 --- key: unique string
 --- module: table with optional fields:
---- order (number), Enable(), Disable(), IsEnabled(),
---- RefreshSettings(self, source), Shutdown(self, reason)
+--- order (number), Enable(), Disable(), IsEnabled()
 function MSUF.MSUF_RegisterModule(key, module)
     if type(key) ~= "string" or key == "" then return end
     if type(module) ~= "table" then module = {} end
@@ -74,9 +71,6 @@ function MSUF.MSUF_RegisterModule(key, module)
         MSUF.MSUF_ApplyModules() --- will handle idempotently
     end
 end
-
---- Alias (short)
-MSUF.RegisterModule = MSUF.MSUF_RegisterModule
 
 local function GetDesiredEnabled(module)
     --- Modules may provide IsEnabled() which returns the desired state.
@@ -119,8 +113,6 @@ function MSUF.MSUF_ApplyModules()
         local m = MSUF.MSUF_Modules[i]
         if m and m.__msufSwitchTo == nil then
             local desired = GetDesiredEnabled(m)
-            --- MSUF_ToggleModule override
-            if m.__msufDebugOff then desired = false end
             local current = not not m.__msufEnabled
 
             if desired ~= current then
@@ -144,94 +136,7 @@ function MSUF.MSUF_ApplyModules()
     end
 end
 
---- RefreshSettings - broadcast a settings change to all enabled modules.
---- Each module's RefreshSettings receives the module table as self. Exported
---- for external callers; nothing inside the addon calls it today.
-function MSUF.MSUF_RefreshModuleSettings(source)
-    SortModulesIfNeeded()
-    for i = 1, #MSUF.MSUF_Modules do
-        local m = MSUF.MSUF_Modules[i]
-        if m and m.__msufEnabled and not m.__msufDebugOff then
-            local fn = m.RefreshSettings
-            if type(fn) == "function" then
-                fn(m, source)
-            end
-        end
-    end
-end
-
---- Shutdown - cleanup all modules. Calls Shutdown on every module that has
---- one, regardless of enabled state. Exported for external callers; nothing
---- inside the addon calls it today.
-function MSUF.MSUF_ShutdownModules(reason)
-    SortModulesIfNeeded()
-    for i = 1, #MSUF.MSUF_Modules do
-        local m = MSUF.MSUF_Modules[i]
-        if m then
-            local fn = m.Shutdown
-            if type(fn) == "function" then
-                fn(m, reason)
-            end
-            m.__msufEnabled = false
-        end
-    end
-    MSUF.__MSUF_ModulesApplied = false
-end
-
---- GetModule - quick lookup by key.
-function MSUF.MSUF_GetModule(key)
-    return MSUF.MSUF_ModulesByKey[key]
-end
-
---- Debug toggle - disable/enable a single module at runtime. Exported as
---- MSUF_ToggleModule for use from external code or /run; there is no slash
---- command for it.
---- Returns new state (true = enabled, false = disabled).
-function MSUF.MSUF_ToggleModule(key)
-    if type(key) ~= "string" then return nil end
-    local m = MSUF.MSUF_ModulesByKey[key]
-    if not m then return nil end
-
-    if m.__msufDebugOff then
-        --- Re-enable
-        m.__msufDebugOff = nil
-        if m.__msufEnabled and type(m.Enable) == "function" then
-            m:Enable()
-        end
-        if m.__msufEnabled and type(m.RefreshSettings) == "function" then
-            m:RefreshSettings("debug_toggle")
-        end
-        return true
-    else
-        --- Disable
-        m.__msufDebugOff = true
-        if m.__msufEnabled and type(m.Disable) == "function" then
-            m:Disable()
-        end
-        return false
-    end
-end
-
---- List all registered module keys (debug helper).
-function MSUF.MSUF_ListModules()
-    SortModulesIfNeeded()
-    local out = {}
-    for i = 1, #MSUF.MSUF_Modules do
-        local m = MSUF.MSUF_Modules[i]
-        if m and m.key then
-            out[#out + 1] = m.key .. (m.__msufEnabled and " [ON]" or " [OFF]") .. (m.__msufDebugOff and " (debug-off)" or "")
-        end
-    end
-    return out
-end
-
---- Optional globals (useful for debugging / slash commands / external modules)
 local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF_RegisterModule", MSUF.MSUF_RegisterModule)
 ExportPublic("MSUF_ApplyModules", MSUF.MSUF_ApplyModules)
-ExportPublic("MSUF_RefreshModuleSettings", MSUF.MSUF_RefreshModuleSettings)
-ExportPublic("MSUF_ShutdownModules", MSUF.MSUF_ShutdownModules)
-ExportPublic("MSUF_GetModule", MSUF.MSUF_GetModule)
-ExportPublic("MSUF_ToggleModule", MSUF.MSUF_ToggleModule)
-ExportPublic("MSUF_ListModules", MSUF.MSUF_ListModules)

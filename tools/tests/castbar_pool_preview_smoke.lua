@@ -91,6 +91,8 @@ local function NewWorld(arenaSlots)
     W.NewFrame = NewFrame
 
     _G.UIParent = NewFrame("UIParent")
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() end
     _G.CreateFrame = function(_, name) return NewFrame(name) end
     _G.UnitExists = function() return false end
     _G.UnitIsDeadOrGhost = function() return false end

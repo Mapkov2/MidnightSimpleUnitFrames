@@ -87,6 +87,9 @@ end
 
 -- The compat walks boss and arena bars through the real pool modules (one slot
 -- each: MAX_BOSS_FRAMES and MSUF_MAX_ARENA_FRAMES are 1 above).
+-- The shared EventBus is outside this fixture: subscriptions are accepted and nothing is delivered.
+_G.MSUF_EventBus_Register = function() return true end
+_G.MSUF_EventBus_Unregister = function() end
 _G.CreateFrame = function()
     local stub = {}
     function stub:SetScript() end

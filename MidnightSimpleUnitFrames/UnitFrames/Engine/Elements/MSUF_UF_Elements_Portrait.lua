@@ -363,9 +363,7 @@ local function SyncPlayerPortraitWorldEvent(frame, spec, p)
     playerPortraitWorldFrame = frame
     if playerPortraitWorldEventRegistered == true then return end
     local registerEvent = _G.MSUF_EventBus_Register
-    if type(registerEvent) == "function"
-      and registerEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY,
-        OnPlayerPortraitWorldEntry) ~= false then
+    if registerEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY, OnPlayerPortraitWorldEntry) ~= false then
       playerPortraitWorldEventRegistered = true
     end
     return
@@ -374,10 +372,7 @@ local function SyncPlayerPortraitWorldEvent(frame, spec, p)
   if frame ~= playerPortraitWorldFrame then return end
   playerPortraitWorldFrame = nil
   if playerPortraitWorldEventRegistered == true then
-    local unregisterEvent = _G.MSUF_EventBus_Unregister
-    if type(unregisterEvent) == "function" then
-      unregisterEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY)
-    end
+    _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY)
     playerPortraitWorldEventRegistered = nil
   end
 end

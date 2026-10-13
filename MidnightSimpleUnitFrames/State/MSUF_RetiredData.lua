@@ -75,11 +75,9 @@ end
 MSUF.ClearRetiredProfilerData = ClearRetiredProfilerData
 
 local bus = MSUF.EventBus
-if type(bus) == "table" and type(bus.Register) == "function" then
-    bus:Register("ADDON_LOADED", BUS_KEY, function(_, loadedName)
-        if loadedName ~= addonName then return end
-        bus:Unregister("ADDON_LOADED", BUS_KEY)
-        ClearRetiredProfilerData()
-        ClearRetiredAssistantData()
-    end)
-end
+bus:Register("ADDON_LOADED", BUS_KEY, function(_, loadedName)
+    if loadedName ~= addonName then return end
+    bus:Unregister("ADDON_LOADED", BUS_KEY)
+    ClearRetiredProfilerData()
+    ClearRetiredAssistantData()
+end)

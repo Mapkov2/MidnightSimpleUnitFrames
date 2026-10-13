@@ -2868,18 +2868,14 @@ local function SyncPredictionWorldEvent()
   if shouldRegister then
     if predictionWorldEventRegistered == true then return end
     local registerEvent = _G.MSUF_EventBus_Register
-    if type(registerEvent) == "function"
-      and registerEvent("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY, OnPredictionWorldEntry) ~= false then
+    if registerEvent("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY, OnPredictionWorldEntry) ~= false then
       predictionWorldEventRegistered = true
     end
     return
   end
   if predictionWorldEventRegistered == true then
-    local unregisterEvent = _G.MSUF_EventBus_Unregister
-    if type(unregisterEvent) == "function" then
-      unregisterEvent("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY)
-      predictionWorldEventRegistered = nil
-    end
+    _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY)
+    predictionWorldEventRegistered = nil
   end
 end
 

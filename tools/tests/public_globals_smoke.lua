@@ -15,8 +15,8 @@
 --
 -- Client facts the harness does not model are supplied here exactly as the
 -- client supplies them: the TOC metadata the unit-frame framework names its
--- frames from (X-MSUF-UnitFrames*), a real StaticPopupDialogs table, and global
--- names for frames that CreateFrame names.
+-- frames from (X-MSUF-UnitFrames-Prefix), a real StaticPopupDialogs table, and
+-- global names for frames that CreateFrame names.
 --
 -- --inventory prints every global the load graph wrote, one line per name
 -- (name, final type, phase, writing file:line), for tools/public_globals_ledger.py.
@@ -74,8 +74,9 @@ local function Boot()
     local env = world.env
 
     -- Names the addon owns read nil until its own file creates them. The
-    -- harness does that for every key containing "MSUF"; the framework's
-    -- TOC-named global (MidnightSimpleUnitFramesUF) has no such substring.
+    -- harness does that for every key containing "MSUF"; a name that starts
+    -- with the addon folder name (MidnightSimpleUnitFrames...) has no such
+    -- substring.
     local meta = getmetatable(env)
     local lookup = meta.__index
     meta.__index = function(table_, key)

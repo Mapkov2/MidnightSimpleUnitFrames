@@ -188,8 +188,7 @@ local function Enable()
         prefixOk = true
     end
 
-    local bus = MSUF.MSUF_EventBus or _G.MSUF_EventBus
-    if not bus then return end
+    local bus = MSUF.MSUF_EventBus
 
     --- One-shot broadcast at login (delayed to avoid login storm)
     bus:Register("PLAYER_ENTERING_WORLD", KEY .. "_PEW", function()
@@ -207,11 +206,9 @@ end
 
 local function Disable()
     broadcastGeneration = broadcastGeneration + 1
-    local bus = MSUF.MSUF_EventBus or _G.MSUF_EventBus
-    if bus then
-        bus:Unregister("PLAYER_ENTERING_WORLD", KEY .. "_PEW")
-        bus:Unregister("CHAT_MSG_ADDON", KEY .. "_CMA")
-    end
+    local bus = MSUF.MSUF_EventBus
+    bus:Unregister("PLAYER_ENTERING_WORLD", KEY .. "_PEW")
+    bus:Unregister("CHAT_MSG_ADDON", KEY .. "_CMA")
     moduleActive = false
 end
 
@@ -229,8 +226,7 @@ MSUF.MSUF_RegisterModule("VersionCheck", {
 --- runs none, so the check starts itself once at PLAYER_LOGIN (SavedVariables
 --- are bound, the broadcast PEW is still ahead). Enable is idempotent; until a
 --- registry pass records the module, IsEnabled gates notice and broadcast.
-local loginBus = MSUF.MSUF_EventBus
-if loginBus then loginBus:Register("PLAYER_LOGIN", KEY .. "_LOGIN", Enable, nil, true) end
+MSUF.MSUF_EventBus:Register("PLAYER_LOGIN", KEY .. "_LOGIN", Enable, nil, true)
 
 --- Public API (slash commands, options, debug)
 MSUF.VersionCheck = {

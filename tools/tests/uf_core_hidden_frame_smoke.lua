@@ -275,9 +275,7 @@ local function Boot(options)
     env.UnitWatchRegistered = client.UnitWatchRegistered
     env.SecureCmdOptionParse = function() return "show" end
     env.C_AddOns = { GetAddOnMetadata = function(_, key)
-        if key == "X-MSUF-UnitFrames" then return "MidnightSimpleUnitFramesUF" end
         if key == "X-MSUF-UnitFrames-Prefix" then return "MSUF" end
-        if key == "X-MSUF-UnitFrames-LegacyGlobals" then return "1" end
     end }
     local ns = { Client = options.clientFacts or { SupportsEvent = function() return true end } }
     ns.ExportPublic = function(name, value) env[name] = value; return value end

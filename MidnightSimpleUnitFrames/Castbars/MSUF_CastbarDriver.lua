@@ -1814,24 +1814,20 @@ local function MSUF_CastbarDriver_OnEnteringWorld()
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
 
-    if _G.MSUF_EventBus_Unregister then
-        _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
-    end
+    Require("MSUF_EventBus_Unregister", FILE)("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
 end
 
 --- atLoad: the file-load registration. The client loads the SavedVariables
 --- after every file ran, so no profile is read then (it answered the defaults,
 --- castbars on); both handlers ask the saved profile themselves when they run.
 local function SyncCastbarDriverLifecycle(runNow, atLoad)
-    if not _G.MSUF_EventBus_Register then return false end
-    if _G.MSUF_EventBus_Unregister then
-        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN")
-        _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
-    end
+    local register, unregister = Require("MSUF_EventBus_Register", FILE), Require("MSUF_EventBus_Unregister", FILE)
+    unregister("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN")
+    unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
     local any = atLoad ~= true and _G.MSUF_AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return false end
-    _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN", MSUF_CastbarDriver_OnLogin, nil, true)
-    _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
+    register("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN", MSUF_CastbarDriver_OnLogin, nil, true)
+    register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
     if runNow == true then MSUF_CastbarDriver_OnLogin() end
     return true
 end

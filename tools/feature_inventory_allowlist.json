@@ -569,6 +569,31 @@
    "evidence": "tools/public-globals.tsv has no rows for these names; repository and Suite source searches find no external addon readers.",
    "reason": "All internal readers use MSUF.ClassPowerOwnership; the four compatibility mirrors have no remaining consumers.",
    "date": "2026-10-13"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_GetModule",
+    "MSUF_ListModules",
+    "MSUF_RefreshModuleSettings",
+    "MSUF_ShutdownModules",
+    "MSUF_ToggleModule"
+   ],
+   "basis": "dead",
+   "evidence": "7.0 package W2-K: zero readers by name in both MSUF addons, tools, .github, the Suite, MapkoSkin, MidnightCooldownManager, the installed addons and tools/public-globals.tsv (searched 2026-10-13); the one test reader (MSUF_GetModule in forever_swing_timer_settings_smoke) now reads MSUF_ModulesByKey.",
+   "reason": "Unreferenced companions of the module registry (settings broadcast, shutdown, lookup, debug toggle, key listing). The registry keeps MSUF_RegisterModule and MSUF_ApplyModules; no module is registered, enabled or disabled any differently.",
+   "date": "2026-10-13"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_LSM_CallbackActive",
+    "MSUF_LSM_CombatRefreshPending"
+   ],
+   "basis": "dead",
+   "evidence": "7.0 package W2-K: zero readers by name in both MSUF addons, tools, .github, the Suite, MapkoSkin, MidnightCooldownManager, the installed addons and tools/public-globals.tsv (searched 2026-10-13).",
+   "reason": "Diagnostic flags of the LibSharedMedia callback that was unregistered and re-registered on every combat edge. The callback now stays registered for the session and combat parks the media refresh behind one listener, so neither state exists; lsm_media_registered_in_combat_smoke pins that fonts and textures registered in combat still apply after combat.",
+   "date": "2026-10-13"
   }
  ]
 }

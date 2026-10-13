@@ -343,6 +343,7 @@ local function NewWorld(flavor, roster)
         table.insert(W.bus[event], handler)
         return true
     end
+    _G.MSUF_EventBus_Unregister = function() end
 
     function W.EnterCombat()
         W.combat = true

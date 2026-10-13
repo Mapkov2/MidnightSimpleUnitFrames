@@ -90,18 +90,6 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
-    "path": "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
     "path": "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_GameplayHelpers.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
@@ -115,12 +103,6 @@
   },
   {
     "path": "MidnightSimpleUnitFrames/Features/Telemetry/MSUF_Analytics.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
-    "path": "MidnightSimpleUnitFrames/Features/Versioning/MSUF_ClientVersionWarning.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"
@@ -230,7 +212,7 @@
   {
     "path": "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua",
     "call": "CreateFrame ( \"Frame\" )",
-    "count": 4,
+    "count": 3,
     "reason": "Kernel event drivers, hidden parents and probes; no visible addon surface"
   },
   {
@@ -241,12 +223,6 @@
   },
   {
     "path": "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
-    "path": "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/api.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"

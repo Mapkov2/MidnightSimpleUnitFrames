@@ -293,8 +293,9 @@ local function MSUF_ClearTrackedGameTooltip(owner, force)
     gt:Hide()
 end
 
-if _G.GameTooltip and (not _G.GameTooltip._msufTooltipTrackingHooked) then
-    _G.GameTooltip._msufTooltipTrackingHooked = true
+-- Hooked once at file load (the file runs once per UI load), so no marker is
+-- written onto the Blizzard frame.
+if _G.GameTooltip then
     _G.GameTooltip:HookScript("OnHide", function(tip)
         tip._msufUnitTooltipOwner = nil
         tip._msufUnitTooltipUnit = nil

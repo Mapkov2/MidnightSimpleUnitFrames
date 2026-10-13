@@ -6,19 +6,7 @@ MSUF.UF = MSUF.UF or {}
 
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
-local Framework = MSUF.MSUFUnitFrames or MSUF.UFCore
-local HostExportPublic = MSUF.ExportPublic
-local function ExportPublic(name, value)
-  if Framework then Framework.legacyAPI[name] = value end
-  if Framework and Framework.publishLegacyGlobals ~= true then
-    return value
-  end
-  if type(HostExportPublic) == "function" then
-    return HostExportPublic(name, value)
-  end
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local type = type
 local pairs = pairs
@@ -219,9 +207,7 @@ local function GetUnitFrameScreenCacheKey(key, unit)
 end
 
 local function GetUnitFrameScreenCacheBucket()
-  local fn = UF.GetService and UF.GetService("ProfileScopedCache")
-    or (UF.GetHostValue and UF.GetHostValue("MSUF_GetProfileScopedCache"))
-  if fn == nil and Framework == nil then fn = _G.MSUF_GetProfileScopedCache end
+  local fn = _G.MSUF_GetProfileScopedCache
   return type(fn) == "function" and fn("unitFrameScreenCache") or nil
 end
 

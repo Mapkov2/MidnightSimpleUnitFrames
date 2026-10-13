@@ -25,7 +25,7 @@ from pathlib import Path
 root = Path(sys.argv[1]).resolve()
 SCRIPT = root / ".github" / "scripts" / "assert-classic-release-line.ps1"
 ADDONS = ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options")
-PAYLOADS = ("MidnightSimpleUnitFrames/State/MSUF_Changelog.lua",
+PAYLOADS = ("MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua",
             "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua")
 failures = []
 

@@ -810,17 +810,15 @@ local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, 
 
     local function UnregisterLifecycleBus()
         local unregister = _G.MSUF_EventBus_Unregister
-        if type(unregister) ~= "function" then return end
         for index = 1, #supportedRows do
             local row = supportedRows[index]
             unregister(row.event, row.key)
         end
     end
 
-    --- Private driver frame for the whole pool. It owns the lifecycle when no
-    --- shared bus exists, and it is also the recovery path when the bus refuses
-    --- a subscription: a half-wired pool would silently miss lifecycle updates
-    --- instead of failing where it can be seen.
+    --- Private driver frame for the whole pool. It is the recovery path when the
+    --- shared bus refuses a subscription: a half-wired pool would silently miss
+    --- lifecycle updates instead of failing where it can be seen.
     local function RegisterLifecycleFrame()
         lifecycleFrame = lifecycleFrame or CreateFrame("Frame")
         lifecycleFrame:SetScript("OnEvent", function(_, event, ...)
@@ -840,19 +838,17 @@ local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, 
             return false
         end
         local register = _G.MSUF_EventBus_Register
-        if type(register) == "function" then
-            -- The bus answers false when it declines a subscription. Every call
-            -- runs before the verdict is read, so one refusal cannot skip the
-            -- others.
-            local wired = true
-            for index = 1, #supportedRows do
-                local row = supportedRows[index]
-                wired = register(row.event, row.key, HandleLifecycle, row.units and lifecycleUnits or nil,
-                    row.once or nil) ~= false and wired
-            end
-            if wired then return true end
-            UnregisterLifecycleBus()
+        -- The bus answers false when it declines a subscription. Every call
+        -- runs before the verdict is read, so one refusal cannot skip the
+        -- others.
+        local wired = true
+        for index = 1, #supportedRows do
+            local row = supportedRows[index]
+            wired = register(row.event, row.key, HandleLifecycle, row.units and lifecycleUnits or nil,
+                row.once or nil) ~= false and wired
         end
+        if wired then return true end
+        UnregisterLifecycleBus()
         RegisterLifecycleFrame()
         return true
     end

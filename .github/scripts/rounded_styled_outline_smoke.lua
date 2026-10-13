@@ -196,6 +196,10 @@ local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"
 local function LoadLibrary(name)
   return assert(loadfile(libraryRoot .. name))("MidnightSimpleUnitFrames", MSUF)
 end
+-- The engine core classifies events through the real EventBus (loaded on its own namespace).
+local busNS = { ExportPublic = function(_, value) return value end }
+assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_EventBus.lua"))("MidnightSimpleUnitFrames", busNS)
+MSUF.EventBus = busNS.EventBus
 LoadLibrary("MSUF_UF_Metadata.lua")
 LoadLibrary("MSUF_UF_Core.lua")
 LoadLibrary("MSUF_UF_Layers.lua")

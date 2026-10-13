@@ -189,6 +189,8 @@ do
     end
     _G.UnitExists = function() return true end
     _G.UnitIsDeadOrGhost = function() return false end
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() end
     _G.CreateFrame = function() return NewWidget() end
     _G.UIParent = NewWidget()
     _G.GameFontHighlight = NewWidget()

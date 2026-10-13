@@ -332,32 +332,33 @@ do
 end
 
 do
-    local data = core.MSUF_Changelog
-    local entries = type(data) == "table" and data.entries or nil
-    if type(entries) == "table" and #entries >= 2 then
-        M.changelogSource = "msuf"
-        local a, b = tostring(entries[1].version), tostring(entries[2].version)
+    -- The compact changelog is Options data: a missing payload fails here instead of skipping the check.
+    local data = env.MSUF_Changelog
+    Check(type(data) == "table" and type(data.entries) == "table" and #data.entries >= 2,
+        "the Options addon did not publish the compact changelog with two releases")
+    local entries = data.entries
+    M.changelogSource = "msuf"
+    local a, b = tostring(entries[1].version), tostring(entries[2].version)
+    M.changelogSelectedVersion = a
+    local entryA = Select("changelog")
+    M.changelogSelectedVersion = b
+    Check(M.RebuildPageKeepingScroll("changelog"), "the changelog did not switch releases")
+    Settle()
+    local entryB = M.cache.changelog
+    Check(entryB ~= entryA, "the changelog showed the old release")
+    local first = WidgetCount()
+    for _ = 1, CYCLES do
         M.changelogSelectedVersion = a
-        local entryA = Select("changelog")
-        M.changelogSelectedVersion = b
-        Check(M.RebuildPageKeepingScroll("changelog"), "the changelog did not switch releases")
+        M.RebuildPageKeepingScroll("changelog")
         Settle()
-        local entryB = M.cache.changelog
-        Check(entryB ~= entryA, "the changelog showed the old release")
-        local first = WidgetCount()
-        for _ = 1, CYCLES do
-            M.changelogSelectedVersion = a
-            M.RebuildPageKeepingScroll("changelog")
-            Settle()
-            Check(M.cache.changelog == entryA, "the changelog rebuilt a release it had shown")
-            M.changelogSelectedVersion = b
-            M.RebuildPageKeepingScroll("changelog")
-            Settle()
-            Check(M.cache.changelog == entryB, "the changelog rebuilt a release it had shown")
-        end
-        Check(WidgetCount() == first, "changelog release switches created " .. (WidgetCount() - first) .. " widgets")
-        Note("changelog release switches x" .. CYCLES, "0 widgets")
+        Check(M.cache.changelog == entryA, "the changelog rebuilt a release it had shown")
+        M.changelogSelectedVersion = b
+        M.RebuildPageKeepingScroll("changelog")
+        Settle()
+        Check(M.cache.changelog == entryB, "the changelog rebuilt a release it had shown")
     end
+    Check(WidgetCount() == first, "changelog release switches created " .. (WidgetCount() - first) .. " widgets")
+    Note("changelog release switches x" .. CYCLES, "0 widgets")
 end
 
 ---------------------------------------------------------------------------

@@ -41,7 +41,9 @@ UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
 UF.elementTraits = UF.elementTraits or {}
 UF.initialized = UF.initialized or false
 
-local HOST_VALUES = UF._hostValues or _G
+-- Host flags (test modes, suspend state, ScheduleOnce) are plain globals the
+-- menu, preview and kernel modules write.
+local HOST_VALUES = _G
 
 local BASIC_ELEMENTS = {
   LoadConditions = true,
@@ -161,14 +163,6 @@ local GROUP_LIFECYCLE_EVENTS = {
 local GROUP_THREAT_EVENTS = {
   UNIT_THREAT_SITUATION_UPDATE = true,
   UNIT_THREAT_LIST_UPDATE = true,
-}
-
-local NONPREFIX_UNIT_EVENTS = {
-  INCOMING_RESURRECT_CHANGED = true,
-  -- Unit payload despite the PLAYER_ prefix (AFK/DND flag edges); without this
-  -- entry a frame-routed subscription would fall back to an unfiltered
-  -- RegisterEvent and fire for every unit's toggle.
-  PLAYER_FLAGS_CHANGED = true,
 }
 
 local function IsUnitToken(unit)
@@ -840,10 +834,10 @@ SyncGroupLifecycleDriver = function()
   return wanted
 end
 
-local function IsUnitEvent(event)
-  return type(event) == "string"
-    and (event:sub(1, 5) == "UNIT_" or NONPREFIX_UNIT_EVENTS[event] == true)
-end
+-- Unit events: UNIT_* plus the non-prefixed ones (PLAYER_FLAGS_CHANGED,
+-- INCOMING_RESURRECT_CHANGED); without them a frame-routed subscription would
+-- fall back to an unfiltered RegisterEvent and fire for every unit's toggle.
+local IsUnitEvent = MSUF.EventBus.IsUnitEvent
 
 local function DependentSource(frame, event)
   if event == "UNIT_TARGET" then
@@ -1914,8 +1908,7 @@ local function QueueDependentIdentity(frame, event)
     frame._msufDependentIdentityCallback = callback
   end
 
-  local scheduleOnce = UF.GetService and UF.GetService("ScheduleOnce")
-    or HOST_VALUES.MSUF_ScheduleOnce
+  local scheduleOnce = HOST_VALUES.MSUF_ScheduleOnce
   if type(scheduleOnce) == "function" then
     scheduleOnce(callback, callback)
   elseif _G.C_Timer and _G.C_Timer.After then
@@ -1955,8 +1948,7 @@ local function QueueBossIdentity(frame, event)
     frame._msufBossIdentityCallback = callback
   end
 
-  local scheduleOnce = UF.GetService and UF.GetService("ScheduleOnce")
-    or HOST_VALUES.MSUF_ScheduleOnce
+  local scheduleOnce = HOST_VALUES.MSUF_ScheduleOnce
   if type(scheduleOnce) == "function" then
     scheduleOnce(callback, callback)
   elseif _G.C_Timer and _G.C_Timer.After then

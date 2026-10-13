@@ -235,6 +235,13 @@ function World.New(root, backend, options)
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.
     _G.MSUF_BuildCastbarFrameElements = function() end
+    -- The shared EventBus is outside this world: it accepts the subscriptions
+    -- the castbar files make and delivers nothing. A smoke sets world.busRefuses
+    -- to make the pools take their private lifecycle frame (the bus declined).
+    _G.MSUF_EventBus_Register = function()
+        return not world.busRefuses
+    end
+    _G.MSUF_EventBus_Unregister = function() end
     if options.setup then options.setup(ns, world) end
     _G.MSUF_MAX_ARENA_FRAMES = options.arenaSlots or 3
     local extra = {}

@@ -14,6 +14,8 @@ return function(root, arenaSlots)
         CreateFrame = _G.CreateFrame,
         C_Timer = _G.C_Timer,
         MSUF_MAX_ARENA_FRAMES = _G.MSUF_MAX_ARENA_FRAMES,
+        MSUF_EventBus_Register = _G.MSUF_EventBus_Register,
+        MSUF_EventBus_Unregister = _G.MSUF_EventBus_Unregister,
     }
     local function Stub()
         local stub = {}
@@ -25,6 +27,9 @@ return function(root, arenaSlots)
     end
     _G.CreateFrame = Stub
     _G.C_Timer = { After = function() end }
+    -- The shared EventBus is outside this helper: subscriptions are accepted, nothing is delivered.
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() end
     _G.MSUF_MAX_ARENA_FRAMES = arenaSlots
     local ns = {}
     function ns.ExportPublic(name, value)
@@ -40,6 +45,8 @@ return function(root, arenaSlots)
     end
     _G.CreateFrame = saved.CreateFrame
     _G.C_Timer = saved.C_Timer
+    _G.MSUF_EventBus_Register = saved.MSUF_EventBus_Register
+    _G.MSUF_EventBus_Unregister = saved.MSUF_EventBus_Unregister
     _G.MSUF_MAX_ARENA_FRAMES = saved.MSUF_MAX_ARENA_FRAMES
     return ns
 end

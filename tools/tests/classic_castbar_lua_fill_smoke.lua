@@ -109,6 +109,9 @@ local function NewWidget(kind)
     return widget
 end
 
+-- The shared EventBus is outside this fixture: subscriptions are accepted and nothing is delivered.
+_G.MSUF_EventBus_Register = function() return true end
+_G.MSUF_EventBus_Unregister = function() end
 _G.CreateFrame = function(kind) return NewWidget(kind) end
 _G.UIParent = NewWidget("Frame")
 _G.GameFontHighlight = NewWidget("Font")

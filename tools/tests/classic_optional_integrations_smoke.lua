@@ -74,6 +74,9 @@ MSUF_ApplyCastbarVisualsForUnit MSUF_ApplyCurrentProfileGlobalUiScale]]):gmatch(
     local key = name
     _G[key] = function() calls[key] = true end
 end
+-- The shared EventBus is outside this fixture: subscriptions are accepted and nothing is delivered.
+_G.MSUF_EventBus_Register = function() return true end
+_G.MSUF_EventBus_Unregister = function() end
 ns.UF = { DisableBlizzardFrames = function() end, RefreshElements = function() end }
 ns.GF = { RefreshFonts = function() end, RefreshColors = function() end, RefreshVisuals = function() end }
 -- Required core providers precede the integration apply in the real graph.

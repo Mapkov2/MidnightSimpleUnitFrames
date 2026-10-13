@@ -92,8 +92,8 @@ Metadata.refreshElementGroups = {
 -- so they live here, ahead of it in the embed load order.
 local tostring = tostring
 local tonumber = tonumber
-local Framework = MSUF.MSUFUnitFrames or MSUF.UFCore
-local HOST_VALUES = UF._hostValues or _G
+-- Host flags (test modes, texture previews) are plain globals the menu writes.
+local HOST_VALUES = _G
 
 UF.unitOrder = UF.unitOrder or {
   "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget",
@@ -200,9 +200,7 @@ function UF.UnitsForConfigKey(key)
 end
 
 function UF.FrameName(unit)
-  local prefix = UF.frameNamePrefix
-    or (Framework and Framework.framePrefix)
-    or "MSUF"
+  local prefix = UF.frameNamePrefix or "MSUF"
   return tostring(prefix) .. "_" .. tostring(unit or "unknown")
 end
 
