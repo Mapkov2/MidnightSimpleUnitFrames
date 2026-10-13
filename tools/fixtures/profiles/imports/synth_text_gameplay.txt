@@ -1,0 +1,31 @@
+{addon="MSUF",fmt=2,kind="gameplay",payload={gameplay={apexAlertAncientArtsID=0,apexAlertDanceWindow=6.9,apexAlertFontSi
+ze=15,apexAlertMessage="strike ",apexAlertOffsetX=-40,apexAlertOffsetY=-89,apexAlertShadowTechID=245529,apexAlertTrackOv
+erlay=true,apexAlertTrackShadowTech=true,apexItFontSize=28,apexItOffsetX=2,apexItOffsetY=-90,apexRangeCounterFontSize=29
+,apexRangeCounterOffsetX=-14,apexRangeCounterOffsetY=-12,classResources={barTexture="EQOL: Astral",bgAlpha=1,bgTexture="
+MSUF Smooth v2",chargedColor={[1]=0.6,[2]=0.2,[3]=0.8},colorMode="power",customColor={[1]=1,[2]=0.8,[3]=0,[4]=1},detAlph
+a=1,detAnchor="CENTER",detBackdrop=true,detBgColor={[1]=0,[2]=0,[3]=0,[4]=0.8},detBorderColor={[1]=0,[2]=0,[3]=0,[4]=1},
+detGap=0,detHeight=17,detPad=2,detRelPoint="CENTER",detScale=1.05,detWidth=195,detX=-1,detY=-173,detached=false,embGap=1
+,embHeight=2,embInset=2,embSpacing=1,emptyAlpha=1,emptyColor={[1]=0.12,[2]=0.12,[3]=0.12},enabled=false,fillReverse=fals
+e,filledAlpha=1,hideOOC=false,hideWhenEmpty=false,hideWhenFull=false,matchECVWidth=false,matchPowerBarWidth=false,powerB
+arManagedByCR=true,powerColors={},runeCDColor={[1]=0.4,[2]=0.4,[3]=0.4},showEbonMight=false,showEleMaelstrom=false,showT
+ext=true,sortRunes="asc",textStyle="CURRENT",tickAlpha=0.15},combatFontSize=22,combatOffsetX=-54,combatOffsetY=-4,combat
+StateColorSync=false,combatStateDuration=1,combatStateEnterColor={[1]=0.7490196228027344,[2]=1,[3]=0.6627451181411743},c
+ombatStateEnterText="+Combat",combatStateFontSize=13,combatStateLeaveColor={[1]=0.7490196228027344,[2]=1,[3]=0.662745118
+1411743},combatStateLeaveText="-Combat",combatStateOffsetX=16.9998779296875,combatStateOffsetY=77.99993896484375,combatT
+imerAnchor="player",combatTimerClickThrough=true,combatTimerColor={[1]=1,[2]=1,[3]=1},cooldownIcons=false,crosshairInRan
+geColor={[1]=0,[2]=1,[3]=0},crosshairOutRangeColor={[1]=1,[2]=0,[3]=0},crosshairSize=26,crosshairThickness=3,darkestNigh
+tDanceCounterOffsetX=-482,darkestNightDanceCounterOffsetY=-669,enableApexAlert=true,enableApexItDevAura=true,enableApexN
+ameplateRangeDetection=true,enableApexRangeCounter=false,enableCombatCrosshair=true,enableCombatCrosshairMeleeRangeColor
+=true,enableCombatStateText=true,enableCombatTimer=true,enableDarkestNightDanceCounter=true,enableFirstDanceTimer=false,
+enableKickTracker=true,enableNameplateCounter=true,enableNameplateMeleeOnly=false,enablePlayerTotems=false,enableShadowT
+echniquesStackHighlight=true,firstDanceClickThrough=true,firstDanceIconSize=32,firstDanceOffsetX=-180,firstDanceOffsetY=
+-227,firstDanceShowIcon=true,firstDanceShowReady=true,fontSize=24,kickTrackerBgAlpha=0.35,kickTrackerFontSize=15,kickTra
+ckerIconSize=25,kickTrackerOffsetX=-479.9999389648438,kickTrackerOffsetY=212.9998168945313,kickTrackerShowInDungeon=true
+,kickTrackerShowInOpenWorld=true,kickTrackerShowInRaid=false,kickTrackerShowNames=true,kickTrackerShowReady=true,kickTra
+ckerSpacing=8,kickTrackerWarned=true,kickTrackerWidth=230,lockApexAlert=true,lockCombatState=true,lockCombatTimer=true,l
+ockCounter=false,lockDarkestNightDanceCounter=true,lockFirstDance=true,lockKickTracker=true,meleeSpellPerClass=true,mele
+eSpellPerSpec=false,nameplateMeleeSpellID=53,nameplateMeleeSpellIDByClass={DEMONHUNTER=162794,ROGUE=53},nameplateMeleeSp
+ellIDBySpec={[259]=1329,[261]=53,[577]=162794},offsetX=0,offsetY=-140,playerTotemsAnchorFrom="TOPLEFT",playerTotemsAncho
+rTo="BOTTOMLEFT",playerTotemsIconSize=24,playerTotemsOffsetX=0,playerTotemsOffsetY=-6,rangeFadeAlpha=0.5,rangeFadeEnable
+d=true,rangeFadeMaxRange=40,rangeFadeTick=0.25,shadowTechniquesGlowColor={[1]=0.69,[2]=0.5,[3]=0.88},shadowTechniquesGlo
+wScale=175,shadowTechniquesGlowStrength=95,shownGameplayColorsTip=true}},profile="Profile01",schema=600}
