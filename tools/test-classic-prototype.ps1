@@ -7,9 +7,20 @@ param(
     [string]$Only = "",
     [switch]$FailFast,
     [int]$Jobs = 0,
-    [switch]$RequireNoSkippedSteps
+    [switch]$RequireNoSkippedSteps,
+    [string[]]$SkipTier = @(),
+    [string]$Shard = "",
+    [string]$TimingsOut = ""
 )
 
+# -SkipTier names smoke tiers (the Tier column of tools/classic-gate-smokes.tsv) that this run
+# leaves out; it prints one SKIPPED line per tier. The default runs every tier. CI skips the
+# slow "nightly" tier on a push and runs it in the nightly workflow.
+# -Shard k/n runs only the k-th of n slices of the smoke plan (what is left after -Only and
+# -SkipTier), so n CI jobs can share one push-tier run. Shard 1 also runs the static checks; the
+# other shards run smokes only. Every shard must be given the same -Only and -SkipTier.
+# -TimingsOut <file> writes the seconds each invocation took, the format of
+# tools/classic-gate-weights.tsv, which the shard split reads.
 $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "../.github/scripts/ClassicGate.Common.psm1") -Force
 # -SelfContained is the CI subset: everything except the Blizzard UI source audit, which
@@ -77,6 +88,7 @@ function Assert-TrackedFile {
 # comment or an unused list never counts as covered.
 $smokeFilePattern = '(?:_smoke\.(?:lua|py)|_contract\.lua)$'
 $ranSmokes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$deferredSmokes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $listedSmokeCount = 0
 $gateSmokeFailures = [Collections.Generic.List[object]]::new()
 $gateSmokeTimings = [Collections.Generic.List[object]]::new()
@@ -94,10 +106,18 @@ function Invoke-GateSmoke {
     <#
         Records every smoke file a planned invocation names, then runs the plan.
         Recording and running live in the same function so nothing can start a
-        smoke the inventory check has not seen.
+        smoke the inventory check has not seen. -Defer records the plan as
+        deferred to a skipped tier and runs nothing; the inventory check counts
+        a smoke that only a skipped tier covers as accounted for, never as unrun.
     #>
-    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Plan)
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Plan,
+        [switch]$Defer
+    )
 
+    # Assigned in two steps: an if-expression would unroll the set into its items.
+    $recorded = $ranSmokes
+    if ($Defer) { $recorded = $deferredSmokes }
     foreach ($item in $Plan) {
         foreach ($argument in $item.Arguments) {
             $text = [string]$argument
@@ -106,10 +126,10 @@ function Invoke-GateSmoke {
             if (-not $full.StartsWith($rootFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Gate smoke lies outside the repository: $text"
             }
-            [void]$ranSmokes.Add($full.Substring($rootFull.Length + 1).Replace([char]92, [char]47))
+            [void]$recorded.Add($full.Substring($rootFull.Length + 1).Replace([char]92, [char]47))
         }
     }
-    if ($Plan.Count -eq 0) { return }
+    if ($Plan.Count -eq 0 -or $Defer) { return }
 
     # -ListSmokes prints every invocation the gate would make, fully expanded,
     # instead of running it: the listing and the run read the same plan.
@@ -236,10 +256,28 @@ if (-not (Test-Path -LiteralPath $smokeManifestPath -PathType Leaf)) {
 Assert-TrackedFile -RelativePath $smokeManifestRelative -Label "Classic gate smoke manifest"
 $smokeRows = @(Import-Csv -LiteralPath $smokeManifestPath -Delimiter "`t")
 if ($smokeRows.Count -eq 0) { throw "Classic gate smoke manifest is empty: $smokeManifestRelative" }
-$smokeManifestColumns = @("Matrix", "Runner", "Smoke", "Arguments", "Label")
+$smokeManifestColumns = @("Matrix", "Runner", "Smoke", "Arguments", "Label", "Tier")
 $actualSmokeColumns = @($smokeRows[0].PSObject.Properties | ForEach-Object { $_.Name })
 if (($actualSmokeColumns -join "`t") -cne ($smokeManifestColumns -join "`t")) {
     throw "Classic gate smoke manifest columns must be exactly: $($smokeManifestColumns -join ', ')"
+}
+# Tier is the last column and a row may leave it out: a smoke without one is in the push tier, which
+# every push and pull request runs. The nightly tier holds the slowest smokes; -SkipTier leaves a
+# tier out of a run and the local default runs them all.
+$smokeTiers = @("push", "nightly")
+foreach ($tierName in $SkipTier) {
+    if ($smokeTiers -cnotcontains $tierName) {
+        throw "-SkipTier names an unknown smoke tier '$tierName'; the tiers are: $($smokeTiers -join ', ')"
+    }
+}
+$shardIndex = 0
+$shardCount = 0
+if (-not [string]::IsNullOrWhiteSpace($Shard)) {
+    if ($Shard -cnotmatch '^(?<index>[1-9][0-9]*)/(?<count>[1-9][0-9]*)$' -or [int]$Matches["index"] -gt [int]$Matches["count"]) {
+        throw "-Shard must read <k>/<n> with 1 <= k <= n, for example 2/6; got '$Shard'"
+    }
+    $shardIndex = [int]$Matches["index"]
+    $shardCount = [int]$Matches["count"]
 }
 $smokeCodecModes = @("raise", "nil")
 $gateSmokeJobs = if ($Jobs -gt 0) { $Jobs } else { [Math]::Max(1, [Math]::Min(8, [Environment]::ProcessorCount)) }
@@ -308,6 +346,10 @@ function New-GateSmokeItem {
         }
         default { throw "Classic gate smoke manifest names an unknown runner '$($Row.Runner)': $($Row.Smoke)" }
     }
+    $tier = if ([string]::IsNullOrEmpty($Row.Tier)) { "push" } else { [string]$Row.Tier }
+    if ($smokeTiers -cnotcontains $tier) {
+        throw "Classic gate smoke manifest names an unknown tier '$tier' ($($smokeTiers -join ', ')): $($Row.Smoke)"
+    }
     $arguments = @($leading) + @([string](Join-Path $root $Row.Smoke))
     foreach ($token in @(($Row.Arguments -split '\s+') | Where-Object { $_ })) {
         $arguments += (Expand-GateSmokeToken -Text $token -Context $Context)
@@ -319,6 +361,7 @@ function New-GateSmokeItem {
     return [pscustomobject]@{
         Runner = $Row.Runner
         Smoke = $Row.Smoke
+        Tier = $tier
         Name = (@($Row.Smoke) + $variant) -join ' '
         Command = $command
         Arguments = [string[]]@($arguments)
@@ -350,6 +393,212 @@ if (-not [string]::IsNullOrWhiteSpace($Only)) {
     if ($smokePlan.Count -eq 0) { throw "-Only '$Only' matches none of the $smokePlanTotal smoke invocations" }
     $skippedSteps.Add("Smoke inventory and $($smokePlanTotal - $smokePlan.Count) smoke invocations (-Only '$Only')")
 }
+# A skipped tier is one SKIPPED line naming the tier and how many invocations it holds, so a push
+# run never reads as the full gate. Its smokes stay in the inventory as deferred, not as unrun.
+foreach ($tierName in @($SkipTier | Select-Object -Unique)) {
+    $deferredPlan = @($smokePlan | Where-Object { $_.Tier -ceq $tierName })
+    Invoke-GateSmoke -Plan $deferredPlan -Defer
+    $skippedSteps.Add("Smoke tier '$tierName' ($($deferredPlan.Count) smoke invocations, -SkipTier $tierName)")
+    $smokePlan = [Collections.Generic.List[object]]@($smokePlan | Where-Object { $_.Tier -cne $tierName })
+}
+if ($smokePlan.Count -eq 0) { throw "-SkipTier leaves none of the $smokePlanTotal smoke invocations to run" }
+
+# -Shard k/n splits what is left of the plan into n slices of about equal weight, longest first:
+# each invocation goes to the shard with the least weight so far. The weight is the seconds the
+# invocation took in an earlier run (tools/classic-gate-weights.tsv, written by -TimingsOut); one
+# the table does not know weighs the median known one. Ties break by plan order, so every shard
+# computes the same split from the same commit. Shard 1 also runs the static checks, so it starts
+# with a share of the plan's weight (about 50 s of a two-core runner against the push tier's
+# smoke time, 4%) and gets that much less smoke work.
+$shardFirstShare = 0.04
+function Get-GateSmokeShardAssignment {
+    param(
+        [Parameter(Mandatory = $true)][object[]]$Plan,
+        [Parameter(Mandatory = $true)][int]$Count,
+        [Parameter(Mandatory = $true)][string]$WeightsPath
+    )
+    $invariant = [Globalization.CultureInfo]::InvariantCulture
+    $known = @{}
+    foreach ($row in @(Import-Csv -LiteralPath $WeightsPath -Delimiter "`t")) {
+        $seconds = 0.0
+        if ([double]::TryParse([string]$row.Seconds, [Globalization.NumberStyles]::Float, $invariant, [ref]$seconds) -and $seconds -gt 0) {
+            $known[[string]$row.Name] = $seconds
+        }
+    }
+    if ($known.Count -eq 0) { throw "Classic gate shard weights hold no timing: $WeightsPath" }
+    $sorted = [double[]]@($known.Values)
+    [Array]::Sort($sorted)
+    $median = $sorted[[int][Math]::Floor(($sorted.Count - 1) / 2)]
+    $weight = New-Object 'double[]' $Plan.Count
+    $total = 0.0
+    for ($index = 0; $index -lt $Plan.Count; $index++) {
+        $weight[$index] = $median
+        if ($known.ContainsKey($Plan[$index].Name)) { $weight[$index] = $known[$Plan[$index].Name] }
+        $total += $weight[$index]
+    }
+    $load = New-Object 'double[]' $Count
+    $load[0] = $shardFirstShare * $total
+    $order = @(0..($Plan.Count - 1) | Sort-Object -Property @{ Expression = { -$weight[$_] } }, @{ Expression = { $_ } })
+    $shardOf = New-Object 'int[]' $Plan.Count
+    foreach ($index in $order) {
+        $lightest = 0
+        for ($candidate = 1; $candidate -lt $Count; $candidate++) {
+            if ($load[$candidate] -lt $load[$lightest]) { $lightest = $candidate }
+        }
+        $shardOf[$index] = $lightest
+        $load[$lightest] += $weight[$index]
+    }
+    return [pscustomobject]@{ ShardOf = $shardOf; Weight = $weight; Total = $total }
+}
+
+if ($shardCount -gt 1) {
+    $weightsRelative = "tools/classic-gate-weights.tsv"
+    Assert-TrackedFile -RelativePath $weightsRelative -Label "Classic gate shard weights"
+    $split = Get-GateSmokeShardAssignment -Plan @($smokePlan) -Count $shardCount -WeightsPath (Join-Path $root $weightsRelative)
+    $ownPlan = [Collections.Generic.List[object]]::new()
+    $otherPlan = [Collections.Generic.List[object]]::new()
+    $ownWeight = 0.0
+    for ($planIndex = 0; $planIndex -lt $smokePlan.Count; $planIndex++) {
+        if ($split.ShardOf[$planIndex] -eq $shardIndex - 1) {
+            $ownPlan.Add($smokePlan[$planIndex])
+            $ownWeight += $split.Weight[$planIndex]
+        } else {
+            $otherPlan.Add($smokePlan[$planIndex])
+        }
+    }
+    if ($ownPlan.Count -eq 0) { throw "Smoke shard $Shard holds none of the $($smokePlan.Count) smoke invocations; use fewer shards" }
+    # The other shards' smokes stay in the inventory as deferred, not as unrun.
+    Invoke-GateSmoke -Plan @($otherPlan) -Defer
+    $shardShare = [Math]::Round(100 * $ownWeight / $split.Total)
+    $shardNote = "shards 2-$shardCount run the rest"
+    if ($shardIndex -gt 1) { $shardNote = "the static checks run in shard 1/$shardCount" }
+    $skippedSteps.Add("Smoke shard $Shard ($($ownPlan.Count) of $($smokePlan.Count) smoke invocations, $shardShare% of their weight; $shardNote)")
+    if ($ListSmokes) { Write-Host "LISTSHARD $Shard | $($ownPlan.Count) invocations | $shardShare% of the weight" }
+    $smokePlan = $ownPlan
+}
+
+# -ListSmokes prints the plan and stops: the static checks below add nothing to a listing.
+if ($ListSmokes) {
+    Invoke-GateSmoke -Plan @($smokePlan)
+    Pop-Location
+    return
+}
+
+# The smoke phase, the inventory and the closing report are functions so a shard that only runs
+# smokes (shard 2 and up) can run them without the static checks between here and the original
+# call sites.
+function Invoke-GateSmokePhase {
+    if (-not $lua) { return }
+    # tools/classic-gate-smokes.tsv is the list; the plan above expanded it
+    # over the client matrix. Its python rows run here too (see the error-path
+    # check below). Invoke-GateSmoke records every smoke file it is about to
+    # start, so the inventory check still sees each one.
+    $luaSmokeStopwatch = [Diagnostics.Stopwatch]::StartNew()
+    Invoke-GateSmoke -Plan @($smokePlan)
+    $luaSmokeStopwatch.Stop()
+    $invariant = [Globalization.CultureInfo]::InvariantCulture
+    $smokeSeconds = ($gateSmokeTimings | Measure-Object -Property Seconds -Sum).Sum
+    Write-Host ("Classic gate smokes: $($gateSmokeTimings.Count) invocations in " +
+        $luaSmokeStopwatch.Elapsed.TotalSeconds.ToString("0.0", $invariant) +
+        " s wall clock on $gateSmokeJobs worker(s), " + ([double]$smokeSeconds).ToString("0", $invariant) +
+        " s of smoke time in all; slowest:")
+    foreach ($slowSmoke in @($gateSmokeTimings | Sort-Object -Property Seconds -Descending | Select-Object -First 10)) {
+        Write-Host ("    " + $slowSmoke.Seconds.ToString("0.00", $invariant).PadLeft(6) + " s  " + $slowSmoke.Name)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($TimingsOut)) {
+        $slowestOf = @{}
+        foreach ($timing in $gateSmokeTimings) {
+            if (-not $slowestOf.ContainsKey($timing.Name) -or $timing.Seconds -gt $slowestOf[$timing.Name]) {
+                $slowestOf[$timing.Name] = $timing.Seconds
+            }
+        }
+        $timingNames = [string[]]@($slowestOf.Keys)
+        [Array]::Sort($timingNames, [StringComparer]::Ordinal)
+        $timingLines = @("Name`tSeconds") + @($timingNames | ForEach-Object { "$_`t" + ([double]$slowestOf[$_]).ToString("0.00", $invariant) })
+        $timingsPath = if ([IO.Path]::IsPathRooted($TimingsOut)) { $TimingsOut } else { Join-Path $root $TimingsOut }
+        [IO.File]::WriteAllText($timingsPath, (($timingLines -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
+    }
+}
+
+# Every tracked smoke either ran through Invoke-GateSmoke above or is retired
+# with a recorded reason, so no smoke silently rots.
+function Assert-GateSmokeInventory {
+    $retiredSmokes = [ordered]@{
+        ".github/scripts/mapkoskin_menu_integration_contract.lua" = "runs only under the external tests/MapkoSkin/run.lua harness, which this repository does not contain"
+        ".github/scripts/prediction_data_writer_parity_smoke.lua" = "compares against an immutable pre-refactor source root in arg[2]; a self-comparison fails by design"
+    }
+    $trackedSmokes = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    $trackedToolingResult = Invoke-GateGit -Arguments @("-C", $root, "ls-files", "--", "tools", ".github")
+    if ($trackedToolingResult.ExitCode -ne 0) { throw "Unable to enumerate tracked smokes: $($trackedToolingResult.Lines -join ', ')" }
+    $trackedToolingPaths = $trackedToolingResult.Lines
+    foreach ($trackedToolingPath in $trackedToolingPaths) {
+        $trackedToolingPath = $trackedToolingPath.Replace([char]92, [char]47)
+        if ($trackedToolingPath -match $smokeFilePattern) { [void]$trackedSmokes.Add($trackedToolingPath) }
+    }
+    foreach ($retiredSmoke in $retiredSmokes.Keys) {
+        if (-not $trackedSmokes.Contains($retiredSmoke)) {
+            throw "Retired smoke entry names no tracked smoke: $retiredSmoke"
+        }
+        if ($ranSmokes.Contains($retiredSmoke) -or $deferredSmokes.Contains($retiredSmoke)) {
+            throw "Retired smoke still runs in the Classic gate: $retiredSmoke"
+        }
+    }
+    foreach ($ranSmoke in @($ranSmokes) + @($deferredSmokes)) {
+        if (-not $trackedSmokes.Contains($ranSmoke)) {
+            throw "The Classic gate ran an untracked smoke; track it with git add -f: $ranSmoke"
+        }
+    }
+    # Without lua no Lua smoke ran; the preflight already recorded that skip. With
+    # -Only the run deliberately holds smokes back and records that as a skipped
+    # step, so the completeness half of the inventory cannot apply.
+    if ($lua -and [string]::IsNullOrWhiteSpace($Only)) {
+        # A smoke only a skipped tier or another shard covers is deferred: a SKIPPED line names it.
+        $unrunSmokes = [string[]]@($trackedSmokes | Where-Object {
+            -not $ranSmokes.Contains($_) -and -not $deferredSmokes.Contains($_) -and -not $retiredSmokes.Contains($_) })
+        if ($unrunSmokes.Count -gt 0) {
+            throw "Tracked smokes neither ran in the Classic gate nor are listed as retired: $($unrunSmokes -join ', ')"
+        }
+    }
+    $deferredOnlyCount = @($deferredSmokes | Where-Object { -not $ranSmokes.Contains($_) }).Count
+    $deferredNote = if ($deferredOnlyCount -gt 0) { "; $deferredOnlyCount deferred to a skipped tier or shard" } else { "" }
+    Write-Host "Smoke inventory: $($trackedSmokes.Count) tracked smokes; $($ranSmokes.Count) ran$deferredNote; $($retiredSmokes.Count) retired with a recorded reason"
+}
+
+function Complete-GateRun {
+    foreach ($skippedStep in $skippedSteps) {
+        Write-Host "SKIPPED: $skippedStep"
+    }
+    # The smoke phase collects instead of aborting, so one run names every broken
+    # smoke. Structural checks above still stop at the first failure, because each
+    # one assumes what the previous ones proved. -FailFast restores the old abort.
+    if ($gateSmokeFailures.Count -gt 0) {
+        Write-Host "Failed smokes: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
+        foreach ($failure in $gateSmokeFailures) {
+            Write-Host "FAILED: $($failure.Label) (exit $($failure.ExitCode))"
+            Write-Host "    $($failure.Command)"
+            foreach ($line in $failure.Output) { Write-Host "    | $line" }
+        }
+        Pop-Location
+        throw "Classic gate smokes failed: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
+    }
+    # A full run in CI has nothing to skip: the job clones the Blizzard mirror.
+    # -RequireNoSkippedSteps makes that explicit, so a clone that lands in the wrong
+    # place cannot leave a green gate that quietly dropped the source audit. It runs
+    # after the smoke report so a broken smoke is still named first.
+    if ($RequireNoSkippedSteps -and $skippedSteps.Count -gt 0) {
+        Pop-Location
+        throw "The Classic gate skipped $($skippedSteps.Count) step(s) while -RequireNoSkippedSteps was set: $($skippedSteps -join '; ')"
+    }
+    Pop-Location
+}
+
+if ($shardIndex -gt 1) {
+    if (-not $lua) { throw "Smoke shard $Shard needs lua to run its smokes" }
+    Invoke-GateSmokePhase
+    Assert-GateSmokeInventory
+    Complete-GateRun
+    return
+}
 
 # Python smokes need no Lua. With lua present they run in the smoke phase
 # below, in one pool with the Lua smokes, so the slow git-driven ones overlap
@@ -378,7 +627,7 @@ $versionableAddonLua = [string[]]@(Get-MsufVersionableFiles -Root $root `
     -Folders ([string[]]@($targets | ForEach-Object { $_.Folder })) -Extension @(".lua"))
 $clients = $clientMatrix
 $expectedVersion = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
-& (Join-Path $root ".github/scripts/assert-classic-6-5-release-line.ps1") `
+& (Join-Path $root ".github/scripts/assert-classic-release-line.ps1") `
     -RepositoryRoot $root -ReleaseVersion $expectedVersion
 # The release line proves the two changelog payloads' version and source hash;
 # the tracked generator's check mode proves their whole content, so a hand
@@ -1023,62 +1272,8 @@ if ($luac) {
     Write-Host "Lua 5.1 syntax: $($luaFiles.Count) files passed"
 }
 
-if ($lua) {
-    # tools/classic-gate-smokes.tsv is the list; the plan above expanded it
-    # over the client matrix. Its python rows run here too (see the error-path
-    # check above). Invoke-GateSmoke records every smoke file it is about to
-    # start, so the inventory check below still sees each one.
-    $luaSmokeStopwatch = [Diagnostics.Stopwatch]::StartNew()
-    Invoke-GateSmoke -Plan @($smokePlan)
-    $luaSmokeStopwatch.Stop()
-    if (-not $ListSmokes) {
-        $invariant = [Globalization.CultureInfo]::InvariantCulture
-        Write-Host ("Classic gate smokes: $($gateSmokeTimings.Count) invocations in " +
-            $luaSmokeStopwatch.Elapsed.TotalSeconds.ToString("0.0", $invariant) +
-            " s wall clock on $gateSmokeJobs worker(s); slowest:")
-        foreach ($slowSmoke in @($gateSmokeTimings | Sort-Object -Property Seconds -Descending | Select-Object -First 10)) {
-            Write-Host ("    " + $slowSmoke.Seconds.ToString("0.00", $invariant).PadLeft(6) + " s  " + $slowSmoke.Name)
-        }
-    }
-}
-
-# Every tracked smoke either ran through Invoke-GateSmoke above or is retired
-# with a recorded reason, so no smoke silently rots.
-$retiredSmokes = [ordered]@{
-    ".github/scripts/mapkoskin_menu_integration_contract.lua" = "runs only under the external tests/MapkoSkin/run.lua harness, which this repository does not contain"
-    ".github/scripts/prediction_data_writer_parity_smoke.lua" = "compares against an immutable pre-refactor source root in arg[2]; a self-comparison fails by design"
-}
-$trackedSmokes = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
-$trackedToolingResult = Invoke-GateGit -Arguments @("-C", $root, "ls-files", "--", "tools", ".github")
-if ($trackedToolingResult.ExitCode -ne 0) { throw "Unable to enumerate tracked smokes: $($trackedToolingResult.Lines -join ', ')" }
-$trackedToolingPaths = $trackedToolingResult.Lines
-foreach ($trackedToolingPath in $trackedToolingPaths) {
-    $trackedToolingPath = $trackedToolingPath.Replace([char]92, [char]47)
-    if ($trackedToolingPath -match $smokeFilePattern) { [void]$trackedSmokes.Add($trackedToolingPath) }
-}
-foreach ($retiredSmoke in $retiredSmokes.Keys) {
-    if (-not $trackedSmokes.Contains($retiredSmoke)) {
-        throw "Retired smoke entry names no tracked smoke: $retiredSmoke"
-    }
-    if ($ranSmokes.Contains($retiredSmoke)) {
-        throw "Retired smoke still runs in the Classic gate: $retiredSmoke"
-    }
-}
-foreach ($ranSmoke in $ranSmokes) {
-    if (-not $trackedSmokes.Contains($ranSmoke)) {
-        throw "The Classic gate ran an untracked smoke; track it with git add -f: $ranSmoke"
-    }
-}
-# Without lua no Lua smoke ran; the preflight already recorded that skip. With
-# -Only the run deliberately holds smokes back and records that as a skipped
-# step, so the completeness half of the inventory cannot apply.
-if ($lua -and [string]::IsNullOrWhiteSpace($Only)) {
-    $unrunSmokes = [string[]]@($trackedSmokes | Where-Object { -not $ranSmokes.Contains($_) -and -not $retiredSmokes.Contains($_) })
-    if ($unrunSmokes.Count -gt 0) {
-        throw "Tracked smokes neither ran in the Classic gate nor are listed as retired: $($unrunSmokes -join ', ')"
-    }
-}
-Write-Host "Smoke inventory: $($trackedSmokes.Count) tracked smokes; $($ranSmokes.Count) ran; $($retiredSmokes.Count) retired with a recorded reason"
+Invoke-GateSmokePhase
+Assert-GateSmokeInventory
 
 if (-not $SelfContained -and $uiMirrorPresent) {
     & (Join-Path $root "tools/audit-classic-ui-source.ps1")
@@ -1087,28 +1282,4 @@ if (-not $SelfContained -and $uiMirrorPresent) {
 
 Write-Host "Client TOCs: $($targets.Count * $clientMatrix.Count) manifests passed ($($clientSuffixes -join ', '))"
 Write-Host "XML load graph: $($seenXml.Count) manifests resolved"
-foreach ($skippedStep in $skippedSteps) {
-    Write-Host "SKIPPED: $skippedStep"
-}
-# The smoke phase collects instead of aborting, so one run names every broken
-# smoke. Structural checks above still stop at the first failure, because each
-# one assumes what the previous ones proved. -FailFast restores the old abort.
-if ($gateSmokeFailures.Count -gt 0) {
-    Write-Host "Failed smokes: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
-    foreach ($failure in $gateSmokeFailures) {
-        Write-Host "FAILED: $($failure.Label) (exit $($failure.ExitCode))"
-        Write-Host "    $($failure.Command)"
-        foreach ($line in $failure.Output) { Write-Host "    | $line" }
-    }
-    Pop-Location
-    throw "Classic gate smokes failed: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
-}
-# A full run in CI has nothing to skip: the job clones the Blizzard mirror.
-# -RequireNoSkippedSteps makes that explicit, so a clone that lands in the wrong
-# place cannot leave a green gate that quietly dropped the source audit. It runs
-# after the smoke report so a broken smoke is still named first.
-if ($RequireNoSkippedSteps -and $skippedSteps.Count -gt 0) {
-    Pop-Location
-    throw "The Classic gate skipped $($skippedSteps.Count) step(s) while -RequireNoSkippedSteps was set: $($skippedSteps -join '; ')"
-}
-Pop-Location
+Complete-GateRun

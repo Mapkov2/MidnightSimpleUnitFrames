@@ -1,15 +1,16 @@
 name: MSUF 7.0 full gate
 
-# The full Classic gate as a reusable workflow, so the push/PR gate and the
+# The full Classic gate as a reusable workflow, so the nightly gate and the
 # release both run the same steps instead of two copies that can drift.
-# It checks out the commit the caller was triggered for (a branch head for the
-# gate workflow, the release tag for the release workflow), clones the Blizzard
-# UI source mirror and runs the gate with the source audit.
+# It checks out the commit the caller was triggered for (the default branch head
+# for the nightly workflow, the release tag for the release workflow), clones the
+# Blizzard UI source mirror and runs the gate with every smoke tier and the
+# source audit.
 #
 # Every step fails closed. -RequireNoSkippedSteps makes the gate itself refuse
 # to pass when any of its own steps was skipped, so a clone that lands in the
 # wrong place cannot produce a green run that quietly dropped the Blizzard
-# source audit.
+# source audit, and a tier skip can never reach this workflow.
 
 on:
   workflow_call:

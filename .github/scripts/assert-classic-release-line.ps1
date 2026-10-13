@@ -18,19 +18,27 @@ if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
 }
 
 $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace '^v(?=\d)', ''
-# A line this script does not know verifies nothing, so it fails instead of
-# reporting "skipped": a mistyped version would otherwise pass every TOC,
-# contract and changelog check below without reading a single file. When the
-# Classic release line moves past 6.5, retarget this script deliberately.
-# 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
-# collides with 6.05 and ranks above 6.20).
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cne '6.50') {
-    throw "Classic release-line contract covers 6.5 alpha/beta and 6.50 only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
-}
-
+# The release line is whatever VERSION says. A version this script cannot read
+# verifies nothing, so a malformed one fails instead of reporting "skipped": it
+# would otherwise pass every TOC, contract and changelog check below without
+# reading a single file. The shared channel resolver, which the packager and the
+# publishing workflows also use, owns the format (stable <major>.<minor>,
+# <major>.<minor>-alpha<N>, <major>.<minor>-beta<N>); this script adds the two
+# rules the version check relies on. The minor is a decimal fraction, so a stable
+# release spells it with two digits (a one-digit minor would collide with the
+# zero-padded one in the integer minor that older clients compare), and a
+# prerelease names its release line as <major>.<minor>.
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()
 if ($sourceVersion -ne $normalizedVersion) {
     throw "Classic VERSION '$sourceVersion' does not match release '$normalizedVersion'."
+}
+$releaseChannel = & (Join-Path $PSScriptRoot "resolve_classic_release_channel.ps1") -Tag $normalizedVersion
+if ($releaseChannel.Channel -ceq "release") {
+    if ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]{2}$') {
+        throw "A stable release spells its minor with two digits (for example 7.00), got '$normalizedVersion'."
+    }
+} elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+$') {
+    throw "A prerelease names its release line as <major>.<minor> (for example 7.0-beta1), got '$normalizedVersion'."
 }
 
 $addons = @(
@@ -50,26 +58,26 @@ foreach ($addon in $addons) {
         $interfaceFields = [regex]::Matches($toc, '(?m)^## Interface:\s*(.+?)\s*$')
         if ($interfaceFields.Count -ne 1 -or
             (Get-InterfaceSetKey -Value $interfaceFields[0].Groups[1].Value) -cne (Get-InterfaceSetKey -Value $client.Interfaces)) {
-            throw "Classic 6.5 has the wrong $flavor interface set (expected $($client.Interfaces)): $tocPath"
+            throw "Release $normalizedVersion has the wrong $flavor interface set (expected $($client.Interfaces)): $tocPath"
         }
         if ($client.IsClassic -cne "true") {
-            # Since 6.50 Midnight runs this release's version as well (owner decision
+            # Midnight runs this release's version as well (owner decision
             # 2026-10-09); WoW Forever reads the same TOC and takes the version from
             # the core TOC's Forever field.
             if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion)) \[AllowLoadGameType standard\]\s*$") {
-                throw "Classic 6.5 has a stale standard game type version: $tocPath"
+                throw "Release $normalizedVersion has a stale standard game type version: $tocPath"
             }
             if ($addon -ceq "MidnightSimpleUnitFrames" -and
                 $toc -notmatch "(?m)^## X-MSUF-Version-Forever: $([regex]::Escape($normalizedVersion))\s*$") {
-                throw "Classic 6.5 has a stale WoW Forever version (X-MSUF-Version-Forever): $tocPath"
+                throw "Release $normalizedVersion has a stale WoW Forever version (X-MSUF-Version-Forever): $tocPath"
             }
             if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion)) \[ExcludeLoadGameType standard\]\s*$") {
-                throw "Classic 6.5 has a stale non-standard game type version: $tocPath"
+                throw "Release $normalizedVersion has a stale non-standard game type version: $tocPath"
             }
             continue
         }
         if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion))\s*$") {
-            throw "Classic 6.5 has a stale $flavor version: $tocPath"
+            throw "Release $normalizedVersion has a stale $flavor version: $tocPath"
         }
     }
 }
@@ -84,7 +92,7 @@ $requiredFragments = [ordered]@{
 foreach ($relativePath in $requiredFragments.Keys) {
     $content = [IO.File]::ReadAllText((Join-Path $RepositoryRoot $relativePath))
     if ($content.IndexOf($requiredFragments[$relativePath], [StringComparison]::Ordinal) -lt 0) {
-        throw "Classic 6.5 lost its 12.1.5 contract '$($requiredFragments[$relativePath])': $relativePath"
+        throw "Release $normalizedVersion lost its 12.1.5 contract '$($requiredFragments[$relativePath])': $relativePath"
     }
 }
 
@@ -96,7 +104,7 @@ foreach ($arenaEntry in @(
     "Castbars\MSUF_ArenaCastbars_Preview.lua"
 )) {
     if ($coreMainline.IndexOf($arenaEntry, [StringComparison]::Ordinal) -lt 0) {
-        throw "Classic 6.5 Mainline lost Arena load entry: $arenaEntry"
+        throw "Release $normalizedVersion Mainline lost Arena load entry: $arenaEntry"
     }
 }
 
@@ -128,4 +136,4 @@ foreach ($relativePath in @(
     }
 }
 
-Write-Host "Classic 6.5 release-line contract: PASS ($normalizedVersion; changelog $changelogVersion)"
+Write-Host "Classic release-line contract: PASS ($normalizedVersion; changelog $changelogVersion)"

@@ -8,6 +8,9 @@ param(
     [switch]$FailFast,
     [int]$Jobs = 0,
     [switch]$RequireNoSkippedSteps,
+    [string[]]$SkipTier = @(),
+    [string]$Shard = "",
+    [string]$TimingsOut = "",
     [string]$LuaPath = "",
     [string]$LuacPath = "",
     [string]$PythonPath = ""
@@ -19,6 +22,11 @@ param(
 # tools/test-classic-prototype.ps1.
 #
 # Parameters win over MSUF_LUA / MSUF_LUAC / MSUF_PYTHON, which win over PATH.
+#
+# -SkipTier <tier> leaves one smoke tier out of the run (CI uses -SkipTier nightly on a push)
+# and the gate prints a SKIPPED line for it; without it every tier runs.
+# -Shard <k>/<n> runs one slice of the smokes (shard 1 also runs the static checks); -TimingsOut <file>
+# records how long each smoke took, the format of tools/classic-gate-weights.tsv.
 #
 # -RetailReferenceRoot is deprecated and ignored: 7.0 is an independent repository, so the
 # gate compares against no Retail checkout. The parameter is still accepted (the gate prints a
@@ -119,6 +127,9 @@ if (-not [string]::IsNullOrWhiteSpace($Only)) { $forwarded["Only"] = $Only }
 if ($FailFast) { $forwarded["FailFast"] = $true }
 if ($Jobs -gt 0) { $forwarded["Jobs"] = $Jobs }
 if ($RequireNoSkippedSteps) { $forwarded["RequireNoSkippedSteps"] = $true }
+if ($SkipTier.Count -gt 0) { $forwarded["SkipTier"] = $SkipTier }
+if (-not [string]::IsNullOrWhiteSpace($Shard)) { $forwarded["Shard"] = $Shard }
+if (-not [string]::IsNullOrWhiteSpace($TimingsOut)) { $forwarded["TimingsOut"] = $TimingsOut }
 
 # The gate is not written against Set-StrictMode, and a wrapper must not change
 # how it behaves, so strict mode ends here.

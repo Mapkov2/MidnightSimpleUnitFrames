@@ -1,10 +1,23 @@
 name: MSUF 7.0 gate
 
-# Runs the Classic gate for every change to the addon folders, the tooling or
-# the workflows on main, as two jobs:
-# the self-contained subset
-# and the full gate. The branch filters keep tag pushes out: path filters are
-# not evaluated for tags.
+# Runs for every change to the addon folders, the tooling or the workflows on
+# main, as two jobs that run side by side and share nothing:
+#
+# - push-gate: every check that reads only the commit (syntax, load-graph lock,
+#   TOC invariants, error paths, ratchets) plus the smokes of the push tier,
+#   spread over six shard jobs so a push finishes in about four minutes. The
+#   static checks run once, in shard 1. The slowest smokes sit in the nightly
+#   tier of tools/classic-gate-smokes.tsv and run in classic-nightly.yml, which
+#   is also where the full gate with every tier lives. The local gate runs every
+#   tier, unsharded, by default.
+# - source-audit: the Blizzard UI source audit. It reads the live branch tips of
+#   Gethe/wow-ui-source, so it can turn red on an unchanged commit when Blizzard
+#   ships a change the audit pins; catching that is its purpose. push-gate reads
+#   nothing but the commit, so its result always belongs to the commit alone.
+#   Keep the two signals apart: never fold one job into the other or make either
+#   depend on the other.
+#
+# The branch filters keep tag pushes out: path filters are not evaluated for tags.
 on:
   push:
     branches:
@@ -33,16 +46,24 @@ permissions:
   contents: read
 
 jobs:
-  classic-gate:
+  push-gate:
+    name: push-gate (shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    strategy:
+      # Every shard reports on its own, so a red one never hides another's result.
+      fail-fast: false
+      matrix:
+        # The count in the -Shard argument below must name the same n as this list;
+        # tools/tests/gate_shard_union_smoke.py fails when they differ.
+        shard: [1, 2, 3, 4, 5, 6]
 
     steps:
       - name: Check out the commit under test
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
-      # The three steps below are the environment and gate steps of the
-      # release workflow; keep them in step with that workflow.
       - name: Set up Python for the Classic gate
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -59,25 +80,80 @@ jobs:
           lua -v
           luac -v
 
-      # -SelfContained runs every check that does not need the Blizzard UI
-      # source mirror: syntax, the load-graph lock, error paths, the TOC
-      # invariants and the smokes. It reads nothing but this commit, so the
-      # classic-full-gate job below covers the rest.
-      - name: Run the self-contained Classic gate
+      # -SelfContained leaves the Blizzard UI source audit to source-audit;
+      # -SkipTier nightly leaves the slowest smokes to the nightly workflow;
+      # -Shard runs this job's slice of the rest. Shard 1 also runs the static
+      # checks (syntax, load-graph lock, TOC invariants, ledgers); the other
+      # shards run smokes only. The gate prints one SKIPPED line for each, so a
+      # push run never reads as the full gate. The smokes use every core the
+      # runner has.
+      - name: Run the push-tier Classic gate (one shard)
         shell: pwsh
         run: |
-          & ./tools/test-classic-prototype.ps1 -SelfContained
+          & ./tools/run-classic-gate.ps1 -SelfContained -SkipTier nightly -Shard "${{ matrix.shard }}/6" -Jobs ([Environment]::ProcessorCount)
           if ($LASTEXITCODE -ne 0) {
-            throw "Classic self-contained gate failed."
+            throw "Classic push-tier gate failed in shard ${{ matrix.shard }}/6."
           }
 
-  # The full gate: everything above, plus the Blizzard UI source audit. It
-  # stays a separate job on purpose. The audit reads the live branch tips of Gethe/wow-ui-source, so
-  # this job can turn red on an unchanged commit when Blizzard ships a change
-  # the audit pins; catching that is its purpose. The self-contained job reads
-  # nothing but the commit, so its result always belongs to the commit alone.
-  # Keep the two signals apart: never fold this job into the one above or make
-  # either depend on the other. The steps live in the reusable workflow so the
-  # release runs exactly this gate instead of a second copy of it.
-  classic-full-gate:
-    uses: ./.github/workflows/classic-full-gate.yml
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # The mirror-reading smoke below is plain Lua 5.1; the audit is pwsh and git.
+      - name: Install Lua 5.1 for the mirror smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+          lua5.1 -v
+
+      # The audit reads Blizzard's branch tips through git only (show, grep,
+      # rev-parse), so a depth-1 clone of every branch needs no working tree.
+      # The tips are listed so a red audit names the branch that moved.
+      - name: Clone the Blizzard UI source mirror
+        shell: pwsh
+        run: |
+          $mirror = "_local_workflows/references/wow-ui-source"
+          git clone --depth 1 --no-single-branch --no-checkout --origin upstream https://github.com/Gethe/wow-ui-source.git $mirror
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not clone the Blizzard UI source mirror."
+          }
+          if (-not (Test-Path -LiteralPath "$mirror/.git" -PathType Container)) {
+            throw "The Blizzard UI source mirror did not land at $mirror/.git."
+          }
+          git -C $mirror for-each-ref "--format=%(refname:short) %(objectname:short) %(committerdate:short)" refs/remotes/upstream
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not list the Blizzard UI source branches."
+          }
+
+      - name: Run the Blizzard UI source audit
+        shell: pwsh
+        run: |
+          & ./tools/audit-classic-ui-source.ps1
+          if ($LASTEXITCODE -ne 0) {
+            throw "Blizzard Classic source contract audit failed."
+          }
+
+      # The one smoke that reads the mirror: push-gate runs it without the
+      # mirror, where it checks the attribute contracts only. This run must
+      # have used the mirror, so a clone that lands in the wrong place cannot
+      # leave a green job.
+      - name: Run the smoke that reads the Blizzard UI source mirror
+        shell: pwsh
+        run: |
+          $report = @(& lua5.1 tools/tests/group_raid_header_blizzard_smoke.lua $PWD.Path 2>&1 | ForEach-Object { [string]$_ })
+          $exitCode = $LASTEXITCODE
+          $report | ForEach-Object { Write-Host $_ }
+          if ($exitCode -ne 0) {
+            throw "Group raid header on Blizzard SecureGroupHeaders smoke failed."
+          }
+          if (($report -join "`n") -notmatch 'Blizzard branches') {
+            throw "The mirror smoke ran without the Blizzard UI source mirror."
+          }

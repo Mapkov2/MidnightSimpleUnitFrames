@@ -723,16 +723,20 @@ it took 30 minutes on 2026-10-13 while several other gates ran in parallel.
 | `-SelfContained` | Everything except the Blizzard UI source audit (the CI subset). It never replaces the full gate. |
 | `-Jobs <n>` | Smokes run in parallel on `n` workers (default: the processor count, at most 8). Use 4 when other gates share the machine. |
 | `-Only <regex>` | Runs only the smokes whose file or label matches. It adds a `SKIPPED:` line, so a narrowed run is never a pass. |
-| `-ListSmokes` | Prints every expanded invocation as `LISTSMOKE nnn \| ...` and runs none. |
+| `-ListSmokes` | Prints every expanded invocation as `LISTSMOKE nnn \| ...`, runs none and stops before the static checks. |
 | `-FailFast` | Aborts at the first failing smoke. By default failures are collected and printed together at the end. |
 | `-AllowMissingTools` | Lets a structure-only run continue without `luac`, `lua` or the UI source mirror; each skipped step prints a `SKIPPED:` line. |
 | `-RequireNoSkippedSteps` | Fails when any step was skipped. The CI full gate passes it. |
+| `-SkipTier <tier>` | Leaves one smoke tier out (`nightly` holds the slowest smokes) and prints one `SKIPPED:` line naming the tier and its invocation count. The default runs every tier. |
+| `-Shard <k>/<n>` | Runs the k-th of n slices of the smokes; shard 1 also runs the static checks. See below. |
+| `-TimingsOut <file>` | Writes the seconds each invocation took, in the format of `tools/classic-gate-weights.tsv`. |
 
 A pass is: exit code 0, no output line containing `WARNING`, a `Smoke inventory:`
 line that accounts for every tracked smoke (ran plus retired), and, for
 `-SelfContained`, exactly one `SKIPPED:` line (the Blizzard UI source audit). A
 full run with the mirror prints no `SKIPPED:` line. Any other `SKIPPED:` line
-means the run proved less than a pass.
+means the run proved less than a pass. A push-tier run (`-SkipTier nightly`) or a shard prints
+further `SKIPPED:` lines naming the tier and the shard; it is the CI subset, not a full pass.
 
 The full gate needs the Blizzard UI source mirror at
 `_local_workflows/references/wow-ui-source`: a clone of `Gethe/wow-ui-source`
@@ -742,23 +746,65 @@ a fresh checkout has none). Create it with the clone command of
 refresh it with `git -C _local_workflows/references/wow-ui-source fetch upstream`.
 The audit reads the branch tips through git only.
 
-CI runs both. `.github/workflows/classic-gate.yml` runs two jobs for every push
-and pull request to `main` that touches `MidnightSimpleUnitFrames/`,
-`MidnightSimpleUnitFrames_Options/`, `tools/`, `.github/`, `VERSION` or
-`CHANGELOG.md`: `classic-gate` runs `-SelfContained`, and `classic-full-gate`
-clones the mirror (depth 1, every branch, no working tree) and runs the full
-gate with `-RequireNoSkippedSteps`. The audit reads Blizzard's live branches, so
-the full job can turn red without any change here; the self-contained job reads
-nothing but the commit.
+Smokes come in tiers. The `Tier` column of `tools/classic-gate-smokes.tsv` is
+the last one and may be left out of a row: no value means `push`, the tier every
+push and pull request runs. `nightly` holds the slowest smokes. The default
+local run executes every tier. `-SkipTier nightly` leaves one out and prints a
+single `SKIPPED:` line naming the tier and how many invocations it holds; the
+smoke inventory still accounts for every smoke, counting one that only a skipped
+tier covers as deferred, never as unrun. Move a smoke between tiers by editing
+its `Tier` cell: the gate prints the slowest invocations of every run, and that
+list is the evidence.
 
-Both full-gate runs are the same steps: they live in the reusable workflow
-`.github/workflows/classic-full-gate.yml`, which `classic-gate.yml` and
-`release-classic.yml` both call. `release-classic.yml` runs three jobs for a
-`classic-v*` tag: `preflight` (tag freshness against `origin/main`, the
-CurseForge secret and the self-contained gate), then `classic-full-gate` on the
-tag, then `publish-classic`, which packages and uploads only when both are
-green. The self-contained subset cannot see drift of Blizzard's source, so it is
-a pre-check, never the only gate on a published build.
+`-Shard <k>/<n>` runs the k-th of n slices of the smoke plan (what is left after
+`-Only` and `-SkipTier`), so CI can spread the push tier over n jobs. The slices
+are balanced by `tools/classic-gate-weights.tsv` (Name, Seconds): each
+invocation, longest first, goes to the shard with the least weight so far, and
+one the table does not know weighs the median. Every shard computes the same
+split from the same commit, so all must get the same `-Only` and `-SkipTier`.
+Shard 1 also runs the static checks (syntax, load-graph lock, error paths, TOC
+invariants, ledgers); shards 2 and up run smokes only, and every shard prints
+one `SKIPPED:` line naming itself. The inventory counts the other shards'
+smokes as deferred. Refresh the weights table from a full run with `-TimingsOut`
+when the plan changes much. `tools/tests/gate_shard_union_smoke.py` proves that the
+shards of the workflow's n together hold every push-tier invocation exactly
+once, that no shard is empty or lopsided, and that the workflow's matrix names
+shards 1 to n.
+
+CI runs these jobs. `.github/workflows/classic-gate.yml` has two kinds
+of job for every push and pull request to `main` that touches the addon folders,
+`tools/`, `.github/`, `VERSION` or `CHANGELOG.md` (a push that changes only other
+documents runs neither): `push-gate` is a matrix of six shards, each running
+`run-classic-gate.ps1 -SelfContained -SkipTier nightly -Shard <k>/6` with every
+core the runner has, and `source-audit` clones
+`Gethe/wow-ui-source` (depth 1, every branch, no working tree) into
+`_local_workflows/references/wow-ui-source`, runs
+`tools/audit-classic-ui-source.ps1` and the one smoke that reads the mirror
+(`group_raid_header_blizzard_smoke.lua`; `push-gate` runs it on its attribute
+contracts only). The audit reads Blizzard's live branches, so `source-audit` can
+turn red without any change here; `push-gate` reads nothing but the commit.
+Neither job re-runs the other's work.
+
+`.github/workflows/classic-nightly.yml` runs the full gate once a day and on
+demand: every tier plus the source audit. Its steps live in the reusable workflow
+`.github/workflows/classic-full-gate.yml`, which `classic-nightly.yml` and
+`release-classic.yml` both call, so a release runs exactly the nightly gate.
+`release-classic.yml` runs three jobs for a `classic-v*` tag: `preflight` (tag
+freshness against `origin/main`, the CurseForge secret and the push-tier gate), then `classic-full-gate`
+on the tag, then `publish-classic`, which packages and uploads only when both
+are green. The push-tier subset cannot see drift of Blizzard's source or the
+nightly tier, so it is a pre-check, never the only gate on a published build.
+The full-gate job passes `-RequireNoSkippedSteps`, which makes the gate refuse
+to pass when any of its own steps was skipped: on a runner a missing Blizzard
+mirror or a skipped tier is otherwise a skip, not a failure.
+
+`.github/scripts/assert-classic-release-line.ps1` runs in every gate and in the
+packager. It takes the release line from `VERSION`: the shared channel resolver
+(`resolve_classic_release_channel.ps1`) must accept it, a stable release spells
+its minor with two digits (`7.00`), a prerelease names `<major>.<minor>`
+(`7.0-beta1`), and every TOC, the changelog section and the two generated
+changelog payloads must carry that version. `tools/tests/release_line_version_smoke.py`
+pins it on a fixture repository for several release lines.
 
 Requirements:
 
@@ -777,8 +823,8 @@ lua .github/scripts/auras3_test_driver.lua tools/tests/classic_aura_backend_smok
 ```
 
 Each smoke's row in `tools/classic-gate-smokes.tsv` (columns Matrix, Runner,
-Smoke, Arguments, Label) is the reference for its runner and arguments, and
-`-ListSmokes` shows the expansion. Matrix values such as `clients`, `classics`
+Smoke, Arguments, Label, Tier) is the reference for its runner and arguments, and
+`-ListSmokes` shows the expansion. Tier is optional (blank means `push`). Matrix values such as `clients`, `classics`
 and `clients+Forever` repeat a row per client; the tokens `{root}`, `{root/}`,
 `{flavor}` and `{clientToken}` expand per run. Two traps:
 
@@ -820,6 +866,8 @@ is not tracked by git. A smoke is registered as a row of the TSV, never as a
 hand-written call in the gate. `tools/` is git-ignored except for the paths
 `.gitignore` re-includes (`tools/tests/` among them), so a new file directly
 under `tools/` needs `git add -f`.
+A smoke that only a skipped tier or another shard covers counts as deferred, and the
+inventory line says how many there are.
 
 ## Regenerating the Menu2 search index
 

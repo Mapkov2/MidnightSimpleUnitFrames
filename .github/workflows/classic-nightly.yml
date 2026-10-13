@@ -1,0 +1,18 @@
+name: MSUF 7.0 nightly gate
+
+# The full gate with every smoke tier: the slow tier that classic-gate.yml leaves
+# out of a push (tools/classic-gate-smokes.tsv, Tier nightly) plus the Blizzard UI
+# source audit. The steps are the reusable workflow's, the same ones a release runs.
+# Scheduled runs use the default branch.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nightly-gate:
+    uses: ./.github/workflows/classic-full-gate.yml

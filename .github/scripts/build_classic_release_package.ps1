@@ -324,7 +324,7 @@ $sourceVersion = [IO.File]::ReadAllText((Join-Path $repoRoot 'VERSION')).Trim()
 if ($sourceVersion -ne $release) {
     throw "VERSION '$sourceVersion' does not match Classic release '$release'."
 }
-& (Join-Path $PSScriptRoot "assert-classic-6-5-release-line.ps1") `
+& (Join-Path $PSScriptRoot "assert-classic-release-line.ps1") `
     -RepositoryRoot $repoRoot -ReleaseVersion $release
 & (Join-Path $PSScriptRoot "assert-classic-changelog-links.ps1") `
     -RepositoryRoot $repoRoot -ReleaseVersion $release

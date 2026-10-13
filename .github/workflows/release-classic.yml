@@ -106,23 +106,24 @@ jobs:
           luac -v
 
       # The fast pre-check: -SelfContained runs every check that does not need
-      # the Blizzard UI source mirror. It is deliberately blind to drift of
-      # Blizzard's source, so it gates only the cheap failures; the
+      # the Blizzard UI source mirror, and -SkipTier nightly leaves out the slow
+      # smokes. It is deliberately blind to drift of Blizzard's source and to the
+      # nightly tier, so it gates only the cheap failures; the
       # classic-full-gate job below covers the rest before anything is
       # published.
-      - name: Run the self-contained Classic gate
+      - name: Run the push-tier Classic gate
         shell: pwsh
         run: |
-          & ./tools/test-classic-prototype.ps1 -SelfContained
+          & ./tools/run-classic-gate.ps1 -SelfContained -SkipTier nightly -Jobs ([Environment]::ProcessorCount)
           if ($LASTEXITCODE -ne 0) {
-            throw "Classic self-contained gate failed."
+            throw "Classic push-tier gate failed."
           }
 
-  # A release runs the same full gate as a push to main: the self-contained
-  # checks plus the Blizzard UI source audit. The self-contained subset above
-  # cannot see drift of Blizzard's source, so it must never be the only gate
-  # on a published build. The steps are the reusable workflow's, not a copy,
-  # and every one of them fails closed.
+  # A release runs the same full gate as the nightly workflow: every smoke
+  # tier plus the Blizzard UI source audit. The push-tier subset above cannot
+  # see drift of Blizzard's source or the nightly tier, so it must never be the
+  # only gate on a published build. The steps are the reusable workflow's, not
+  # a copy, and every one of them fails closed.
   classic-full-gate:
     needs: preflight
     uses: ./.github/workflows/classic-full-gate.yml
