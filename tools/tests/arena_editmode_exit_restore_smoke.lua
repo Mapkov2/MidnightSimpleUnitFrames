@@ -619,7 +619,7 @@ local function NewWorld(flavor, roster)
                 local watched = _G.UnitWatchRegistered(frame) == true
                 frame._msufUnitWatched = watched and true or nil
                 if frame._msufVisibilityManaged ~= true and not watched then
-                    frame:Enable()
+                    frame:_msufActivate()
                     frame._msufUnitWatched = true
                 end
             end
@@ -674,13 +674,13 @@ local function NewWorld(flavor, roster)
             frame.levelText = Widget(nil, false, frame)
             frame._mouse = true
             frame.ForceUpdate = function() return true end
-            -- MSUF_UF_Factory.lua SpawnFrame Enable/Disable contract.
-            frame.Enable = function(self)
+            -- MSUF_UF_Factory.lua SpawnFrame _msufActivate/_msufDeactivate contract.
+            frame._msufActivate = function(self)
                 _G.RegisterUnitWatch(self)
                 self:Show()
                 return true
             end
-            frame.Disable = function(self)
+            frame._msufDeactivate = function(self)
                 _G.UnregisterUnitWatch(self)
                 self._msufUnitWatched = nil
                 self:Hide()

@@ -728,35 +728,3 @@ local function RequestAlphaRefresh(unit)
   return Alpha.RequestRefresh(unit)
 end
 ExportPublic("MSUF_RequestAlphaRefresh", RequestAlphaRefresh)
-
-local function RefreshCombatUnitAlphas(unit)
-  if _G.MSUF_RefreshAllUnitAlphas then
-    return _G.MSUF_RefreshAllUnitAlphas(unit)
-  end
-  return false
-end
-ExportPublic("MSUF_RefreshCombatUnitAlphas", RefreshCombatUnitAlphas)
-
-local function GetDesiredUnitAlpha(key)
-  local unit = key == "boss" and "boss1" or key
-  if unit == "arena" then unit = "arena1" end
-  if unit == "tot" or unit == "targetoftarget" then
-    unit = "targettarget"
-  end
-  local spec = unit and UF.Config and UF.Config.GetSpec and UF.Config.GetSpec(unit)
-  local cfg = spec and spec.alpha
-  if not cfg then
-    return 1
-  end
-  return Clamp01(cfg.hpAlpha, 1)
-end
-ExportPublic("MSUF_GetDesiredUnitAlpha", GetDesiredUnitAlpha)
-
-local function ApplyUnitAlpha(frame, key)
-  if not frame then
-    return false
-  end
-  Alpha.Update(frame, "MSUF_ALPHA")
-  return true
-end
-ExportPublic("MSUF_ApplyUnitAlpha", ApplyUnitAlpha)

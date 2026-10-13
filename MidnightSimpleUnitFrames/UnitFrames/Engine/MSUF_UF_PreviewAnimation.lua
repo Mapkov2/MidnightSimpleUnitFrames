@@ -59,8 +59,6 @@ local percentValue = 0
 local frameStateScratch = {}
 local unitFrameRestoreFrames = setmetatable({}, { __mode = "k" })
 
-PA.menuBoxes = PA.menuBoxes or setmetatable({}, { __mode = "k" })
-PA.groupBoxes = PA.groupBoxes or setmetatable({}, { __mode = "k" })
 PA.refreshOwners = PA.refreshOwners or setmetatable({}, { __mode = "k" })
 PA.elapsed = tonumber(PA.elapsed) or 0
 PA.enabled = PA.enabled == true
@@ -234,40 +232,6 @@ function PA.RegisterRefreshOwner(owner, fn)
   end
 end
 
-function PA.UnregisterRefreshOwner(owner)
-  if owner then PA.refreshOwners[owner] = nil end
-end
-
-function PA.RegisterMenuBox(box)
-  if box then PA.menuBoxes[box] = true end
-end
-
-function PA.UnregisterMenuBox(box)
-  if box then PA.menuBoxes[box] = nil end
-end
-
-function PA.RegisterGroupBox(box)
-  if box then PA.groupBoxes[box] = true end
-end
-
-function PA.UnregisterGroupBox(box)
-  if box then PA.groupBoxes[box] = nil end
-end
-
-local function HasVisibleMenuBox()
-  for box in pairs(PA.menuBoxes) do
-    if IsVisible(box) then return true end
-  end
-  return false
-end
-
-local function HasVisibleGroupBox()
-  for box in pairs(PA.groupBoxes) do
-    if IsVisible(box) then return true end
-  end
-  return false
-end
-
 local function GroupPreviewActive()
   local gf = MSUF and MSUF.GF
   local active = gf and gf._previewActive
@@ -297,8 +261,6 @@ end
 
 local function HasVisibleTarget()
   if PA.source == "edit_mode" then return EditModeAnimationTargetActive() end
-  if HasVisibleMenuBox() then return true end
-  if HasVisibleGroupBox() then return true end
   if GroupPreviewActive() then return true end
   if BossPreviewActive() then return true end
   if ArenaPreviewActive() then return true end
@@ -961,35 +923,6 @@ local function RefreshStaticCastbarPreviews()
   end
 end
 
-local function RefreshMenuBoxes()
-  local preview = MSUF and (MSUF.UFPreview or MSUF.MSUF_UFPreview) or _G.MSUF_UFPreview
-  local refresh = preview and preview.Refresh
-  if type(refresh) ~= "function" then return false end
-  local any = false
-  for box in pairs(PA.menuBoxes) do
-    if IsVisible(box) then
-      refresh(box, "PREVIEW_COMBAT_ANIMATE")
-      any = true
-    end
-  end
-  return any
-end
-
-local function RefreshGroupBoxes()
-  local any = false
-  for box in pairs(PA.groupBoxes) do
-    if IsVisible(box) then
-      if type(box.RequestRefresh) == "function" then
-        box:RequestRefresh("GROUP_PREVIEW_COMBAT_ANIMATE")
-      elseif type(box.Refresh) == "function" then
-        box:Refresh("GROUP_PREVIEW_COMBAT_ANIMATE")
-      end
-      any = true
-    end
-  end
-  return any
-end
-
 local function RefreshGroupPreviews()
   local fn = _G.MSUF_GF_RefreshPreviewAnimation
   if type(fn) == "function" then
@@ -1053,8 +986,6 @@ end
 
 local function RefreshPreviewTargets()
   local any = false
-  any = RefreshMenuBoxes() or any
-  any = RefreshGroupBoxes() or any
   any = RefreshGroupPreviews() or any
   any = RefreshBossPreviewFrames() or any
   any = RefreshArenaPreviewFrames() or any
@@ -1066,8 +997,6 @@ local StopDriver
 
 local function RefreshAfterDriverStop(stoppedSource)
   RefreshStaticCastbarPreviews()
-  RefreshMenuBoxes()
-  RefreshGroupBoxes()
   RefreshGroupPreviews()
   if stoppedSource == "edit_mode" then
     RefreshStaticGroupRuntimeFrames()
@@ -1215,16 +1144,9 @@ function PA.Toggle(source)
   return PA.SetEnabled(PA.enabled ~= true, source)
 end
 
-ExportPublic("MSUF_PreviewAnimation", PA)
 ExportPublic("MSUF_IsPreviewAnimationEnabled", function() return PA.IsEnabled() end)
-ExportPublic("MSUF_SetPreviewAnimationEnabled", function(enabled, source) return PA.SetEnabled(enabled, source) end)
 ExportPublic("MSUF_TogglePreviewAnimation", function(source) return PA.Toggle(source) end)
-ExportPublic("MSUF_RegisterPreviewAnimationMenuBox", function(box) return PA.RegisterMenuBox(box) end)
-ExportPublic("MSUF_UnregisterPreviewAnimationMenuBox", function(box) return PA.UnregisterMenuBox(box) end)
-ExportPublic("MSUF_RegisterPreviewAnimationGroupBox", function(box) return PA.RegisterGroupBox(box) end)
-ExportPublic("MSUF_UnregisterPreviewAnimationGroupBox", function(box) return PA.UnregisterGroupBox(box) end)
 ExportPublic("MSUF_RegisterPreviewAnimationRefreshOwner", function(owner, fn) return PA.RegisterRefreshOwner(owner, fn) end)
-ExportPublic("MSUF_UnregisterPreviewAnimationRefreshOwner", function(owner) return PA.UnregisterRefreshOwner(owner) end)
 ExportPublic("MSUF_BuildPreviewAnimationFrameState", function(frame, index, kind, scratch, elapsed) return PA.BuildFrameState(frame, index, kind, scratch, elapsed) end)
 ExportPublic("MSUF_BuildPreviewAnimationAuraState", function(kind, index, scratch, options, elapsed) return PA.BuildAuraState(kind, index, scratch, options, elapsed) end)
 ExportPublic("MSUF_GetPreviewAnimationFrameState", function(frame, index, kind, scratch) return PA.FrameState(frame, index, kind, scratch) end)

@@ -398,10 +398,6 @@ local function GetUpdateKey(name)
   return UPDATE_KEYS[name]
 end
 
-function UF.BasicElementAllowed(name)
-  return BASIC_ELEMENTS[name] == true
-end
-
 local function HotElementAllowed(name)
   return BASIC_ELEMENTS[name] == true
 end
@@ -2830,14 +2826,6 @@ function UF.ForEachFrame(fn, a, b, c)
   end
 end
 
-function UF.ForEachAttachedFrame(fn, scope)
-  if type(fn) ~= "function" then return end
-  for i = 1, #UF.attachedFrameList do
-    local frame = UF.attachedFrameList[i]
-    if frame and (scope == nil or frame._msufCoreScope == scope) then fn(frame) end
-  end
-end
-
 function UF.SetFrameSpec(frame, spec, unitFallback)
   if not (frame and spec) then return nil end
   local unit = spec.unit or unitFallback or frame.MSUFUnitKey
@@ -2845,7 +2833,6 @@ function UF.SetFrameSpec(frame, spec, unitFallback)
   frame._msufCoreSpecEnabled = spec.enabled ~= false
   frame.MSUFUnitKey = unit
   frame.unitKey = unit
-  frame.cachedConfig = spec
   frame.configKey = spec.key
   return frame
 end
@@ -3054,23 +3041,6 @@ end
 function UF.EndEventRegistrationBatch()
   UF._msufApplyingSpec = nil
   if UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
-end
-
-function UF.RebuildHotEventState()
-  return true
-end
-
-function UF.RebindGroupHotEventHandlers()
-  return true
-end
-
-function UF.DumpIdentityList(unit)
-  local frame = unit and UF.frames[unit]
-  local labels = frame and frame._msufIdentityLabels
-  if not labels then return "" end
-  local out = {}
-  for i = 1, #labels do out[i] = tostring(labels[i]) end
-  return table.concat(out, ",")
 end
 
 MSUF.UnitFrames = UF

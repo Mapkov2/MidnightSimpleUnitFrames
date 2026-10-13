@@ -132,13 +132,13 @@ local function Run(flavor)
     } } } }
     Config.Refresh()
     -- The stub world cannot build secure templates; the frames carry the same
-    -- Enable/Disable pair Factory's SpawnFrame gives them.
+    -- activate/deactivate pair Factory's SpawnFrame gives them.
     for _, unit in ipairs({ "target", "pet" }) do
         local frame = env.CreateFrame("Button", nil, env.UIParent)
         frame.MSUFUnitKey = unit
         function frame:GetCenter() return 500, 400 end
-        function frame:Enable() env.RegisterUnitWatch(self); self:Show(); return true end
-        function frame:Disable() env.UnregisterUnitWatch(self); self:Hide() end
+        function frame:_msufActivate() env.RegisterUnitWatch(self); self:Show(); return true end
+        function frame:_msufDeactivate() env.UnregisterUnitWatch(self); self:Hide() end
         UF.AttachFrame(frame, { scope = "single" })
         UF.frames[unit] = frame
         UF.frameList[#UF.frameList + 1] = frame

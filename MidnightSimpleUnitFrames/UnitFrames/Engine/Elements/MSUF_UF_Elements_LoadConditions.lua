@@ -291,14 +291,9 @@ function LoadConditions.IsEnabled(frame, spec)
   return VisibilityNeedsDriver(spec) or ShouldForcePreview(frame)
 end
 
-local function VisibilityFrame(frame)
-  return frame
-end
-
 local function RegisterVisibility(frame, spec)
-  local visibilityFrame = VisibilityFrame(frame)
   if UnitWatchRegistered then
-    frame._msufUnitWatched = UnitWatchRegistered(visibilityFrame) == true and true or nil
+    frame._msufUnitWatched = UnitWatchRegistered(frame) == true and true or nil
   end
   -- Existence-only visibility: use the lightweight unit watch, never a secure
   -- state driver. Tear down any driver left from a previous conditional config.
@@ -316,12 +311,12 @@ local function RegisterVisibility(frame, spec)
       end
     elseif frame._msufVisibilityExpr ~= nil then
       if UnregisterStateDriver then
-        UnregisterStateDriver(visibilityFrame, "visibility")
+        UnregisterStateDriver(frame, "visibility")
       end
       frame._msufVisibilityExpr = nil
     end
     if frame._msufUnitWatched ~= true then
-      RegisterUnitWatch(visibilityFrame)
+      RegisterUnitWatch(frame)
       frame._msufUnitWatched = true
     end
     frame._msufVisibilityManaged = nil
@@ -342,10 +337,10 @@ local function RegisterVisibility(frame, spec)
       -- Swapping from unit-watch to driver: the watch and the driver both
       -- manage visibility, so drop the watch first to avoid double control.
       if frame._msufUnitWatched == true then
-        UnregisterUnitWatch(visibilityFrame)
+        UnregisterUnitWatch(frame)
         frame._msufUnitWatched = nil
       end
-      RegisterStateDriver(visibilityFrame, "visibility", visibility)
+      RegisterStateDriver(frame, "visibility", visibility)
       frame._msufVisibilityExpr = visibility
     end
     return true
@@ -358,7 +353,7 @@ local function RegisterVisibility(frame, spec)
     show = UnitExistsPlain(frame.MSUFUnitKey)
   end
   if frame._msufLoadShown ~= show then
-    visibilityFrame:SetShown(show)
+    frame:SetShown(show)
     frame._msufLoadShown = show
   end
   return true

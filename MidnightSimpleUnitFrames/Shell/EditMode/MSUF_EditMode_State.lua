@@ -166,21 +166,6 @@ local function RestoreSnapshotTable(dst, src, seen)
     return true
 end
 
-local function InvalidateAllFrameCaches()
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.ForEachFrame) == "function" then
-        UF.ForEachFrame(function(f)
-            if f and f.cachedConfig then f.cachedConfig = nil end
-        end)
-        return
-    end
-    local frames = UF and UF.frames
-    if not frames then return end
-    for _, f in pairs(frames) do
-        if f and f.cachedConfig then f.cachedConfig = nil end
-    end
-end
-
 local function HardHideEditModePreviews()
     PublishCompat("MSUF_UnitPreviewActive", false)
     PublishCompat("MSUF_PreviewTestMode", false)
@@ -567,11 +552,6 @@ function State.CancelAll()
     if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(false) end
 
     if restored then
-        --- Invalidate all frame config caches so the pipeline reads the
-        --- freshly restored DB tables, not stale references to the old
-        --- (dragged) config objects.
-        InvalidateAllFrameCaches()
-
         --- Apply synchronously - the async path can silently drop when a
         --- pending commit is already scheduled.
         ApplyAllSettingsSafe()

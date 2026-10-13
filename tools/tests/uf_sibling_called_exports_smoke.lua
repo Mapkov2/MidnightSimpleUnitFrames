@@ -1,13 +1,14 @@
 -- uf_sibling_called_exports_smoke.lua <repoRoot>
 --
--- Engine functions with no Classic caller that a sibling addon tree still
--- calls stay defined: a dead-code removal needs zero callers across Classic,
--- the Retail tree and the Suite. Each row names the sibling caller.
---   UF.GetSecureHeaderUnitButtonTemplate: the Retail tree's
---     UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua builds its header
---     buttons from it (wave 4 removed it as dead; CX-R7 restored it).
--- Every client boots its real core graph; the export must exist and return the
--- same template the single-unit buttons use.
+-- Engine functions with no caller in this tree stay defined only while a
+-- sibling addon tree still calls them: a dead-code removal needs zero callers
+-- across this repo, the Suite and the other addons. Each row names its caller.
+--   (no rows) UF.GetSecureHeaderUnitButtonTemplate was kept for the Retail
+--     tree's UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua. That tree is
+--     retired (6.22 is a frozen backup, 7.0 builds its group header buttons
+--     itself), so the alias is gone; the pin below keeps it gone.
+-- Every client boots its real core graph; the single-unit button template
+-- accessor must remain, and the retired alias must not return.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -25,9 +26,11 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     Check(failure == nil, flavor .. ": load failed in " .. tostring(failure and failure.file) .. ": "
         .. tostring(failure and failure.message))
     local UF = world.core.UF
-    Check(type(UF.GetSecureHeaderUnitButtonTemplate) == "function",
-        flavor .. ": UF.GetSecureHeaderUnitButtonTemplate is gone; the Retail group headers call it")
-    Check(UF.GetSecureHeaderUnitButtonTemplate() == UF.GetSecureUnitButtonTemplate(),
-        flavor .. ": the header button template differs from the unit button template")
+    Check(type(UF.GetSecureUnitButtonTemplate) == "function",
+        flavor .. ": UF.GetSecureUnitButtonTemplate is gone; every unit button is built from it")
+    Check(UF.GetSecureUnitButtonTemplate() == "SecureUnitButtonTemplate, PingableUnitFrameTemplate",
+        flavor .. ": the unit button template changed")
+    Check(UF.GetSecureHeaderUnitButtonTemplate == nil,
+        flavor .. ": UF.GetSecureHeaderUnitButtonTemplate returned; no caller remains in any tree")
     print("uf_sibling_called_exports_smoke: ok (" .. flavor .. ")")
 end

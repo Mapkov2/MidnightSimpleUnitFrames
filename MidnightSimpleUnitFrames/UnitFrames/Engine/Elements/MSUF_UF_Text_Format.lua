@@ -285,13 +285,6 @@ end
 
 local SetTextPlainCached = ApplyText
 
-local function AddSuffix(text, suffix)
-  if suffix then
-    return (text or "") .. suffix
-  end
-  return text
-end
-
 local function SlotText(slot, text)
   if slot.appendSuffix == true then
     SetTextCached(slot.fs, text .. slot.suffix)
@@ -1530,7 +1523,6 @@ Text.ModeNeedsPercent = ModeNeedsPercent
 Text.FormatValue = FormatValue
 Text.FormatPercentValue = FormatPercentValue
 Text.SetTextCached = SetTextCached
-Text.AddSuffix = AddSuffix
 Text.SetModeText = SetModeText
 Text.ResolveHealthTextModes = ResolveHealthTextModes
 Text.AddTextSlot = AddTextSlot

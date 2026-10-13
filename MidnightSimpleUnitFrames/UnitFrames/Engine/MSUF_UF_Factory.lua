@@ -428,20 +428,15 @@ local function ScreenCacheKey(spec, frame)
   return spec and spec.key or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey)) or frame and frame.MSUFUnitKey
 end
 
-local function LayoutFrame(frame)
-  return frame
-end
-
 --- Keep the visible root inside the screen without replacing its configured
 --- anchor. Blizzard performs the final clamp in physical screen space, so this
 --- remains correct for CDM/custom anchors with a different effective scale.
 --- The flag makes this a creation/cold-path cost only.
 local function EnableScreenClamp(frame)
-  local layout = LayoutFrame(frame)
-  if not (layout and layout.SetClampedToScreen) then return false end
-  if layout._msufScreenClampEnabled == true then return true end
-  layout:SetClampedToScreen(true)
-  layout._msufScreenClampEnabled = true
+  if not (frame and frame.SetClampedToScreen) then return false end
+  if frame._msufScreenClampEnabled == true then return true end
+  frame:SetClampedToScreen(true)
+  frame._msufScreenClampEnabled = true
   return true
 end
 
@@ -466,13 +461,12 @@ local function MarkPending(unit)
 end
 
 local function InvalidateFramePositionCache(frame)
-  local layout = LayoutFrame(frame)
-  if not layout then return end
-  layout._msufPoint = nil
-  layout._msufAnchor = nil
-  layout._msufRelativePoint = nil
-  layout._msufX = nil
-  layout._msufY = nil
+  if not frame then return end
+  frame._msufPoint = nil
+  frame._msufAnchor = nil
+  frame._msufRelativePoint = nil
+  frame._msufX = nil
+  frame._msufY = nil
 end
 
 local function InvalidatePositionCache(unit)
@@ -509,7 +503,6 @@ end
 local function ApplyPosition(frame, spec)
   if frame._msufDragActive == true then return true end
   if InCombat() then return DeferApply(frame.MSUFUnitKey) end
-  local layout = LayoutFrame(frame)
 
   local point = spec.point or "CENTER"
   local relativePoint = spec.relativePoint or point
@@ -526,7 +519,7 @@ local function ApplyPosition(frame, spec)
       ScheduleLateAnchorReanchor()
     end
     local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-    if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
+    if type(applyCached) == "function" and applyCached(frame, key, frame.MSUFUnitKey) then
       SetFrameUnitExternalAnchorProxy(frame, nil)
       frame._msufStableExternalAnchor = nil
       return true
@@ -534,61 +527,57 @@ local function ApplyPosition(frame, spec)
     if frame._msufPositionInitialized == true then return true end
   end
 
-  if AnchorWouldCreateCycle(layout, anchor) then
+  if AnchorWouldCreateCycle(frame, anchor) then
     anchor = UIParent
     relativePoint = point
   end
 
   if anchor == UIParent then
-    x, y = Snap(layout, x), Snap(layout, y)
+    x, y = Snap(frame, x), Snap(frame, y)
   end
 
   local externalAnchor = not IsMSUFOwnedAnchor(anchor)
   local externalProxy = externalAnchor and EnsureUnitExternalAnchorProxy(requestedAnchor, anchor) or nil
   if externalProxy then anchor = externalProxy end
-  if layout._msufPoint ~= point
-    or layout._msufAnchor ~= anchor
-    or layout._msufRelativePoint ~= relativePoint
-    or layout._msufX ~= x
-    or layout._msufY ~= y then
-    layout:ClearAllPoints()
-    layout:SetPoint(point, anchor, relativePoint, x, y)
-    if externalAnchor and layout:GetCenter() == nil then
+  if frame._msufPoint ~= point
+    or frame._msufAnchor ~= anchor
+    or frame._msufRelativePoint ~= relativePoint
+    or frame._msufX ~= x
+    or frame._msufY ~= y then
+    frame:ClearAllPoints()
+    frame:SetPoint(point, anchor, relativePoint, x, y)
+    if externalAnchor and frame:GetCenter() == nil then
       -- A hidden/not-yet-laid-out provider cannot resolve our rect, so the
       -- live link would render nowhere. Prefer the existing screen cache,
       -- otherwise use the safe UIParent fallback and retry on the normal
       -- bounded late-anchor lifecycle.
       externalAnchor = false
       local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-      if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
+      if type(applyCached) == "function" and applyCached(frame, key, frame.MSUFUnitKey) then
         SetFrameUnitExternalAnchorProxy(frame, nil)
         frame._msufStableExternalAnchor = nil
         return true
       end
-      layout:ClearAllPoints()
-      layout:SetPoint(point, UIParent, relativePoint, x, y)
+      frame:ClearAllPoints()
+      frame:SetPoint(point, UIParent, relativePoint, x, y)
       ScheduleLateAnchorReanchor()
       -- Record the actual fallback target so the next apply retries the
       -- provider instead of memo-skipping into a stale fallback.
       anchor = UIParent
       externalProxy = nil
     end
-    layout._msufPoint = point
-    layout._msufAnchor = anchor
-    layout._msufRelativePoint = relativePoint
-    layout._msufX = x
-    layout._msufY = y
-  end
-  if frame ~= layout and frame.ClearAllPoints and frame.SetAllPoints then
-    frame:ClearAllPoints()
-    frame:SetAllPoints(layout)
+    frame._msufPoint = point
+    frame._msufAnchor = anchor
+    frame._msufRelativePoint = relativePoint
+    frame._msufX = x
+    frame._msufY = y
   end
 
   frame._msufPositionInitialized = true
   SetFrameUnitExternalAnchorProxy(frame, externalProxy)
   frame._msufStableExternalAnchor = externalAnchor and not externalProxy and anchor or nil
   if not missingAnchorName and ShouldCacheScreenPosition(spec, requestedAnchor) then
-    Dep("MSUF_CacheUnitFrameScreenPosition")(layout, key, frame.MSUFUnitKey, point)
+    Dep("MSUF_CacheUnitFrameScreenPosition")(frame, key, frame.MSUFUnitKey, point)
   end
   if not missingAnchorName then
     frame._msufHardLockedToUIParent = nil
@@ -604,17 +593,13 @@ end
 
 local function ApplySize(frame, spec)
   if InCombat() then return DeferApply(frame.MSUFUnitKey) end
-  local layout = LayoutFrame(frame)
   local width = tonumber(spec.width) or 220
   local height = tonumber(spec.height) or 34
-  if layout._msufWidth ~= width or layout._msufHeight ~= height then
-    layout:SetSize(width, height)
-    layout._msufWidth = width
-    layout._msufHeight = height
+  if frame._msufWidth ~= width or frame._msufHeight ~= height then
+    frame:SetSize(width, height)
+    frame._msufWidth = width
+    frame._msufHeight = height
   end
-  if frame ~= layout then frame:SetSize(width, height) end
-  frame._msufWidth = width
-  frame._msufHeight = height
   return true
 end
 
@@ -746,12 +731,7 @@ local function DisableFrame(frame)
     clickOverlay._msufClickOverlayWatched = nil
     if clickOverlay.Hide then clickOverlay:Hide() end
   end
-  if frame.Disable then
-    frame:Disable()
-  else
-    if UnregisterUnitWatch then UnregisterUnitWatch(frame) end
-    frame:Hide()
-  end
+  frame:_msufDeactivate()
   -- UnregisterUnitWatch removes the frame from Blizzard's secure existence
   -- monitor. Keep our mirror state in sync or a later Blizzard -> MSUF profile
   -- transition will believe the hidden frame is still watched and skip both
@@ -790,13 +770,6 @@ local function RegisterGlobals(unit, frame)
 end
 
 function UF.GetSecureUnitButtonTemplate()
-  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
-end
-
--- No Classic caller: Classic's group headers build their buttons themselves. Kept
--- for the Retail sibling, whose UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
--- (around line 1080) still asks the engine for the header button template.
-function UF.GetSecureHeaderUnitButtonTemplate()
   return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 end
 
@@ -1096,12 +1069,13 @@ local function SpawnFrame(unit)
   EnsureMouseoverHooks(frame)
   SetSecureUnitAttributes(frame, unit)
   if UF.EnsureHealthVisualRoot then UF.EnsureHealthVisualRoot(frame) end
-  frame.Enable = function(self)
+  -- Not Enable/Disable: those are the native Button methods of this secure frame.
+  frame._msufActivate = function(self)
     if RegisterUnitWatch then RegisterUnitWatch(self) end
     if self.Show then self:Show() end
     return true
   end
-  frame.Disable = function(self)
+  frame._msufDeactivate = function(self)
     if UnregisterUnitWatch then UnregisterUnitWatch(self) end
     self._msufUnitWatched = nil
     if self.Hide then self:Hide() end
@@ -1155,15 +1129,8 @@ local function ApplyFrame(frame, spec, applyMask)
     frame._msufUnitWatched = unitWatched and true or nil
   end
   if frame._msufVisibilityManaged ~= true and not unitWatched then
-    if frame.Enable then
-      frame:Enable()
-      frame._msufUnitWatched = true
-    elseif RegisterUnitWatch then
-      RegisterUnitWatch(frame)
-      frame._msufUnitWatched = true
-    else
-      frame:Show()
-    end
+    frame:_msufActivate()
+    frame._msufUnitWatched = true
   end
   return true
 end

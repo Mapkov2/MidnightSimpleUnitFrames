@@ -160,25 +160,7 @@ local function SetRoundedMouseoverStackColor(owner, baseEdge, poolKey, r, g, b, 
   end
 end
 
-local function ResolveUnitEdgeColor(f)
-  local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
-  if key and key ~= 0 then
-    return f._msufHighlightOutlineR or 1,
-      f._msufHighlightOutlineG or 1,
-      f._msufHighlightOutlineB or 1,
-      ACTIVE_BORDER_A
-  end
-  return ResolveBaseEdgeColor(f)
-end
-
-local function ResolveUnitEdgeThickness(f, active, activeThickness)
-  if active then
-    return ClampEdgeSize(activeThickness, 2, 30)
-  end
-  return ResolveUnitOutlineThickness(f)
-end
-
-local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
+local function ApplyUnitRoundedEdge(f, enabled)
   if not f then return end
   local edge = f._msufRUF_Edge
   if not enabled then
@@ -189,61 +171,41 @@ local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
   -- f.bg to the health-only rectangle when power is embedded, so using f.bg
   -- here would make the outline/highlight disagree with the shared mask.
   local anchor = f
-  local thickness = ResolveUnitEdgeThickness(f, active, activeThickness)
+  local thickness = ResolveUnitOutlineThickness(f)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
     edge = PixelLayoutRegion((f._msufHealthVisualRoot or f):CreateTexture(nil, "BACKGROUND", nil, -7), true)
     SE_SnapOff(edge)
     f._msufRUF_Edge = edge
   end
-  if thickness <= 0 and not active then
+  if thickness <= 0 then
     HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
     return edge
   end
   if not ApplyRoundedEdgeStack(f, f, edge, anchor, thickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return edge end
-  local r, g, b, a = ResolveUnitEdgeColor(f)
+  local r, g, b, a = ResolveBaseEdgeColor(f)
   SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", r, g, b, a)
   return edge
 end
 
-local function SetUnitRoundedEdgeColor(f, active, r, g, b, a, thickness)
+local function RefreshUnitRoundedEdgeColor(f)
   if not f then return false end
   local edge = f._msufRUF_Edge
   if not edge then
     if IsCombatLocked() then return false end
-    ApplyUnitRoundedEdge(f, true, active, thickness)
+    ApplyUnitRoundedEdge(f, true)
     edge = f._msufRUF_Edge
   end
   if not edge then return false end
-  local resolvedThickness = ResolveUnitEdgeThickness(f, active, thickness)
-  if resolvedThickness <= 0 and not active then
+  local thickness = ResolveUnitOutlineThickness(f)
+  if thickness <= 0 then
     HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
     return true
   end
-  if active then
-    if not ApplyRoundedEdgeStack(f, f, edge, f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
-    SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", r or 1, g or 1, b or 1, a or ACTIVE_BORDER_A)
-  else
-    local br, bgc, bb, ba = ResolveBaseEdgeColor(f)
-    if not ApplyRoundedEdgeStack(f, f, edge, f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
-    SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", br, bgc, bb, ba)
-  end
+  local br, bgc, bb, ba = ResolveBaseEdgeColor(f)
+  if not ApplyRoundedEdgeStack(f, f, edge, f, thickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
+  SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", br, bgc, bb, ba)
   return true
-end
-
-local function HandleUnitHighlightChanged(f, hlKey, r, g, b, cfg)
-  if not (f and RoundedFrameEnabled(f)) then
-    if f then f._msufRoundedHighlightGlowAnchor = nil end
-    return false
-  end
-  local active = (tonumber(hlKey) or 0) ~= 0
-  if f._msufHighlightOutline and f._msufHighlightOutline.Hide then
-    f._msufHighlightOutline:Hide()
-  end
-  f._msufRoundedHighlightGlowAnchor = active and f or nil
-  return SetUnitRoundedEdgeColor(f, active, r, g, b,
-    active and ((cfg and cfg.highlightBorderAlpha) or ACTIVE_BORDER_A) or nil,
-    active and (cfg and cfg.highlightBorderThickness) or nil)
 end
 
 local function ApplyUnitRoundedHoverEdge(f, enabled)
@@ -984,9 +946,6 @@ local function SuppressNativeOutlineNow(f)
   if RoundedMouseoverEnabled(f) and f.highlightBorder and f.highlightBorder.Hide then
     f.highlightBorder:Hide()
   end
-  if f._msufHighlightOutline and f._msufHighlightOutline.Hide then
-    f._msufHighlightOutline:Hide()
-  end
 
   f._msufRUF_SuppressMouseover = RoundedMouseoverEnabled(f) and true or nil
 end
@@ -1071,19 +1030,6 @@ local function ApplyGroupBackdrop(f, kind, enabled)
       f.barGroup._msufGFBackdropB = b
       f.barGroup._msufGFBackdropA = a
     end
-  end
-end
-
-local function RefreshGroupBackdropAlpha(f, kind)
-  if not (f and RoundedFrameEnabled(f)) then return end
-  local bg = f._msufRGF_Background
-  if not bg then
-    return
-  end
-  local r, g, b, a = ResolveGroupBackdropColor(f, kind)
-  if f._msufRGF_BgR ~= r or f._msufRGF_BgG ~= g or f._msufRGF_BgB ~= b or f._msufRGF_BgA ~= a then
-    f._msufRGF_BgR, f._msufRGF_BgG, f._msufRGF_BgB, f._msufRGF_BgA = r, g, b, a
-    bg:SetVertexColor(r, g, b, a)
   end
 end
 
@@ -1263,7 +1209,6 @@ local function SuppressGroupSquareBorders(f)
           local owner = self._msufRGFOwner
           local handled = false
           if owner then
-            owner._msufRGF_GlowAnchor = owner.barGroup or owner
             handled = SetGroupRoundedEdgeColor(owner)
             if not handled and not IsCombatLocked() and ApplyToGroupFrame then
               ApplyToGroupFrame(owner)
@@ -1275,7 +1220,6 @@ local function SuppressGroupSquareBorders(f)
       end)
     end
     if RoundedFrameEnabled(f) and border.Hide then
-      f._msufRGF_GlowAnchor = f.barGroup or f
       if SetGroupRoundedEdgeColor(f) then
         border:Hide()
       end
@@ -1294,24 +1238,6 @@ local function HandleGroupMouseover(f, active)
     if active then container:Show() else container:Hide() end
   end
   return true
-end
-
-local function HandleGroupHighlightChanged(border)
-  local owner = border and (border._msufRGFOwner or (border.GetParent and border:GetParent() and border:GetParent():GetParent()))
-  if not (owner and RoundedFrameEnabled(owner)) then return false end
-  owner._msufRGF_GlowAnchor = owner.barGroup or owner
-  if SetGroupRoundedEdgeColor(owner) then
-    if border.Hide then border:Hide() end
-    return true
-  end
-  if not IsCombatLocked() and ApplyToGroupFrame then
-    ApplyToGroupFrame(owner)
-    if owner._msufRGF_Edge then
-      if border.Hide then border:Hide() end
-      return true
-    end
-  end
-  return false
 end
 
 local function ApplyToUnitFrame(f)
@@ -1419,7 +1345,6 @@ ApplyToGroupFrame = function(f, kind)
 
   if not enabled then
     f._msufRUF_SuppressGFHover = nil
-    f._msufRGF_GlowAnchor = nil
     local hadRounded = f._msufRGF_Background or f._msufRGF_Edge or f._msufRoundedGFShell or f._msufRGF_MaskedTextures
     ClearGroupMasks(f)
     ApplyGroupRoundedEdge(f, false)
@@ -1532,7 +1457,6 @@ local function UpdateMouseoverHotState(enabled)
   local mouseoverEnabled = enabled == true and RoundedMouseoverEnabled()
   unitMouseoverHotEnabled = mouseoverEnabled and RoundedUnitFramesEnabled() or false
   groupMouseoverHotEnabled = mouseoverEnabled and RoundedGroupFramesEnabled() or false
-  ExportPublic("MSUF_RoundedUF_MouseoverActive", (unitMouseoverHotEnabled or groupMouseoverHotEnabled) and true or nil)
   local highlight = MSUF and MSUF.Highlight
   if highlight and type(highlight.SetRoundedMouseoverState) == "function" then
     highlight.SetRoundedMouseoverState(
@@ -1659,9 +1583,6 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnUnitMouseover", function(frame, active)
     return HandleUnitMouseover(frame, active)
   end)
-  ExportPublic("MSUF_RoundedUF_OnUnitHighlightChanged", function(frame, hlKey, r, g, b, cfg)
-    return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
-  end)
   ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a, prepare)
     if prepare == true then return PrewarmAndApplyModernBorderVisual(frame) end
     return ApplyModernRoundedBorderVisual(frame, shown, thickness, source, r, g, b, a)
@@ -1670,13 +1591,6 @@ local function HookOnce()
     if not frame then return false end
     ApplyToUnitFrame(frame)
     return true
-  end)
-  ExportPublic("MSUF_RoundedUF_OnUnitDispelOverlayChanged", function(frame)
-    if not frame then return end
-    if IsCombatLocked() then DeferApply(); return end
-    if RoundedFrameEnabled(frame) then
-      ApplyToUnitFrame(frame)
-    end
   end)
   ExportPublic("MSUF_RoundedUF_PrepareDispelOverlay", function(frame, region, owner)
     return PrepareFrozenDispelOverlayMask(frame, region, owner)
@@ -1690,12 +1604,6 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnGroupFrameApplied", function(frame, kind)
     if IsCombatLocked() then DeferApply(); return end
     if frame then ApplyToGroupFrame(frame, kind) end
-  end)
-  ExportPublic("MSUF_RoundedUF_OnGroupBackdropAlphaChanged", function(frame, kind)
-    RefreshGroupBackdropAlpha(frame, kind)
-  end)
-  ExportPublic("MSUF_RoundedUF_OnGroupHighlightChanged", function(border)
-    return HandleGroupHighlightChanged(border)
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupIndicatorPrepared", function(frame, kind, enabled, shown, thickness, r, g, b, a)
     return ApplyGroupRoundedIndicator(frame, kind, enabled, shown, thickness, r, g, b, a)
@@ -1729,8 +1637,7 @@ local function HookOnce()
           ApplyUnitRoundedEdge(frame, true)
           ApplyUnitRoundedHoverEdge(frame, RoundedMouseoverEnabled(frame))
         end
-        HandleUnitHighlightChanged(frame, frame._msufHighlightActiveKey or frame._msufHighlightColorKey or 0,
-          frame._msufHighlightOutlineR, frame._msufHighlightOutlineG, frame._msufHighlightOutlineB)
+        RefreshUnitRoundedEdgeColor(frame)
         ApplyCurrentModernBorderVisual(frame)
       end
     end)
@@ -1741,16 +1648,12 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnApplyAll",
   "MSUF_RoundedUF_OnGroupMouseover",
   "MSUF_RoundedUF_OnUnitMouseover",
-  "MSUF_RoundedUF_OnUnitHighlightChanged",
   "MSUF_RoundedUF_OnBorderVisualChanged",
   "MSUF_RoundedUF_OnPowerBorderChanged",
-  "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
   "MSUF_RoundedUF_PrepareDispelOverlay",
   "MSUF_RoundedUF_PrepareDispelBorder",
   "MSUF_RoundedUF_OnDispelOverlayChanged",
   "MSUF_RoundedUF_OnGroupFrameApplied",
-  "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
-  "MSUF_RoundedUF_OnGroupHighlightChanged",
   "MSUF_RoundedUF_OnGroupIndicatorPrepared",
   "MSUF_RoundedUF_OnGroupIndicatorChanged",
   "MSUF_RoundedUF_OnGroupAuraVisualCreated",
