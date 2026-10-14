@@ -280,10 +280,10 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return db[key]
     end
 
-    local function GroupAuraRoot(kind)
+    local function GroupAuraRoot(kind, activate)
         local conf = GroupConf(kind)
         if type(conf.auras) ~= "table" then conf.auras = {} end
-        if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
+        if activate == true then conf.auras.renderer = "CUSTOM" end
         if type(conf.auras.buff) ~= "table" then conf.auras.buff = {} end
         if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = {} end
         return conf.auras
@@ -299,6 +299,8 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local function InvalidateGroupBlacklist(scope, groupKey)
         local af = AuraFilter()
         local a, b = GroupScopeKinds(scope)
+        GroupAuraRoot(a, true)
+        if b then GroupAuraRoot(b, true) end
         if af and type(af.InvalidateBlacklistHash) == "function" then
             af.InvalidateBlacklistHash(GroupAuraGroup(a, groupKey))
             if b then af.InvalidateBlacklistHash(GroupAuraGroup(b, groupKey)) end

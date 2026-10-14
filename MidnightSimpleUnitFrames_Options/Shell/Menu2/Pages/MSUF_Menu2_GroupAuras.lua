@@ -16,7 +16,11 @@ local VT = M.ValueTextList
 local C_Timer = M.MenuTimer or _G.C_Timer
 local RefreshGFPreview, AURA_ANCHORS, STATUS_ICON_ANCHORS = GP.RefreshGFPreview, GP.AURA_ANCHORS, GP.STATUS_ICON_ANCHORS
 local SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup = GP.SPELL_GROWTH_VALUES, GP.ScopeSection, GP.CurrentScope, GP.AuraGroup
-local AurasRoot, QueueGF, RefreshContext = GP.AurasRoot, GP.QueueGF, GP.RefreshContext
+local AurasRoot, QueueGroupApply, RefreshContext = GP.AurasRoot, GP.QueueGF, GP.RefreshContext
+local function QueueGF(scope, mode)
+    AurasRoot(scope, true)
+    if QueueGroupApply then QueueGroupApply(scope, mode) end
+end
 local SetOptionEnabled, SetOptionsEnabled = GP.SetOptionEnabled, GP.SetOptionsEnabled
 local FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge = GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus, GP.OnOffBadge
 local BadgeNumber, OptionText = GP.BadgeNumber, GP.OptionText
@@ -361,7 +365,7 @@ local function BuildGFAuras(ctx)
         return true
     end
     local function BindLiveAuraSlider(widget, scope, lane, key, fallback, meta)
-        local pendingApply, pendingScope, releaseScheduled
+        local pendingApply, pendingScope, pendingAuras, releaseScheduled
         local function RefreshPreviewOnly()
             RefreshAuraPreviews(pendingScope or scope)
         end
@@ -372,9 +376,11 @@ local function BuildGFAuras(ctx)
                 return false
             end
             local applyScope = pendingScope or scope
-            pendingApply = nil
-            pendingScope = nil
-            releaseScheduled = nil
+            if pendingAuras ~= AurasRoot(applyScope) then
+                pendingApply, pendingScope, pendingAuras, releaseScheduled = nil, nil, nil, nil
+                return true
+            end
+            pendingApply, pendingScope, pendingAuras, releaseScheduled = nil, nil, nil, nil
             QueueGF(applyScope, "auras")
             return true
         end
@@ -403,11 +409,10 @@ local function BuildGFAuras(ctx)
                 local group = AuraGroup(activeScope, lane)
                 if group[key] == value then return end
                 group[key] = value
+                pendingAuras = AurasRoot(activeScope, true)
                 pendingApply = true
                 pendingScope = activeScope
-                -- Every drag tick repaints both preview surfaces from the same
-                -- freshly compiled Aura lane, while live GroupFrames stay on
-                -- the bounded release-time apply below.
+                -- Preview each edit immediately; apply live frames once on release.
                 RefreshPreviewOnly()
                 if widget._msuf2SliderActive == true or releaseScheduled then
                     return
@@ -434,6 +439,7 @@ local function BuildGFAuras(ctx)
                 value = value or fallback
                 if group[key] == value then return end
                 group[key] = value
+                AurasRoot(activeScope, true)
                 RefreshAuraPreviews(activeScope)
                 QueueGF(activeScope, "auras")
                 if key == "growth" then RefreshContext(ctx) end

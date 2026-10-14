@@ -811,10 +811,10 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
             db[key].chunkedFill = false
             db[key].powerSmoothFill = false
             db[key].powerChunkedFill = false
+            -- Secure headers enforce this cap after a page reset too.
+            if key == "gf_raid" then db[key].maxColumns = 8 end
         end
     end
-    --- The factory profile starts with MSUF party frames on and Focus Target
-    --- (the focus's target) off, whatever the snapshot ships.
     if type(db.gf_party) ~= "table" then db.gf_party = {} end
     db.gf_party.enabled = true
     if type(db.focustarget) ~= "table" then db.focustarget = {} end

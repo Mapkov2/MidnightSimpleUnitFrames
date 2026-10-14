@@ -130,6 +130,8 @@ local function AssertFactory(db, label)
     Check(db.general._msufPreviewDragHintExperienced == false, label .. ": a factory profile starts with the drag hint")
     Check(type(db.gf_party) == "table" and db.gf_party.enabled == true,
         label .. ": the factory profile must start with MSUF party frames on")
+    Check(db.gf_raid.unitsPerColumn * db.gf_raid.maxColumns >= 40,
+        label .. ": factory/reset raid header cannot display every subgroup")
     if spec.classic then
         Check(db.gf_raid.maxColumns == 8 and db.gf_raid.unitsPerColumn == 5 and db.gf_raid.preserveRaidGroups,
             label .. ": Classic raid must fit eight real subgroups")
@@ -152,9 +154,9 @@ local function AssertFactory(db, label)
             and target.layoutShared.debuffGrowthY == "UP" and target.filters.debuffs.onlyMine == false,
             label .. ": target needs space for own effects and other casters' crowd control")
     else
-        Check(db.gf_raid.maxColumns == 1 and db.gf_raid.width == 140 and db.gf_raid.offsetX == -994
+        Check(db.gf_raid.maxColumns == 8 and db.gf_raid.width == 140 and db.gf_raid.offsetX == -994
             and db.bars.classPowerHeight == 4 and db.bars.powerBarHeight == 3,
-            label .. ": Classic factory policy changed Midnight's snapshot")
+            label .. ": factory raid capacity or unrelated Midnight geometry changed")
     end
 end
 
@@ -203,7 +205,7 @@ assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_
 MSUF_DB = second
 ns.GF.EnsureDB()
 local raid = ns.GF.GetConf("raid")
-Check(ns.GF.GetVisibleLayoutCount("raid", 40, raid) == (spec.classic and 40 or 5),
+Check(ns.GF.GetVisibleLayoutCount("raid", 40, raid) == 40,
     "group runtime lost the factory raid capacity")
 if spec.classic then
     Check(raid.anchorToFrame == "UIParent" and raid.nameAnchor == "LEFT"

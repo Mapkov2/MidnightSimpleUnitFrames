@@ -144,6 +144,22 @@ function Variants.Restore(capture)
     journal, activeDB = {}, nil
 end
 
+-- Explicit module resets discard both saved overrides and remembered overlay
+-- bases. The caller replaces every root owned by this module immediately after.
+function Variants.ClearModuleOverrides(db, module)
+    if db == activeDB then
+        for id, record in pairs(journal) do
+            if Fields.RootModules[record.path[1]] == module then journal[id] = nil end
+        end
+    end
+    for _, entry in ipairs(Entries(db) or NO_ENTRIES) do
+        local patch = entry.patch
+        for i = #patch, 1, -1 do
+            if Fields.RootModules[patch[i].path[1]] == module then table.remove(patch, i) end
+        end
+    end
+end
+
 function Variants.Resolve(db, context)
     Variants.Restore()
     if type(db) ~= "table" or db.profileVariants == nil then return false end
