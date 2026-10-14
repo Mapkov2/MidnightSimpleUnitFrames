@@ -44,6 +44,7 @@ local C_NamePlate = _G.C_NamePlate
 local issecure = _G.issecure
 local INTERRUPTED = _G.INTERRUPTED
 local castbarEngine
+local castDebug = false
 
 local function ScheduleDelayed(callback, delay)
     if type(ScheduleAfter) == "function" then
@@ -103,6 +104,7 @@ end
 local function ClearEmpower(frame, hideFrame)
     local fn = Empower.PlayerCastbar_ClearEmpower
     if fn then fn(frame, hideFrame) end
+    if frame then frame._msufActiveCastBarID = nil end
 end
 
 local function UpdateChannelHasteMarkers(frame, force)
@@ -967,21 +969,27 @@ local function HandleEmpowerEvent(frame, event, ...)
     if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
         if event == "UNIT_SPELLCAST_EMPOWER_START" then
             ClearPendingPlayerInterrupt(frame)
+            frame._msufActiveCastBarID = select(4, ...)
         end
         CallEmpowerStart(frame, select(3, ...))
         return true
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+        if not ActiveCastBarIDMatches(frame, select(6, ...)) then return true end
         -- Keep the feedback deadline when INTERRUPTED arrives first.
         if frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime then
             ClearEmpower(frame, false)
             return true
         end
         local complete = select(4, ...)
+        local interruptedBy = select(5, ...)
         -- CastingBarMixin:HandleCastStop treats an incomplete empower as an
-        -- interrupt. Restricted completion is never tested as a Lua boolean.
-        if not issecretvalue(complete) and complete == false then
+        -- interrupt. Match Driver's CHANNEL_STOP rule when completion is secret.
+        if issecretvalue(complete) then
+            complete = not (issecretvalue(interruptedBy) or interruptedBy ~= nil)
+        end
+        if complete == false then
             ClearEmpower(frame, false)
-            ShowPlayerInterruptFeedback(frame, select(5, ...))
+            ShowPlayerInterruptFeedback(frame, interruptedBy)
         else
             ClearEmpower(frame, true)
         end
@@ -992,14 +1000,30 @@ end
 
 local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
+    if select(1, ...) ~= "player" then return true end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
+        if not ActiveCastBarIDMatches(frame, select(5, ...)) then return true end
         ClearEmpower(frame, false)
         ShowPlayerInterruptFeedback(frame, select(4, ...))
         return true
+    elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+        if not ActiveCastBarIDMatches(frame, select(5, ...)) then return true end
+        local interruptedBy = select(4, ...)
+        -- Native HandleCastStop accepts CHANNEL_STOP for reverseChanneling.
+        -- Do not require a separate INTERRUPTED or EMPOWER_STOP for this kick.
+        if issecretvalue(interruptedBy) or interruptedBy ~= nil then
+            ClearEmpower(frame, false)
+            ShowPlayerInterruptFeedback(frame, interruptedBy)
+        else
+            ClearEmpower(frame, true)
+        end
+        return true
     elseif event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED" then
-        ClearEmpower(frame, true)
+        -- Blizzard only stops reverseChanneling on EMPOWER_STOP/CHANNEL_STOP.
+        -- Keep the displayed empower until that authoritative terminal event,
+        -- so a following INTERRUPTED cannot be rejected as idle spell spam.
         return true
     end
 
@@ -1133,8 +1157,58 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     end
 end
 
+local function CastDebugValue(value)
+    if issecretvalue(value) then return "<secret>" end
+    return tostring(value)
+end
+
+local function TracePlayerCastEvent(frame, event, unit, castGUID, spellID, arg4, arg5, arg6)
+    local complete, interruptedBy, castBarID
+    if event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+        complete, interruptedBy, castBarID = arg4, arg5, arg6
+    elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+        interruptedBy, castBarID = arg4, arg5
+    else
+        castBarID = arg4
+    end
+    print("MSUF castdebug", CastDebugValue(GetTime()), event,
+        "unit=" .. CastDebugValue(unit), "castGUID=" .. CastDebugValue(castGUID), "spellID=" .. CastDebugValue(spellID),
+        "complete=" .. CastDebugValue(complete), "interruptedBy=" .. CastDebugValue(interruptedBy),
+        "castBarID=" .. CastDebugValue(castBarID), "activeBarID=" .. CastDebugValue(frame._msufActiveCastBarID),
+        "empower=" .. CastDebugValue(frame.isEmpower))
+end
+
+local function TracedPlayerCastbarOnEvent(frame, event, ...)
+    TracePlayerCastEvent(frame, event, ...)
+    PlayerCastbarOnEventImpl(frame, event, ...)
+    local feedback = frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime
+    local decision = feedback and "feedback" or (frame:IsShown() and "active" or "hidden")
+    print("MSUF castdebug", "decision=" .. decision, "event=" .. event,
+        "deadline=" .. CastDebugValue(frame.interruptFeedbackEndTime),
+        "showInterrupt=" .. CastDebugValue(Config.Read().player.showInterrupt))
+end
+
+-- The disabled path keeps the original single tail call: no trace flag check,
+-- argument formatting, diagnostic API calls or allocations on received events.
+local playerEventHandler = PlayerCastbarOnEventImpl
 local function PlayerCastbarOnEvent(frame, event, ...)
-    return PlayerCastbarOnEventImpl(frame, event, ...)
+    return playerEventHandler(frame, event, ...)
+end
+
+function Player.ToggleCastDebug()
+    castDebug = not castDebug
+    playerEventHandler = castDebug and TracedPlayerCastbarOnEvent or PlayerCastbarOnEventImpl
+    local frame = Castbars.Frames.Get("player")
+    if frame then
+        -- SUCCEEDED is observation-only: the normal player runtime, like the
+        -- native player castbar, does not use it to decide completion.
+        if castDebug then
+            frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
+        else
+            frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+        end
+    end
+    return castDebug
 end
 
 Player.PlayerCastbar_UpdateLatencyZone = UpdateLatencyZone

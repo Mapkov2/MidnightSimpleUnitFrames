@@ -730,6 +730,18 @@ Commands.Register({
     end,
 })
 
+Commands.Register({
+    name = "castdebug",
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf castdebug",
+    help = "Toggle player cast-event and interrupt-feedback diagnostics.",
+    run = function()
+        local enabled = MSUF.Castbars.Player.ToggleCastDebug()
+        print("MSUF castdebug: " .. (enabled and "ON" or "OFF"))
+    end,
+})
+
 --- The old "!msuf help" chat trigger is gone: it kept 12 CHAT_MSG_* events
 --- registered for the whole session (every trade/guild/say line paid string
 --- work) to duplicate what /msuf help already does.

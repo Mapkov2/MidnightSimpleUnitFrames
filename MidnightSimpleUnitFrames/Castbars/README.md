@@ -7,6 +7,17 @@ cast events; Pools owns boss/arena lifecycles; Manager owns registration and sha
 Style owns outlines; Config compiles reused unit records; KickReady owns readiness snapshots and wakes.
 Player retains its separate event runtime. Font and texture services remain in Core.
 
+`/msuf castdebug` toggles session-only player event diagnostics, including completion,
+interrupter, castBarID and the resulting feedback/visibility decision. Secret arguments
+print as `<secret>`. SUCCEEDED is observed only while tracing; it does not decide player
+completion. Tracing off retains the normal event dispatch without diagnostic work.
+The player preserves empower state across preliminary STOP/FAILED events until the
+authoritative empower stop or interrupt. Restricted completion uses the Driver's
+interrupter-presence rule. CHANNEL_STOP also terminates empower, matching native
+reverse-channel handling; an interrupter produces feedback on that route too.
+Blizzard's Lua defines the payload and reverse-channel handling, not engine event order;
+the player terminal-event smoke covers competing orders and needs an in-game trace.
+
 Only PublicAPI publishes the compatibility functions required by other subsystems, the public ledger
 and Suite. Suite's `MSUF.KickReady` retains its own consumer table and its original eleven-key surface;
 `MSUF.Castbars.KickReady` holds the internal readiness providers.

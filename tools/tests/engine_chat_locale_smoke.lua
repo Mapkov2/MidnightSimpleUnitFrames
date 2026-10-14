@@ -37,6 +37,7 @@ local DIAGNOSTICS = {
     { "Runtime/MSUF_SlashCommands.lua", "client info", "/msuf clientinfo: English bug-report facts by design" },
     { "Runtime/MSUF_SlashCommands.lua", "  /msuf fullreset", "a command to type, not a sentence" },
     { "Runtime/MSUF_SlashCommands.lua", "Group-frame hover debug is", "/msuf gfhoverdebug status line" },
+    { "Runtime/MSUF_SlashCommands.lua", "MSUF castdebug: ", "/msuf castdebug status line (dev diagnostic)" },
     { "Features/Versioning/MSUF_VersionCheck.lua", "could not read own version", "/msuf versiontest debug hook" },
 }
 
