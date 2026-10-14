@@ -37,6 +37,10 @@
 -- Mainline raid_shift: 106 original calls + 20 GUID reads = 126; Vanilla:
 -- 160 + 20 = 180. Combat entry seeds the identities once, outside this case.
 --
+-- 2026-10-14: restored NameText follower measures Mainline raid_apply
+-- 571.1 -> 582.0 KB and 1045k -> 1033k instructions. The x86 cap moves
+-- 582 -> 594 KB (+12, below production 6.501's +14); x64 and all other
+-- limits stay unchanged. Native work is checked separately below.
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
 
@@ -48,7 +52,7 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local BUDGETS = {
     Mainline = {
         party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1533, 3912 },
-        raid_settle = { 64, 8 }, raid_apply = { 1097, 582 }, raid_shift = { 84, 26 },
+        raid_settle = { 64, 8 }, raid_apply = { 1097, 594 }, raid_shift = { 84, 26 },
     },
     Vanilla = {
         party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1485, 4865 },

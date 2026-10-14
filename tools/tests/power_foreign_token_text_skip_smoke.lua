@@ -24,9 +24,9 @@ local power = Slice.Read(root .. "/" .. POWER)
 local core = Slice.Read(root .. "/" .. CORE)
 
 -- Every site that compares the event token must flag its rejection.
-local _, checks = power:gsub("bar%._msufPowerToken ~= eventPowerToken", "")
+local _, checks = power:gsub("bar%._msufPowerEventToken ~= eventPowerToken", "")
 local _, flagged = power:gsub(
-    "CachedDisplayPowerIdentityIsCurrent%(bar, unit%) then return nil, nil, nil, nil, nil, true end", "")
+    "CachedDisplayPowerIdentityIsCurrent%(bar, unit, eventPowerToken%) then return nil, nil, nil, nil, nil, true end", "")
 Check(checks == 5, "expected 5 power token checks, found " .. checks)
 Check(flagged == checks, "every power token check must return the foreign flag (" .. flagged .. "/" .. checks .. ")")
 
@@ -59,6 +59,7 @@ local function EnergyFrame(shown)
             _msufShown = shown,
             _msufPowerTypeKnown = true,
             _msufPowerToken = "ENERGY",
+            _msufPowerEventToken = "ENERGY",
         },
     }
 end
@@ -123,3 +124,83 @@ for _, target in ipairs({ false, "target" }) do
 end
 
 print("power_foreign_token_text_skip_smoke: ok")
+
+-- 2026-10-14, Lua 5.1 x86, actual registered CURRENT bar/text route:
+-- matching ENERGY stays at 235021 VM instructions/1000 notifications;
+-- rejected COMBO_POINTS moves 78008 -> 82008 (+4/event, production 6.501's
+-- exact delta). Matching native work stays at 1000 value reads, foreign at
+-- zero; both paths stay at 0.055 KB. No extra instruction headroom is added.
+for _, flavor in ipairs({ "Mainline", "Vanilla" }) do
+    local world = dofile(root .. "/tools/tests/client_world.lua").New(root, flavor)
+    local env = world.env
+    env.Enum = setmetatable({ PowerType = { Mana = 0, Rage = 1, Energy = 3, ComboPoints = 4 } }, { __index = env.Enum })
+    local reads, typeReads = 0, 0
+    env.UnitPowerType = function() typeReads = typeReads + 1 return 3, "ENERGY" end
+    env.UnitPower = function() reads = reads + 1 return 50 end
+    env.UnitPowerMax = function() reads = reads + 1 return 100 end
+    env.UnitPowerPercent = function() reads = reads + 1 return 50 end
+    world:Boot()
+    assert(not world:FirstFailure())
+    env.MSUF_EnsureDB(true)
+    local UF = world.core.UF
+    UF.Config.Refresh()
+    local frame = env.CreateFrame("Button", nil, env.UIParent)
+    frame:SetSize(200, 40)
+    frame.MSUFUnitKey, frame.unit = "target", "target"
+    UF.AttachFrame(frame, { scope = "unit" })
+    local spec = UF.Config.GetSpec("target")
+    spec.enabled, spec.showPowerText, spec.power.enabled = true, true, true
+    spec.power.mode = "power"
+    spec.text.powerLeft, spec.text.powerCenter, spec.text.powerRight = "NONE", "CURRENT", "NONE"
+    spec.text.healthLeft, spec.text.healthCenter, spec.text.healthRight = "NONE", "NONE", "NONE"
+    spec.text.showName = false
+    UF.ApplySpec(frame, spec, "MSUF_APPLY", { Text = true, Power = true, PowerText = true })
+    assert(frame:IsEventRegistered("UNIT_POWER_UPDATE"), "power event was not registered")
+    local handler = assert(frame:GetScript("OnEvent"))
+    local function Drain()
+        for _, ticker in ipairs(world.widgets.tickers) do
+            if not ticker.cancelled then ticker.callback() end
+        end
+    end
+    local natives = {}
+    for _, name in ipairs({"UnitPowerType", "UnitPower", "UnitPowerMax", "UnitPowerPercent", "UnitExists", "GetTime"}) do
+        if type(env[name]) == "function" then natives[env[name]] = true end
+    end
+    for _, name in ipairs({"SetValue", "SetMinMaxValues", "SetText", "SetFormattedText", "SetTextColor",
+        "SetStatusBarColor", "IsShown", "IsVisible", "Show", "Hide"}) do
+        natives[world.widgets.Methods[name]] = true
+    end
+    for _, token in ipairs({"ENERGY", "COMBO_POINTS"}) do
+        for _ = 1, 100 do handler(frame, "UNIT_POWER_UPDATE", "target", token) end
+        Drain()
+        local ticks, kb = 0, math.huge
+        for _ = 1, 2 do
+            collectgarbage("collect")
+            collectgarbage("stop")
+            local count = 0
+            local before = collectgarbage("count")
+            debug.sethook(function() count = count + 1 end, "", 1)
+            for _ = 1, 1000 do handler(frame, "UNIT_POWER_UPDATE", "target", token) end
+            debug.sethook()
+            ticks = math.max(ticks, count)
+            kb = math.min(kb, collectgarbage("count") - before)
+            collectgarbage("restart")
+            Drain()
+        end
+        reads, typeReads = 0, 0
+        local nativeCalls = 0
+        debug.sethook(function()
+            if natives[debug.getinfo(2, "f").func] then nativeCalls = nativeCalls + 1 end
+        end, "c")
+        for _ = 1, 1000 do handler(frame, "UNIT_POWER_UPDATE", "target", token) end
+        debug.sethook()
+        local expectedTicks = token == "ENERGY" and 235021 or 82008
+        local expectedNative = token == "ENERGY" and 1000 or 0
+        assert(ticks <= expectedTicks, flavor .. ": " .. token .. " exceeded measured VM budget: " .. ticks)
+        assert(kb <= 0.1, flavor .. ": power event allocated " .. kb .. " KB")
+        assert(nativeCalls == expectedNative and reads == expectedNative and typeReads == 0,
+            flavor .. ": power event added native or metadata reads")
+        print(string.format("power_event_budget: ok (%s %s: %d instructions, %.3f KB, %d native calls)",
+            flavor, token, ticks, kb, nativeCalls))
+    end
+end

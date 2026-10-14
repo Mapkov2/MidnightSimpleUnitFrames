@@ -58,10 +58,15 @@ local costs = { show, combatEnd, raidJoin }
 -- next-frame latch set (this kit pumps no OnUpdate), so no later refresh ran
 -- here. Now the rounded apply above runs it and raid frames gain their Auras3
 -- surfaces; cc552759 measures the same raid join 11 lower on both clients.
+-- 2026-10-14: restoring the production 6.501 name follower adds 3715
+-- instructions to Mainline/Forever raid join and 3690 to Classic. The same
+-- lifecycle with production providers adds 3855 (Mainline/Vanilla). Only
+-- raid-join caps move, to the exact 7.0 readings: +3483 Mainline/Forever,
+-- +2663 Classic after existing slack. Show/combat-end caps stay unchanged.
 local limits = {
-    Mainline = { 10438, 271832, 2049299 }, Forever = { 10837, 269792, 2052956 },
-    Vanilla = { 12987, 269712, 1793570 },
-    TBC = { 12987, 271200, 1793900 }, Mists = { 12868, 271210, 1790250 },
+    Mainline = { 10438, 271832, 2052782 }, Forever = { 10837, 269792, 2056439 },
+    Vanilla = { 12987, 269712, 1796233 },
+    TBC = { 12987, 271200, 1796563 }, Mists = { 12868, 271210, 1792913 },
 }
 local labels = { "unit OnShow", "combat end after combat show", "rounded raid join" }
 local failures = {}

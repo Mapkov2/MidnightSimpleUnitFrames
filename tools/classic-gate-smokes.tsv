@@ -693,3 +693,5 @@ clients+Forever	lua	tools/tests/profile_data_boundaries_smoke.lua	{root/} {flavo
 -	lua	tools/tests/profile_printsafe_bound_smoke.lua	{root/}	Print-safe profile decode exceeded its early bound
 clients+Forever	lua	tools/tests/profile_external_transport_smoke.lua	{root/} {flavor}	External profile transport fallback, limits and rollback failed: {flavor}
 clients+Forever	lua	tools/tests/profile_texture_migration_phase_smoke.lua	{root/} {flavor}	Legacy texture migration finishes before binding: {flavor}
+clients+Forever	lua	tools/tests/group_name_update_smoke.lua	{root} {flavor}	Group delayed and other-instance name update regression: {flavor}
+clients+Forever	lua	tools/tests/power_event_identity_smoke.lua	{root} {flavor}	Power event identity smoke failed: {flavor}

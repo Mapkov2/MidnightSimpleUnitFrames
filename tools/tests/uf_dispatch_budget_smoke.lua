@@ -16,6 +16,9 @@
 -- Lua; on any interpreter the value events (health, power) must stay
 -- allocation-free (one table per dispatch would cost 16 KB or more).
 --
+-- 2026-10-14: restored group NameText route measures 920k -> 1211k on both
+-- clients, with allocation unchanged at 0.05 KB. The 1236k cap adds 290k,
+-- below production 6.501's 301k allowance; other event limits stay fixed.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -27,7 +30,7 @@ local BUDGETS = {
     UNIT_HEALTH = { 97, 1 },
     UNIT_MAXHEALTH = { 1419, 3 },
     UNIT_POWER_UPDATE = { 123, 1 },
-    UNIT_NAME_UPDATE = { 946, 1 },
+    UNIT_NAME_UPDATE = { 1236, 1 },
     UNIT_FLAGS = { 1241, 3 },
 }
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_NAME_UPDATE", "UNIT_FLAGS" }

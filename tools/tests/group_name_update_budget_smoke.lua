@@ -1,11 +1,19 @@
--- A 20-member name burst keeps the HEAD 71bb0f03 instruction limits, with no headroom.
+-- A 20-member name burst measures real name recovery, with no headroom.
+-- 2026-10-14: OOC/combat 249k/250k -> 276k/277k on both clients after
+-- restoring the production 6.501 NameText route. The +27k is useful name
+-- work plus the emulator delivering all 20 events to all registered frames.
+-- The same burst against production providers measures +28k/+27k on
+-- Mainline and +27k/+27k on Vanilla; 7.0 permits only +27k/+27k.
+-- The native unit filter delivers only matching frames; targeted dispatch
+-- measures +291 instructions/event, below production's +302. No added slack,
+-- overlay compilation or full lifecycle work is permitted.
 -- Measured with the same real group-header world, on Lua 5.1 (32-bit).
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "client flavor required")
 -- 2026-10-13: Mainline OOC 248 -> 249. The harness delivers each event to every frame in Lua, so the
 -- EllesmereUI login watcher frame (one more frame) costs 11 instructions per event here only; the client
 -- delivers UNIT_NAME_UPDATE only to registered frames, so in game the burst cost is unchanged.
-local limits = assert(({ Mainline = { 249, 250 }, Vanilla = { 249, 250 } })[flavor])
+local limits = assert(({ Mainline = { 276, 277 }, Vanilla = { 276, 277 } })[flavor])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local h = Harness.New(root, flavor)
 local GF = h.GF
@@ -40,7 +48,7 @@ local function Measure(label, limit)
     Burst()
     debug.sethook()
     collectgarbage("restart")
-    assert(ticks <= limit, string.format("%s %s: %dk instructions exceeds HEAD %dk", flavor, label, ticks, limit))
+    assert(ticks <= limit, string.format("%s %s: %dk instructions exceeds restored-name %dk", flavor, label, ticks, limit))
     assert(compiles == 0 and lifecycles == 0, label .. " compiled overlays or ran full group lifecycles")
     return ticks
 end
@@ -50,5 +58,5 @@ h:EnterCombat()
 local combat = Measure("combat name burst", limits[2])
 h:LeaveCombat()
 assert(#h.violations == 0, tostring(h.violations[1]))
-print(string.format("group_name_update_budget_smoke: ok (%s: 20 members, OOC %dk, combat %dk, HEAD limits unchanged)",
+print(string.format("group_name_update_budget_smoke: ok (%s: 20 members, OOC %dk, combat %dk, restored-name limits)",
     flavor, ooc, combat))

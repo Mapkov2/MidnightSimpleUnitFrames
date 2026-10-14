@@ -66,6 +66,9 @@ function Collaborators.Install(root, ns)
     for name, standin in pairs(Collaborators.STANDINS) do
         if _G[name] == nil then _G[name] = standin end
     end
+    -- Native power identity is available on every supported client.
+    _G.Enum = _G.Enum or {}
+    Enum.PowerType = Enum.PowerType or { Mana = 0, Rage = 1, Focus = 2, Energy = 3, ComboPoints = 4 }
     -- Load the real Power element, which owns the ClassPower subscription in
     -- every client before the ClassPower stack. Stand-alone CP fixtures have
     -- no unit-frame registry or value updates to drive.
