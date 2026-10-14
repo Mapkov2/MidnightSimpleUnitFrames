@@ -196,6 +196,8 @@ AssertFactory(second, "new profile")
 -- public MSUF_GF_AuraFilter table of Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua,
 -- which loads before the group files. The factory check needs none of its filters.
 _G.MSUF_GF_AuraFilter = _G.MSUF_GF_AuraFilter or {}
+-- The group text part requires the actual unconditional UFText providers.
+dofile(repo .. "/tools/tests/group_text_fixture.lua")(ns, repo)
 for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MidnightSimpleUnitFrames", ns)
 end

@@ -15,7 +15,7 @@
 --   3. Libs/MSUFUnitFrames/MSUF_UF_Core.lua: the OnShow identity follow-up
 --      ignores a secret GUID when it marks and when it consumes;
 --   4. UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua
---      TruncateLegacyGroupName: a secret name is returned untouched, and the
+--      TruncateName: a secret name is returned untouched, and the
 --      common path (no legacy truncation) still asks no native predicate;
 --      UpdateHealthRuntime (plain health text): secret health values from the
 --      dispatch, from the health bar cache or from UnitHealth reach the secret
@@ -105,8 +105,9 @@ local coreEnv = {
 }
 local MarkOnShowIdentityFollowup = Slice(CORE, "local function MarkOnShowIdentityFollowup(frame)", coreEnv)
 local ConsumeOnShowIdentityFollowup = Slice(CORE, "local function ConsumeOnShowIdentityFollowup(frame, event, unit)", coreEnv)
--- 4. Legacy name truncation ---------------------------------------------------------
-local TruncateLegacyGroupName = Slice(RUNTIME, "local function TruncateLegacyGroupName(name, rt)", {
+-- 4. The same legacy implementation moved to a shared scalar name helper.
+-- Keep both original secret-pass-through and zero-predicate expectations.
+local TruncateName = Slice(RUNTIME, "local function TruncateName(name, maxChars, showDots, clipSide)", {
     floor = math.floor,
     NextUtf8Byte = function(_, pos) return pos + 1 end,
     issecretvalue = CountingPredicate,
@@ -157,11 +158,11 @@ Check(ConsumeOnShowIdentityFollowup(identityFrame, "PLAYER_TARGET_CHANGED", "tar
     "a secret GUID matched the remembered OnShow follow-up")
 
 local secretName = Secrets.New("string")
-Check(TruncateLegacyGroupName(secretName, { nameLegacyTruncation = true, nameLegacyShortenMax = 10 }) == secretName,
+Check(TruncateName(secretName, 10) == secretName,
     "a secret name was not returned untouched")
 predicateCalls = 0
 local plainName = "Plain"
-Check(TruncateLegacyGroupName(plainName, {}) == plainName and predicateCalls == 0,
+Check(TruncateName(plainName, 0) == plainName and predicateCalls == 0,
     "the name path without legacy truncation asked " .. predicateCalls .. " native predicate(s)")
 
 local function HealthRuntime(event, hp, hpMax)

@@ -172,7 +172,7 @@ local engineNameUnit
 function GF.RefreshGroupNames(unit) Count("EngineRefreshGroupNames"); engineNameUnit = unit; return "engine result" end
 MSUF.UFBarTextCommon = { ApplyHealthStatusColor = function(bar) Count("Paint"); bar:SetStatusBarColor(.1, .2, .3) end }
 
-dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
+dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF, root)
 local function Load(client)
     MSUF.Client = client
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))("MSUF", MSUF)

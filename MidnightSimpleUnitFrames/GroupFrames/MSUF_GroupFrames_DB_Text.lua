@@ -33,53 +33,6 @@ end
 local ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
 
 ---
---- C-API references for secret-safe text formatting (WoW 12.0)
---- AbbreviateNumbers / BreakUpLargeNumbers accept secret values and
---- return secret strings that pass through to C-side SetText.
----
-local _GF_AbbrShort  = _G.AbbreviateNumbers         --- "1.2k" (secret-safe)
-local _GF_AbbrLong   = _G.BreakUpLargeNumbers       --- "1,234" (secret-safe)
-local _GF_AbbrFallback = _G.AbbreviateLargeNumbers or _G.ShortenNumber
-local _GF_UnitHealthPercent = _G.UnitHealthPercent   --- SecretReturns (UnitDocumentation)
-local _GF_UnitPowerPercent  = _G.UnitPowerPercent    --- secret when power is restricted
-local _GF_UnitPowerType     = _G.UnitPowerType
-local _GF_UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
-local _GF_UnitHealthMissing = _G.UnitHealthMissing   --- secret-safe deficit
-local _GF_CSU_Round = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
-local _GF_CSU_TruncateZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
-local _GF_CSU_WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
-local _GF_ScaleTo100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
-local _GF_issecretvalue = _G.issecretvalue
---- Global abbreviation style, pushed on the cold path by
---- Runtime/MSUF_NumberFormat.lua. nil keeps the client's locale-dependent
---- output; a table switches the C abbreviator to MSUF's locale-independent
---- breakpoints. Only the short form takes it - BreakUpLargeNumbers does not.
-local _GF_NUM_OPTS = nil
-do
-    local NumberFormat = MSUF.NumberFormat
-    if NumberFormat and NumberFormat.Register then
-        NumberFormat.Register(function(options) _GF_NUM_OPTS = options end)
-    end
-end
-local _GF_ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
-local _GF_ABSORB_MODE_BASE = {
-    CURRENTABSORB = "CURRENT",
-    FULLVALUEABSORB = "FULLVALUE",
-    MAXABSORB = "MAX",
-    DEFICITABSORB = "DEFICIT",
-    CURMAXABSORB = "CURMAX",
-    PERCENTABSORB = "PERCENT",
-    CURPERCENTABSORB = "CURPERCENT",
-    CURMAXPERCENTABSORB = "CURMAXPERCENT",
-    MAXPERCENTABSORB = "MAXPERCENT",
-    PERCENTCURABSORB = "PERCENTCUR",
-    PERCENTMAXABSORB = "PERCENTMAX",
-    PERCENTCURMAXABSORB = "PERCENTCURMAX",
-    MAXCURABSORB = "MAXCUR",
-    PERCENTMAXCURABSORB = "PERCENTMAXCUR",
-}
-
----
 --- Health text modes (matches EQoL healthTextModeOptions)
 ---
 GF.HEALTH_TEXT_MODES = {
@@ -365,317 +318,37 @@ function GF.InvalidateTextFormatCache()
     _cachedUseShort = nil
 end
 
-local _GF_SPACED_DELIMITERS = {
-    [""] = " ",
-    ["-"] = " - ",
-    ["/"] = " / ",
-    ["\\"] = " \\ ",
-    ["|"] = " | ",
-    ["<"] = " < ",
-    [">"] = " > ",
-    ["~"] = " ~ ",
-    [":"] = " : ",
-}
-
-local function _GF_NormalizeTextDelimiter(delimiter, fallback)
-    if delimiter == nil then
-        return fallback or " / "
+-- The engine loads before Group DB text. Keep inherited options on the existing
+-- invalidation boundary; return-value formatting is explicitly the GROUP contract.
+local TEXT_CONTEXT = "GroupFrames/MSUF_GroupFrames_DB_Text.lua"
+local Text = MSUF.Require("MSUF_NS", TEXT_CONTEXT).UFText
+if type(Text) ~= "table" then
+    error("MSUF: missing required dependency 'UFText' required by " .. TEXT_CONTEXT, 2)
+end
+for _, name in ipairs({ "FormatValue", "FormatPercentValue", "FormatHealthString", "FormatPowerString", "TruncateName",
+    "PercentFromValues", "MissingHealthFromValues" }) do
+    -- Validate field readiness in the same resolve/type phase as MSUF.Require.
+    local kind = type(Text[name])
+    if kind ~= "function" then
+        error("MSUF: missing required dependency 'UFText." .. name .. "' required by " .. TEXT_CONTEXT, 2)
     end
-    return _GF_SPACED_DELIMITERS[delimiter] or delimiter
 end
 
----
---- Unified abbreviator (handles secret + non-secret)
---- Secret: AbbreviateNumbers - secret string (C-side, no Lua arith)
---- Non-secret: AbbreviateNumbers or BreakUpLargeNumbers per user pref
----
-local function _GF_Abbrev(val, shortNumbers)
-    local iss = _GF_issecretvalue
-    local isSecret = iss and iss(val)
-    if not isSecret and val == nil then return "0" end
-    local useShort = shortNumbers == nil and _GF_GetUseShort() or shortNumbers == true
-    if isSecret then
-        --- Secret: must use C-side abbreviator; no type()/tonumber()/arithmetic
-        local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
-                            or  (_GF_AbbrLong  or _GF_AbbrShort or _GF_AbbrFallback)
-        if fn then return fn(val, useShort and _GF_NUM_OPTS or nil) end
-        return val   --- raw secret ? SetText handles it C-side
-    end
-    --- Non-secret
-    local n = tonumber(val) or 0
-    local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
-                        or  (_GF_AbbrLong  or _GF_AbbrShort or _GF_AbbrFallback)
-    if fn then return fn(n, useShort and _GF_NUM_OPTS or nil) end
-    return tostring(n)
-end
-
----
---- Percent helpers. UnitHealthPercent is SecretReturns and UnitPowerPercent
---- SecretWhenUnitPowerRestricted (UnitDocumentation.lua): a secret percent goes
---- to the C formatter untouched, only a plain one may be compared. Fallback:
---- compute from values if both are non-secret.
----
-local function _GF_HealthPercent(unit, hp, hpMax)
-    if _GF_UnitHealthPercent and unit then
-        --- EQoL method: UnitHealthPercent(unit, usePredicted, curve)
-        --- ScaleTo100 curve - returns 0- (not 0-)
-        local pct = _GF_UnitHealthPercent(unit, true, _GF_ScaleTo100)
-        if (_GF_issecretvalue and _GF_issecretvalue(pct)) or pct ~= nil then return pct end
-    end
-    --- Fallback (non-secret values only)
-    local iss = _GF_issecretvalue
-    if iss and (iss(hp) or iss(hpMax)) then return nil end
-    local mx = tonumber(hpMax) or 0
-    if mx > 0 then return (tonumber(hp) or 0) / mx * 100 end
-    return nil
-end
-
-local function _GF_PowerPercent(unit, pw, pwMax)
-    if _GF_UnitPowerPercent and unit then
-        local ptFn = _GF_UnitPowerType
-        local pType = ptFn and ptFn(unit)
-        --- EQoL method: UnitPowerPercent(unit, pType, unmodified, curve)
-        --- ScaleTo100 curve - returns 0- (not 0-)
-        local pct
-        if _GF_ScaleTo100 then
-            pct = _GF_UnitPowerPercent(unit, pType, false, _GF_ScaleTo100)
-        else
-            pct = _GF_UnitPowerPercent(unit, pType, false, true)
-        end
-        if (_GF_issecretvalue and _GF_issecretvalue(pct)) or pct ~= nil then return pct end
-    end
-    local iss = _GF_issecretvalue
-    if iss and (iss(pw) or iss(pwMax)) then return nil end
-    local mx = tonumber(pwMax) or 0
-    if mx > 0 then return (tonumber(pw) or 0) / mx * 100 end
-    return nil
-end
-
---- Format a percent value into "42%" or "42" (respects hidePercentSymbol).
---- Handles secret percent (rare) via C_StringUtil.RoundToNearestString. The
---- second result is a plain boolean "has a percent": a secret text may be
---- concatenated but never truth-tested.
-local function _GF_FormatPct(pctVal, pctSuffix, percentDecimals)
-    local iss = _GF_issecretvalue
-    if iss and iss(pctVal) then
-        if _GF_CSU_Round then
-            return _GF_CSU_Round(pctVal) .. pctSuffix, true
-        end
-        return nil, false
-    end
-    local p = tonumber(pctVal)
-    if not p then return nil, false end
-    if percentDecimals == 1 then
-        return string.format("%.1f", math_floor(p * 10 + 0.5) / 10) .. pctSuffix, true
-    end
-    return math_floor(p + 0.5) .. pctSuffix, true
-end
-
----
---- Core mode formatter (shared by health + power)
---- All inputs may be secret strings (from _GF_Abbrev) or normal strings.
---- String concat ".." on secret strings produces a secret string.
----
-local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, hasPct, missingVal, shortNumbers)
-    if mode == "PERCENT"  then
-        if not hasPct then return "" end
-        return pctStr
-    end
-    if mode == "CURRENT"  then return sCur end
-    if mode == "FULLVALUE" then return sCur end
-    if mode == "MAX"      then return sMax end
-
-    if mode == "DEFICIT" then
-        local iss = _GF_issecretvalue
-        if iss and iss(missingVal) then
-            return "-" .. _GF_Abbrev(missingVal, shortNumbers)
-        end
-        if missingVal == nil then return "" end
-        local m = tonumber(missingVal) or 0
-        if m <= 0 then return "" end
-        return "-" .. _GF_Abbrev(m, shortNumbers)
-    end
-
-    if mode == "CURMAX"   then return sCur .. delim .. sMax end
-    if mode == "MAXCUR"   then return sMax .. delim .. sCur end
-
-    --- All remaining modes need percent
-    if not hasPct then return sCur end
-    if mode == "CURPERCENT"     then return sCur .. delim .. pctStr end
-    if mode == "CURMAXPERCENT"  then return sCur .. delim .. sMax .. delim .. pctStr end
-    if mode == "PERCENTMAXCUR"  then return pctStr .. delim .. sMax .. delim .. sCur end
-    if mode == "MAXPERCENT"     then return sMax .. delim .. pctStr end
-    if mode == "PERCENTCUR"     then return pctStr .. delim .. sCur end
-    if mode == "PERCENTMAX"     then return pctStr .. delim .. sMax end
-    if mode == "PERCENTCURMAX"  then return pctStr .. delim .. sCur .. delim .. sMax end
-
-    return sCur
-end
-
----
-local function _GF_FormatAbsorbText(value, shortNumbers, absorbIcon, combined)
-    local iss = _GF_issecretvalue
-    local secret = iss and iss(value)
-    if not secret and value == nil then return "" end
-    local prefix
-    if combined then
-        prefix = absorbIcon and (" + " .. _GF_ABSORB_ICON_MARKUP .. " ") or " + "
-    elseif absorbIcon then
-        prefix = _GF_ABSORB_ICON_MARKUP .. " "
-    end
-    if secret then
-        if _GF_CSU_TruncateZero then
-            local text = _GF_CSU_TruncateZero(value)
-            if prefix and _GF_CSU_WrapString then return _GF_CSU_WrapString(text, prefix, "") end
-            return text
-        end
-        return _GF_Abbrev(value, shortNumbers)
-    end
-    value = tonumber(value) or 0
-    if value <= 0 then return "" end
-    local text = _GF_Abbrev(value, shortNumbers)
-    return prefix and (prefix .. text) or text
-end
-
---- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers [, totalAbsorb [, absorbIcon]]]]])
---- mode : "PERCENT", "CURMAX", "DEFICIT", etc. or "NONE"
---- hp, hpMax : raw UnitHealth / UnitHealthMax (possibly secret)
---- delimiter : " / " etc.
---- reverse : swap mode before formatting
---- unit : unitId for secret-safe percent (optional, nil in preview)
----
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb, absorbIcon, percentDecimals)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers,
+    totalAbsorb, absorbIcon, percentDecimals)
     if not mode or mode == "NONE" then return "" end
-    if reverse then mode = REVERSE_HP_MAP[mode] or mode end
-
-    local absorbBaseMode = _GF_ABSORB_MODE_BASE[mode]
-    local absorbText = ""
-    if mode == "ABSORB" or absorbBaseMode then
-        local value = totalAbsorb
-        local valueIsSecret = _GF_issecretvalue and _GF_issecretvalue(value)
-        if not valueIsSecret and value == nil and unit and _GF_UnitGetTotalAbsorbs then
-            value = _GF_UnitGetTotalAbsorbs(unit)
-        end
-        absorbText = _GF_FormatAbsorbText(value, shortNumbers, absorbIcon == true, absorbBaseMode ~= nil)
-        if mode == "ABSORB" then return absorbText end
-        mode = absorbBaseMode
-    end
-
-    local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
-    local hidePct = _GF_ResolveHidePct(hidePercentSymbol)
-    local pctSuffix = hidePct and "" or "%"
-
-    --- Abbreviate cur/max (secret-safe: C-side abbreviators)
-    local sCur = _GF_Abbrev(hp, shortNumbers)
-    local sMax = _GF_Abbrev(hpMax, shortNumbers)
-
-    --- Percent (non-secret via UnitHealthPercent API; fallback if non-secret values)
-    local pctStr, hasPct = nil, false
-    if mode ~= "CURRENT" and mode ~= "FULLVALUE" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
-        local pctVal = _GF_HealthPercent(unit, hp, hpMax)
-        pctStr, hasPct = _GF_FormatPct(pctVal, pctSuffix, percentDecimals)
-    end
-
-    --- Deficit: try UnitHealthMissing API (secret-safe), else compute if non-secret
-    local missingVal = nil
-    if mode == "DEFICIT" then
-        if _GF_UnitHealthMissing and unit then
-            missingVal = _GF_UnitHealthMissing(unit)
-        end
-        --- UnitHealthMissing is SecretReturns: test secrecy before nil.
-        local iss = _GF_issecretvalue
-        if not (iss and iss(missingVal)) and missingVal == nil then
-            if not (iss and (iss(hp) or iss(hpMax))) then
-                local cur = tonumber(hp) or 0
-                local mx  = tonumber(hpMax) or 0
-                missingVal = mx - cur
-            end
-        end
-    end
-
-    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, hasPct, missingVal, shortNumbers) .. absorbText
+    if reverse then mode = GF.ReverseHealthTextMode(mode) end
+    if shortNumbers == nil then shortNumbers = _GF_GetUseShort() end
+    return Text.FormatHealthString(mode, hp, hpMax, delimiter, unit, _GF_ResolveHidePct(hidePercentSymbol),
+        shortNumbers == true, totalAbsorb, absorbIcon, percentDecimals, "GROUP")
 end
 
---- Truncate name string (UTF-8 aware when possible)
 function GF.TruncateName(name, maxChars, noEllipsis, clipSide)
-    maxChars = math_floor((tonumber(maxChars) or 0) + 0.5)
-    if not name or maxChars <= 0 then return name end
-    if _GF_issecretvalue and _GF_issecretvalue(name) then return name end
-    clipSide = (clipSide == "LEFT") and "LEFT" or "RIGHT"
-
-    local function NextByte(pos)
-        local b = string.byte(name, pos)
-        if not b then return pos + 1 end
-        if b < 128 then return pos + 1 end
-        if b < 224 then return pos + 2 end
-        if b < 240 then return pos + 3 end
-        return pos + 4
-    end
-
-    local charCount = 0
-    local bytePos = 1
-    local nameLen = #name
-    while bytePos <= nameLen do
-        charCount = charCount + 1
-        bytePos = NextByte(bytePos)
-    end
-
-    if charCount <= maxChars then return name end
-
-    if clipSide == "LEFT" then
-        local skip = charCount - maxChars
-        bytePos = 1
-        for _ = 1, skip do
-            bytePos = NextByte(bytePos)
-        end
-        local truncated = string.sub(name, bytePos)
-        if noEllipsis then return truncated end
-        return ".." .. truncated
-    end
-
-    charCount = 0
-    bytePos = 1
-    while bytePos <= nameLen and charCount < maxChars do
-        charCount = charCount + 1
-        bytePos = NextByte(bytePos)
-    end
-    local truncated = string.sub(name, 1, bytePos - 1)
-    if noEllipsis then return truncated end
-    return truncated .. ".."
+    return Text.TruncateName(name, maxChars, not noEllipsis, clipSide)
 end
 
----
---- FormatPowerText(mode, pw, pwMax, delimiter [, unit [, hidePercentSymbol]])
---- Same modes as health text. Secret-safe via C-side abbreviators.
----
 function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit, hidePercentSymbol)
     if not mode or mode == "NONE" then return "" end
-
-    local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
-    local hidePct = _GF_ResolveHidePct(hidePercentSymbol)
-    local pctSuffix = hidePct and "" or "%"
-
-    --- Abbreviate cur/max (secret-safe)
-    local sCur = _GF_Abbrev(pw)
-    local sMax = _GF_Abbrev(pwMax)
-
-    --- Percent
-    local pctStr, hasPct = nil, false
-    if mode ~= "CURRENT" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
-        local pctVal = _GF_PowerPercent(unit, pw, pwMax)
-        pctStr, hasPct = _GF_FormatPct(pctVal, pctSuffix)
-    end
-
-    --- Deficit: compute from values if non-secret (no UnitPowerMissing API)
-    local missingVal = nil
-    if mode == "DEFICIT" then
-        local iss = _GF_issecretvalue
-        if not (iss and (iss(pw) or iss(pwMax))) then
-            local cur = tonumber(pw) or 0
-            local mx  = tonumber(pwMax) or 0
-            missingVal = mx - cur
-        end
-    end
-
-    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, hasPct, missingVal)
+    return Text.FormatPowerString(mode, pw, pwMax, delimiter, unit, _GF_ResolveHidePct(hidePercentSymbol),
+        _GF_GetUseShort(), "GROUP")
 end

@@ -674,3 +674,6 @@ clients+Forever	lua	tools/tests/profile_legacy_precedence_smoke.lua	{root/} {fla
 -	lua	tools/tests/focus_kick_frame_enabled_smoke.lua	{root} state	Focus tracker state consumer respects the focus frame switch
 -	lua	tools/tests/focus_kick_frame_enabled_smoke.lua	{root} icon	Focus tracker icon consumer respects the focus frame switch
 -	lua	tools/tests/castbar_pool_public_geometry_smoke.lua	{root}	Public boss and arena position calls observe live geometry after errors and reentry
+-	lua	tools/tests/group_text_return_contract_smoke.lua	{root}	Group text return contract, UTF-8 and strict secrets
+-	lua	tools/tests/group_text_math_owner_smoke.lua	{root}	Group return-value math owners and required provider readiness
+-	lua	tools/tests/group_text_required_helpers_smoke.lua	{root}	Required group text fields name missing dependencies on real client load orders

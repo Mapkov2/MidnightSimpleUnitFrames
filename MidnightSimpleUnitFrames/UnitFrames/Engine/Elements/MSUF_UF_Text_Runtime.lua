@@ -266,18 +266,22 @@ if type(Text._pendingDisplayNameResolver) == "function" then
   Text._pendingDisplayNameResolver = nil
 end
 
-local function MissingHealthFromValues(hp, hpMax)
+local function MissingHealthFromValues(hp, hpMax, compatibility)
   -- Missing health is derived from API values that may become secret. Return nil in that case
   -- so callers can keep the previous safe display instead of doing math on protected values.
   if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
     return nil
   end
-  if not IsFiniteNumber(hp) or not IsFiniteNumber(hpMax) then
+  if not (type(hp) == "number" and hp == hp and (hp - hp) == 0
+    and type(hpMax) == "number" and hpMax == hpMax and (hpMax - hpMax) == 0) then
+    -- Return-value group previews retain their unbounded numeric input policy.
+    if compatibility == "GROUP" then return hpMax - hp end
     return nil
   end
   local missing = hpMax - hp
   return missing > 0 and missing or 0
 end
+Text.MissingHealthFromValues = MissingHealthFromValues
 
 local function ReadMissingHealth(unit, hp, hpMax)
   local missing = MissingHealthFromValues(hp, hpMax)
@@ -307,13 +311,18 @@ local function PercentCacheKeyFromValue(pct, decimals)
   return pct >= 0 and floor(pct) or -floor(-pct)
 end
 
-local function PercentFromValues(cur, maxValue)
+local function PercentFromValues(cur, maxValue, compatibility)
   if issecretvalue(cur) == true or issecretvalue(maxValue) == true then return nil end
-  if IsFiniteNumber(cur) and IsFiniteNumber(maxValue) and maxValue > 0 then
+  -- Keep the same finite guards inline: rejected live inputs also retain their
+  -- instruction cost when the GROUP compatibility branch is not requested.
+  if type(cur) == "number" and cur == cur and (cur - cur) == 0
+    and type(maxValue) == "number" and maxValue == maxValue and (maxValue - maxValue) == 0 and maxValue > 0 then
     return (cur / maxValue) * 100
   end
+  if compatibility == "GROUP" and maxValue > 0 then return (cur / maxValue) * 100 end
   return nil
 end
+Text.PercentFromValues = PercentFromValues
 
 local function ConsumeDispatchPercent(rt, valueKey, readyKey)
   if rt and rt[readyKey] == true then
@@ -859,8 +868,8 @@ end
 -- Start of the UTF-8 character after the one at pos. File scope: a closure
 -- here would be built again for every name update.
 local function NextUtf8Byte(name, pos)
+  -- Every caller stays within the counted byte string at a character start.
   local byte = string_byte(name, pos)
-  if not byte then return pos + 1 end
   if byte < 128 then return pos + 1 end
   if byte < 224 then return pos + 2 end
   if byte < 240 then return pos + 3 end
@@ -871,12 +880,11 @@ end
 -- dots when its character count exceeded the configured cap. Preserve that
 -- behavior for migrated Group profiles instead of showing 6.0's separate
 -- clip-marker FontString for every name while shortening is merely enabled.
-local function TruncateLegacyGroupName(name, rt)
-  local maxChars = rt and rt.nameLegacyTruncation == true and tonumber(rt.nameLegacyShortenMax) or 0
-  maxChars = floor((maxChars or 0) + 0.5)
+local function TruncateName(name, maxChars, showDots, clipSide)
+  maxChars = floor((tonumber(maxChars) or 0) + 0.5)
   -- maxChars is plain configuration, so the common path (no legacy
   -- truncation) still returns before the native predicate.
-  if maxChars <= 0 or issecretvalue(name) == true or name == nil then return name end
+  if maxChars <= 0 or issecretvalue(name) == true or not name then return name end
 
   local count, pos, byteLength = 0, 1, #name
   while pos <= byteLength do
@@ -885,8 +893,8 @@ local function TruncateLegacyGroupName(name, rt)
   end
   if count <= maxChars then return name end
 
-  local dots = rt.nameLegacyShortenDots == true and ".." or ""
-  if rt.nameShortenSide == "LEFT" then
+  local dots = showDots == true and ".." or ""
+  if clipSide == "LEFT" then
     pos = 1
     for _ = 1, count - maxChars do pos = NextUtf8Byte(name, pos) end
     return dots .. string_sub(name, pos)
@@ -899,6 +907,8 @@ local function TruncateLegacyGroupName(name, rt)
   end
   return string_sub(name, 1, pos - 1) .. dots
 end
+
+Text.TruncateName = TruncateName
 
 function Text.UpdateName(frame, event, unit)
   local frameUnit = frame and frame.MSUFUnitKey
@@ -927,7 +937,10 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = nil
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, true)
-    SetNameTextCached(frame, TruncateLegacyGroupName(previewName, rt))
+    if rt and rt.nameLegacyTruncation == true then
+      previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+    end
+    SetNameTextCached(frame, previewName)
     frame._msufNameTextUnit = unit
     Text.UpdateNameColor(frame, event, unit)
     return
@@ -997,7 +1010,10 @@ function Text.UpdateName(frame, event, unit)
   else
     displayName = ReadDisplayName(unit)
   end
-  SetNameTextCached(frame, TruncateLegacyGroupName(displayName, rt))
+  if rt and rt.nameLegacyTruncation == true then
+    displayName = TruncateName(displayName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+  end
+  SetNameTextCached(frame, displayName)
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)
 end

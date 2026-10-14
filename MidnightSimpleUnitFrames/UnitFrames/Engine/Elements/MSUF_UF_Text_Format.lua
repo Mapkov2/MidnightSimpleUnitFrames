@@ -47,8 +47,9 @@ Text.DISPATCH_KEY = DISPATCH_KEY
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue
-local TruncateWhenZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
-local WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
+local StringUtil = _G.C_StringUtil
+local TruncateWhenZero = StringUtil and StringUtil.TruncateWhenZero
+local WrapString = StringUtil and StringUtil.WrapString
 local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
 local ApplyText = Apply.Text
 local function IsFiniteNumber(value)
@@ -1520,8 +1521,6 @@ end
 Text.HealthPercent = HealthPercent
 Text.PowerPercent = PowerPercent
 Text.ModeNeedsPercent = ModeNeedsPercent
-Text.FormatValue = FormatValue
-Text.FormatPercentValue = FormatPercentValue
 Text.SetTextCached = SetTextCached
 Text.SetModeText = SetModeText
 Text.ResolveHealthTextModes = ResolveHealthTextModes
@@ -1531,3 +1530,240 @@ Text.CompileTextRuntime = CompileTextRuntime
 Text.UpdateTextSlots = UpdateTextSlots
 Text.UpdateTextSlotsPlain = UpdateTextSlotsPlain
 Text.UpdateTextSlotsSecret = UpdateTextSlotsSecret
+
+-- Return-value callers cannot use the native FontString writer. GROUP explicitly
+-- preserves its public preview contract (aliases stay unknown, missing percent
+-- falls back to current, FULLVALUE follows short, and secrets stay opaque).
+function Text.FormatValue(value, short, canSecret, compatibility)
+    if compatibility ~= "GROUP" then return FormatValue(value, short, canSecret) end
+    local secret = issecretvalue(value) == true
+    if not secret and value == nil then return "0" end
+    local fn = short and (AbbreviateShortNumber or AbbreviateLargeNumber)
+        or (BreakUpLargeNumbers or AbbreviateShortNumber or AbbreviateLargeNumber)
+    if secret then
+        if fn then return fn(value, short and NUM_OPTS or nil) end
+        return value
+    end
+    value = tonumber(value) or 0
+    -- GF's native fallback order and unbounded public numeric inputs differ.
+    if not fn then return tostring(value) end
+    if (short and not AbbreviateShortNumber) or (not short and not BreakUpLargeNumbers)
+        or not IsFiniteNumber(value) then
+        return fn(value, short and NUM_OPTS or nil)
+    end
+    return FormatValue(value, short, canSecret)
+end
+
+local RoundToNearestString = StringUtil and StringUtil.RoundToNearestString
+local UnitHealthMissing = _G.UnitHealthMissing
+local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
+function Text.FormatPercentValue(value, hideSymbol, canSecret, decimals, compatibility)
+    if compatibility ~= "GROUP" then return FormatPercentValue(value, hideSymbol, canSecret, decimals) end
+    if issecretvalue(value) == true then
+        if RoundToNearestString then return RoundToNearestString(value) .. (hideSymbol and "" or "%"), true end
+        return nil, false
+    end
+    value = tonumber(value)
+    if value == nil then return nil, false end
+    if decimals ~= 1 then value, decimals = floor(value + 0.5), 0 end
+    -- GROUP used number concatenation, not %d's signed native integer range.
+    -- Keep unbounded public previews intact while normal values share the cache.
+    if decimals == 0 and (not IsFiniteNumber(value) or value < -2147483648 or value > 2147483647) then
+        return value .. (hideSymbol and "" or "%"), true
+    end
+    if decimals == 1 and not IsFiniteNumber(value) then
+        return format("%.1f", value) .. (hideSymbol and "" or "%"), true
+    end
+    return FormatPercentValue(value, hideSymbol, canSecret, decimals), true
+end
+
+local function GroupDelimiter(delimiter, fallback)
+    if delimiter == nil then
+        return fallback or " / "
+    end
+    return SPACED_DELIMITERS[delimiter] or delimiter
+end
+
+---
+--- Unified abbreviator (handles secret + non-secret)
+--- Secret: AbbreviateNumbers - secret string (C-side, no Lua arith)
+--- Non-secret: AbbreviateNumbers or BreakUpLargeNumbers per user pref
+---
+local function GroupValue(value, short)
+    return Text.FormatValue(value, short, true, "GROUP")
+end
+
+---
+--- Percent helpers. UnitHealthPercent is SecretReturns and UnitPowerPercent
+--- SecretWhenUnitPowerRestricted (UnitDocumentation.lua): a secret percent goes
+--- to the C formatter untouched, only a plain one may be compared. Fallback:
+--- compute from values if both are non-secret.
+---
+local function GroupPercentValue(unit, current, maximum, power)
+    local pct
+    if unit then
+        if power and UnitPowerPercent then
+            local powerType = UnitPowerType and UnitPowerType(unit)
+            if SCALE_100 then pct = UnitPowerPercent(unit, powerType, false, SCALE_100)
+            else pct = UnitPowerPercent(unit, powerType, false, true) end
+        elseif not power and UnitHealthPercent then
+            pct = UnitHealthPercent(unit, true, SCALE_100)
+        end
+        if issecretvalue(pct) or pct ~= nil then return pct end
+    end
+    if issecretvalue(current) or issecretvalue(maximum) then return nil end
+    -- Runtime supplies the shared arithmetic owner after this file loads.
+    return Text.PercentFromValues(tonumber(current) or 0, tonumber(maximum) or 0, "GROUP")
+end
+
+local function GroupMissingValue(current, maximum, unit, health)
+    local missingVal
+    if health and unit and UnitHealthMissing then missingVal = UnitHealthMissing(unit) end
+    if issecretvalue(missingVal) or missingVal ~= nil then return missingVal end
+    if issecretvalue(current) or issecretvalue(maximum) then return nil end
+    return Text.MissingHealthFromValues(tonumber(current) or 0, tonumber(maximum) or 0, "GROUP")
+end
+
+--- Format a percent value into "42%" or "42" (respects hidePercentSymbol).
+--- Handles secret percent (rare) via C_StringUtil.RoundToNearestString. The
+--- second result is a plain boolean "has a percent": a secret text may be
+--- concatenated but never truth-tested.
+local function GroupPercent(value, suffix, decimals)
+    return Text.FormatPercentValue(value, suffix == "", true, decimals, "GROUP")
+end
+
+---
+--- Core mode formatter (shared by health + power)
+--- All inputs may be secret strings (from GroupValue) or normal strings.
+--- String concat ".." on secret strings produces a secret string.
+---
+local function FormatModeString(mode, sCur, sMax, delim, pctStr, hasPct, missingVal, shortNumbers)
+    if mode == "PERCENT"  then
+        if not hasPct then return "" end
+        return pctStr
+    end
+    if mode == "CURRENT"  then return sCur end
+    if mode == "FULLVALUE" then return sCur end
+    if mode == "MAX"      then return sMax end
+
+    if mode == "DEFICIT" then
+        local iss = issecretvalue
+        if iss and iss(missingVal) then
+            return "-" .. GroupValue(missingVal, shortNumbers)
+        end
+        if missingVal == nil then return "" end
+        local m = tonumber(missingVal) or 0
+        if m <= 0 then return "" end
+        return "-" .. GroupValue(m, shortNumbers)
+    end
+
+    if mode == "CURMAX"   then return sCur .. delim .. sMax end
+    if mode == "MAXCUR"   then return sMax .. delim .. sCur end
+
+    --- All remaining modes need percent
+    if not hasPct then return sCur end
+    if mode == "CURPERCENT"     then return sCur .. delim .. pctStr end
+    if mode == "CURMAXPERCENT"  then return sCur .. delim .. sMax .. delim .. pctStr end
+    if mode == "PERCENTMAXCUR"  then return pctStr .. delim .. sMax .. delim .. sCur end
+    if mode == "MAXPERCENT"     then return sMax .. delim .. pctStr end
+    if mode == "PERCENTCUR"     then return pctStr .. delim .. sCur end
+    if mode == "PERCENTMAX"     then return pctStr .. delim .. sMax end
+    if mode == "PERCENTCURMAX"  then return pctStr .. delim .. sCur .. delim .. sMax end
+
+    return sCur
+end
+
+---
+local function GroupAbsorbText(value, shortNumbers, absorbIcon, combined)
+    local iss = issecretvalue
+    local secret = iss and iss(value)
+    if not secret and value == nil then return "" end
+    local prefix
+    if combined then
+        prefix = absorbIcon and (" + " .. ABSORB_ICON_MARKUP .. " ") or " + "
+    elseif absorbIcon then
+        prefix = ABSORB_ICON_MARKUP .. " "
+    end
+    if secret then
+        if TruncateWhenZero then
+            local text = TruncateWhenZero(value)
+            if prefix and WrapString then return WrapString(text, prefix, "") end
+            return text
+        end
+        return GroupValue(value, shortNumbers)
+    end
+    value = tonumber(value) or 0
+    if value <= 0 then return "" end
+    local text = GroupValue(value, shortNumbers)
+    return prefix and (prefix .. text) or text
+end
+
+-- GROUP strings retain the legacy mode/fallback contract; live slots continue
+-- to use compiled native writers above. A secret result is never inspected here.
+function Text.FormatHealthString(mode, hp, hpMax, delimiter, unit, hidePercentSymbol, shortNumbers,
+     totalAbsorb, absorbIcon, percentDecimals, compatibility)
+    if not mode or mode == "NONE" then return "" end
+    assert(compatibility == "GROUP", "health string compatibility required")
+
+    local absorbBaseMode = ABSORB_HEALTH_MODE_BASE[mode]
+    local absorbText = ""
+    if mode == "ABSORB" or absorbBaseMode then
+        local value = totalAbsorb
+        local valueIsSecret = issecretvalue and issecretvalue(value)
+        if not valueIsSecret and value == nil and unit and UnitGetTotalAbsorbs then
+            value = UnitGetTotalAbsorbs(unit)
+        end
+        absorbText = GroupAbsorbText(value, shortNumbers, absorbIcon == true, absorbBaseMode ~= nil)
+        if mode == "ABSORB" then return absorbText end
+        mode = absorbBaseMode
+    end
+
+    local delim = GroupDelimiter(delimiter, " / ")
+    local hidePct = hidePercentSymbol == true
+    local pctSuffix = hidePct and "" or "%"
+
+    --- Abbreviate cur/max (secret-safe: C-side abbreviators)
+    local sCur = GroupValue(hp, shortNumbers)
+    local sMax = GroupValue(hpMax, shortNumbers)
+
+    --- Percent via the native API, or plain-value fallback.
+    local pctStr, hasPct = nil, false
+    if mode ~= "CURRENT" and mode ~= "FULLVALUE" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
+        local pctVal = GroupPercentValue(unit, hp, hpMax, false)
+        pctStr, hasPct = GroupPercent(pctVal, pctSuffix, percentDecimals)
+    end
+
+    local missingVal
+    if mode == "DEFICIT" then missingVal = GroupMissingValue(hp, hpMax, unit, true) end
+
+    return FormatModeString(mode, sCur, sMax, delim, pctStr, hasPct, missingVal, shortNumbers) .. absorbText
+end
+
+---
+--- FormatPowerText(mode, pw, pwMax, delimiter [, unit [, hidePercentSymbol]])
+--- Same modes as health text. Secret-safe via C-side abbreviators.
+---
+function Text.FormatPowerString(mode, pw, pwMax, delimiter, unit, hidePercentSymbol, shortNumbers, compatibility)
+    assert(compatibility == "GROUP", "power string compatibility required")
+    if not mode or mode == "NONE" then return "" end
+
+    local delim = GroupDelimiter(delimiter, " / ")
+    local hidePct = hidePercentSymbol == true
+    local pctSuffix = hidePct and "" or "%"
+
+    --- Abbreviate cur/max (secret-safe)
+    local sCur = GroupValue(pw, shortNumbers)
+    local sMax = GroupValue(pwMax, shortNumbers)
+
+    --- Percent
+    local pctStr, hasPct = nil, false
+    if mode ~= "CURRENT" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
+        local pctVal = GroupPercentValue(unit, pw, pwMax, true)
+        pctStr, hasPct = GroupPercent(pctVal, pctSuffix)
+    end
+
+    local missingVal
+    if mode == "DEFICIT" then missingVal = GroupMissingValue(pw, pwMax, unit, false) end
+
+    return FormatModeString(mode, sCur, sMax, delim, pctStr, hasPct, missingVal, shortNumbers)
+end

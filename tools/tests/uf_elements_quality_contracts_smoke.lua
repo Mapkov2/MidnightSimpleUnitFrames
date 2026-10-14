@@ -52,11 +52,12 @@ for _, line in ipairs(printed) do
 end
 Check(found, "the highlight debug command did not report the target frame")
 
--- 2. Legacy group name truncation: no closure per call, same cuts as before.
+-- 2. The legacy implementation is now the scalar shared TruncateName export.
+-- Move only the source pin: no closure per call and every original cut remains.
 local source = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua")
-local body = source:match("\nlocal function TruncateLegacyGroupName%(name, rt%)\n(.-)\nend\n")
-Check(body ~= nil, "TruncateLegacyGroupName is missing")
-Check(not body:find("function", 1, true), "TruncateLegacyGroupName builds a closure on every name update")
+local body = source:match("\nlocal function TruncateName%(name, maxChars, showDots, clipSide%)\n(.-)\nend\n")
+Check(body ~= nil, "TruncateName is missing")
+Check(not body:find("function", 1, true), "TruncateName builds a closure on every name update")
 
 local Text = assert(core.UFText, "the unit text module is missing")
 local frame = env.CreateFrame("Frame", nil, env.UIParent)

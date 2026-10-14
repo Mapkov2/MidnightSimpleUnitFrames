@@ -725,6 +725,10 @@ translated. Search breadcrumb segments are derived from control paths; one used
 by fewer than 8 index rows stays English (allowlist) until breadcrumbs are built
 from real section titles.
 
+The internal [unit-frame return-value text contract](docs/UNITFRAME_TEXT_CONTRACT.md)
+records group preview compatibility and the shared engine formatter/name owners.
+The strict secret smoke and native/instruction/allocation budgets cover that seam.
+
 ### What the gate does not prove
 
 These are source/runtime-mock gates, not a substitute for logging into every

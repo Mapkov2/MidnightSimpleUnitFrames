@@ -38,28 +38,31 @@ SecretMeta.__lt, SecretMeta.__le, SecretMeta.__len, SecretMeta.__call = Raise, R
 SecretMeta.__add, SecretMeta.__sub, SecretMeta.__mul, SecretMeta.__div = Raise, Raise, Raise, Raise
 local function Label(value) return secrets[value] and rawget(value, "label") or value end
 
+local World = dofile(root .. "/tools/tests/client_world.lua")
+local world = World.New(root, "Mainline")
+local env = world.env
 local units = {}
-_G.issecretvalue = function(value) return secrets[value] == true end
-_G.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
-_G.AbbreviateNumbers = function(value)
+env.issecretvalue = function(value) return secrets[value] == true end
+env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
+env.AbbreviateNumbers = function(value)
     if secrets[value] then return Secret("abbr(" .. Label(value) .. ")") end
     return tostring(value)
 end
-_G.BreakUpLargeNumbers = _G.AbbreviateNumbers
-_G.C_StringUtil = { RoundToNearestString = function(value)
+env.BreakUpLargeNumbers = env.AbbreviateNumbers
+env.C_StringUtil = { RoundToNearestString = function(value)
     if secrets[value] then return Secret("round(" .. Label(value) .. ")") end
     return tostring(math.floor(value + 0.5))
 end }
-_G.CurveConstants = { ScaleTo100 = {} }
-_G.UnitHealthPercent = function(unit) return units[unit] and units[unit].hpPct end
-_G.UnitPowerPercent = function(unit) return units[unit] and units[unit].ppPct end
-_G.UnitHealthMissing = function(unit) return units[unit] and units[unit].missing end
-_G.UnitPowerType = function() return 0 end
-local ns = { ExportPublic = function() end }
-dofile(root .. "/tools/tests/group_dependencies.lua")(ns)
-for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MSUF", ns)
-end
+env.CurveConstants = { ScaleTo100 = {} }
+env.UnitHealthPercent = function(unit) return units[unit] and units[unit].hpPct end
+env.UnitPowerPercent = function(unit) return units[unit] and units[unit].ppPct end
+env.UnitHealthMissing = function(unit) return units[unit] and units[unit].missing end
+env.UnitPowerType = function() return 0 end
+-- The formatter moved into UFText: boot the actual providers, rather than
+-- reproducing them in the narrow group DB fixture.
+world:Boot()
+Check(not world:FirstFailure(), "client graph failed to boot")
+local ns = world.core
 local GF = ns.GF
 GF.GetConf = function() return {} end
 
@@ -83,24 +86,26 @@ Check(Label(GF.FormatPowerText("PERCENT", Secret("pw"), Secret("pwMax"), " / ", 
     "secret power percent")
 
 -- Source order: issecretvalue before every nil test, no truth test of the text.
-local path = root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Text.lua"
+-- Source pins moved with their implementation. Every original ordering and
+-- no-truth-test expectation remains; the group wrappers contain no secret math.
+local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua"
 local source = Slice.Read(path)
 local function Before(body, guard, use, label)
     local g, u = body:find(guard, 1, true), body:find(use, 1, true)
     Check(g ~= nil and (u == nil or g < u), label .. ": '" .. use .. "' runs before '" .. guard .. "'")
 end
-local abbrev = Slice.Function(source, "local function _GF_Abbrev", path)
-Before(abbrev, "iss(val)", "val == nil", "_GF_Abbrev")
-for _, name in ipairs({ "_GF_HealthPercent", "_GF_PowerPercent" }) do
-    Before(Slice.Function(source, "local function " .. name, path), "_GF_issecretvalue(pct)", "pct ~= nil", name)
+local abbrev = Slice.Function(source, "function Text.FormatValue", path)
+Before(abbrev, "issecretvalue(value)", "value == nil", "Text.FormatValue GROUP")
+for _, name in ipairs({ "GroupPercentValue" }) do
+    Before(Slice.Function(source, "local function " .. name, path), "issecretvalue(pct)", "pct ~= nil", name)
 end
-local formatPct = Slice.Function(source, "local function _GF_FormatPct", path)
-Before(formatPct, "iss(pctVal)", "pctVal ==", "_GF_FormatPct")
-local byMode = Slice.Function(source, "local function _GF_FormatByMode", path)
+local formatPct = Slice.Function(source, "function Text.FormatPercentValue", path)
+Before(formatPct, "issecretvalue(value)", "value == nil", "Text.FormatPercentValue GROUP")
+local byMode = Slice.Function(source, "local function FormatModeString", path)
 Check(not byMode:find("pctStr or", 1, true) and not byMode:find("not pctStr", 1, true),
-    "_GF_FormatByMode truth-tests the possibly secret percent text")
-Before(byMode, "iss(missingVal)", "missingVal == nil", "_GF_FormatByMode")
-Before(Slice.Function(source, "function GF.FormatHealthText", path), "iss(missingVal)", "missingVal == nil",
-    "GF.FormatHealthText")
+    "FormatModeString truth-tests the possibly secret percent text")
+Before(byMode, "iss(missingVal)", "missingVal == nil", "FormatModeString")
+Before(Slice.Function(source, "local function GroupMissingValue", path), "issecretvalue(missingVal)", "missingVal ~= nil",
+    "GroupMissingValue (health deficit provider)")
 
 print("group_text_secret_percent_smoke: ok (plain previews unchanged, secret percent/deficit via C formatters)")

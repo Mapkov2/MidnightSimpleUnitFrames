@@ -1,15 +1,10 @@
--- Hard group dependencies for narrow fixtures that do not boot the Kernel.
-return function(namespace)
-    namespace.Require = namespace.Require or function(name)
-        local value = _G[name]
-        assert(type(value) == "function" or type(value) == "table", "fixture lacks " .. tostring(name))
-        return value
-    end
-    -- MSUF_UF_Text_Runtime.lua's display-name reader with no resolver installed:
-    -- the plain UnitName read (the fixture's own UnitName, looked up per call).
-    namespace.UFText = namespace.UFText or {}
-    namespace.UFText.ReadDisplayName = namespace.UFText.ReadDisplayName
-        or function(unit) return _G.UnitName(unit) end
+-- Hard group dependencies for narrow fixtures; text comes from the real core graph.
+return function(namespace, root)
+    root = assert(root, "group fixture repository root required"):gsub("\\", "/"):gsub("/$", "")
+    dofile(root .. "/tools/tests/group_text_fixture.lua")(namespace, root)
+    _G.MSUF_NS = namespace
+    namespace.ExportPublic = namespace.ExportPublic or function(name, value) _G[name] = value end
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
     _G.MSUF_PixelLayoutRegion = function(region, policy, ...)
         if type(policy) == "string" then return region[policy](region, ...) end
         return region
