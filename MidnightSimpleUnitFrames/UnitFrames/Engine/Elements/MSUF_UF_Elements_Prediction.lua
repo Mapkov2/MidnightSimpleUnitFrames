@@ -535,9 +535,9 @@ end
 
 local function HideOverAbsorbGlow(frame)
   local holder = frame and frame.overAbsorbGlowBar
-  if holder and holder._msufOverAbsorbShown ~= false then
+  if holder and holder._msufShown ~= false then
     holder:SetShown(false)
-    holder._msufOverAbsorbShown = false
+    holder._msufShown = false
   end
 end
 
@@ -721,9 +721,9 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   -- also retires the stripe's full-health gate on it.
   SetOverAbsorbAlpha(holder, 1, false)
   frame._msufPredictionFullHealthAlphaReady = nil
-  if holder._msufOverAbsorbShown ~= true then
+  if holder._msufShown ~= true then
     holder:SetShown(true)
-    holder._msufOverAbsorbShown = true
+    holder._msufShown = true
   end
   return true
 end
@@ -823,9 +823,9 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       and frame._msufPredictionFullHealthAlphaDirty ~= true
       and frame._msufPredictionFullHealthAlphaUnit == unit then
       UngateOverAbsorbGlow(holder)
-      if holder._msufOverAbsorbShown ~= true then
+      if holder._msufShown ~= true then
         holder:SetShown(true)
-        holder._msufOverAbsorbShown = true
+        holder._msufShown = true
       end
       return
     end
@@ -863,9 +863,9 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       frame._msufPredictionFullHealthAlphaUnit = unit
     end
     UngateOverAbsorbGlow(holder)
-    if holder._msufOverAbsorbShown ~= true then
+    if holder._msufShown ~= true then
       holder:SetShown(true)
-      holder._msufOverAbsorbShown = true
+      holder._msufShown = true
     end
     return
   end
@@ -919,9 +919,9 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       end
       if frame._msufPredictionFullHealthAlphaReady == true then
         UngateOverAbsorbGlow(holder)
-        if holder._msufOverAbsorbShown ~= true then
+        if holder._msufShown ~= true then
           holder:SetShown(true)
-          holder._msufOverAbsorbShown = true
+          holder._msufShown = true
         end
         return
       end
@@ -946,9 +946,9 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   end
   SetOverAbsorbAlpha(holder, 1, false)
   UngateOverAbsorbGlow(holder)
-  if holder._msufOverAbsorbShown ~= true then
+  if holder._msufShown ~= true then
     holder:SetShown(true)
-    holder._msufOverAbsorbShown = true
+    holder._msufShown = true
   end
 end
 
@@ -2241,9 +2241,9 @@ UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
   frame._msufPredictionFullHealthAlphaDirty = nil
   frame._msufPredictionFullHealthAlphaUnit = unit
   UngateOverAbsorbGlow(holder)
-  if holder._msufOverAbsorbShown ~= true then
+  if holder._msufShown ~= true then
     holder:SetShown(true)
-    holder._msufOverAbsorbShown = true
+    holder._msufShown = true
   end
 end
 
@@ -2492,7 +2492,7 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
         and frame._msufPredictionFullHealthStripe ~= true
         and issecretvalue(glowAbsorb) ~= true
         and (type(glowAbsorb) ~= "number" or glowAbsorb <= 0)
-        and (holder == nil or (holder._msufOverAbsorbShown == false
+        and (holder == nil or (holder._msufShown == false
           and holder._msufOverAbsorbValuePlain == true
           and (type(holder._msufOverAbsorbValue) ~= "number"
             or holder._msufOverAbsorbValue <= 0)))
@@ -2758,7 +2758,7 @@ local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
       local holder = frame.overAbsorbGlowBar
       local knownInactive = not fullStripe and not absorbSecret
         and (type(absorb) ~= "number" or absorb <= 0)
-        and (holder == nil or (holder._msufOverAbsorbShown == false
+        and (holder == nil or (holder._msufShown == false
           and holder._msufOverAbsorbValuePlain == true
           and (type(holder._msufOverAbsorbValue) ~= "number" or holder._msufOverAbsorbValue <= 0)))
       if not knownInactive then

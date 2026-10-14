@@ -186,7 +186,9 @@ end
 
 -- Only this file shows or hides the text, so its state is cached on the
 -- FontString and a repeated event writes nothing. The plate, while in use,
--- follows the text.
+-- follows the text. That makes this flag the state of the text and plate pair,
+-- not the shared region cache: the plate changes only when this flag does, so
+-- a writer that bypassed the flag would leave the plate behind.
 local function SetShown(fs, show)
     if fs._msufThreatShown ~= show then
         if show then fs:Show() else fs:Hide() end

@@ -718,3 +718,6 @@ clients+Forever	lua	tools/tests/menu_pilot_button_lifecycle_smoke.lua	{root} {fl
 -	lua	tools/tests/uf_scoped_route_plans_smoke.lua	{root}	Scoped UF recipe ownership and immutable plans failed
 -	lua	tools/tests/player_health_registered_delivery_smoke.lua	{root}	Player health complete registered delivery cost failed
 -	lua	tools/tests/classpower_health_registration_smoke.lua	{root}	ClassPower health consumer registration failed
+clients+Forever	lua	tools/tests/region_visibility_cache_smoke.lua	{root} {flavor}	One shown cache per region across every owner: {flavor}
+clients+Forever	lua	tools/tests/region_visibility_cost_smoke.lua	{root} {flavor} forward	Shown cache owner complete-operation cost against the parent, forward: {flavor}
+clients+Forever	lua	tools/tests/region_visibility_cost_smoke.lua	{root} {flavor} reverse	Shown cache owner complete-operation cost against the parent, reverse: {flavor}

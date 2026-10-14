@@ -28,9 +28,9 @@ local pairs = pairs
 local floor = math.floor
 
 local issecretvalue = _G.issecretvalue
--- The status runtime shows and hides the timer text through Apply.Shown, which
--- keeps its own shown cache; a hide here has to go through it too.
-local ApplyShown = MSUF.Apply.Shown
+-- The status runtime shows and hides the timer text through the shared shown
+-- cache (region._msufShown); a hide here has to go through it too.
+local ApplyShown = MSUF.Apply.ShownPlain
 
 local afkSince = {}        -- guid -> GetTime() stamp of the observed AFK-on edge
 local attached = {}        -- frame -> true while its AFK timer text is visible
@@ -212,11 +212,10 @@ end
 
 local function HideTimerRegion(frame)
   local fs = frame and frame.statusAFKTimerText
-  if fs and fs._msufStatusShown ~= false then
-    -- A raw Hide left Apply.Shown believing the text was still shown, so the
-    -- re-show after combat wrote nothing and the timer never came back.
+  if fs and fs._msufShown ~= false then
+    -- A raw Hide would leave the shared cache believing the text was still shown,
+    -- so the re-show after combat would write nothing and the timer never come back.
     ApplyShown(fs, false)
-    fs._msufStatusShown = false
   end
 end
 

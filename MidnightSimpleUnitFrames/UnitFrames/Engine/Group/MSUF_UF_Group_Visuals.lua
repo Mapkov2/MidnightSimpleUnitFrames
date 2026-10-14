@@ -17,13 +17,7 @@ if not (UF and UF.RegisterElement) then return end
 
 local CreateFrame = _G.CreateFrame
 
-local function SetShown(region, show)
-  if not region then return end
-  show = show == true
-  if region._msufGFVisualShown == show then return end
-  region:SetShown(show)
-  region._msufGFVisualShown = show
-end
+local SetShown = (MSUF.Apply or {}).ShownPlain
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent

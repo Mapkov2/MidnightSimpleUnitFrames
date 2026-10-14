@@ -77,7 +77,7 @@ local function GlowSettled(label, frame)
     local glow = holder and holder._msufOverAbsorbGlowTexture
     Check(glow ~= nil, label .. ": no glow texture")
     Check(rawequal(glow.alphaBoolean, lastFlag[frame]), label .. ": the glow does not carry the last calculator flag")
-    Check(holder._msufOverAbsorbShown == true, label .. ": the glow holder is hidden")
+    Check(holder._msufShown == true, label .. ": the glow holder is hidden")
     Check(frame._msufPredictionGlowDeferred == nil, label .. ": a deferred tick survived the drain")
     Check(frame._msufPredictionQueued == nil, label .. ": the frame is still queued")
 end
@@ -167,7 +167,7 @@ do
     w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
     Check(frame._msufPredictionQueued == nil, "target: Apply left the frame queued")
     Check(frame._msufPredictionGlowDeferred == nil, "target: Apply left a deferred tick behind")
-    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "target: the glow stayed up without the overlay")
+    Check(frame.overAbsorbGlowBar._msufShown == false, "target: the glow stayed up without the overlay")
     spec.prediction.overAbsorbOverlay = true
 end
 
@@ -232,7 +232,7 @@ do
     w.UF.ClearPredictionPreview(frame)
     Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
         "target suspend: the suspension left the frame queued or deferred")
-    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "target suspend: the glow stayed up")
+    Check(frame.overAbsorbGlowBar._msufShown == false, "target suspend: the glow stayed up")
     DrainRendersNothing("target suspend", frame)
 end
 
@@ -245,7 +245,7 @@ do
     w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
     Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
         "target disable: disabling prediction left the frame queued or deferred")
-    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "target disable: the glow stayed up")
+    Check(frame.overAbsorbGlowBar._msufShown == false, "target disable: the glow stayed up")
     DrainRendersNothing("target disable", frame)
     spec.prediction.enabled = true
     w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
@@ -259,7 +259,7 @@ do
     w:Fire(frame, "raid1", "UNIT_CONNECTION")
     Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
         "raid1 offline: going offline left the frame queued or deferred")
-    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "raid1 offline: the glow stayed up")
+    Check(frame.overAbsorbGlowBar._msufShown == false, "raid1 offline: the glow stayed up")
     DrainRendersNothing("raid1 offline", frame)
     S.connected = true
     w:Fire(frame, "raid1", "UNIT_CONNECTION")

@@ -59,9 +59,9 @@ end
 -- Only this file shows or hides the icon, so its state is cached on the texture
 -- and a repeated event writes nothing.
 local function HideIcon(tex)
-    if tex._msufHappinessShown ~= false then
+    if tex._msufShown ~= false then
         tex:Hide()
-        tex._msufHappinessShown = false
+        tex._msufShown = false
     end
 end
 
@@ -75,9 +75,9 @@ local function ShowIcon(tex, happiness)
         end
         tex._msufHappiness = happiness
     end
-    if tex._msufHappinessShown ~= true then
+    if tex._msufShown ~= true then
         tex:Show()
-        tex._msufHappinessShown = true
+        tex._msufShown = true
     end
 end
 

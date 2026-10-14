@@ -77,13 +77,37 @@ function Apply.Point(region, point, rel, relPoint, x, y)
   end
 end
 
+--- Visibility has one cache per region: region._msufShown, the last plain shown
+--- flag sent to the native region (nil = unknown, so the next write repaints).
+--- The UF modules that cache a region's visibility read and write this field, so
+--- two owners of one region never disagree about what is on screen.
+--- ShownPlain is the entry for callers whose flag is plain Lua state (settings,
+--- canonical frame state, literals). It branches on the flag instead of
+--- normalising it first, which keeps every path at or below the instruction
+--- count of the per-module setters it replaced. Shown is the generic boundary
+--- for a flag that may be secret: a secret flag reaches the native region as it
+--- is, is never stored, and forgets the cache so the next plain write repaints.
+function Apply.ShownPlain(region, show)
+  if not region then return end
+  if show then
+    if region._msufShown ~= true then
+      region:SetShown(true)
+      region._msufShown = true
+    end
+  elseif region._msufShown ~= false then
+    region:SetShown(false)
+    region._msufShown = false
+  end
+end
+
 function Apply.Shown(region, show)
   if not region then return end
-  show = show and true or false
-  if region._aShown ~= show then
+  if issecretvalue(show) == true then
     region:SetShown(show)
-    region._aShown = show
+    region._msufShown = nil
+    return
   end
+  Apply.ShownPlain(region, show)
 end
 
 function Apply.Text(region, text)
@@ -154,7 +178,7 @@ function Apply.Invalidate(region)
   region._aRelPt = nil
   region._aX = nil
   region._aY = nil
-  region._aShown = nil
+  region._msufShown = nil
   region._aCR = nil
   region._aVR = nil
 end

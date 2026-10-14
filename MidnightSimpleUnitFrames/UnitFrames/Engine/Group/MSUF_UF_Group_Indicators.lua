@@ -15,13 +15,6 @@ local Layers = UF.Layers or {}
 
 if not (UF and UF.RegisterElement) then return end
 
-local function SetShown(region, show)
-  if not region then return end
-  show = show == true
-  if region._msufGFShown == show then return end
-  region:SetShown(show)
-  region._msufGFShown = show
-end
 local UnitAffectingCombat = UnitAffectingCombat
 local CreateFrame = CreateFrame
 local tonumber = tonumber
@@ -35,6 +28,7 @@ local Visuals = MSUF.UFVisuals or {}
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
 local Apply = MSUF.Apply or {}
 local ApplyColorTexture = Apply.ColorTexture
+local SetShown = Apply.ShownPlain
 
 local EMPTY = {}
 local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }

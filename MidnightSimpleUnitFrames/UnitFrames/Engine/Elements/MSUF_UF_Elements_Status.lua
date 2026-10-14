@@ -86,7 +86,6 @@ local function UnitIsPlayerRuntime(unit, state, frame)
   return UnitIsPlayer and false or nil
 end
 local Apply = MSUF.Apply or {}
-local ApplyShown = Apply.Shown
 local ApplyTexture = Apply.Texture
 local ApplyText = Apply.Text
 
@@ -224,13 +223,9 @@ local function EnsureLayerFrame(frame, layer)
   return holder, layer
 end
 
-local function SetShown(region, show)
-  show = show and true or false
-  if region and region._msufStatusShown ~= show then
-    ApplyShown(region, show)
-    region._msufStatusShown = show
-  end
-end
+-- Status flags are plain Lua state, so the status runtime writes through the
+-- trusted entry; the cache it shares with every other owner is region._msufShown.
+local SetShown = Apply.ShownPlain
 
 local function SetTexture(region, texture)
   if region and region._msufStatusTexture ~= texture then
@@ -1173,8 +1168,8 @@ function Runtime.UpdateLeaderPair(frame, status)
   -- API calls entirely and just ensure the icons are hidden. This guard makes
   -- rapid target-swaps over mobs cheap.
   if exists and UnitIsPlayerRuntime(unit, unitState, frame) == false then
-    if leaderTex and leaderTex._msufStatusShown ~= false then SetShown(leaderTex, false); leaderTex._msufStatusShown = false end
-    if assistTex and assistTex._msufStatusShown ~= false then SetShown(assistTex, false); assistTex._msufStatusShown = false end
+    if leaderTex and leaderTex._msufShown ~= false then SetShown(leaderTex, false) end
+    if assistTex and assistTex._msufShown ~= false then SetShown(assistTex, false) end
     frame._msufLeaderPairState = 0
     return
   end
@@ -1196,8 +1191,8 @@ function Runtime.UpdateLeaderPair(frame, status)
     and frame._msufLeaderCustom == (leaderCfg and leaderCfg.customIcon)
     and frame._msufAssistStyle == (assistCfg and assistCfg.style)
     and frame._msufAssistCustom == (assistCfg and assistCfg.customIcon)
-    and (not leaderTex or leaderTex._msufStatusShown == (showLeader and true or false))
-    and (not assistTex or assistTex._msufStatusShown == (showAssist and true or false)) then
+    and (not leaderTex or leaderTex._msufShown == (showLeader and true or false))
+    and (not assistTex or assistTex._msufShown == (showAssist and true or false)) then
     return
   end
   if frame then
@@ -1715,7 +1710,7 @@ function Runtime.UpdateRaidGroup(frame, status)
   if frame._msufRaidGroupSubgroup == subgroup
     and frame._msufRaidGroupSerial == serial
     and frame._msufRaidGroupStyle == cfg.style
-    and fs._msufStatusShown == (subgroup ~= nil) then
+    and fs._msufShown == (subgroup ~= nil) then
     return
   end
   frame._msufRaidGroupSubgroup = subgroup
@@ -1943,7 +1938,7 @@ local function ClearStatusText(frame, fs, keepAFKTimer)
   if not keepAFKTimer then HideAFKTimerText(frame) end
   if frame._msufStatusTextValue == nil
     and frame._msufStatusTextLayout == nil
-    and fs and fs._msufStatusShown == false then
+    and fs and fs._msufShown == false then
     return
   end
   local oldValue = frame._msufStatusTextValue
@@ -1968,7 +1963,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
   if status.testMode ~= true
     and event == "UNIT_HEALTH"
     and frame._msufStatusTextValue == nil
-    and fs._msufStatusShown == false
+    and fs._msufShown == false
     and (cfg.showDead == true or cfg.showGhost == true) then
     local healthDead = SeedHealthDeadOverride(seedHP)
     local deadOrGhost = healthDead == true or ReadDeadCached(frame, unit, unitState)
@@ -2022,7 +2017,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
     UpdateAFKTimerText(frame, status, cfg, state)
     if frame._msufStatusTextValue == text
       and frame._msufStatusTextLayout == layout
-      and fs._msufStatusShown == true then
+      and fs._msufShown == true then
       return
     end
     local oldValue = frame._msufStatusTextValue
@@ -2180,7 +2175,7 @@ function Status.UpdateStanceText(frame, status)
     SetShown(fs, false)
     return
   end
-  if frame._msufStanceTextValue == text and fs._msufStatusShown == true then
+  if frame._msufStanceTextValue == text and fs._msufShown == true then
     return
   end
   frame._msufStanceTextValue = text

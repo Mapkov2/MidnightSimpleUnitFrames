@@ -1314,6 +1314,23 @@ global getter changed effective colors, so the original Colors resolution
 body is retained. The lifecycle smoke exercises actual shipped getters on every
 client; optional immutable-base comparison checks the old owner directly.
 
+### Unit-frame region visibility cache
+
+A region's shown state is cached once, in `region._msufShown`: true or false, and
+nil when unknown so the next write repaints. Every unit-frame module that caches a
+region's visibility shares that field: Apply, the status runtime and AFK timer,
+the load-conditions fallback, the prediction over-absorb glow, group corner
+indicators and visuals, pet happiness, and the text, bar, portrait and power
+regions that already used it. `Apply.ShownPlain` is the trusted entry for plain
+Lua flags and `Apply.Invalidate` clears the field. `Apply.Shown` stays public and
+also takes a secret flag, which reaches the native region as it is and is never
+cached; a plain call through it costs one extra `issecretvalue` query, so core
+callers use `ShownPlain`. The threat text keeps `_msufThreatShown` because its
+background plate follows that flag. The rounded-surface interval and art tables,
+border source state and group target and focus verdicts are semantic state, not
+region caches. A direct native Show or Hide must reset the field. The region
+visibility smokes pin the cross-owner behavior and the parent's per-operation cost.
+
 ## Bundled media and legacy profile selections
 
 State owns legacy bar-texture names at the migrate-to-bind boundary and repairs

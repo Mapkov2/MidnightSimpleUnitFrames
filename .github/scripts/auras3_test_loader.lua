@@ -244,7 +244,7 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("= Apply.Text") or Uses("= Apply.Shown") or Uses("= Apply.Texture") or Uses("= Apply.ColorTexture") then
         namespace.Apply = namespace.Apply or {}
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua"))
-        for _, name in ipairs({ "Text", "Shown", "Texture", "ColorTexture" }) do
+        for _, name in ipairs({ "Text", "Shown", "ShownPlain", "Texture", "ColorTexture" }) do
             if not namespace.Apply[name] then
                 local body = Slice.Function(text, "function Apply." .. name, "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua")
                 assert(compileSource("local Apply = ...\nlocal issecretvalue = _G.issecretvalue or function() return false end\nlocal IsSecret = issecretvalue\n" .. body))(namespace.Apply)

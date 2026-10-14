@@ -352,9 +352,9 @@ local function RegisterVisibility(frame, spec)
   elseif visibility ~= "hide" then
     show = UnitExistsPlain(frame.MSUFUnitKey)
   end
-  if frame._msufLoadShown ~= show then
+  if frame._msufShown ~= show then
     frame:SetShown(show)
-    frame._msufLoadShown = show
+    frame._msufShown = show
   end
   return true
 end

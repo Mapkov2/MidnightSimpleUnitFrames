@@ -38,7 +38,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
     frame.hpBar._msufHealthPercentUnit = "party1"
     P.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "party1", hp, maxHP)
     local holder = frame.overAbsorbGlowBar
-    return holder and holder._msufOverAbsorbShown == true
+    return holder and holder._msufShown == true
   end
   local a = tick(992)
   local b = tick(996)

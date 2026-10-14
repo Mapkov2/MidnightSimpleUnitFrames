@@ -51,6 +51,8 @@ GF.ForEachFrameForUnit = function(unit, fn, ...)
   return any
 end
 local ns = { UF = UF, GF = GF, Secrets = { PlainBool = function(v) return v end } }
+-- Group visuals write region visibility through the shared Apply owner.
+assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Apply.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(ROOT .. "UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua"))("MidnightSimpleUnitFrames", ns)
 local GV = elements.GroupVisuals
 
