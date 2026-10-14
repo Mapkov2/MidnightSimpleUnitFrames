@@ -71,6 +71,7 @@ end
 local TEXTURE = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua"
 local LAYOUT = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua"
 local CORE = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
+local NAME = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua"
 local RUNTIME = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua"
 
 local predicateCalls = 0
@@ -107,7 +108,7 @@ local MarkOnShowIdentityFollowup = Slice(CORE, "local function MarkOnShowIdentit
 local ConsumeOnShowIdentityFollowup = Slice(CORE, "local function ConsumeOnShowIdentityFollowup(frame, event, unit)", coreEnv)
 -- 4. The same legacy implementation moved to a shared scalar name helper.
 -- Keep both original secret-pass-through and zero-predicate expectations.
-local TruncateName = Slice(RUNTIME, "local function TruncateName(name, maxChars, showDots, clipSide)", {
+local TruncateName = Slice(NAME, "local function TruncateName(name, maxChars, showDots, clipSide)", {
     floor = math.floor,
     NextUtf8Byte = function(_, pos) return pos + 1 end,
     issecretvalue = CountingPredicate,
@@ -126,7 +127,8 @@ local healthEnv = {
 }
 local UpdateHealthRuntime = Slice(RUNTIME, "local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)", healthEnv)
 
-local stop = Secrets.Watch({ root .. "/" .. TEXTURE, root .. "/" .. LAYOUT, root .. "/" .. CORE, root .. "/" .. RUNTIME },
+local stop = Secrets.Watch({ root .. "/" .. TEXTURE, root .. "/" .. LAYOUT, root .. "/" .. CORE, root .. "/" .. RUNTIME,
+    root .. "/" .. NAME },
     { strict = true })
 
 local alpha = Secrets.New("number")

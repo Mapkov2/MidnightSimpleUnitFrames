@@ -31,6 +31,9 @@ local GF, Text = world.core.GF, world.core.UFText
 local path = root .. "/MidnightSimpleUnitFrames/"
 local stop = Secrets.Watch({ path .. "GroupFrames/MSUF_GroupFrames_DB_Text.lua",
     path .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua",
+    path .. "UnitFrames/Engine/Elements/MSUF_UF_Text_SlotCompile.lua",
+    path .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua",
+    path .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Drain.lua",
     path .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua" }, { strict = true })
 local secret = Secret("name", "string")
 assert(GF.TruncateName(secret, 3) == secret, "secret name must pass through")

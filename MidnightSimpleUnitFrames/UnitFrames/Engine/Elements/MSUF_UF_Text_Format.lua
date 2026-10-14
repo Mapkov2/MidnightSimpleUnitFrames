@@ -1,14 +1,21 @@
 --- UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua
 --- Allocation-light formatting helpers for unitframe text strings.
----
---- Called from frequent UNIT_* events, so number formatting, fallback strings,
---- and secret-safe branches stay local and avoid per-refresh table churn.
 
 local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
 local Apply = MSUF.Apply or {}
+
+-- Bind mandatory factories once; report both the consumer and received shape.
+local function RequireFactory(key)
+  local factories = MSUF.UFModuleFactories
+  assert(type(factories) == "table", "Elements/MSUF_UF_Text_Format.lua: required UF factory registry for " .. key)
+  local factory = factories[key]
+  local kind = type(factory)
+  assert(kind == "function", "Elements/MSUF_UF_Text_Format.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
+  return factory
+end
 local luaType = type
 -- SlotFormatted counts its varargs on every formatted text write.
 local select = select
@@ -22,9 +29,6 @@ local AbbreviateLargeNumber = Text.AbbreviateLargeNumbers or _G.AbbreviateLargeN
 local AbbreviateSecretNumber = AbbreviateShortNumber or AbbreviateLargeNumber
 --- Global abbreviation style: nil lets the client decide (locale-dependent),
 --- a table switches the C abbreviator to MSUF's locale-independent breakpoints.
---- Runtime/MSUF_NumberFormat.lua pushes it on the cold path, so every call site
---- below stays one direct C call with a constant second argument. Only the
---- short/abbreviating calls take it - BreakUpLargeNumbers never does.
 local NUM_OPTS = nil
 do
   local NumberFormat = MSUF.NumberFormat
@@ -580,17 +584,7 @@ local function WriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
   SlotText(slot, "")
 end
 
---- Absorbs come back secret on every 12.x client, and a secret number can be
---- neither compared to zero nor formatted in Lua. TruncateWhenZero is the only
---- tainted-callable API that collapses a zero to an empty string, but it always
---- writes the raw integer - which is why the absorb value ignored "Short
---- numbers" while every other health slot honored it.
----
---- Parking that raw integer in the data section of a hyperlink keeps the zero
---- test (WrapString still drops prefix and suffix for an empty infix) while the
---- client renders the link body only, and the body carries the value formatted
---- exactly like the health slots next to it. The inner WrapString is a plain
---- secret-safe join: a formatted number is never the empty string.
+-- WriteDeficit rationale: docs/uf-responsibility-notes.md.
 local ABSORB_SECRET_LINK = "|Hmsufabsorb:"
 
 local function SecretAbsorbText(slot, absorb, prefix)
@@ -799,7 +793,58 @@ local SECRET_SETTERS = {
   function(fs, pattern, cur, maxValue, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, cur, delimiter, maxValue) end,
 }
 
+local function CompileCurrentPercentWriter(slot)
+  local fs = slot.fs
+  local fn = slot.secretValueFn
+  local abbreviates = slot.short == true
+  local code = slot.secretCode
+  local pattern = slot.secretPattern
+  local delimiter = slot.delimiter
+    if fn and abbreviates then
+      -- Bind the two frequent native formats without adding a dispatch/helper
+      -- call per write. Only values and the live number style vary at runtime.
+      if code == 6 then
+        return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+          if curSecret == nil then curSecret = issecretvalue(cur) == true end
+          if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+          cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
+          if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+          fs._aText, fs._aTextPlain = nil, nil
+          fs:SetFormattedText(pattern, cur, delimiter, pct)
+        end
+      end
+      return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+        if curSecret == nil then curSecret = issecretvalue(cur) == true end
+        if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+        cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
+        if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+        fs._aText, fs._aTextPlain = nil, nil
+        fs:SetFormattedText(pattern, pct, delimiter, cur)
+      end
+    end
+    -- Current + percent is a common two-value slot. Its maximum is unused, so
+    -- compile that fact instead of walking the general three-value dispatcher.
+    -- Number-style options stay live, as in the single-value writers above.
+    local currentFirst = code == 6
+    return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+      if curSecret == nil then curSecret = issecretvalue(cur) == true end
+      if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+      if fn then
+        local opts = abbreviates and NUM_OPTS or nil
+        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
+      elseif curSecret ~= true then
+        cur = FiniteNumberOr(cur, 0)
+      end
+      if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+      fs._aText, fs._aTextPlain = nil, nil
+      if currentFirst then fs:SetFormattedText(pattern, cur, delimiter, pct)
+      else fs:SetFormattedText(pattern, pct, delimiter, cur) end
+    end
+end
+
 local function CompileSecretWriter(slot)
+  local code = slot.secretCode
+  if code == 6 or code == 7 then return CompileCurrentPercentWriter(slot) end
   local fs = slot.fs
   local fn = slot.secretValueFn
   -- Only the short slot abbreviates; the long slot runs BreakUpLargeNumbers,
@@ -807,16 +852,10 @@ local function CompileSecretWriter(slot)
   -- (instead of binding it here) keeps compiled slots correct after a style
   -- change without a recompile pass.
   local abbreviates = slot.short == true
-  local code = slot.secretCode
-  local needsCur = slot.secretNeedsCur
-  local needsMax = slot.secretNeedsMax
-  local needsPct = slot.secretNeedsPct
   local pattern = slot.secretPattern
   local delimiter = slot.delimiter
 
   -- A single-value slot has no runtime format dispatch or unused value needs.
-  -- Keep NUM_OPTS live inside the abbreviated writers: changing number style
-  -- must affect existing compiled slots without a new frame/spec application.
   if code == 1 then
     -- Native number formatters already return a string. For an exact "%s"
     -- slot, SetText accepts that same opaque result without formatting it again.
@@ -885,49 +924,11 @@ local function CompileSecretWriter(slot)
       fs._aText, fs._aTextPlain = nil, nil
       fs:SetFormattedText(pattern, pct)
     end
-  elseif code == 6 or code == 7 then
-    if fn and abbreviates then
-      -- Bind the two frequent native formats without adding a dispatch/helper
-      -- call per write. Only values and the live number style vary at runtime.
-      if code == 6 then
-        return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
-          if curSecret == nil then curSecret = issecretvalue(cur) == true end
-          if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
-          cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
-          if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
-          fs._aText, fs._aTextPlain = nil, nil
-          fs:SetFormattedText(pattern, cur, delimiter, pct)
-        end
-      end
-      return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
-        if curSecret == nil then curSecret = issecretvalue(cur) == true end
-        if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
-        cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
-        if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
-        fs._aText, fs._aTextPlain = nil, nil
-        fs:SetFormattedText(pattern, pct, delimiter, cur)
-      end
-    end
-    -- Current + percent is a common two-value slot. Its maximum is unused, so
-    -- compile that fact instead of walking the general three-value dispatcher.
-    -- Number-style options stay live, as in the single-value writers above.
-    local currentFirst = code == 6
-    return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
-      if curSecret == nil then curSecret = issecretvalue(cur) == true end
-      if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
-      if fn then
-        local opts = abbreviates and NUM_OPTS or nil
-        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
-      elseif curSecret ~= true then
-        cur = FiniteNumberOr(cur, 0)
-      end
-      if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
-      fs._aText, fs._aTextPlain = nil, nil
-      if currentFirst then fs:SetFormattedText(pattern, cur, delimiter, pct)
-      else fs:SetFormattedText(pattern, pct, delimiter, cur) end
-    end
   end
 
+  local needsCur = slot.secretNeedsCur
+  local needsMax = slot.secretNeedsMax
+  local needsPct = slot.secretNeedsPct
   return function(_, cur, maxValue, pct, _, _, curSecret, maxSecret, pctSecret)
     if needsCur and curSecret == nil then curSecret = issecretvalue(cur) == true end
     if needsMax and maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
@@ -1036,396 +1037,13 @@ local function ResolveHealthTextModes(text)
   return healthLeft, healthCenter, healthRight, hideLeft, hideCenter, hideRight, iconLeft, iconCenter, iconRight
 end
 
-local function BuildSecretPattern(mode, vf, pf)
-  if mode == "CURRENT" or mode == "FULLVALUE" or mode == "MAX" then
-    return vf
-  elseif mode == "PERCENT" then
-    return pf
-  elseif mode == "CURMAX" or mode == "MAXCUR" then
-    return vf .. "%s" .. vf
-  elseif mode == "CURPERCENT" or mode == "MAXPERCENT" then
-    return vf .. "%s" .. pf
-  elseif mode == "PERCENTCUR" or mode == "PERCENTMAX" then
-    return pf .. "%s" .. vf
-  elseif mode == "CURMAXPERCENT" then
-    return vf .. "%s" .. vf .. "%s" .. pf
-  elseif mode == "PERCENTMAXCUR" or mode == "PERCENTCURMAX" then
-    return pf .. "%s" .. vf .. "%s" .. vf
-  end
-  return nil
-end
-
-local function SecretPercentFormat(slot)
-  if NormalizePercentDecimals(slot and slot.percentDecimals) >= 1 then
-    return slot.hidePercentSymbol and "%.1f" or "%.1f%%"
-  end
-  return slot.hidePercentSymbol and "%d" or "%d%%"
-end
-
-local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals, absorbIcon)
-  if not (fs and mode and mode ~= "NONE") then
-    return index, false, false, false, false, false, false
-  end
-  local absorbBaseMode = ABSORB_HEALTH_MODE_BASE[mode]
-  local compiledMode = absorbBaseMode or mode
-  if not MODE_WRITERS[compiledMode] then
-    mode = "CURMAX"
-    compiledMode = mode
-    absorbBaseMode = nil
-  end
-  local needsPercent = ModeNeedsPercent(compiledMode)
-  local slot = slots[index]
-  if not slot then
-    slot = {}
-    slots[index] = slot
-  end
-  slot.fs = fs
-  slot.mode = mode
-  slot.absorbIcon = absorbIcon == true
-  slot.absorbBaseWriter = absorbBaseMode and MODE_WRITERS[compiledMode] or nil
-  slot.absorbBasePlainWriter = absorbBaseMode and MODE_PLAIN_WRITERS[compiledMode] or nil
-  slot.writer = absorbBaseMode and WriteAbsorbCombined or (MODE_WRITERS[compiledMode] or WriteCurMax)
-  slot.plainWriter = absorbBaseMode and PlainWriteAbsorbCombined or (MODE_PLAIN_WRITERS[compiledMode] or PlainWriteCurMax)
-  local secretCode
-  if not absorbBaseMode then secretCode = SECRET_MODE_CODES[compiledMode] end
-  slot.secretWriter = nil
-  slot.secretCode = secretCode
-  slot.secretSetter = secretCode and SECRET_SETTERS[secretCode] or nil
-  slot.secretNeedsCur = SECRET_NEEDS_CUR[secretCode]
-  slot.secretNeedsMax = SECRET_NEEDS_MAX[secretCode]
-  slot.secretNeedsPct = SECRET_NEEDS_PCT[secretCode]
-  slot.needsPercent = needsPercent
-  slot.delimiter = NormalizeTextDelimiter(delimiter)
-  slot.short = short == true
-  slot.hidePercentSymbol = hidePercentSymbol == true
-  slot.percentDecimals = NormalizePercentDecimals(percentDecimals)
-  if secretCode then
-    local secretValueFn = slot.short and AbbreviateSecretNumber or BreakUpLargeNumbers
-    slot.secretValueFn = secretValueFn
-    slot.secretPattern = BuildSecretPattern(mode,
-      secretValueFn and "%s" or "%d",
-      SecretPercentFormat(slot))
-    slot.secretWriter = CompileSecretWriter(slot)
-  else
-    slot.secretValueFn = nil
-    slot.secretPattern = nil
-  end
-  slot.suffix = nil
-  slot.appendSuffix = false
-  slot.canSecret = nil
-  local usesAbsorb = mode == "ABSORB" or absorbBaseMode ~= nil
-  return index + 1, needsPercent, compiledMode == "DEFICIT", ModeNeedsCurrent(compiledMode), ModeNeedsMax(compiledMode), usesAbsorb, mode == "ABSORB"
-end
-
-local function TrimTextSlots(slots, firstDead)
-  for i = firstDead, #slots do
-    slots[i] = nil
-  end
-end
-
-local HEALTH_SLOT_FIELDS = { "hpTextLeft", "hpTextCenter", "hpTextRight" }
-local POWER_SLOT_FIELDS = { "powerTextLeft", "powerTextCenter", "powerTextRight" }
-
-local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals)
-  local nextIndex = 1
-  local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
-  if show then
-    for i = 1, #fields do
-      local fs = frame[fields[i]]
-      if fs and fs:IsShown() then
-        local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
-        -- Branch-selected for the same reason as the health slots: a false flag
-        -- would otherwise fall through to the Right slot's flag.
-        local hidePercentSymbol
-        if i == 1 then hidePercentSymbol = hidePercentSymbol1
-        elseif i == 2 then hidePercentSymbol = hidePercentSymbol2
-        else hidePercentSymbol = hidePercentSymbol3 end
-        local slotNeeds, slotMissing, slotCurrent, slotMax
-        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(slots, nextIndex, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
-        needsPercent = needsPercent or slotNeeds
-        needsMissing = needsMissing or slotMissing
-        needsCurrent = needsCurrent or slotCurrent
-        needsMax = needsMax or slotMax
-      end
-    end
-  end
-  TrimTextSlots(slots, nextIndex)
-  return nextIndex - 1, needsPercent, needsMissing, needsCurrent, needsMax
-end
-
-local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals, absorbIcon1, absorbIcon2, absorbIcon3)
-  local valueIndex, absorbIndex = 1, 1
-  local combinedAbsorbCount = 0
-  local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
-  if show then
-    for i = 1, #HEALTH_SLOT_FIELDS do
-      local fs = frame[HEALTH_SLOT_FIELDS[i]]
-      if fs and fs:IsShown() then
-        local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
-        -- Booleans must be selected by branch, never by and/or: a slot whose
-        -- flag is false makes `i == n and flagN` yield false and fall through
-        -- to the Right slot's flag, so a Left/Center slot silently inherited
-        -- Right's "Hide % sign" and absorb icon.
-        local hidePercentSymbol, absorbIcon
-        if i == 1 then
-          hidePercentSymbol, absorbIcon = hidePercentSymbol1, absorbIcon1
-        elseif i == 2 then
-          hidePercentSymbol, absorbIcon = hidePercentSymbol2, absorbIcon2
-        else
-          hidePercentSymbol, absorbIcon = hidePercentSymbol3, absorbIcon3
-        end
-        local absorbOnly = mode == "ABSORB"
-        local slots = absorbOnly and absorbSlots or valueSlots
-        local index = absorbOnly and absorbIndex or valueIndex
-        local slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb, slotAbsorbOnly
-        index, slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb, slotAbsorbOnly = AddTextSlot(
-          slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals, absorbIcon)
-        if slotAbsorbOnly then
-          absorbIndex = index
-        else
-          valueIndex = index
-          if slotAbsorb then combinedAbsorbCount = combinedAbsorbCount + 1 end
-        end
-        needsPercent = needsPercent or slotNeeds
-        needsMissing = needsMissing or slotMissing
-        needsCurrent = needsCurrent or slotCurrent
-        needsMax = needsMax or slotMax
-      end
-    end
-  end
-  TrimTextSlots(valueSlots, valueIndex)
-  TrimTextSlots(absorbSlots, absorbIndex)
-  local valueCount, absorbCount = valueIndex - 1, absorbIndex - 1
-  return valueCount + absorbCount, valueCount, absorbCount, combinedAbsorbCount, needsPercent, needsMissing, needsCurrent, needsMax
-end
-
-local function CompileTextRuntime(frame, spec, text)
-  local rt = frame._msufTextRuntime
-  if not rt then
-    rt = {}
-    frame._msufTextRuntime = rt
-  end
-  text = text or {}
-  rt.showName = spec and spec.showName ~= false and frame.nameText ~= nil or false
-  rt.hideNameOnDeadOffline = text.hideNameOnDeadOffline == true
-  local configuredNameShortenMax = text.nameShorten == true and (tonumber(text.nameShortenMax) or 6) or 0
-  rt.nameShortenMax = configuredNameShortenMax
-  if rt.nameShortenMax > 0 then
-    rt.nameShortenMax = floor(max(4, rt.nameShortenMax) + 0.5)
-    if rt.nameShortenMax > 40 then
-      rt.nameShortenMax = 40
-    end
-  end
-  rt.nameShortenSide = text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-  local nameAnchor = text.nameAnchor or "LEFT"
-  rt.nameShortenDots = text.nameShortenDots ~= false
-    and (nameAnchor == "LEFT" or nameAnchor == "TOPLEFT" or nameAnchor == "FRAMELEFT")
-  rt.nameLegacyTruncation = text.nameLegacyTruncation == true
-  rt.nameLegacyShortenMax = rt.nameLegacyTruncation and configuredNameShortenMax or 0
-  rt.nameLegacyShortenDots = text.nameShortenDots ~= false
-  rt.nameShortenStamp = rt.nameShortenMax > 0 and (rt.nameShortenMax .. ":" .. rt.nameShortenSide .. ":" .. (rt.nameShortenDots and "1" or "0")) or false
-  local inline = text.inlineToT
-  if inline and inline.enabled == true and spec and spec.key == "target" then
-    local inlineRt = rt.inlineToT
-    if not inlineRt then
-      inlineRt = {}
-      rt.inlineToT = inlineRt
-    end
-    inlineRt.unit = inline.unit or "targettarget"
-    inlineRt.separator = inline.separator or " | "
-    inlineRt.colorMode = inline.colorMode or "AUTO"
-    inlineRt.targetNameClassColor = inline.targetNameClassColor == true
-    inlineRt.targetNameNpcColor = inline.targetNameNpcColor == true
-    inlineRt.targetNameNpcClassColor = inline.targetNameNpcClassColor == true
-    inlineRt.totNameClassColor = inline.totNameClassColor == true
-    inlineRt.totNameNpcColor = inline.totNameNpcColor == true
-    inlineRt.totNameNpcClassColor = inline.totNameNpcClassColor == true
-    inlineRt.nameShortenMax = inline.nameShorten == true and (tonumber(inline.nameShortenMax) or 6) or 0
-    if inlineRt.nameShortenMax > 0 then
-      inlineRt.nameShortenMax = floor(max(4, inlineRt.nameShortenMax) + 0.5)
-      if inlineRt.nameShortenMax > 40 then
-        inlineRt.nameShortenMax = 40
-      end
-    end
-    inlineRt.nameShortenSide = inline.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-    inlineRt.nameShortenDots = inline.nameShortenDots ~= false
-      and (nameAnchor == "LEFT" or nameAnchor == "TOPLEFT" or nameAnchor == "FRAMELEFT")
-    inlineRt.stamp = inlineRt.unit .. ":" .. inlineRt.separator .. ":" .. inlineRt.colorMode .. ":" .. (inlineRt.nameShortenMax or 0) .. ":" .. inlineRt.nameShortenSide .. ":" .. (inlineRt.nameShortenDots and "1" or "0")
-  else
-    rt.inlineToT = nil
-  end
-  rt.healthSlots = rt.healthSlots or {}
-  rt.healthAbsorbSlots = rt.healthAbsorbSlots or {}
-  rt.powerSlots = rt.powerSlots or {}
-  local showHealth = spec and spec.showHealthText ~= false
-  local healthLeft, healthCenter, healthRight, healthHideLeft, healthHideCenter, healthHideRight,
-    healthIconLeft, healthIconCenter, healthIconRight = ResolveHealthTextModes(text)
-  rt.healthPercentDecimals = NormalizePercentDecimals(text.healthPercentDecimals)
-
-  local needsPercent, needsMissing, needsCurrent, needsMax
-  rt.healthSlotCount, rt.healthValueSlotCount, rt.healthAbsorbSlotCount, rt.healthCombinedAbsorbSlotCount,
-    needsPercent, needsMissing, needsCurrent, needsMax = CompileHealthTextSlots(
-    rt.healthSlots, rt.healthAbsorbSlots, frame, showHealth,
-    healthLeft, healthCenter, healthRight,
-    text.healthDelimiter, text.healthShortNumbers,
-    healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals,
-    healthIconLeft, healthIconCenter, healthIconRight)
-  rt.healthUsesAbsorb = (rt.healthAbsorbSlotCount or 0) + (rt.healthCombinedAbsorbSlotCount or 0) > 0
-  rt.healthNeedsPercent = needsPercent
-  rt.healthNeedsMissing = needsMissing
-  rt.healthNeedsCurrent = needsCurrent
-  rt.healthNeedsMax = needsMax
-  rt.healthColorByHealth = text.healthColorByHealth == true
-  rt.healthColorByClass = text.healthColorByClass == true
-  if (needsPercent == true or rt.healthColorByHealth == true) and needsCurrent ~= true then
-    rt.healthDispatchKeyMode = needsMax == true and DISPATCH_KEY.PERCENT_MAX or DISPATCH_KEY.PERCENT
-  elseif needsCurrent == true and needsMax == true then
-    rt.healthDispatchKeyMode = DISPATCH_KEY.CURRENT_MAX
-  elseif needsMax == true then
-    rt.healthDispatchKeyMode = DISPATCH_KEY.MAX
-  elseif needsCurrent == true then
-    rt.healthDispatchKeyMode = DISPATCH_KEY.CURRENT
-  else
-    rt.healthDispatchKeyMode = DISPATCH_KEY.NONE
-  end
-  local baseTextColor = spec and spec.textColor
-  rt.textColorR = baseTextColor and baseTextColor.r or 1
-  rt.textColorG = baseTextColor and baseTextColor.g or 1
-  rt.textColorB = baseTextColor and baseTextColor.b or 1
-  rt.textColorA = baseTextColor and baseTextColor.a or 1
-  rt.healthTextAlpha = rt.textColorA
-  rt._textGradientPct = nil
-  rt.healthPlain = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
-  rt._lastHealthTextHP = nil
-  rt._lastHealthTextMax = nil
-  rt._lastHealthTextMissing = nil
-  rt._lastAbsorbTextValue = nil
-  rt.healthAbsorb = nil
-  rt._dispatchHealthTextHP = nil
-  rt._dispatchHealthTextMax = nil
-  rt._dispatchHealthTextMissing = nil
-  rt._dispatchHealthMissing = nil
-  rt._dispatchHealthMissingReady = nil
-  frame._msufTextHealthMax = nil
-  frame._msufTextHealthMaxUnit = nil
-  frame._msufTextHealthMaxReady = nil
-
-  local showPower = spec and spec.showPowerText ~= false
-  local powerUnused
-  -- Per-slot override wins whenever it is set, including an explicit false.
-  local powerFallbackHide = text.hidePercentSymbol == true
-  local powerHideLeft, powerHideCenter, powerHideRight =
-    text.powerLeftHidePercentSymbol, text.powerCenterHidePercentSymbol, text.powerRightHidePercentSymbol
-  if powerHideLeft == nil then powerHideLeft = powerFallbackHide else powerHideLeft = powerHideLeft == true end
-  if powerHideCenter == nil then powerHideCenter = powerFallbackHide else powerHideCenter = powerHideCenter == true end
-  if powerHideRight == nil then powerHideRight = powerFallbackHide else powerHideRight = powerHideRight == true end
-  rt.powerSlotCount, needsPercent, powerUnused, needsCurrent, needsMax = CompileThreeTextSlots(
-    rt.powerSlots, frame, showPower, POWER_SLOT_FIELDS,
-    text.powerLeft, text.powerCenter, text.powerRight,
-    text.powerDelimiter, text.shortNumbers,
-    powerHideLeft, powerHideCenter, powerHideRight)
-  rt.powerNeedsPercent = needsPercent
-  rt.powerNeedsCurrent = needsCurrent
-  rt.powerNeedsMax = needsMax
-  if needsPercent == true and needsCurrent ~= true then
-    rt.powerDispatchKeyMode = needsMax == true and DISPATCH_KEY.PERCENT_MAX or DISPATCH_KEY.PERCENT
-  elseif needsCurrent == true and needsMax == true then
-    rt.powerDispatchKeyMode = DISPATCH_KEY.CURRENT_MAX
-  elseif needsMax == true then
-    rt.powerDispatchKeyMode = DISPATCH_KEY.MAX
-  elseif needsCurrent == true then
-    rt.powerDispatchKeyMode = DISPATCH_KEY.CURRENT
-  else
-    rt.powerDispatchKeyMode = DISPATCH_KEY.NONE
-  end
-  if text.directLayout == true and text.powerColorByType ~= true then
-    rt.powerColorByType = "STATIC"
-  else
-    rt.powerColorByType = text.powerColorByType == true
-  end
-  local powerSpec = spec and spec.power
-  rt.powerRefreshTypeOnTick = rt.powerColorByType == true
-    and (not powerSpec or powerSpec.mode == nil or powerSpec.mode == "power")
-  -- CURRENT-only non-Player text normally needs no power metadata. Player can
-  -- switch native identity (forms/vehicles) or hand this surface to Mana while
-  -- the text layout itself remains unchanged, so keep its cached identity path
-  -- available. Steady bar-fed value events still consume Power's shared payload
-  -- and perform no extra native reads.
-  frame._msufTextPowerNeedsType = rt.powerSlotCount > 0
-    and (frame.MSUFUnitKey == "player"
-      or rt.powerColorByType == true
-      or needsMax == true
-      or needsPercent == true)
-    and true
-    or nil
-  rt.powerPlain = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
-  rt.plainTextTrusted = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
-  rt._lastPowerTextPower = nil
-  rt._lastPowerTextMax = nil
-  rt._dispatchHealthPercent = nil
-  rt._dispatchHealthPercentReady = nil
-  rt._dispatchHealthMissing = nil
-  rt._dispatchHealthMissingReady = nil
-  rt._dispatchPowerTextPower = nil
-  rt._dispatchPowerTextMax = nil
-  frame._msufTextPowerType = nil
-  frame._msufTextPowerToken = nil
-  frame._msufTextPowerTypeKnown = nil
-  frame._msufTextPowerTypeUnit = nil
-  frame._msufTextPowerDisplayMana = nil
-  frame._msufTextPowerMax = nil
-  frame._msufTextPowerMaxUnit = nil
-  local hot = Text.RuntimeHotFunctions
-  if hot then
-    local groupScope = spec and spec.scope == "group"
-    if rt.healthValueSlotCount > 0 then
-      local fromValues
-      if groupScope and (rt.healthNeedsCurrent == true
-        or rt.healthNeedsMax == true
-        or rt.healthNeedsMissing == true) then
-        fromValues = hot.healthFromValues and hot.healthFromValues(frame, rt) or nil
-      end
-      rt.healthHot = fromValues or hot.healthHot
-      rt.healthDrain = hot.healthDrain and hot.healthDrain(rt) or nil
-      rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
-      rt.healthDirty = groupScope and hot.groupHealthDirty or hot.healthDirty
-      rt.healthDefersUnitHealthText = not (groupScope and rt.healthHotFromPercent
-        and rt.healthUsesAbsorb ~= true) and true or nil
-    else
-      rt.healthHot = nil
-      rt.healthDrain = nil
-      rt.healthHotFromPercent = nil
-      rt.healthDirty = nil
-      rt.healthDefersUnitHealthText = nil
-    end
-    if rt.powerSlotCount > 0 then
-      local fromValues
-      if groupScope and (rt.powerNeedsCurrent == true or rt.powerNeedsMax == true) then
-        fromValues = hot.powerFromValues and hot.powerFromValues(frame, rt) or nil
-      end
-      rt.powerHot = fromValues or hot.powerHot
-      rt.powerDrain = hot.powerDrain and hot.powerDrain(rt, groupScope) or nil
-      rt.powerHotFromPercent = hot.powerFromPercent and hot.powerFromPercent(frame, rt) or nil
-      rt.powerDirty = hot.powerDirty
-    else
-      rt.powerHot = nil
-      rt.powerDrain = nil
-      rt.powerHotFromPercent = nil
-      rt.powerDirty = nil
-    end
-  else
-    rt.healthHot = nil
-    rt.healthDrain = nil
-    rt.healthHotFromPercent = nil
-    rt.healthDirty = nil
-    rt.healthDefersUnitHealthText = nil
-    rt.powerHot = nil
-    rt.powerDrain = nil
-    rt.powerHotFromPercent = nil
-    rt.powerDirty = nil
-  end
-  return rt
-end
+local AddTextSlot, CompileTextRuntime, TrimTextSlots
+AddTextSlot, CompileTextRuntime, TrimTextSlots = RequireFactory("TextSlotCompile")(
+  ABSORB_HEALTH_MODE_BASE, AbbreviateSecretNumber, BreakUpLargeNumbers, CompileSecretWriter, DISPATCH_KEY, MODE_PLAIN_WRITERS,
+    MODE_WRITERS, ModeNeedsCurrent, ModeNeedsMax, ModeNeedsPercent, NormalizePercentDecimals, NormalizeTextDelimiter,
+    PlainWriteAbsorbCombined, PlainWriteCurMax, ResolveHealthTextModes, SECRET_MODE_CODES, SECRET_NEEDS_CUR, SECRET_NEEDS_MAX,
+    SECRET_NEEDS_PCT, SECRET_SETTERS, Text, WriteAbsorbCombined, WriteCurMax, floor, max, nativeSecrets, tonumber
+)
 
 local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPercent, rt)
   if not slots or not count or count <= 0 then
@@ -1625,9 +1243,6 @@ local function GroupMissingValue(current, maximum, unit, health)
 end
 
 --- Format a percent value into "42%" or "42" (respects hidePercentSymbol).
---- Handles secret percent (rare) via C_StringUtil.RoundToNearestString. The
---- second result is a plain boolean "has a percent": a secret text may be
---- concatenated but never truth-tested.
 local function GroupPercent(value, suffix, decimals)
     return Text.FormatPercentValue(value, suffix == "", true, decimals, "GROUP")
 end

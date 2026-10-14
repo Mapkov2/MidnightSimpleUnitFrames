@@ -471,6 +471,9 @@ do
     local runtimePath = core .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua"
     local effectsPath = core .. "Auras3/MSUF_Auras3_SpellIndicators_Effects.lua"
     Load("Libs/MSUFUnitFrames/MSUF_UF_Apply.lua", ns)
+    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_SlotCompile.lua", ns)
+    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Drain.lua", ns)
+    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua", ns)
     Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua", ns)
     Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua", ns)
     Load("Auras3/MSUF_Auras3_SpellIndicators_Config.lua", ns)
@@ -509,7 +512,7 @@ do
     Check(overlay.text == "Bob", "Name Overlay kept the previous target's name: " .. tostring(overlay.text))
 
     -- A secret name reaches the overlay untouched (strict watch on both files).
-    local stop = Secrets.Watch({ effectsPath, runtimePath }, { strict = true })
+    local stop = Secrets.Watch({ effectsPath, runtimePath, core .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua" }, { strict = true })
     local secretName = Secrets.New("string")
     names.target = secretName
     NameText.Update(target, "PLAYER_TARGET_CHANGED", "target")

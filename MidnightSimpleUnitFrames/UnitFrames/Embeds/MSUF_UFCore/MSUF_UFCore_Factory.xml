@@ -1,3 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="..\..\Engine\MSUF_UF_Factory_Anchors.lua"/>
+  <Script file="..\..\Engine\MSUF_UF_Factory_Spawn.lua"/>
+  <Script file="..\..\Engine\MSUF_UF_Factory_CooldownWidth.lua"/>
   <Script file="..\..\Engine\MSUF_UF_Factory.lua"/>
 </Ui>

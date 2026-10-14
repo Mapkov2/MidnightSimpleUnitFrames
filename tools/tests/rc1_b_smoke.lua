@@ -276,7 +276,12 @@ Case("power text drain", function()
     local Text = setmetatable({ floor = math.floor, EMPTY_EVENTS = {}, POWER_EVENTS = {}, POWER_EVENTS_FREQUENT = {} },
         { __index = function() return noop end })
     local runtime = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua"
-    assert(loadfile(runtime))("MidnightSimpleUnitFrames", { UFText = Text, UF = UF, Secrets = {} })
+    local ns = { UFText = Text, UF = UF, Secrets = {} }
+    local drain = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Drain.lua"
+    local name = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua"
+    assert(loadfile(drain))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(name))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(runtime))("MidnightSimpleUnitFrames", ns)
     local drained
     local frame = {
         MSUFUnitKey = "target",
@@ -298,7 +303,7 @@ Case("power text drain", function()
         },
     }
     UF.attachedFrames[frame] = true
-    local stop = Secrets.Watch(runtime, { strict = true })
+    local stop = Secrets.Watch({ runtime, drain }, { strict = true })
     elements.PowerText.MarkValueDirty(frame)
     local ok, err
     if ticker then ok, err = pcall(ticker) end

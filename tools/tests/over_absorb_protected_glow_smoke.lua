@@ -194,6 +194,8 @@ local namespace = { ExportPublic = function() end, UF = { Layers = {}, RegisterE
 end } }
 -- The saved overlay anchor modes (UF.Shared.ABSORB_ANCHOR) come from the file that owns them.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(registered, "the prediction element did not register")

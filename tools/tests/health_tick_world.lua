@@ -43,6 +43,7 @@ World.WIDGET_SINKS = {
     "SetAlphaFromBoolean", "GetStatusBarTexture", "SetShown", "SetColorTexture", "SetTexture",
 }
 World.OWNED = {
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua",

@@ -727,3 +727,20 @@ clients+Forever	lua	tools/tests/region_visibility_cost_smoke.lua	{root} {flavor}
 -	lua	tools/tests/editmode_core_history_smoke.lua	{root}	Core-only Edit Mode history or late Options attachment failed
 -	lua	tools/tests/apply_typed_domains_smoke.lua	{root}	Typed domains or legacy apply compatibility drifted
 -	lua	tools/tests/apply_legacy_oracle_smoke.lua	{root}	Legacy apply routing parity failed
+clients+Forever	lua	tools/tests/uf_required_split_providers_smoke.lua	{root} {flavor}	Unit-frame required responsibility providers: {flavor}
+-	lua	tools/tests/uf_level_badge_client_binding_smoke.lua	{root}	Unit-frame level badge retains late client binding and the original absent-client fallback
+clients+Forever	lua	tools/tests/boss_number_warm_update_smoke.lua	{root} {flavor}	Boss number complete warm updater: {flavor}
+clients+Forever	lua	tools/tests/text_resolver_type_capture_smoke.lua	{root} {flavor}	Text resolver captured type binding: {flavor}
+-	lua	tools/tests/prediction_force_update_cost_smoke.lua	{root}	Prediction exported force-update complete path costs
+clients+Forever	lua	tools/tests/prediction_exported_secret_routes_smoke.lua	{root} {flavor}	Prediction exported strict secret routes: {flavor}
+clients+Forever	lua	tools/tests/external_anchor_refresh_cost_smoke.lua	{root} {flavor}	Complete external anchor refresh original costs: {flavor}
+clients+Forever	lua	tools/tests/callable_boundary_cost_smoke.lua	{root} {flavor}	Complete callable boundary original costs: {flavor}
+clients+Forever	lua	tools/tests/callable_boundary_heap_smoke.lua	{root} {flavor}	Hook-free complete callable boundary original heap: {flavor}
+clients+Forever	lua	tools/tests/late_cooldown_anchor_binding_smoke.lua	{root} {flavor}	Late cooldown anchor original callable binding: {flavor}
+-	python	tools/tests/callable_boundary_allocation_controls_smoke.py	{root}	Callable boundary heap detects real per-operation tables closures and strings
+clients+Forever	lua	tools/tests/responsibility_route_cost_smoke.lua	{root} {flavor}	Complete moved responsibility event and public costs: {flavor}
+clients+Forever	lua	tools/tests/responsibility_route_heap_smoke.lua	{root} {flavor}	Hook-free moved responsibility event and public heap: {flavor}
+clients+Forever	lua	tools/tests/responsibility_adapter_cost_smoke.lua	{root} {flavor}	Complete configured adapter original costs: {flavor}
+clients+Forever	lua	tools/tests/responsibility_adapter_heap_smoke.lua	{root} {flavor}	Hook-free configured adapter original heap: {flavor}
+-	python	tools/tests/responsibility_adapter_allocation_controls_smoke.py	{root}	Configured adapter heap rejects tables closures and transient strings
+clients+Forever	lua	tools/tests/power_slot_delivery_parity_smoke.lua	{root} {flavor}	Power slot delivery matches Text.UpdateTextSlotsSecret: {flavor}

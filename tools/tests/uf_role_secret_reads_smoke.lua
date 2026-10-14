@@ -6,8 +6,11 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local world = World.New(root, flavor)
 local env = world.env
 local statusPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"
+local groupStatusPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_GroupRuntime.lua"
+local indicatorsPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"
+local regionsPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Regions.lua"
 local visualsPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua"
-local source = { ["@" .. statusPath] = World.Read(statusPath), ["@" .. visualsPath] = World.Read(visualsPath) }
+local source = { ["@" .. groupStatusPath] = World.Read(groupStatusPath), ["@" .. statusPath] = World.Read(statusPath), ["@" .. visualsPath] = World.Read(visualsPath) }
 local role = Secrets.New("string")
 local errors, reads = {}, 0
 env.issecretvalue = Secrets.IsSecret
@@ -43,7 +46,7 @@ frame.roleIcon = frame:CreateTexture()
 local status = { role = { enabled = true, showTank = true, showHealer = true, showDPS = true } }
 local function Case(label, fn)
     reads = 0
-    local stop = Secrets.Watch({ statusPath, visualsPath }, { strict = true })
+    local stop = Secrets.Watch({ statusPath, regionsPath, indicatorsPath, groupStatusPath, visualsPath }, { strict = true })
     local ok, err = pcall(fn)
     local violations = stop()
     if not ok then errors[#errors + 1] = label .. ": " .. tostring(err) end

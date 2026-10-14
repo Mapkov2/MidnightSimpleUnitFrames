@@ -1,13 +1,20 @@
 --- UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua
 --- Runtime dispatcher for unitframe text slots.
----
---- Decides which text slots refresh for each unit/event, keeps combat-safe
---- visibility updates isolated, and separates secret-value branches from cache hits.
 
 local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 local UF = MSUF and MSUF.UF
 if not (Text and UF) then return end
+
+-- Bind mandatory factories once; report both the consumer and received shape.
+local function RequireFactory(key)
+  local factories = MSUF.UFModuleFactories
+  assert(type(factories) == "table", "Elements/MSUF_UF_Text_Runtime.lua: required UF factory registry for " .. key)
+  local factory = factories[key]
+  local kind = type(factory)
+  assert(kind == "function", "Elements/MSUF_UF_Text_Runtime.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
+  return factory
+end
 
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
@@ -21,8 +28,6 @@ local UnitPowerType = Text.UnitPowerType
 local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 
 local UnitName = Text.UnitName
-local ReadDisplayName = UnitName
-local displayNameResolverUsesFrame = false
 
 local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
@@ -108,10 +113,6 @@ local POWER_IDENTITY_EVENTS = {
   MSUF_GF_UNIT_IDENTITY = true,
   MSUF_GF_UNIT_STRUCTURE = true,
   -- Single-unit frames never see the synthetic MSUF_UNIT_IDENTITY reasons:
-  -- AddIdentityLifecycleHandlers routes their swaps into the identity path
-  -- under the raw Blizzard event name. Without these the cached power type
-  -- outlives the unit it was read for, and a frame whose power bar is disabled
-  -- has no bar-fed seed to correct it.
   PLAYER_ENTERING_WORLD = true,
   PLAYER_TARGET_CHANGED = true,
   PLAYER_FOCUS_CHANGED = true,
@@ -135,93 +136,6 @@ local POWER_IDENTITY_EVENTS = {
 -- queue retains frames only; restricted event payloads are always reread when
 -- the batch drains, while latest plain values already owned by a bar may be
 -- reused.
-local TEXT_DIRTY_HEALTH = 1
-local TEXT_DIRTY_POWER = 2
-local TEXT_DIRTY_BOTH = 3
-local TEXT_DIRTY_DELAY = 0.25
-local dirtyTextQueueA, dirtyTextQueueB = {}, {}
-local dirtyTextWriteQueue = dirtyTextQueueA
-local dirtyTextWriteCount = 0
-local dirtyTextTicker
-local FlushDirtyText
-local UpdateHealthTextValues
-local UpdatePowerTextValues
-
-local function ClearDirtyTextBit(frame, bit)
-  if not frame then return end
-  local mask = frame._msufTextDirtyMask
-  if mask == TEXT_DIRTY_BOTH then
-    frame._msufTextDirtyMask = bit == TEXT_DIRTY_HEALTH and TEXT_DIRTY_POWER or TEXT_DIRTY_HEALTH
-  elseif mask == bit then
-    frame._msufTextDirtyMask = nil
-  end
-end
-
-local function ClearDirtyTextDispatch(frame, mask)
-  local rt = frame and frame._msufTextRuntime
-  if not rt then return end
-  if mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-    rt._dispatchHealthMissing = nil
-    rt._dispatchHealthMissingReady = nil
-  end
-  if mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH then
-    rt._dispatchPowerPercent = nil
-    rt._dispatchPowerPercentReady = nil
-  end
-end
-
-local function CancelDirtyTextFrame(frame, mask, preserveDispatch)
-  if not frame then return end
-  if mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_POWER then
-    ClearDirtyTextBit(frame, mask)
-    if preserveDispatch ~= true then ClearDirtyTextDispatch(frame, mask) end
-  else
-    frame._msufTextDirtyMask = nil
-    if preserveDispatch ~= true then ClearDirtyTextDispatch(frame, TEXT_DIRTY_BOTH) end
-  end
-end
-
-local function ArmDirtyTextTimer()
-  if not dirtyTextTicker then
-    dirtyTextTicker = C_Timer.NewTicker(TEXT_DIRTY_DELAY, FlushDirtyText)
-  end
-end
-
-local function MarkDirtyText(frame, bit)
-  if not frame then return end
-  local mask = frame._msufTextDirtyMask
-  if mask == nil then
-    frame._msufTextDirtyMask = bit
-  elseif mask ~= bit then
-    frame._msufTextDirtyMask = TEXT_DIRTY_BOTH
-  end
-  if frame._msufTextDirtyQueued == true then return end
-  frame._msufTextDirtyQueued = true
-  dirtyTextWriteCount = dirtyTextWriteCount + 1
-  dirtyTextWriteQueue[dirtyTextWriteCount] = frame
-  ArmDirtyTextTimer()
-end
-
-local function MarkHealthTextDirty(frame)
-  MarkDirtyText(frame, TEXT_DIRTY_HEALTH)
-  -- The bar route may have published a restricted percent for a synchronous
-  -- text writer. A deferred marker must never retain that event payload.
-  local rt = frame and frame._msufTextRuntime
-  if rt and (rt._dispatchHealthPercentReady == true
-      or rt._dispatchHealthMissingReady == true) then
-    ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
-  end
-end
-
-local MarkGroupHealthTextDirty = MarkHealthTextDirty
-
-local function MarkPowerTextDirty(frame)
-  MarkDirtyText(frame, TEXT_DIRTY_POWER)
-  ClearDirtyTextDispatch(frame, TEXT_DIRTY_POWER)
-end
-
 local function DirtyTextFrameVisible(frame)
   local visible = UF.FrameVisibleForEvent
   if type(visible) == "function" then return visible(frame) end
@@ -229,42 +143,19 @@ local function DirtyTextFrameVisible(frame)
   return true
 end
 
-local function DirtyTextFrameState(frame)
-  if not frame or not DirtyTextFrameVisible(frame) then return false end
-  local attached = UF.attachedFrames
-  if type(attached) == "table" and attached[frame] ~= true then return false end
-  local active = frame._msufActiveElements
-  local rt = frame._msufTextRuntime
-  if not (rt and type(active) == "table") then return false end
-  local unit = frame.MSUFUnitKey or frame.unit
-  if unit == nil then return false end
-  return rt, unit, active
-end
+local CancelDirtyTextFrame, DirtyTextFrameState, MarkGroupHealthTextDirty, MarkHealthTextDirty, MarkPowerTextDirty, TEXT_DIRTY_HEALTH,
+  TEXT_DIRTY_POWER, BindTextDrain
+local UpdateHealthTextValues
+local UpdatePowerTextValues
+CancelDirtyTextFrame, DirtyTextFrameState, MarkGroupHealthTextDirty, MarkHealthTextDirty, MarkPowerTextDirty, TEXT_DIRTY_HEALTH,
+  TEXT_DIRTY_POWER, BindTextDrain = RequireFactory("TextDrain")(
+  C_Timer, HealthPercent, HealthPercentAvailable, UF, nil, nil, issecretvalue, type, DirtyTextFrameVisible
+)
 
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
 
-function Text.SetDisplayNameResolver(resolver)
-  if type(resolver) == "function" then
-    ReadDisplayName = resolver
-    displayNameResolverUsesFrame = true
-  else
-    ReadDisplayName = UnitName
-    displayNameResolverUsesFrame = false
-  end
-end
-
--- The name the engine frames show (character-name and nickname resolvers
--- included), for name surfaces outside the engine such as the extra group blocks.
-function Text.ReadDisplayName(unit)
-  return ReadDisplayName(unit)
-end
-
-if type(Text._pendingDisplayNameResolver) == "function" then
-  Text.SetDisplayNameResolver(Text._pendingDisplayNameResolver)
-  Text._pendingDisplayNameResolver = nil
-end
 
 local function MissingHealthFromValues(hp, hpMax, compatibility)
   -- Missing health is derived from API values that may become secret. Return nil in that case
@@ -792,15 +683,34 @@ local function UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pct, pct
   UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
 end
 
-function Text.UpdateNameColor(frame, event, unit)
-  if RegionShown(frame and frame.nameText) then
-    ApplyNameTextColor(frame, unit or frame.MSUFUnitKey)
-    local rt = frame and frame._msufTextRuntime
-    if rt and rt.inlineToT and frame._msufIdentityInlineToTScheduled ~= true then
-      Text.UpdateInline(frame, event, unit)
-    end
+local BuildTextName = RequireFactory("TextName")
+local ReadDisplayName = UnitName
+local displayNameResolverUsesFrame = false
+
+function Text.SetDisplayNameResolver(resolver)
+  if type(resolver) == "function" then
+    ReadDisplayName = resolver
+    displayNameResolverUsesFrame = true
+  else
+    ReadDisplayName = UnitName
+    displayNameResolverUsesFrame = false
   end
 end
+
+-- The name the engine frames show (character-name and nickname resolvers
+-- included), for name surfaces outside the engine such as the extra group blocks.
+function Text.ReadDisplayName(unit)
+  return ReadDisplayName(unit)
+end
+
+if type(Text._pendingDisplayNameResolver) == "function" then
+  Text.SetDisplayNameResolver(Text._pendingDisplayNameResolver)
+  Text._pendingDisplayNameResolver = nil
+end
+
+local SetNameTextCached, TruncateName = BuildTextName(
+  ApplyNameTextColor, RefreshNameCenterClipFit, RegionShown, SetTextCached, Text, floor, issecretvalue, string_byte, string_sub, tonumber
+)
 
 function Text.UpdateInline(frame, event, unit)
   local rt = frame and frame._msufTextRuntime
@@ -850,66 +760,6 @@ function Text.UpdateInline(frame, event, unit)
   ApplyInlineTextColor(frame, inlineUnit, inline)
 end
 
-local function SetNameTextCached(frame, value)
-  SetTextCached(frame.nameText, value)
-  local proxy = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText
-  if proxy then SetTextCached(proxy, value) end
-  -- Any no-ellipsis clip window (side or centered) needs the warm fit: it
-  -- tracks whether the name really overflows the window, which decides the
-  -- NAMELEFT/NAMERIGHT status anchor target.
-  if frame._msufNameInlineClip ~= nil and RefreshNameCenterClipFit then
-    RefreshNameCenterClipFit(frame)
-  end
-  -- Aura Name Overlay effects copy this text (MSUF_Auras3_SpellIndicators_Effects.lua).
-  local mirror = frame._msufNameTextMirror
-  if mirror then mirror(frame) end
-end
-
--- Start of the UTF-8 character after the one at pos. File scope: a closure
--- here would be built again for every name update.
-local function NextUtf8Byte(name, pos)
-  -- Every caller stays within the counted byte string at a character start.
-  local byte = string_byte(name, pos)
-  if byte < 128 then return pos + 1 end
-  if byte < 224 then return pos + 2 end
-  if byte < 240 then return pos + 3 end
-  return pos + 4
-end
-
--- Native 5.73 Group Frames shortened the actual UTF-8 name and only added
--- dots when its character count exceeded the configured cap. Preserve that
--- behavior for migrated Group profiles instead of showing 6.0's separate
--- clip-marker FontString for every name while shortening is merely enabled.
-local function TruncateName(name, maxChars, showDots, clipSide)
-  maxChars = floor((tonumber(maxChars) or 0) + 0.5)
-  -- maxChars is plain configuration, so the common path (no legacy
-  -- truncation) still returns before the native predicate.
-  if maxChars <= 0 or issecretvalue(name) == true or not name then return name end
-
-  local count, pos, byteLength = 0, 1, #name
-  while pos <= byteLength do
-    count = count + 1
-    pos = NextUtf8Byte(name, pos)
-  end
-  if count <= maxChars then return name end
-
-  local dots = showDots == true and ".." or ""
-  if clipSide == "LEFT" then
-    pos = 1
-    for _ = 1, count - maxChars do pos = NextUtf8Byte(name, pos) end
-    return dots .. string_sub(name, pos)
-  end
-
-  count, pos = 0, 1
-  while pos <= byteLength and count < maxChars do
-    count = count + 1
-    pos = NextUtf8Byte(name, pos)
-  end
-  return string_sub(name, 1, pos - 1) .. dots
-end
-
-Text.TruncateName = TruncateName
-
 function Text.UpdateName(frame, event, unit)
   local frameUnit = frame and frame.MSUFUnitKey
   unit = unit or frameUnit
@@ -921,101 +771,95 @@ function Text.UpdateName(frame, event, unit)
   if not (frame and frame.nameText) then
     return
   end
-  if not frameUnit or frameUnit == "" then
-    frame._msufNameStatusUnit = nil
-    frame._msufNameStatusHidden = nil
-    frame._msufNameTextUnit = nil
-    SetNameTextCached(frame, "")
-    frame.nameText._msufShown = nil
-    SetShownCached(frame.nameText, false)
-    return
-  end
-  unit = frameUnit
-  local previewName = frame._msufPreviewNameText
-  if type(previewName) == "string" and previewName ~= "" then
-    frame._msufNameStatusUnit = nil
-    frame._msufNameStatusHidden = nil
-    frame.nameText._msufShown = nil
-    SetShownCached(frame.nameText, true)
-    if rt and rt.nameLegacyTruncation == true then
-      previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
-    end
-    SetNameTextCached(frame, previewName)
-    frame._msufNameTextUnit = unit
-    Text.UpdateNameColor(frame, event, unit)
-    return
-  end
-  if rt and rt.showName == false then
-    frame._msufNameStatusUnit = nil
-    frame._msufNameStatusHidden = nil
-    frame._msufNameTextUnit = nil
-    SetNameTextCached(frame, "")
-    frame.nameText._msufShown = nil
-    SetShownCached(frame.nameText, false)
-    return
-  end
-  if rt and rt.hideNameOnDeadOffline == true then
-    local connected, connectedKnown = ReadConnectedCached(frame, unit)
-    local hidden = false
-    if connectedKnown == true and connected == false then
-      hidden = true
-    else
-      local dead, deadKnown = ReadDeadCached(frame, unit)
-      if deadKnown == true and dead == true then
-        hidden = true
-      end
-    end
-    local statusUnchanged = frame._msufNameStatusUnit == unit
-      and frame._msufNameStatusHidden == hidden
-    if statusUnchanged then
-      if event == "UNIT_HEALTH" then
-        return
-      elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then
-        if hidden then
-          if frame.nameText._msufShown == false then
-            return
-          end
-        elseif frame.nameText._msufShown == true then
-          return
-        end
-      end
-    end
-    frame._msufNameStatusUnit = unit
-    frame._msufNameStatusHidden = hidden
-    if hidden then
-      frame._msufNameTextUnit = nil
-      SetNameTextCached(frame, "")
+  -- Missing-unit and configured-hidden names share one original cleanup.
+  if not (not frameUnit or frameUnit == "") then
+    unit = frameUnit
+    local previewName = frame._msufPreviewNameText
+    if type(previewName) == "string" and previewName ~= "" then
+      frame._msufNameStatusUnit = nil
+      frame._msufNameStatusHidden = nil
       frame.nameText._msufShown = nil
-      SetShownCached(frame.nameText, false)
+      SetShownCached(frame.nameText, true)
+      if rt and rt.nameLegacyTruncation == true then
+        previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+      end
+      SetNameTextCached(frame, previewName)
+      frame._msufNameTextUnit = unit
+      Text.UpdateNameColor(frame, event, unit)
       return
     end
-  else
-    frame._msufNameStatusUnit = nil
-    frame._msufNameStatusHidden = nil
+    if not (rt and rt.showName == false) then
+      if rt and rt.hideNameOnDeadOffline == true then
+        local connected, connectedKnown = ReadConnectedCached(frame, unit)
+        local hidden = false
+        if connectedKnown == true and connected == false then
+          hidden = true
+        else
+          local dead, deadKnown = ReadDeadCached(frame, unit)
+          if deadKnown == true and dead == true then
+            hidden = true
+          end
+        end
+        local statusUnchanged = frame._msufNameStatusUnit == unit
+          and frame._msufNameStatusHidden == hidden
+        if statusUnchanged then
+          if event == "UNIT_HEALTH" then
+            return
+          elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then
+            if hidden then
+              if frame.nameText._msufShown == false then
+                return
+              end
+            elseif frame.nameText._msufShown == true then
+              return
+            end
+          end
+        end
+        frame._msufNameStatusUnit = unit
+        frame._msufNameStatusHidden = hidden
+        if hidden then
+          frame._msufNameTextUnit = nil
+          SetNameTextCached(frame, "")
+          frame.nameText._msufShown = nil
+          SetShownCached(frame.nameText, false)
+          return
+        end
+      else
+        frame._msufNameStatusUnit = nil
+        frame._msufNameStatusHidden = nil
+      end
+      frame.nameText._msufShown = nil
+      SetShownCached(frame.nameText, true)
+      if frame._msufNameTextUnit == unit
+        and frame.nameText._msufShown == true
+        and (event == "UNIT_CONNECTION"
+          or event == "UNIT_FLAGS"
+          or event == "UNIT_FACTION"
+          or event == "UNIT_CLASSIFICATION_CHANGED") then
+        Text.UpdateNameColor(frame, event, unit)
+        return
+      end
+      local displayName
+      if displayNameResolverUsesFrame then
+        displayName = ReadDisplayName(unit, frame)
+      else
+        displayName = ReadDisplayName(unit)
+      end
+      if rt and rt.nameLegacyTruncation == true then
+        displayName = TruncateName(displayName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+      end
+      SetNameTextCached(frame, displayName)
+      frame._msufNameTextUnit = unit
+      Text.UpdateNameColor(frame, event, unit)
+      return
+    end
   end
+  frame._msufNameStatusUnit = nil
+  frame._msufNameStatusHidden = nil
+  frame._msufNameTextUnit = nil
+  SetNameTextCached(frame, "")
   frame.nameText._msufShown = nil
-  SetShownCached(frame.nameText, true)
-  if frame._msufNameTextUnit == unit
-    and frame.nameText._msufShown == true
-    and (event == "UNIT_CONNECTION"
-      or event == "UNIT_FLAGS"
-      or event == "UNIT_FACTION"
-      or event == "UNIT_CLASSIFICATION_CHANGED") then
-    Text.UpdateNameColor(frame, event, unit)
-    return
-  end
-  local displayName
-  if displayNameResolverUsesFrame then
-    displayName = ReadDisplayName(unit, frame)
-  else
-    displayName = ReadDisplayName(unit)
-  end
-  if rt and rt.nameLegacyTruncation == true then
-    displayName = TruncateName(displayName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
-  end
-  SetNameTextCached(frame, displayName)
-  frame._msufNameTextUnit = unit
-  Text.UpdateNameColor(frame, event, unit)
+  SetShownCached(frame.nameText, false)
 end
 
 local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
@@ -1100,7 +944,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent,
+        rt, pctOverride, pctOverrideSet)
       return
     end
 
@@ -1119,7 +964,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent,
+        rt, pctOverride, pctOverrideSet)
       return
     end
     local keyHP, keyMax = false, false
@@ -1161,7 +1007,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._lastHealthTextMissing = nil
     end
     UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-    UpdateTextSlotsPlain(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+    UpdateTextSlotsPlain(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt,
+      pctOverride, pctOverrideSet)
     return
   end
 
@@ -1204,7 +1051,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
   end
   UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet, hpSecret, hpMaxSecret)
+  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt,
+    pctOverride, pctOverrideSet, hpSecret, hpMaxSecret)
 end
 
 local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
@@ -1239,7 +1087,79 @@ local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
   end
 end
 
+
+-- Same delivery as Text.UpdateTextSlotsSecret for the power slots, inlined so each power event
+-- pays no extra call; keep both in step.
+local function WritePowerValueSlots(frame, event, unit, rt, power, powerMax, needsPercent,
+  needPowerValue, needMaxValue, animate, powerMaxSecret, percentFn)
+  local powerSecret = issecretvalue(power) == true
+  -- powerMaxSecret was established before seeding the maximum cache. Neither
+  -- metadata nor text-color updates replace this value.
+  if not powerSecret and not powerMaxSecret
+    and ((needPowerValue and power == nil) or (needMaxValue and powerMax == nil)) then
+    local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
+    if needPowerValue and power == nil then
+      power = currentPower
+      powerSecret = issecretvalue(power) == true
+    end
+    if needMaxValue and powerMax == nil then
+      powerMax = currentMax
+      powerMaxSecret = issecretvalue(powerMax) == true
+    end
+  end
+  rt.healthMissing = nil
+
+  rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
+
+  local pctOverride, pctOverrideSet
+  if needsPercent then
+    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+    if pctOverrideSet ~= true then
+      if not powerSecret and not powerMaxSecret then pctOverride = PercentFromValues(power, powerMax) end
+      pctOverrideSet = pctOverride ~= nil
+      if pctOverrideSet ~= true and PowerPercentAvailable then
+        pctOverride = percentFn(unit)
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
+      end
+    end
+  end
+  local slots, count = rt.powerSlots, rt.powerSlotCount
+  if not slots or not count or count <= 0 then
+    return
+  end
+  local powerPercent
+  if needsPercent == true and percentFn then
+    if pctOverrideSet == true then
+      powerPercent = pctOverride
+    else
+      powerPercent = percentFn(unit)
+    end
+  end
+  -- Runtime readers can pass the classification of these exact values. It is
+  -- local to this synchronous write, never retained across events or rereads.
+  -- Standalone slot callers still classify their own inputs once here.
+  if powerSecret == nil then powerSecret = issecretvalue(power) == true end
+  if powerMaxSecret == nil then powerMaxSecret = issecretvalue(powerMax) == true end
+  local powerPercentSecret = needsPercent == true and issecretvalue(powerPercent) == true or false
+  local powerPercentKnown = needsPercent == true and (powerPercentSecret or powerPercent ~= nil)
+  for i = 1, count do
+    local slot = slots[i]
+    if slot then
+      local writer = slot.secretWriter
+      if writer then
+        writer(slot, power, powerMax, powerPercent, true, rt, powerSecret, powerMaxSecret, powerPercentSecret)
+      else
+        writer = slot.writer
+        if writer then
+          writer(slot, power, powerMax, powerPercent, powerPercentKnown, rt)
+        end
+      end
+    end
+  end
+end
+
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+  -- Resolve identity and color before either retained slot-delivery route.
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
   if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
@@ -1247,16 +1167,10 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
-  -- One client read per dispatch: an identity or tick refresh below already
-  -- asked, and a second ask in the same event returns the same answer.
   local powerTypeReread = false
   if identityChanged then
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
-    -- A bar-fed identity event already carries authoritative metadata for the
-    -- new unit, so seeding it over the old values is enough. Only a frame with
-    -- no power bar arrives here empty-handed, and for it the cached type still
-    -- belongs to the previous unit behind this token: drop it and read once.
     if (powerType ~= nil or powerToken ~= nil)
       and issecretvalue(powerType) ~= true
       and issecretvalue(powerToken) ~= true then
@@ -1281,9 +1195,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       and (powerType ~= nil or powerToken ~= nil)
       and frame._msufTextPowerType == powerType
       and frame._msufTextPowerToken == powerToken) then
-    -- Power already resolved this metadata for a normal value tick. Preserve
-    -- the seed for text-only/bar-missing and unknown/secret payloads, but do
-    -- not rewrite four identical cache fields on every bar-fed update.
     SeedCachedPowerType(frame, unit, powerType, powerToken)
   end
   local powerMaxSecret = issecretvalue(powerMax) == true
@@ -1321,10 +1232,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       or displayManaChanged
       or frame._msufPowerTextColorType ~= frame._msufTextPowerType
       or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
-    -- "Known" with nothing cached is a failed read, not knowledge: UnitPowerType
-    -- returns nothing for a restricted unit token, and PowerColor trusts the
-    -- known flag and settles on Mana. Retry here, where the gate already only
-    -- opens on colour events, never on a value tick.
     if not powerTypeReread
       and (frame._msufTextPowerTypeKnown ~= true
         or not typeUnitMatches
@@ -1336,10 +1243,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     end
     local cachedType = frame._msufTextPowerType
     local cachedToken = frame._msufTextPowerToken
-    -- Same contract the power bar applies (MSUF_UF_Elements_Power.lua SetColor):
-    -- metadata counts as known only once a read actually produced a resource.
-    -- The flag alone means "already asked", and PowerColor answers a known but
-    -- empty pair with Mana, claiming a resource this unit never reported.
     local metaKnown = frame._msufTextPowerTypeKnown == true
       and typeUnitMatches
       and (cachedType ~= nil or cachedToken ~= nil)
@@ -1347,8 +1250,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       local r, g, b = PowerColor(frame, unit, cachedType, cachedToken, true)
       SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
     else
-      -- Nothing to colour by, so render the configured text colour instead of
-      -- guessing: what these slots show with colour-by-type switched off.
       SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
     end
     frame._msufPowerTextColorInitialized = true
@@ -1363,37 +1264,31 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     frame._msufPowerTextColorType = false
     frame._msufPowerTextColorToken = nil
   end
-
   local needsPercent = rt.powerNeedsPercent == true
   local needsCurrent = rt.powerNeedsCurrent == true
   local needsMax = rt.powerNeedsMax == true
   local needPowerValue = needsCurrent
-  local needMaxValue = needsMax
-
   if rt.powerPlain == true then
-    if (needPowerValue and power == nil) or (needMaxValue and powerMax == nil) then
-      local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
+    if (needPowerValue and power == nil) or (needsMax and powerMax == nil) then
+      local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needsMax and powerMax == nil, animate)
       if needPowerValue and power == nil then
         power = currentPower
       end
-      if needMaxValue and powerMax == nil then
+      if needsMax and powerMax == nil then
         powerMax = currentMax
       end
     end
     rt.healthMissing = nil
-
     if needPowerValue and power == nil then
       power = 0
     end
-    if needMaxValue and powerMax == nil then
+    if needsMax and powerMax == nil then
       powerMax = 1
     end
-
     local pctOverride, pctOverrideSet
     if needsPercent then
       pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
     end
-
     if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
       rt._lastPowerTextPower = nil
       rt._lastPowerTextMax = nil
@@ -1402,7 +1297,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
-
     if needsPercent and pctOverrideSet ~= true then
       pctOverride = PercentFromValues(power, powerMax)
       pctOverrideSet = pctOverride ~= nil
@@ -1453,39 +1347,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
     return
   end
-
-  local powerSecret = issecretvalue(power) == true
-  -- powerMaxSecret was established before seeding the maximum cache. Neither
-  -- metadata nor text-color updates replace this value.
-  if not powerSecret and not powerMaxSecret
-    and ((needPowerValue and power == nil) or (needMaxValue and powerMax == nil)) then
-    local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
-    if needPowerValue and power == nil then
-      power = currentPower
-      powerSecret = issecretvalue(power) == true
-    end
-    if needMaxValue and powerMax == nil then
-      powerMax = currentMax
-      powerMaxSecret = issecretvalue(powerMax) == true
-    end
-  end
-  rt.healthMissing = nil
-
-  rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
-
-  local pctOverride, pctOverrideSet
-  if needsPercent then
-    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
-    if pctOverrideSet ~= true then
-      if not powerSecret and not powerMaxSecret then pctOverride = PercentFromValues(power, powerMax) end
-      pctOverrideSet = pctOverride ~= nil
-      if pctOverrideSet ~= true and PowerPercentAvailable then
-        pctOverride = PowerPercent(unit)
-        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
-      end
-    end
-  end
-  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet, powerSecret, powerMaxSecret)
+  return WritePowerValueSlots(frame, event, unit, rt, power, powerMax, needsPercent,
+    needPowerValue, needsMax, animate, powerMaxSecret, PowerPercent)
 end
 
 -- The deferred queue has already checked attachment, visibility and active
@@ -1541,8 +1404,6 @@ end
 local function DrainPowerCurrentText(frame, unit, power)
   local rt = frame._msufTextRuntime
   -- Static text still needs its initial color after a spec/region replacement.
-  -- Resource identity (including Player's displayed Mana) stays with the same
-  -- native reader as the general runtime whenever no public bar value exists.
   if rt.powerColorByType == false and (frame._msufPowerTextColorInitialized ~= true
     or frame._msufPowerTextColorType ~= false) then
     SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
@@ -2182,13 +2043,7 @@ function PowerText.SelectEventUpdate(frame, spec, event, update)
   end
   if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
     local rt = frame and frame._msufTextRuntime
-    -- Flat inline write: a group frame with a single percent-only power
-    -- slot writes its text synchronously in the same compiled route pass as the
-    -- bar (which just published the plain percent to rt._dispatchPowerPercent),
-    -- consuming that value with the existing bucket dedup. This drops the
-    -- deferred dirty-text machinery (MarkDirty -> C_Timer ticker -> FlushDirtyText
-    -- -> per-frame state re-fetch) that an inline SetFormattedText
-    -- never pays. Any other text shape keeps the deferred coalescer.
+    -- SelectEventUpdate rationale: docs/uf-responsibility-notes.md.
     if spec and spec.scope == "group" and rt and rt.powerHotFromPercent then
       return UpdatePowerTextValues
     end
@@ -2204,99 +2059,6 @@ function PowerText.Disable(frame)
   SetShownCached(frame and frame.powerTextRight, false)
 end
 
-FlushDirtyText = function()
-  if dirtyTextWriteCount == 0 then
-    local ticker = dirtyTextTicker
-    dirtyTextTicker = nil
-    if ticker then ticker:Cancel() end
-    return
-  end
-  local batch = dirtyTextWriteQueue
-  local count = dirtyTextWriteCount
-  dirtyTextWriteQueue = batch == dirtyTextQueueA and dirtyTextQueueB or dirtyTextQueueA
-  dirtyTextWriteCount = 0
-
-  for i = 1, count do
-    local frame = batch[i]
-    batch[i] = nil
-    if frame and frame._msufTextDirtyQueued == true then
-      frame._msufTextDirtyQueued = nil
-      local mask = frame._msufTextDirtyMask
-      frame._msufTextDirtyMask = nil
-      local rt, unit, active = DirtyTextFrameState(frame)
-      if rt then
-        if (mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH)
-          and active.HealthText == true and (rt.healthSlotCount or 0) > 0 then
-          -- No event payload is retained. Force max-dependent modes to resolve
-          -- the authoritative value at drain time rather than reusing a cache
-          -- that may predate the dirty window.
-          frame._msufTextHealthMaxReady = nil
-          local bar = frame.hpBar or frame.Health
-          local pct = bar and bar._msufHealthPercentValue
-          local percentFn = rt.healthHotFromPercent
-          local percentReady = (rt.healthNeedsPercent == true or rt.healthColorByHealth == true)
-            and bar
-            and bar._msufHealthPercentUnit == unit
-            and pct ~= nil
-            and issecretvalue(pct) ~= true
-          if percentFn and HealthPercentAvailable then
-            -- Percent-only Group text can bypass the generic value resolver.
-            -- Reuse Health's plain cache; protected values are reread once at
-            -- drain time and passed directly to the precompiled writer.
-            if percentReady ~= true then pct = HealthPercent(unit) end
-            percentFn(frame, "UNIT_HEALTH", unit, pct)
-          elseif rt.healthDrain then
-            rt.healthDrain(frame, unit, pct, percentReady)
-          else
-            if percentReady == true then
-              -- The Health element already read this latest plain percentage
-              -- for the same unit. Share it with the generic deferred writer;
-              -- opaque values never enter this cache.
-              rt._dispatchHealthPercent = pct
-              rt._dispatchHealthPercentReady = true
-            end
-            UpdateHealthTextValues(frame, "UNIT_HEALTH", unit, nil, nil)
-          end
-        elseif mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH then
-          ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
-        end
-        if (mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH)
-          and active.PowerText == true and (rt.powerSlotCount or 0) > 0 then
-          local bar = frame.targetPowerBar
-          local power, powerMax
-          if bar and bar._msufShown == true then
-            local cachedPower = bar._msufPowerValue
-            if rt.powerNeedsCurrent == true
-              and bar._msufPowerValueUnit == unit
-              and issecretvalue(cachedPower) ~= true
-              and cachedPower ~= nil then
-              power = cachedPower
-            end
-            local cachedMax = bar._msufPowerMax
-            if rt.powerNeedsMax == true
-              and bar._msufPowerMaxReady == true
-              and bar._msufPowerMaxUnit == unit
-              and issecretvalue(cachedMax) ~= true
-              and cachedMax ~= nil then
-              powerMax = cachedMax
-            end
-          end
-          if rt.powerDrain then
-            rt.powerDrain(frame, unit, power)
-          else
-            UpdatePowerTextValues(frame, "UNIT_POWER_UPDATE", unit, power, powerMax, nil, nil, false)
-          end
-        elseif mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH then
-          ClearDirtyTextDispatch(frame, TEXT_DIRTY_POWER)
-        end
-      else
-        ClearDirtyTextDispatch(frame, mask)
-      end
-    end
-  end
-
-  -- New work queued during the drain already shares the active ticker.
-end
 
 HealthText.MarkValueDirty = MarkHealthTextDirty
 HealthText.MarkGroupValueDirty = MarkGroupHealthTextDirty
@@ -2402,3 +2164,8 @@ end
 
 InlineToT.Routes = { basic = true, identity = true }
 UF.RegisterElement("InlineToT", InlineToT)
+
+BindTextDrain({
+  UpdateHealthTextValues = UpdateHealthTextValues,
+  UpdatePowerTextValues = UpdatePowerTextValues,
+})

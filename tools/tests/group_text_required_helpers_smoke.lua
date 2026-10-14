@@ -7,7 +7,7 @@ local fields = {
     FormatPercentValue = "MSUF_UF_Text_Format.lua",
     FormatHealthString = "MSUF_UF_Text_Format.lua",
     FormatPowerString = "MSUF_UF_Text_Format.lua",
-    TruncateName = "MSUF_UF_Text_Runtime.lua",
+    TruncateName = "MSUF_UF_Text_Name.lua",
     PercentFromValues = "MSUF_UF_Text_Runtime.lua",
     MissingHealthFromValues = "MSUF_UF_Text_Runtime.lua",
 }

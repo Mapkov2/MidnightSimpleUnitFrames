@@ -1,17 +1,25 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy,
+  ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local UF = MSUF.UF
+
+-- Bind mandatory factories once; report both the consumer and received shape.
+local function RequireFactory(key)
+  local factories = MSUF.UFModuleFactories
+  assert(type(factories) == "table", "Elements/MSUF_UF_Elements_Status.lua: required UF factory registry for " .. key)
+  local factory = factories[key]
+  local kind = type(factory)
+  assert(kind == "function", "Elements/MSUF_UF_Elements_Status.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
+  return factory
+end
 if not UF then return end
 local Layers = UF.Layers or {}
 local Shared = UF.Shared
 
 -- Unitframe status indicator element.
--- Owns level/classification/PvP/ready-check/role/raid-marker style icons for normal unit
--- frames. This is an event-hot path, so helpers prefer cached unit state, secret-safe reads,
--- and cached region mutation instead of rebuilding textures every event.
 local CreateFrame = CreateFrame
 local UnitIsGroupLeader = UnitIsGroupLeader
 local UnitIsGroupAssistant = UnitIsGroupAssistant
@@ -181,180 +189,6 @@ local Status = {}
 --- here.
 local Runtime = {}
 
-local function ClampLayer(layer, fallback)
-  layer = floor((tonumber(layer) or fallback or 7) + 0.5)
-  if layer < 0 then
-    return 0
-  elseif layer > 30 then
-    return 30
-  end
-  return layer
-end
-
-local GetLayerBaseLevel = Layers.BaseFrameLevel
-
-local function EnsureLayerFrame(frame, layer)
-  if not frame then
-    return nil
-  end
-  layer = ClampLayer(layer, 7)
-  local layers = frame.MSUFStatusLayers
-  if not layers then
-    layers = {}
-    frame.MSUFStatusLayers = layers
-  end
-  local holder = layers[layer]
-  if not holder then
-    holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
-    holder:SetAllPoints(frame)
-    holder:EnableMouse(false)
-    if holder.SetClipsChildren then
-      holder:SetClipsChildren(false)
-    end
-    layers[layer] = holder
-  end
-  if holder.SetFrameLevel then
-    local level = (Layers.StatusLevel and Layers.StatusLevel(frame, layer, 7)) or (GetLayerBaseLevel(frame) + 10 + layer)
-    if holder._msufStatusFrameLevel ~= level then
-      holder:SetFrameLevel(level)
-      holder._msufStatusFrameLevel = level
-    end
-  end
-  return holder, layer
-end
-
--- Status flags are plain Lua state, so the status runtime writes through the
--- trusted entry; the cache it shares with every other owner is region._msufShown.
-local SetShown = Apply.ShownPlain
-
-local function SetTexture(region, texture)
-  if region and region._msufStatusTexture ~= texture then
-    ApplyTexture(region, texture)
-    region._msufStatusTexture = texture
-    region._msufStatusAtlas = nil
-  end
-end
-
-local function SetAtlas(region, atlas)
-  if region and region.SetAtlas and region._msufStatusAtlas ~= atlas then
-    region:SetAtlas(atlas)
-    region._msufStatusAtlas = atlas
-    region._msufStatusTexture = nil
-    region._aTex = nil
-    region._aColorTexture = nil
-    region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = nil, nil, nil, nil
-  end
-end
-
--- Atlas data cannot change while the client runs, and GetAtlasInfo builds a
--- new table per call (UpdateCombat asks on every UNIT_FLAGS in combat), so
--- each name is asked once per session.
-local atlasKnown = {}
-local function AtlasAvailable(region, atlas)
-  if not (region and region.SetAtlas and type(atlas) == "string" and atlas ~= "") then
-    return false
-  end
-  local known = atlasKnown[atlas]
-  if known == nil then
-    local textureAPI = _G.C_Texture
-    known = textureAPI ~= nil and type(textureAPI.GetAtlasInfo) == "function"
-      and textureAPI.GetAtlasInfo(atlas) ~= nil
-    atlasKnown[atlas] = known
-  end
-  return known
-end
-
-local function StopRestingFlipbook(tex, resetAtlas)
-  if not tex then return end
-  local group = tex._msufRestingFlipbook
-  if group then
-    local playing = tex._msufRestingFlipbookPlaying == true
-    if group.IsPlaying then
-      playing = group:IsPlaying() == true
-    end
-    if playing then
-      group:Stop()
-    end
-  end
-  tex._msufRestingFlipbookPlaying = nil
-  if resetAtlas == true then
-    tex._msufRestingFlipbookAtlas = nil
-    tex._msufStatusAtlas = nil
-  end
-end
-
-local function ApplyRestingFlipbook(tex, play)
-  if not (tex and tex.SetAtlas and tex.CreateAnimationGroup) then return false end
-  if not AtlasAvailable(tex, Media.RESTING_FLIPBOOK_ATLAS) then return false end
-  if tex._msufRestingFlipbookAtlas ~= true then
-    tex:SetAtlas(Media.RESTING_FLIPBOOK_ATLAS)
-    tex._msufRestingFlipbookAtlas = true
-    tex._msufStatusAtlas = Media.RESTING_FLIPBOOK_ATLAS
-    tex._msufStatusTexture, tex._aTex, tex._aColorTexture = nil, nil, nil
-    tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
-  end
-  if play == false then
-    StopRestingFlipbook(tex)
-    return true
-  end
-  -- Structural StatusIndicators applies configure the texture without owning
-  -- its active state. Preserve an existing loop until RestingIndicator says
-  -- explicitly whether it should play or stop.
-  if play ~= true then return true end
-  local group = tex._msufRestingFlipbook
-  if not group then
-    group = tex:CreateAnimationGroup()
-    group:SetLooping("REPEAT")
-    group:SetToFinalAlpha(true)
-    local flipbook = group:CreateAnimation("FlipBook")
-    flipbook:SetSmoothing("NONE")
-    flipbook:SetFlipBookRows(7)
-    flipbook:SetFlipBookColumns(6)
-    flipbook:SetFlipBookFrames(42)
-    flipbook:SetDuration(1.5)
-    tex._msufRestingFlipbook = group
-  end
-  local playing = tex._msufRestingFlipbookPlaying == true
-  if group.IsPlaying then
-    playing = group:IsPlaying() == true
-  end
-  if not playing then
-    group:Play()
-  end
-  tex._msufRestingFlipbookPlaying = true
-  return true
-end
-
-MSUF.UFRestingFlipbook = { Apply = ApplyRestingFlipbook, Stop = StopRestingFlipbook }
-
-local function SetTexCoord(region, l, r, t, b)
-  if region and region.SetTexCoord
-    and (region._msufStatusL ~= l or region._msufStatusR ~= r or region._msufStatusT ~= t or region._msufStatusB ~= b) then
-    region:SetTexCoord(l, r, t, b)
-    region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = l, r, t, b
-  end
-end
-
-local function SetText(region, text, raw)
-  if not region then
-    return
-  end
-  if issecretvalue(text) == true then
-    region._msufStatusText = nil
-    ApplyText(region, text)
-    return
-  end
-  if raw == true then
-    region._aText = nil
-    region._aTextPlain = nil
-    region:SetText(text)
-    region._msufStatusText = nil
-  elseif region._msufStatusText ~= text then
-    ApplyText(region, text)
-    region._msufStatusText = text
-  end
-end
-
 local function SetFont(region, spec, size, role)
   if not region or not region.SetFont then
     return true
@@ -405,206 +239,34 @@ local function SetFont(region, spec, size, role)
   return fontReady
 end
 
---- A per-indicator color is opt-in: only a complete stored triple overrides the
---- frame's resolved font color, so profiles that never set one keep their exact
---- current look. Alpha stays with the shared font text alpha - an indicator owns
---- its hue, not the global text opacity.
-local function ApplyTextColor(region, spec, cfg)
-  local c = spec and spec.textColor
-  local r, g, b, a = c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1
-  if cfg and cfg.difficultyColor == true then
-    -- A difficulty-colored level text is graded per unit by
-    -- Runtime.ApplyLevelDifficultyColor; a static write here would fight it on
-    -- every layout pass. The layout pass only repaints the band that unit pass
-    -- last resolved, so a palette edit applies live without re-reading the
-    -- unit. Both writers share the _msufStatusR/G/B/A cache.
-    local tier, colors = region and region._msufLevelTier, cfg.difficultyColors
-    if not (tier and colors) then return end
-    local base = (tier - 1) * 3
-    r, g, b = colors[base + 1], colors[base + 2], colors[base + 3]
-  else
-    if region and region._msufLevelTier then region._msufLevelTier = nil end
-    local cr = cfg and cfg.colorR
-    if cr then
-      local cg, cb = cfg.colorG, cfg.colorB
-      if cg and cb then r, g, b = cr, cg, cb end
-    end
+-- Atlas data cannot change while the client runs, and GetAtlasInfo builds a
+-- new table per call (UpdateCombat asks on every UNIT_FLAGS in combat), so
+-- each name is asked once per session.
+local atlasKnown = {}
+local function AtlasAvailable(region, atlas)
+  if not (region and region.SetAtlas and type(atlas) == "string" and atlas ~= "") then
+    return false
   end
-  if region and region.SetTextColor
-    and (region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a) then
-    region:SetTextColor(r, g, b, a)
-    region._msufStatusR, region._msufStatusG, region._msufStatusB, region._msufStatusA = r, g, b, a
+  local known = atlasKnown[atlas]
+  if known == nil then
+    local textureAPI = _G.C_Texture
+    known = textureAPI ~= nil and type(textureAPI.GetAtlasInfo) == "function"
+      and textureAPI.GetAtlasInfo(atlas) ~= nil
+    atlasKnown[atlas] = known
   end
+  return known
 end
 
-local function ApplyLayer(region, layer)
-  if not (region and region.SetDrawLayer) then
-    return
-  end
-  local sub = ClampLayer(layer, 7) - 1
-  if sub > 7 then sub = 7 end
-  if region._msufStatusLayer ~= sub then
-    region:SetDrawLayer("OVERLAY", sub)
-    region._msufStatusLayer = sub
-  end
-end
+local AdoptRegion, AnchorRegion, ApplyRestingFlipbook, ApplyTextColor, ClampLayer, EnsureText, EnsureTexture, LayoutRegion,
+  SetAtlas, SetShown, SetTexCoord, SetText, SetTexture, StopRestingFlipbook
+AdoptRegion, AnchorRegion, ApplyRestingFlipbook, ApplyTextColor, ClampLayer, EnsureText, EnsureTexture, LayoutRegion, SetAtlas,
+  SetShown, SetTexCoord, SetText, SetTexture, StopRestingFlipbook = RequireFactory("StatusRegions")(
+  SetFont, Apply, ApplyText, ApplyTexture, CreateFrame, Layers, MSUF, Media, PixelLayoutRegion, floor, issecretvalue, tonumber,
+    AtlasAvailable
+)
 
-local function NameRelativeAnchor(frame, anchor)
-  local name = frame and frame.nameText
-  if not name then
-    return nil
-  end
-
-  local text = frame.MSUFSpec and frame.MSUFSpec.text or nil
-  local dots = frame._msufNameDotsFS
-  if dots and dots._msufShown == true and text and text.nameShortenDots == true then
-    if anchor == "NAMERIGHT" and text.nameShortenSide == "RIGHT" then
-      return dots, "LEFT", "RIGHT", 0
-    elseif anchor == "NAMELEFT" and text.nameShortenSide ~= "RIGHT" then
-      return dots, "RIGHT", "LEFT", 0
-    end
-  end
-
-  local clip = frame._msufNameInlineClip
-  if clip then
-    -- The shorten window stays maxChars wide however short the rendered name
-    -- is, so its edge only matches the glyphs while the name really overflows
-    -- (tracked by the warm fit). Fitting names anchor to the invisible
-    -- auto-width twin that mirrors the visible run inside the window.
-    local target = clip
-    if frame._msufNameCenterClipOverflow ~= true
-      and frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText then
-      target = frame._msufNameAnchorText
-    end
-    if anchor == "NAMERIGHT" then
-      return target, "LEFT", "RIGHT", 0
-    end
-    return target, "RIGHT", "LEFT", 0
-  end
-
-  -- Bar-anchored name FontStrings span the full health bar, so their region
-  -- edge is not the rendered glyph edge. Text layout supplies an invisible,
-  -- auto-sized twin for that case. Anchoring directly to its edge lets the UI
-  -- engine propagate restricted name geometry without exposing a secret
-  -- GetStringWidth() result to Lua.
-  local target = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText or name
-  if anchor == "NAMERIGHT" then
-    return target, "LEFT", "RIGHT", 0
-  end
-  return target, "RIGHT", "LEFT", 0
-end
-
-local function AnchorRegion(region, frame, cfg)
-  if not (region and frame and cfg) then
-    return
-  end
-  local anchor = cfg.anchor or "TOPLEFT"
-  local x = tonumber(cfg.x) or 0
-  local y = tonumber(cfg.y) or 0
-  local target, point, relPoint = frame, anchor, anchor
-  if anchor == "NAMERIGHT" or anchor == "NAMELEFT" then
-    local nameTarget, namePoint, nameRelPoint, nameX = NameRelativeAnchor(frame, anchor)
-    if nameTarget then
-      target, point, relPoint = nameTarget, namePoint, nameRelPoint
-      x = x + (nameX or 0)
-    elseif anchor == "NAMERIGHT" then
-      point, relPoint = "RIGHT", "RIGHT"
-    else
-      point, relPoint = "LEFT", "LEFT"
-    end
-  end
-  if region._msufStatusAnchor ~= anchor or region._msufStatusTarget ~= target
-    or region._msufStatusPoint ~= point or region._msufStatusRelPoint ~= relPoint
-    or region._msufStatusX ~= x or region._msufStatusY ~= y then
-    region:ClearAllPoints()
-    region:SetPoint(point, target, relPoint, x, y)
-    region._msufStatusAnchor, region._msufStatusTarget = anchor, target
-    region._msufStatusPoint, region._msufStatusRelPoint = point, relPoint
-    region._msufStatusX, region._msufStatusY = x, y
-  end
-end
-
-local function LayoutRegion(region, frame, spec, cfg, isText, fontRole)
-  if not (region and cfg) then
-    return
-  end
-
-  if not isText then
-    local size = tonumber(cfg.size) or 16
-    if region._msufStatusSize ~= size then
-      region:SetSize(size, size)
-      region._msufStatusSize = size
-    end
-  else
-    SetFont(region, spec, cfg.size, fontRole)
-    ApplyTextColor(region, spec, cfg)
-    if region.SetJustifyH then
-      local anchor = cfg.anchor
-      local justify = (anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "NAMELEFT") and "RIGHT" or ((anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM") and "CENTER" or "LEFT")
-      if region._msufStatusJustify ~= justify then
-        region:SetJustifyH(justify)
-        region._msufStatusJustify = justify
-      end
-    end
-    if region.SetJustifyV and region._msufStatusJustifyV ~= "MIDDLE" then
-      region:SetJustifyV("MIDDLE")
-      region._msufStatusJustifyV = "MIDDLE"
-    end
-  end
-  ApplyLayer(region, cfg.layer)
-  local alpha = spec and spec.status and spec.status.alpha or 1
-  if region.SetAlpha and region._msufStatusAlpha ~= alpha then
-    region:SetAlpha(alpha)
-    region._msufStatusAlpha = alpha
-  end
-  AnchorRegion(region, frame, cfg)
-end
-
-local function AdoptRegion(frame, region, layer)
-  local holder = EnsureLayerFrame(frame, layer)
-  if region and holder and region.GetParent and region:GetParent() ~= holder then
-    if region.SetParent then
-      region:SetParent(holder)
-      region:ClearAllPoints()
-      region._msufStatusAnchor, region._msufStatusTarget = nil, nil
-      region._msufStatusX, region._msufStatusY = nil, nil
-    else
-      return nil
-    end
-  end
-  return holder
-end
-
-local function EnsureTexture(frame, field, layer)
-  local tex = frame[field]
-  local holder = AdoptRegion(frame, tex, layer)
-  if tex then
-    return tex
-  end
-  tex = PixelLayoutRegion((holder or frame):CreateTexture(nil, "OVERLAY"))
-  tex:SetTexture(Media.WHITE)
-  tex:Hide()
-  frame[field] = tex
-  return tex
-end
-
-local function EnsureText(frame, field, layer)
-  local fs = frame[field]
-  local holder = AdoptRegion(frame, fs, layer)
-  if fs then
-    return fs
-  end
-  fs = PixelLayoutRegion((holder or frame):CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-  fs:Hide()
-  frame[field] = fs
-  return fs
-end
-
---- Lay out the round level medallion behind the existing level text. Forever
---- and clients that expose its atlas use the native art; older clients use the
---- bundled circle mask plus gold relief ring so the style remains available.
---- This is cold configuration work: UNIT_LEVEL only toggles the already-built
---- texture with the text and never recreates or reanchors it.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
+-- Keep late Client resolution and the original nil-client atlas fallback.
 function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
   local badge = frame and frame.levelBackdrop
   if not (frame and cfg and cfg.foreverBadge == true) then
@@ -643,8 +305,6 @@ function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
     badge:SetSize(size, size)
     badge._msufStatusSize = size
   end
-  -- The number's OVERLAY sublevel is capped at 7. Leave one sublevel for the
-  -- ring and another for the medallion, including imported layer values > 8.
   local numberSub = ClampLayer(cfg.layer, 7) - 1
   if numberSub > 7 then numberSub = 7 end
   local sub = numberSub - 2
@@ -690,120 +350,85 @@ function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
   return badge
 end
 
-function Runtime.SetForeverLevelBadgeShown(frame, shown)
-  local badge = frame and frame.levelBackdrop
-  SetShown(badge, badge ~= nil and shown == true)
-  local ring = frame and frame.levelBackdropRing
-  SetShown(ring, ring ~= nil and shown == true)
-end
+local BindStatusLevelBadge
+BindStatusLevelBadge = RequireFactory("StatusLevelBadge")(
+  BoolTrue, FreshUnitState, nil, ReadUnitClassCached, Runtime, SafeNumber, SetShown, SetText, UnitExistsRuntime, UnitLevel, UnitRace,
+    issecretvalue, tostring, type
+)
 
-local function SymbolPath(symbol, useMidnight)
-  if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
-    return nil
-  end
-  if not VALID_STATE_SYMBOLS[symbol] then
-    return nil
-  end
-  local cacheKey = symbol .. (useMidnight and "\001M" or "\001C")
-  local cached = SYMBOL_PATH_CACHE[cacheKey]
-  if cached then
-    return cached
-  end
-  local folder = "Combat"
-  local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
-  if find(symbol, "^rested_") then
-    folder = "Rested"
-    suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
-  elseif find(symbol, "^resurrection_") then
-    folder = "Ress"
-    suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
-  end
-  local path = Media.SYMBOL_BASE .. folder .. "\\" .. symbol .. suffix
-  SYMBOL_PATH_CACHE[cacheKey] = path
-  return path
-end
-
-local function ApplyStateIconTexture(tex, kind, cfg, status)
-  local path = SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true)
-  if path then
-    SetTexture(tex, path)
-    SetTexCoord(tex, 0, 1, 0, 1)
+-- Boss-number updates retain their original inline callable gate.
+function Runtime.UpdateBossNumber(frame, status)
+  local cfg = status and status.bossNumber
+  local fs = frame and frame.bossNumberText
+  local unit = frame and frame.MSUFUnitKey
+  local index = type(GetBossIndexFromToken) == "function" and GetBossIndexFromToken(unit) or nil
+  if not (cfg and cfg.enabled == true and fs and index) then
+    SetShown(fs, false)
     return
   end
-  if kind == "combat" then
-    if AtlasAvailable(tex, Media.COMBAT_ATLAS) then
-      SetAtlas(tex, Media.COMBAT_ATLAS)
-    else
-      SetTexture(tex, Media.STATE_TEXTURE)
-      SetTexCoord(tex, 0.5, 1, 0, 0.5)
-    end
-  elseif kind == "resting" then
-    SetTexture(tex, Media.STATE_TEXTURE)
-    SetTexCoord(tex, 0, 0.5, 0, 0.5)
-  elseif kind == "incomingRes" then
-    SetTexture(tex, Media.READY_REZ_TEXTURE)
-    SetTexCoord(tex, 0, 1, 0, 1)
-  end
+  SetText(fs, tostring(index))
+  SetShown(fs, true)
 end
 
-local function PVPAtlasForFaction(factionGroup)
-  return Media.PVP_ATLAS_BY_FACTION[factionGroup]
-end
-
-local function PVPFallbackTextureForAtlas(atlas)
-  return Media.PVP_TEXTURE_BY_ATLAS[atlas]
-end
-
-local function ResolvePVPAtlas(frame, unit, unitState)
-  if not (unit and UnitExistsRuntime(unit, unitState, frame)) then
-    return nil
-  end
-  if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
-    return Media.PVP_FFA_ATLAS
-  end
-  if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
-    return nil
-  end
-  local factionGroup = UnitFactionGroup(unit)
-  if issecretvalue(factionGroup) == true or not factionGroup or factionGroup == "Neutral" then
-    return nil
-  end
-  if unit == "player" and UnitIsMercenary and BoolTrue(UnitIsMercenary(unit)) then
-    if factionGroup == "Horde" then
-      factionGroup = "Alliance"
-    elseif factionGroup == "Alliance" then
-      factionGroup = "Horde"
-    end
-  end
-  return PVPAtlasForFaction(factionGroup)
-end
-
-local function ResolvePVPTestAtlas(unit)
-  local factionGroup
-  if UnitFactionGroup then
-    factionGroup = UnitFactionGroup("player")
-  end
-  if issecretvalue(factionGroup) == true then
-    factionGroup = nil
-  end
-  return PVPAtlasForFaction(factionGroup) or Media.PVP_ALLIANCE_ATLAS
-end
-
-local function ApplyPVPTexture(tex, atlas)
-  if not (tex and atlas) then
-    return false
-  end
-  if tex.SetAtlas then
-    SetAtlas(tex, atlas)
-    return true
-  end
-  local fallback = PVPFallbackTextureForAtlas(atlas)
-  if fallback then
-    SetTexture(tex, fallback)
+local function StatusApplyRoleTexture(tex, cfg, status, role)
+  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
     SetTexCoord(tex, 0, 1, 0, 1)
     return true
+  end
+  local gf = MSUF and MSUF.GF
+  local kind = status and status.kind
+  if gf and kind and type(gf.GetRoleTexture) == "function" then
+    local path, l, r, t, b = gf.GetRoleTexture(kind, role, cfg and cfg.style)
+    if type(path) == "string" and path ~= "" then
+      SetTexture(tex, path)
+      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+      return true
+    end
+  end
+  local resolver = _G.MSUF_GetRoleStatusIconTexture
+  if type(resolver) == "function" then
+    local path, l, r, t, b = resolver(cfg and cfg.style, role, status and status.useMidnight == true)
+    if type(path) == "string" and path ~= "" then
+      SetTexture(tex, path)
+      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+      return true
+    end
   end
   return false
+end
+
+local function StatusEffectiveStatusIconStyle(cfg, status)
+  local style = cfg and cfg.style
+  if type(style) ~= "string" or style == "" or style == "DEFAULT" then
+    style = status and status.iconStyle
+  end
+  if type(style) ~= "string" or style == "" or style == "DEFAULT" or style == "BLIZZARD" then
+    return nil
+  end
+  return style
+end
+
+local function StatusApplyStatusIconPackTexture(tex, cfg, status, iconType, variant)
+  if not tex then return false end
+  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return true
+  end
+  local style = StatusEffectiveStatusIconStyle(cfg, status)
+  if not style then return false end
+  local resolver = _G.MSUF_GetStatusIconTexture
+  if type(resolver) ~= "function" then
+    local gf = MSUF and MSUF.GF
+    resolver = gf and gf.GetStatusIconTexture
+  end
+  if type(resolver) ~= "function" then return false end
+  local path, l, r, t, b = resolver(style, iconType, variant, status and status.useMidnight == true)
+  if type(path) ~= "string" or path == "" then return false end
+  SetTexture(tex, path)
+  SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+  return true
 end
 
 local function ApplyLeaderTexture(tex, cfg, status, assist)
@@ -846,85 +471,54 @@ local function ApplyLeaderTexture(tex, cfg, status, assist)
   end
 end
 
-local function ApplyRoleTexture(tex, cfg, status, role)
-  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
-    SetTexture(tex, cfg.customIcon)
-    SetTexCoord(tex, 0, 1, 0, 1)
-    return true
+local function RefreshHealthAfterGoneStatus(frame, oldValue)
+  if oldValue ~= "DEAD" and oldValue ~= "GHOST" and oldValue ~= "OFFLINE" then
+    return
   end
-  local gf = MSUF and MSUF.GF
-  local kind = status and status.kind
-  if gf and kind and type(gf.GetRoleTexture) == "function" then
-    local path, l, r, t, b = gf.GetRoleTexture(kind, role, cfg and cfg.style)
-    if type(path) == "string" and path ~= "" then
-      SetTexture(tex, path)
-      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-      return true
-    end
+  -- A group-state snapshot has already written authoritative detailed health.
+  -- Do not immediately replace it with a second direct-health read while the
+  -- client is still committing an AI/secure-header transition.
+  if frame._msufGroupStateRefresh == true or frame._msufHealthStateNotify == true then
+    return
   end
-  local resolver = _G.MSUF_GetRoleStatusIconTexture
-  if type(resolver) == "function" then
-    local path, l, r, t, b = resolver(cfg and cfg.style, role, status and status.useMidnight == true)
-    if type(path) == "string" and path ~= "" then
-      SetTexture(tex, path)
-      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-      return true
-    end
+  if frame._msufStatusTextHealthRefresh == true then
+    return
   end
-  return false
+  local active = frame._msufActiveElements
+  if not (active and active.Health == true) then
+    return
+  end
+  local health = UF.elements and UF.elements.Health
+  local update = health and health.Update
+  local unit = frame.MSUFUnitKey
+  if not (type(update) == "function" and type(unit) == "string" and unit ~= "" and issecretvalue(unit) ~= true) then
+    return
+  end
+  local refreshed = false
+  local hadDeadBg = frame._msufGFDeadBgState == true
+  local gone = frame._msufUpdateGroupVisualsGoneState
+  if type(gone) == "function" then
+    gone(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
+    refreshed = hadDeadBg and frame._msufGFDeadBgState ~= true
+  end
+  if refreshed == true then
+    return
+  end
+  frame._msufStatusTextHealthRefresh = true
+  update(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
+  frame._msufStatusTextHealthRefresh = nil
 end
 
-local function EffectiveStatusIconStyle(cfg, status)
-  local style = cfg and cfg.style
-  if type(style) ~= "string" or style == "" or style == "DEFAULT" then
-    style = status and status.iconStyle
-  end
-  if type(style) ~= "string" or style == "" or style == "DEFAULT" or style == "BLIZZARD" then
-    return nil
-  end
-  return style
-end
-
-local function ApplyStatusIconPackTexture(tex, cfg, status, iconType, variant)
-  if not tex then return false end
-  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
-    SetTexture(tex, cfg.customIcon)
-    SetTexCoord(tex, 0, 1, 0, 1)
-    return true
-  end
-  local style = EffectiveStatusIconStyle(cfg, status)
-  if not style then return false end
-  local resolver = _G.MSUF_GetStatusIconTexture
-  if type(resolver) ~= "function" then
-    local gf = MSUF and MSUF.GF
-    resolver = gf and gf.GetStatusIconTexture
-  end
-  if type(resolver) ~= "function" then return false end
-  local path, l, r, t, b = resolver(style, iconType, variant, status and status.useMidnight == true)
-  if type(path) ~= "string" or path == "" then return false end
-  SetTexture(tex, path)
-  SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-  return true
-end
-
-local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant, playAnimation)
-  if kind == "resting" then
-    if cfg and cfg.symbol == Media.RESTING_ANIMATED_SYMBOL
-      and ApplyRestingFlipbook(tex, playAnimation) then
-      return true
-    end
-    StopRestingFlipbook(tex, true)
-  end
-  if SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true) then
-    ApplyStateIconTexture(tex, kind, cfg, status)
-    return true
-  end
-  if ApplyStatusIconPackTexture(tex, cfg, status, kind, variant or kind) then
-    return true
-  end
-  ApplyStateIconTexture(tex, kind, cfg, status)
-  return true
-end
+local ApplyRoleTexture, ApplyStateOrPackIconTexture, ApplyStatusIconPackTexture, HideAFKTimerText, BindStatusIndicatorArt
+ApplyRoleTexture, ApplyStateOrPackIconTexture, ApplyStatusIconPackTexture, HideAFKTimerText,
+  BindStatusIndicatorArt = RequireFactory("StatusIndicatorArt")(
+  StatusApplyRoleTexture, StatusApplyStatusIconPackTexture, AdoptRegion, nil, ApplyRestingFlipbook, AtlasAvailable, BoolTrue, EnsureText,
+    FreshUnitState, GetRaidTargetIndex, IsResting, LayoutRegion, MSUF, Media, ReadConnectedCached, ReadDeadCached, Runtime,
+    SYMBOL_PATH_CACHE, SafeNumber, SetAtlas, SetRaidTargetIconTexture, SetShown, SetTexCoord, SetText, SetTexture, StopRestingFlipbook, UF,
+    UnitAffectingCombat, UnitClassification, UnitExistsRuntime, UnitFactionGroup, UnitHasIncomingResurrection, UnitIsAFK, UnitIsDND,
+    UnitIsGhost, UnitIsGroupAssistant, UnitIsGroupLeader, UnitIsMercenary, UnitIsPVP, UnitIsPVPFreeForAll, UnitIsPlayerRuntime, UnitLevel,
+    VALID_STATE_SYMBOLS, find, issecretvalue, type, ApplyLeaderTexture, RefreshHealthAfterGoneStatus
+)
 
 local function HideField(frame, field)
   if type(field) == "table" then
@@ -951,7 +545,8 @@ local CONFIGURED_REGION_DEFS = {
   { "statusText", "statusIndicatorText", nil, nil, nil, nil, true },
   { "combat", "combatStateIndicatorIcon", nil, nil, nil, nil, nil, "combat" },
   { "resting", "restingIndicatorIcon", nil, nil, nil, nil, nil, "resting" },
-  { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon", "IncomingResIndicator" }, nil, nil, "incomingRes" },
+  { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon",
+    "IncomingResIndicator" }, nil, nil, "incomingRes" },
   { "pvp", "pvpIndicatorIcon", "pvpIcon", { "pvpIcon", "pvpIndicatorIcon" }, { "pvpIndicatorIcon", "pvpIcon" } },
   { "stance", "stanceIndicatorText", nil, nil, nil, nil, true },
   { "readyCheck", "readyCheckIcon" },
@@ -1073,240 +668,12 @@ local function RefreshNameRelativeAnchors(frame)
 end
 
 local function ApplyDefaultRaidMarkerTexture(tex, index)
-  -- 12.x SetRaidTargetIconTexture is texture:SetSpriteSheetCell(): it slices whatever texture is
-  -- currently set and moves the real tex coords behind the SetTexCoord dedupe cache. Re-assert the
-  -- stock marker sheet first (cached no-op while it is already set, and required after a custom
-  -- icon or pack texture was on this region), then drop the coord cache so a later custom/pack
-  -- application cannot be dedupe-skipped against coords the sprite-cell call changed underneath.
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   SetTexture(tex, Media.RAID_MARKER_TEXTURE)
   SetRaidTargetIconTexture(tex, index)
   tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
 end
 
-function Runtime.UpdateRaidMarker(frame, status)
-  local cfg = status and status.raidMarker
-  local tex = frame.raidTargetIcon
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
-    if tex then
-      tex._msufRaidMarkerIndex = nil
-      SetShown(tex, false)
-    end
-    return
-  end
-  -- tex._msufRaidMarkerIndex contract: non-nil only while the region shows the default sheet cell
-  -- for that plain index; every other render nils it so the dedupe below can never skip a repaint.
-  local index = GetRaidTargetIndex(unit)
-  if issecretvalue(index) == true then
-    tex._msufRaidMarkerIndex = nil
-    -- A custom icon override is one fixed texture for all eight markers, so it renders without
-    -- knowing the secret index; only the default sheet needs the C-side sprite-cell helper.
-    local custom = cfg.customIcon
-    if type(custom) == "string" and custom ~= "" then
-      SetTexture(tex, custom)
-      SetTexCoord(tex, 0, 1, 0, 1)
-    else
-      ApplyDefaultRaidMarkerTexture(tex, index)
-    end
-    SetShown(tex, true)
-    return
-  end
-  if not index then
-    tex._msufRaidMarkerIndex = nil
-    SetShown(tex, false)
-    return
-  end
-  if ApplyStatusIconPackTexture(tex, cfg, status, "raidMarker", index) then
-    tex._msufRaidMarkerIndex = nil
-    SetShown(tex, true)
-    return
-  end
-  if status.group then
-    tex._msufRaidMarkerIndex = nil
-    ApplyDefaultRaidMarkerTexture(tex, index)
-  elseif tex._msufRaidMarkerIndex ~= index then
-    ApplyDefaultRaidMarkerTexture(tex, index)
-    tex._msufRaidMarkerIndex = index
-  end
-  SetShown(tex, true)
-end
-
-function Runtime.UpdateLeader(frame, status)
-  local cfg = status and status.leader
-  local tex = frame.LeaderIndicator
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and tex and exists) then
-    SetShown(tex, false)
-    return
-  end
-  local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-  local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-  local leader = BoolTrue(isLeader)
-  local assist = (not leader) and BoolTrue(isAssist)
-  if leader or assist then
-    ApplyLeaderTexture(tex, cfg, status, assist)
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
-function Runtime.UpdateLeaderPair(frame, status)
-  local unit = frame and frame.MSUFUnitKey
-  local leaderCfg = status and status.leader
-  local assistCfg = status and status.assist
-  local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
-  local assistTex = frame and frame.assistIcon
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  -- Unit-type early-out: only a PLAYER can be group leader/assistant, so a
-  -- non-player target (any mob) can never show these. Skip the two group-query
-  -- API calls entirely and just ensure the icons are hidden. This guard makes
-  -- rapid target-swaps over mobs cheap.
-  if exists and UnitIsPlayerRuntime(unit, unitState, frame) == false then
-    if leaderTex and leaderTex._msufShown ~= false then SetShown(leaderTex, false) end
-    if assistTex and assistTex._msufShown ~= false then SetShown(assistTex, false) end
-    frame._msufLeaderPairState = 0
-    return
-  end
-  local leaderRaw = exists and UnitIsGroupLeader and UnitIsGroupLeader(unit)
-  local leader = BoolTrue(leaderRaw)
-  local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-  local assist = BoolTrue(assistRaw)
-
-  local showLeader = leaderCfg and leaderCfg.enabled and leaderTex and leader
-  local showAssist = assistCfg and assistCfg.enabled and assistTex and assist
-  local state = (showLeader and 1 or 0) + (showAssist and 2 or 0)
-  local serial = frame and (frame._msufStatusIndicatorSerial
-    or (frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial)
-    or 0)
-  if frame
-    and frame._msufLeaderPairState == state
-    and frame._msufLeaderPairSerial == serial
-    and frame._msufLeaderStyle == (leaderCfg and leaderCfg.style)
-    and frame._msufLeaderCustom == (leaderCfg and leaderCfg.customIcon)
-    and frame._msufAssistStyle == (assistCfg and assistCfg.style)
-    and frame._msufAssistCustom == (assistCfg and assistCfg.customIcon)
-    and (not leaderTex or leaderTex._msufShown == (showLeader and true or false))
-    and (not assistTex or assistTex._msufShown == (showAssist and true or false)) then
-    return
-  end
-  if frame then
-    frame._msufLeaderPairState = state
-    frame._msufLeaderPairSerial = serial
-    frame._msufLeaderStyle = leaderCfg and leaderCfg.style
-    frame._msufLeaderCustom = leaderCfg and leaderCfg.customIcon
-    frame._msufAssistStyle = assistCfg and assistCfg.style
-    frame._msufAssistCustom = assistCfg and assistCfg.customIcon
-  end
-
-  if showLeader then
-    ApplyLeaderTexture(leaderTex, leaderCfg, status, false)
-    SetShown(leaderTex, true)
-  else
-    SetShown(leaderTex, false)
-  end
-
-  if showAssist then
-    ApplyLeaderTexture(assistTex, assistCfg, status, true)
-    SetShown(assistTex, true)
-  else
-    SetShown(assistTex, false)
-  end
-end
-
-local function CancelReadyCheckTimer(frame)
-  if frame then
-    ReadyCheckQueue.timers[frame] = nil
-  end
-end
-
-local ReadyCheckTimerCallback
-
-local function ArmReadyCheckTimer(when)
-  if ReadyCheckQueue.timerAt and ReadyCheckQueue.timerAt <= when then return end
-  ReadyCheckQueue.timerAt = when
-  local now = GetTime and GetTime() or 0
-  local delay = when - now
-  C_Timer.After(delay > 0 and delay or 0, ReadyCheckTimerCallback)
-end
-
-ReadyCheckTimerCallback = function()
-  -- Ready-check icons share one compact timer queue instead of one timer per frame. The
-  -- callback compacts sparse slots so raid-size checks do not leave long-lived table holes.
-  ReadyCheckQueue.timerAt = nil
-  local now = GetTime and GetTime() or 0
-  local nextAt
-  local out = ReadyCheckQueue.head
-  local last = ReadyCheckQueue.tail
-
-  for i = ReadyCheckQueue.head, last do
-    local frame = ReadyCheckQueue.list[i]
-    local due = frame and ReadyCheckQueue.timers[frame]
-    if not due then
-      ReadyCheckQueue.list[i] = nil
-    elseif now >= due then
-      ReadyCheckQueue.timers[frame] = nil
-      ReadyCheckQueue.list[i] = nil
-      SetShown(frame.readyCheckIcon, false)
-    else
-      if out ~= i then
-        ReadyCheckQueue.list[out] = frame
-        ReadyCheckQueue.list[i] = nil
-      end
-      out = out + 1
-      if not nextAt or due < nextAt then
-        nextAt = due
-      end
-    end
-  end
-
-  local appendedTail = ReadyCheckQueue.tail
-  if appendedTail > last then
-    for i = last + 1, appendedTail do
-      local frame = ReadyCheckQueue.list[i]
-      local due = frame and ReadyCheckQueue.timers[frame]
-      if due then
-        if out ~= i then
-          ReadyCheckQueue.list[out] = frame
-          ReadyCheckQueue.list[i] = nil
-        end
-        out = out + 1
-        if not nextAt or due < nextAt then
-          nextAt = due
-        end
-      else
-        ReadyCheckQueue.list[i] = nil
-      end
-    end
-  end
-
-  ReadyCheckQueue.head = 1
-  ReadyCheckQueue.tail = out - 1
-  if ReadyCheckQueue.tail <= 0 then
-    ReadyCheckQueue.tail = 0
-  end
-  if nextAt then
-    ArmReadyCheckTimer(nextAt)
-  end
-end
-
-local function QueueReadyCheckHide(frame)
-  if not frame then return end
-  local now = GetTime and GetTime() or 0
-  local due = now + 6
-  local known = ReadyCheckQueue.timers[frame] ~= nil
-  ReadyCheckQueue.timers[frame] = due
-  if not known then
-    ReadyCheckQueue.tail = ReadyCheckQueue.tail + 1
-    ReadyCheckQueue.list[ReadyCheckQueue.tail] = frame
-  end
-  ArmReadyCheckTimer(due)
-end
 
 local function UpdatePowerRoleVisibility(frame, status)
   local spec = frame and frame.MSUFSpec
@@ -1364,798 +731,19 @@ local function UpdatePowerRoleVisibility(frame, status)
   return hidden
 end
 
-function Runtime.UpdateRole(frame, status)
-  local cfg = status and status.role
-  local tex = frame and frame.roleIcon
-  local unit = frame and frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  local role
-  if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
-  if issecretvalue(role) == true then role = nil end
-  if role == "NONE" then role = nil end
-  if frame and frame._msufIsGroupFrame and InCombatLockdown and InCombatLockdown() then
-    local gf = MSUF and MSUF.GF
-    local refresh = gf and gf.RefreshFrameRoleOverlay
-    if refresh then
-      local oldRole = status and status.roleValue
-      if issecretvalue(oldRole) == true then oldRole = nil end
-      if gf.NormalizeGroupRole(oldRole) ~= gf.NormalizeGroupRole(role) then
-        refresh(frame)
-      end
-    end
-  end
-  if status then status.roleValue = role end
-  UpdatePowerRoleVisibility(frame, status)
+local CancelReadyCheckTimer, RaidGroupText
 
-  if not (cfg and cfg.enabled and tex and exists and role) then
-    SetShown(tex, false)
-    return
-  end
-  if (role == "TANK" and cfg.showTank == false)
-    or (role == "HEALER" and cfg.showHealer == false)
-    or (role == "DAMAGER" and cfg.showDPS == false) then
-    SetShown(tex, false)
-    return
-  end
-  if ApplyRoleTexture(tex, cfg, status, role) then
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
+CancelReadyCheckTimer, RaidGroupText = RequireFactory("StatusGroupRuntime")(
+  UpdatePowerRoleVisibility, ApplyRoleTexture, ApplyStatusIconPackTexture, C_IncomingSummon, C_Timer, FreshUnitState, GetRaidRosterInfo,
+    GetReadyCheckStatus, GetTime, InCombatLockdown, MSUF, Media, ReadUnitIsPlayerCached, ReadyCheckQueue, Runtime, SUMMON_TEXTURES,
+    SafeNumber, SetShown, SetTexCoord, SetText, SetTexture, UnitExistsRuntime, UnitGroupRolesAssigned, UnitInRaid, UnitIsPlayerRuntime,
+    UnitPhaseReason, issecretvalue, tostring, type
+)
 
-function Runtime.UpdateReadyCheck(frame, status, event)
-  local cfg = status and status.readyCheck
-  local tex = frame and frame.readyCheckIcon
-  local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
-    SetShown(tex, false)
-    CancelReadyCheckTimer(frame)
-    return
-  end
 
-  local ready = GetReadyCheckStatus and GetReadyCheckStatus(unit)
-  local texture = Media.READY_TEXTURES[ready]
-  if texture then
-    CancelReadyCheckTimer(frame)
-    if not ApplyStatusIconPackTexture(tex, cfg, status, "readyCheck", ready) then
-      SetTexture(tex, texture)
-      SetTexCoord(tex, 0, 1, 0, 1)
-    end
-    SetShown(tex, true)
-  elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() then
-    -- Blizzard leaves ready-check result icons visible briefly after finish; queue a delayed
-    -- hide so MSUF matches that readable window without polling.
-    QueueReadyCheckHide(frame)
-  else
-    SetShown(tex, false)
-  end
-end
 
-function Runtime.UpdateSummon(frame, status)
-  local cfg = status and status.summon
-  local tex = frame and frame.summonIcon
-  local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
-    SetShown(tex, false)
-    if frame then frame._msufGFSummonActive = false end
-    return
-  end
-  local summonStatus
-  if C_IncomingSummon and C_IncomingSummon.IncomingSummonStatus then
-    summonStatus = C_IncomingSummon.IncomingSummonStatus(unit)
-  end
-  if issecretvalue(summonStatus) == true then
-    -- Summon status can be restricted; an unknown value means hide the icon, not inspect it.
-    summonStatus = nil
-  end
-  local texture = summonStatus and SUMMON_TEXTURES[summonStatus]
-  if texture then
-    if not ApplyStatusIconPackTexture(tex, cfg, status, "summon", summonStatus) then
-      SetTexture(tex, texture)
-      SetTexCoord(tex, 0, 1, 0, 1)
-    end
-    SetShown(tex, true)
-    frame._msufGFSummonActive = true
-  else
-    SetShown(tex, false)
-    frame._msufGFSummonActive = false
-  end
-end
 
-function Runtime.UpdatePhase(frame, status)
-  local cfg = status and status.phase
-  local tex = frame and frame.phaseIcon
-  local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
-    SetShown(tex, false)
-    return
-  end
-  local reason
-  local unitState = FreshUnitState(frame, unit)
-  local isPlayer = UnitIsPlayerRuntime(unit, unitState, frame)
-  if isPlayer == true and UnitPhaseReason then
-    reason = UnitPhaseReason(unit)
-  end
-  if issecretvalue(reason) ~= true and reason then
-    if not ApplyStatusIconPackTexture(tex, cfg, status, "phase", reason) then
-      SetTexture(tex, Media.PHASE_TEXTURE)
-      SetTexCoord(tex, 0, 1, 0, 1)
-    end
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
-local function IdentityString(value)
-  if issecretvalue(value) == true then
-    return value, true
-  end
-  if type(value) == "string" and value ~= "" then
-    return value, true
-  end
-  return "", false
-end
-
-local function IdentityDisplayValue(localizedValue, stableValue)
-  -- UnitRace/UnitClass localized names can be identity-secret in restricted
-  -- instances. Some client builds render those localized secret strings as the
-  -- unit name or as blank text. Their stable second returns remain suitable for
-  -- direct, secret-safe FontString display; never inspect or index them in Lua.
-  if issecretvalue(localizedValue) == true then
-    local _, stablePresent = IdentityString(stableValue)
-    if stablePresent then return stableValue end
-    return localizedValue
-  end
-  if type(localizedValue) == "string" and localizedValue ~= "" then
-    return localizedValue
-  end
-  return stableValue
-end
-
-local function ShowIdentityText(region, value, present)
-  if not region then return end
-  if present then
-    SetText(region, value)
-    SetShown(region, true)
-  else
-    SetShown(region, false)
-  end
-end
-
-local IDENTITY_TEXT_FIELDS = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }
-
---- Level difficulty tier, mirroring TargetFrameMixin:CheckLevel. Returns an
---- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime, like the other
---- cold helpers here.
-function Runtime.BuildLevelTierMap()
-  local map = {}
-  local difficulty = _G.Enum and _G.Enum.RelativeContentDifficulty
-  if difficulty then
-    if difficulty.Impossible ~= nil then map[difficulty.Impossible] = 1 end
-    if difficulty.Difficult ~= nil then map[difficulty.Difficult] = 2 end
-    if difficulty.Fair ~= nil then map[difficulty.Fair] = 3 end
-    if difficulty.Easy ~= nil then map[difficulty.Easy] = 4 end
-    if difficulty.Trivial ~= nil then map[difficulty.Trivial] = 5 end
-  end
-  Runtime.levelTierByDifficulty = map
-  return map
-end
-
-function Runtime.LevelDifficultyTier(unit, level)
-  -- "??" is always the top band, attackable or not.
-  if level == -1 then return 1 end
-  -- Blizzard only grades what the player can attack; everything else keeps the
-  -- standard color.
-  local canAttack = _G.UnitCanAttack
-  if not (canAttack and BoolTrue(canAttack("player", unit))) then return 3 end
-  local playerInfo = _G.C_PlayerInfo
-  local getDifficulty = playerInfo and playerInfo.GetContentDifficultyCreatureForPlayer
-  if getDifficulty then
-    -- Server-side grading: correct under level scaling and Timewalking, where
-    -- a raw level gap is not.
-    local difficulty = getDifficulty(unit)
-    if issecretvalue(difficulty) ~= true then
-      local tier = (Runtime.levelTierByDifficulty or Runtime.BuildLevelTierMap())[difficulty]
-      if tier then return tier end
-    end
-    return 3
-  end
-  -- Clients without that API (Classic flavors) use GetRelativeDifficultyColor's
-  -- level-gap bands.
-  local readPlayerLevel = _G.UnitEffectiveLevel or UnitLevel
-  local playerLevel = readPlayerLevel and SafeNumber(readPlayerLevel("player"))
-  if not (level and playerLevel) then return 3 end
-  local diff = level - playerLevel
-  if diff >= 5 then return 1 end
-  if diff >= 3 then return 2 end
-  if diff >= -2 then return 3 end
-  local greenRange = _G.GetQuestGreenRange and SafeNumber(_G.GetQuestGreenRange()) or 8
-  if -diff <= greenRange then return 4 end
-  return 5
-end
-
---- `tier` pins the band for previews, which have no real unit to grade.
-function Runtime.ApplyLevelDifficultyColor(region, frame, unit, level, cfg, tier)
-  local colors = cfg.difficultyColors
-  if not (region and colors and region.SetTextColor) then return end
-  tier = tier or Runtime.LevelDifficultyTier(unit, level)
-  region._msufLevelTier = tier
-  local base = (tier - 1) * 3
-  local r, g, b = colors[base + 1], colors[base + 2], colors[base + 3]
-  -- Alpha stays with the frame's shared font text alpha, as in ApplyTextColor.
-  local spec = frame.MSUFSpec
-  local c = spec and spec.textColor
-  local a = c and c.a or 1
-  if region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a then
-    region:SetTextColor(r, g, b, a)
-    region._msufStatusR, region._msufStatusG, region._msufStatusB, region._msufStatusA = r, g, b, a
-  end
-end
-
-function Runtime.UpdateIdentityTexts(frame, status)
-  local levelCfg = status and status.level
-  local raceCfg = status and status.race
-  local classCfg = status and status.classText
-  local showLevel = levelCfg and levelCfg.enabled == true and frame.levelText ~= nil
-  local showRace = raceCfg and raceCfg.enabled == true and frame.raceText ~= nil
-  local showClass = classCfg and classCfg.enabled == true and frame.classStatusText ~= nil
-
-  if not (showLevel or showRace or showClass) then
-    HideField(frame, IDENTITY_TEXT_FIELDS)
-    return
-  end
-
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  if not UnitExistsRuntime(unit, unitState, frame) then
-    HideField(frame, IDENTITY_TEXT_FIELDS)
-    return
-  end
-
-  local levelText, levelPresent = "", false
-  if showLevel and UnitLevel then
-    local level = SafeNumber(UnitLevel(unit))
-    if level then
-      levelText, levelPresent = level == -1 and "??" or tostring(level), true
-      if levelCfg.difficultyColor == true then
-        Runtime.ApplyLevelDifficultyColor(frame.levelText, frame, unit, level, levelCfg)
-      end
-    end
-  end
-
-  local raceText, racePresent = "", false
-  if showRace and UnitRace then
-    local localizedRace, englishRace = UnitRace(unit)
-    raceText, racePresent = IdentityString(IdentityDisplayValue(localizedRace, englishRace))
-  end
-
-  local classText, classPresent = "", false
-  if showClass then
-    local localizedClass, classToken = ReadUnitClassCached(frame, unit)
-    classText, classPresent = IdentityString(IdentityDisplayValue(localizedClass, classToken))
-  end
-
-  if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
-  Runtime.SetForeverLevelBadgeShown(frame, showLevel and levelPresent and levelCfg.foreverBadge == true)
-  if showRace then ShowIdentityText(frame.raceText, raceText, racePresent) else SetShown(frame.raceText, false) end
-  if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
-end
-
-function Runtime.UpdateBossNumber(frame, status)
-  local cfg = status and status.bossNumber
-  local fs = frame and frame.bossNumberText
-  local unit = frame and frame.MSUFUnitKey
-  local index = type(GetBossIndexFromToken) == "function" and GetBossIndexFromToken(unit) or nil
-  if not (cfg and cfg.enabled == true and fs and index) then
-    SetShown(fs, false)
-    return
-  end
-  SetText(fs, tostring(index))
-  SetShown(fs, true)
-end
-
-local function RaidGroupText(style, subgroup)
-  if style == "BRACKET" then
-    return "[" .. subgroup .. "]"
-  elseif style == "NONE" then
-    return tostring(subgroup)
-  end
-  return "(" .. subgroup .. ")"
-end
-
---- A secure raid header's unit token already encodes the roster index
---- ("raid7" -> 7), so the group-frame case resolves without an API call and
---- without depending on UnitInRaid resolving that token. UnitInRaid stays as
---- the fallback for party tokens and for target/focus unit frames.
-local RAID_TOKEN_INDEX = {}
-for i = 1, 40 do RAID_TOKEN_INDEX["raid" .. i] = i end
-
-function Runtime.UpdateRaidGroup(frame, status)
-  local cfg = status and status.raidGroup
-  local fs = frame.raidGroupNameText
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and fs and GetRaidRosterInfo and exists) then
-    SetShown(fs, false)
-    return
-  end
-  local index = RAID_TOKEN_INDEX[unit]
-  if not index then
-    -- Only a PLAYER can be in the raid roster, so a mob target never needs the
-    -- roster lookup at all; this keeps rapid target-swaps over mobs cheap.
-    -- Bail only on a positive "not a player": an unknown identity has to fall
-    -- through, or a frame whose identity was never resolved silently loses its
-    -- number.
-    local isPlayer, isPlayerKnown = ReadUnitIsPlayerCached(frame, unit)
-    if isPlayerKnown == true and isPlayer ~= true then
-      SetShown(fs, false)
-      return
-    end
-    index = UnitInRaid and SafeNumber(UnitInRaid(unit)) or nil
-  end
-  local subgroup
-  if index then
-    local _, _, sg = GetRaidRosterInfo(index)
-    if type(sg) == "number" and sg > 0 then
-      subgroup = sg
-    end
-  end
-  local serial = frame._msufStatusIndicatorSerial
-    or (frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial)
-    or 0
-  if frame._msufRaidGroupSubgroup == subgroup
-    and frame._msufRaidGroupSerial == serial
-    and frame._msufRaidGroupStyle == cfg.style
-    and fs._msufShown == (subgroup ~= nil) then
-    return
-  end
-  frame._msufRaidGroupSubgroup = subgroup
-  frame._msufRaidGroupSerial = serial
-  frame._msufRaidGroupStyle = cfg.style
-  if subgroup then
-    SetText(fs, RaidGroupText(cfg.style, subgroup))
-    SetShown(fs, true)
-  else
-    SetShown(fs, false)
-  end
-end
-
-local function EliteAtlas(state)
-  -- Mirror Blizzard_NamePlateClassificationFrame exactly: elite/worldboss use
-  -- gold, rare elite uses silver, and rare uses the standalone rare star.
-  if state == "RARE" then
-    return "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star"
-  elseif state == "RAREELITE" then
-    return "nameplates-icon-elite-silver"
-  end
-  return "nameplates-icon-elite-gold"
-end
-
-local function EliteState(frame, unit, unitState)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (UnitClassification and exists) then
-    return nil
-  end
-  local class = UnitClassification(unit)
-  if issecretvalue(class) == true then
-    return nil
-  end
-  if class == "worldboss" then
-    return "BOSS"
-  elseif class == "rareelite" then
-    return "RAREELITE"
-  elseif class == "rare" then
-    return "RARE"
-  elseif class == "elite" then
-    return "ELITE"
-  end
-  if UnitLevel then
-    local level = UnitLevel(unit)
-    if SafeNumber(level) == -1 then
-      return "BOSS"
-    end
-  end
-  return nil
-end
-
-function Runtime.UpdateElite(frame, status)
-  local cfg = status and status.elite
-  local tex = frame.eliteIcon
-  if not (cfg and cfg.enabled and tex) then
-    SetShown(tex, false)
-    return
-  end
-  -- Opposite gate: only NPCs are elite/rare/boss classifications, so a PLAYER
-  -- target can never show this. Skip the classification query for players.
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame) == true then
-    SetShown(tex, false)
-    return
-  end
-  local state = status.testMode and "BOSS" or EliteState(frame, unit, unitState)
-  if state then
-    if ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
-      SetShown(tex, true)
-      return
-    elseif tex.SetAtlas then
-      SetAtlas(tex, EliteAtlas(state))
-    else
-      SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
-      SetTexCoord(tex, 0, 1, 0, 1)
-    end
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
-local function SeedHealthDeadOverride(seedHP)
-  if issecretvalue(seedHP) == true or type(seedHP) ~= "number" then
-    return nil
-  end
-  return seedHP <= 0
-end
-
-local function StatusText(frame, cfg, unitState, seedHP)
-  local unit = frame.MSUFUnitKey
-  local healthDead = SeedHealthDeadOverride(seedHP)
-  if cfg and cfg.showDead then
-    local connected, connectedKnown = ReadConnectedCached(frame, unit, unitState)
-    if connectedKnown == true and connected == false then
-      return "OFFLINE", "dead"
-    end
-  end
-  if healthDead ~= false and cfg and cfg.showGhost and UnitIsGhost then
-    local ghost = UnitIsGhost(unit)
-    if BoolTrue(ghost) then
-      return "GHOST", "ghost"
-    end
-  end
-  if cfg and cfg.showDead then
-    local dead, deadKnown
-    if healthDead ~= nil then
-      dead, deadKnown = healthDead, true
-    else
-      dead, deadKnown = ReadDeadCached(frame, unit, unitState)
-    end
-    if deadKnown == true and dead == true then
-      return "DEAD", "dead"
-    end
-  end
-  if cfg and (cfg.showAFK or (cfg.afkTimer and cfg.afkTimer.enabled)) and UnitIsAFK then
-    local afk = UnitIsAFK(unit)
-    if BoolTrue(afk) then
-      return "AFK", "afk"
-    end
-  end
-  if cfg and cfg.showDND and UnitIsDND then
-    local dnd = UnitIsDND(unit)
-    if BoolTrue(dnd) then
-      return "DND", "dnd"
-    end
-  end
-  return nil
-end
-
-local function RefreshHealthAfterGoneStatus(frame, oldValue)
-  if oldValue ~= "DEAD" and oldValue ~= "GHOST" and oldValue ~= "OFFLINE" then
-    return
-  end
-  -- A group-state snapshot has already written authoritative detailed health.
-  -- Do not immediately replace it with a second direct-health read while the
-  -- client is still committing an AI/secure-header transition.
-  if frame._msufGroupStateRefresh == true or frame._msufHealthStateNotify == true then
-    return
-  end
-  if frame._msufStatusTextHealthRefresh == true then
-    return
-  end
-  local active = frame._msufActiveElements
-  if not (active and active.Health == true) then
-    return
-  end
-  local health = UF.elements and UF.elements.Health
-  local update = health and health.Update
-  local unit = frame.MSUFUnitKey
-  if not (type(update) == "function" and type(unit) == "string" and unit ~= "" and issecretvalue(unit) ~= true) then
-    return
-  end
-  local refreshed = false
-  local hadDeadBg = frame._msufGFDeadBgState == true
-  local gone = frame._msufUpdateGroupVisualsGoneState
-  if type(gone) == "function" then
-    gone(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
-    refreshed = hadDeadBg and frame._msufGFDeadBgState ~= true
-  end
-  if refreshed == true then
-    return
-  end
-  frame._msufStatusTextHealthRefresh = true
-  update(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
-  frame._msufStatusTextHealthRefresh = nil
-end
-
-local function StatusTextIsGone(value)
-  return value == "DEAD" or value == "GHOST" or value == "OFFLINE"
-end
-
-local function HideAFKTimerText(frame)
-  if not frame then return end
-  local fs = frame.statusAFKTimerText
-  if fs then
-    SetText(fs, "")
-    SetShown(fs, false)
-  end
-  frame._msufAFKTimerLayout = nil
-  local afkTimer = MSUF.UFAFKTimer
-  if afkTimer and afkTimer.Detach then afkTimer.Detach(frame) end
-end
-
---- Companion region to the AFK status text: shows how long the unit has been
---- AFK. Data comes from the shared GUID ledger (MSUF.UFAFKTimer), which is
---- strictly out-of-combat; ResolveText returns nil in combat or when the
---- AFK-on edge was never observed, so this hides instead of guessing.
-local function UpdateAFKTimerText(frame, status, cfg, state)
-  local tcfg = cfg and cfg.afkTimer
-  if not (tcfg and tcfg.enabled == true and state == "afk") then
-    HideAFKTimerText(frame)
-    return
-  end
-  local afkTimer = MSUF.UFAFKTimer
-  if not afkTimer then return end
-  local text
-  if status.testMode == true then
-    text = afkTimer.SampleText()
-  else
-    text = afkTimer.ResolveText(frame.MSUFUnitKey)
-  end
-  if type(text) ~= "string" or text == "" then
-    HideAFKTimerText(frame)
-    return
-  end
-  local fs = EnsureText(frame, "statusAFKTimerText", tcfg.layer)
-  if not fs then return end
-  if frame._msufAFKTimerLayout ~= tcfg then
-    frame._msufAFKTimerLayout = tcfg
-    AdoptRegion(frame, fs, tcfg.layer)
-    LayoutRegion(fs, frame, frame.MSUFSpec, tcfg, true)
-  end
-  SetText(fs, text)
-  SetShown(fs, true)
-  if status.testMode ~= true then
-    if afkTimer.Attach then afkTimer.Attach(frame) end
-  elseif afkTimer.Detach then
-    afkTimer.Detach(frame)
-  end
-end
-
-local function ClearStatusText(frame, fs, keepAFKTimer)
-  if not keepAFKTimer then HideAFKTimerText(frame) end
-  if frame._msufStatusTextValue == nil
-    and frame._msufStatusTextLayout == nil
-    and fs and fs._msufShown == false then
-    return
-  end
-  local oldValue = frame._msufStatusTextValue
-  frame._msufStatusTextValue = nil
-  frame._msufStatusTextLayout = nil
-  if fs then
-    SetText(fs, "")
-    SetShown(fs, false)
-  end
-  RefreshHealthAfterGoneStatus(frame, oldValue)
-end
-
-function Runtime.UpdateStatusText(frame, status, event, seedHP)
-  local cfg = status and status.statusText
-  local fs = frame.statusIndicatorText
-  local unit = frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and fs) then
-    ClearStatusText(frame, fs)
-    return
-  end
-  local unitState = FreshUnitState(frame, unit)
-  if status.testMode ~= true
-    and event == "UNIT_HEALTH"
-    and frame._msufStatusTextValue == nil
-    and fs._msufShown == false
-    and (cfg.showDead == true or cfg.showGhost == true) then
-    local healthDead = SeedHealthDeadOverride(seedHP)
-    local deadOrGhost = healthDead == true or ReadDeadCached(frame, unit, unitState)
-    if deadOrGhost ~= true then
-      return
-    end
-  elseif status.testMode ~= true
-    and event == "UNIT_HEALTH"
-    and frame._msufStatusTextValue == nil
-    and cfg.showDead ~= true
-    and cfg.showGhost ~= true then
-    return
-  end
-  if not UnitExistsRuntime(unit, unitState, frame) then
-    ClearStatusText(frame, fs)
-    return
-  end
-  local text, state
-  if status.testMode then
-    if cfg.showDead then
-      text, state = "DEAD", "dead"
-    elseif cfg.showGhost then
-      text, state = "GHOST", "ghost"
-    elseif cfg.showAFK or (cfg.afkTimer and cfg.afkTimer.enabled) then
-      text, state = "AFK", "afk"
-    elseif cfg.showDND then
-      text, state = "DND", "dnd"
-    end
-  end
-  if not text then
-    text, state = StatusText(frame, cfg, unitState, seedHP)
-  end
-  if text then
-    local layout = cfg
-    if state == "ghost" and cfg.ghost then
-      layout = cfg.ghost
-    elseif state == "afk" and cfg.afk then
-      layout = cfg.afk
-    elseif state == "dnd" and cfg.dnd then
-      layout = cfg.dnd
-    elseif cfg.dead then
-      layout = cfg.dead
-    end
-    if layout and layout.enabled == false then
-      ClearStatusText(frame, fs, state == "afk")
-      UpdateAFKTimerText(frame, status, cfg, state)
-      return
-    end
-    -- Before the unchanged early-out: the ledger ticker re-enters this
-    -- function with an unchanged main text and only the duration moves.
-    UpdateAFKTimerText(frame, status, cfg, state)
-    if frame._msufStatusTextValue == text
-      and frame._msufStatusTextLayout == layout
-      and fs._msufShown == true then
-      return
-    end
-    local oldValue = frame._msufStatusTextValue
-    frame._msufStatusTextValue = text
-    frame._msufStatusTextLayout = layout
-    if layout ~= cfg then
-      AdoptRegion(frame, fs, layout.layer)
-    end
-    LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
-    -- text stays the state token (DEAD, GHOST, OFFLINE, AFK, DND) that the
-    -- health element compares; only the font string gets the translation.
-    SetText(fs, MSUF.Translate(text))
-    SetShown(fs, true)
-    if StatusTextIsGone(oldValue) and not StatusTextIsGone(text) then
-      RefreshHealthAfterGoneStatus(frame, oldValue)
-    end
-  else
-    ClearStatusText(frame, fs)
-  end
-end
-
-function Runtime.UpdateCombat(frame, status)
-  local cfg = status and status.combat
-  local tex = frame.combatStateIndicatorIcon
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and tex and exists) then
-    SetShown(tex, false)
-    return
-  end
-  local active = status.testMode
-  if not active and UnitAffectingCombat then
-    local activeRaw = UnitAffectingCombat(unit)
-    active = BoolTrue(activeRaw)
-  end
-  if active == true then
-    ApplyStateOrPackIconTexture(tex, "combat", cfg, status, "combat")
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
-function Runtime.UpdateResting(frame, status)
-  local cfg = status and status.resting
-  local tex = frame.restingIndicatorIcon
-  if not (cfg and cfg.enabled and tex) then
-    StopRestingFlipbook(tex)
-    SetShown(tex, false)
-    return
-  end
-  local active = status.testMode
-  if not active and frame.MSUFUnitKey == "player" and IsResting then
-    local activeRaw = IsResting()
-    active = BoolTrue(activeRaw)
-  end
-  if active == true then
-    SetShown(tex, true)
-    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting", true)
-  else
-    StopRestingFlipbook(tex)
-    SetShown(tex, false)
-  end
-end
-
-function Runtime.UpdateIncomingRes(frame, status)
-  local cfg = status and status.incomingRes
-  local tex = frame.incomingResIndicatorIcon
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and tex and exists) then
-    SetShown(tex, false)
-    return
-  end
-  if frame._msufGFSummonActive then
-    SetShown(tex, false)
-    return
-  end
-  -- Only players get resurrected; a mob target never has incoming res. Skip the
-  -- API query for non-players.
-  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame) == false then
-    SetShown(tex, false)
-    return
-  end
-  local active = status.testMode
-  if not active and UnitHasIncomingResurrection then
-    local activeRaw = UnitHasIncomingResurrection(unit)
-    active = BoolTrue(activeRaw)
-  end
-  if active == true then
-    ApplyStateOrPackIconTexture(tex, "incomingRes", cfg, status, "resurrect")
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
-local function PVPVariantForAtlas(atlas)
-  if atlas == Media.PVP_HORDE_ATLAS then return "Horde" end
-  if atlas == Media.PVP_FFA_ATLAS then return "FFA" end
-  return "Alliance"
-end
-
-function Runtime.UpdatePVP(frame, status)
-  local cfg = status and status.pvp
-  local tex = frame and frame.pvpIndicatorIcon
-  local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
-    SetShown(tex, false)
-    return
-  end
-  -- Classic compiles the indicator whenever it is configured (contextGated, see
-  -- MSUF_UF_Config.lua): the player's PvP context flips in combat, where no
-  -- recompile can run, so it is read here from the cached context instead.
-  if cfg.contextGated == true and status.testMode ~= true
-    and not (UF.PVPIndicatorContextActive and UF.PVPIndicatorContextActive()) then
-    SetShown(tex, false)
-    return
-  end
-  local unitState = FreshUnitState(frame, unit)
-  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(frame, unit, unitState)
-  if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
-    SetShown(tex, true)
-  elseif ApplyPVPTexture(tex, atlas) then
-    SetShown(tex, true)
-  else
-    SetShown(tex, false)
-  end
-end
-
---- Player stance / form / aura text from the native stance bar. Data comes
---- from MSUF.UFStance (spellID -> name cache, immutable per session); the
---- reads are the player's own action-bar state, so they stay valid in combat
---- and the text updates live while stance-dancing. Region creation, font,
---- color and anchoring are owned by ApplyConfiguredRegions - this only moves
---- the text. Lives on Status, like the per-indicator updaters on Runtime.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 function Status.UpdateStanceText(frame, status)
   local cfg = status and status.stance
   local fs = frame.stanceIndicatorText
@@ -2443,17 +1031,7 @@ local function RegisterStatusIndicator(def)
   UF.RegisterElement(name, element)
 end
 
--- Registration data, read once at load by RegisterStatusIndicator and never
--- touched again. Field meanings:
---   name / key            element name and spec.status key
---   events / unitlessEvents   static unit / unitless event lists
---   getEvents / getUnitlessEvents   resolvers (spec, frame) for dynamic lists
---   playerUnitlessEvents  unitless list that only the player frame receives
---   update / hide         updater (frame, status[, event, seedHP]) and the
---                         region field(s) hidden on Disable
---   noGroup / playerOnly  IsEnabled gates
---   routes                declared engine event and lifecycle participation
---   updateWithEvent       forward (event, seedHP) into the updater
+-- Disable rationale: docs/uf-responsibility-notes.md.
 local STATUS_INDICATOR_DEFS = {
   { name = "RaidMarkerIndicator", routes = { events = true, identity = true }, key = "raidMarker", unitlessEvents = Runtime.RAID_MARKER_EVENTS,
     update = Runtime.UpdateRaidMarker, hide = "raidTargetIcon", noGroup = true },
@@ -2519,3 +1097,10 @@ for i = 1, #STATUS_REFRESH_ALIASES do
     return RefreshStatus(unit, reason or "MSUF_STATUS")
   end
 end
+
+BindStatusLevelBadge({
+  HideField = HideField,
+})
+BindStatusIndicatorArt({
+  ApplyDefaultRaidMarkerTexture = ApplyDefaultRaidMarkerTexture,
+})

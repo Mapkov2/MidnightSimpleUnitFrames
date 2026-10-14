@@ -89,6 +89,11 @@ local function NewRuntime(source, legacy, percentAPI, formatters)
   local ns = { UF = UF, UFText = Text, NumberFormat = { Register = function(fn) options = fn end } }
   local formatPath = source .. "/" .. relative .. "MSUF_UF_Text_Format.lua"
   local runtimePath = source .. "/" .. relative .. "MSUF_UF_Text_Runtime.lua"
+  if source == root then
+    for _, name in ipairs({ "MSUF_UF_Text_SlotCompile.lua", "MSUF_UF_Text_Drain.lua", "MSUF_UF_Text_Name.lua" }) do
+      assert(loadfile(source .. "/" .. relative .. name))("MidnightSimpleUnitFrames", ns)
+    end
+  end
   assert(loadfile(formatPath))("MidnightSimpleUnitFrames", ns)
   assert(loadfile(runtimePath))("MidnightSimpleUnitFrames", ns)
   local function Region(name)

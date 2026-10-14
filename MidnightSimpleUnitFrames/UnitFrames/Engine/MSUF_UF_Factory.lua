@@ -1,4 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy,
+  ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -14,6 +15,16 @@ local EnsureCooldownWidthObservers
 local ScheduleCooldownWidthRefresh
 local ScheduleLateAnchorReanchor
 local ApplyBossPhysicalBarGeometry
+
+-- Bind mandatory factories once; report both the consumer and received shape.
+local function RequireFactory(key)
+  local factories = MSUF.UFModuleFactories
+  assert(type(factories) == "table", "MSUF_UF_Factory.lua: required UF factory registry for " .. key)
+  local factory = factories[key]
+  local kind = type(factory)
+  assert(kind == "function", "MSUF_UF_Factory.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
+  return factory
+end
 -- Kernel/MSUF_Util.lua loads ahead of this file in every core TOC.
 local Snap = MSUF.Require("MSUF_Snap", "UnitFrames/Engine/MSUF_UF_Factory.lua")
 --- Every other MSUF provider resolves at use: frames apply once the core has
@@ -138,6 +149,7 @@ end
 
 UF.GetPetBattleFrameHider = ResolvePetBattleFrameHider
 
+-- Original inline optional-callable boundaries; proxy policy lives in FactoryAnchors.
 local function IsCooldownViewerAnchor(name)
   return COOLDOWN_ANCHORS[name] == true
 end
@@ -154,56 +166,6 @@ local function IsCooldownViewerAnchorFrameUsable(frame)
   return type(getSize) == "function" and getSize(frame) ~= nil
 end
 
-local function IsCooldownViewerAnchorUsable(name)
-  return IsCooldownViewerAnchorFrameUsable(ResolveCooldownViewerAnchor(name))
-end
-
---- Fixed per client once the integration resolved it, so this stays a single
---- boolean read on the cold anchor path.
-local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
-
-local IsGlobalCooldownAnchorEnabled = _G.MSUF_GlobalCooldownAnchorEnabled
-
-local function CanonicalAnchorFrameName(name)
-  if name == "UI_Parent" then return "UIParent" end
-  return name
-end
-
-local function ResolveNamedAnchor(name)
-  name = CanonicalAnchorFrameName(name)
-  if type(name) ~= "string" or name == "" then return nil, nil end
-  if IsCooldownViewerAnchor(name) then
-    local frame = ResolveCooldownViewerAnchor(name)
-    if IsCooldownViewerAnchorUsable(name) then return frame, nil, true end
-    return nil, name, true
-  end
-  if UF.frames and UF.frames[name] then return UF.frames[name], nil end
-  -- The name is free text (Custom Anchor Frame), so it can hit any global:
-  -- only a region (a UI object with SetPoint: frames, textures, font strings)
-  -- can be an anchor. Fonts and animation groups are UI objects without it;
-  -- anything else counts as missing.
-  local global = _G[name]
-  if type(global) == "table" and global.GetObjectType ~= nil and global.SetPoint ~= nil then return global, nil end
-  return nil, name
-end
-
-local function ResolveAnchor(spec, frame)
-  local anchor = UIParent
-  local name = CanonicalAnchorFrameName(spec and spec.anchorFrameName)
-  if type(name) ~= "string" or name == "" then
-    name = CanonicalAnchorFrameName(spec and spec.anchorToUnitframe)
-    if name == "GLOBAL" or name == "global" or name == "FREE" then
-      name = nil
-    end
-  end
-  if type(name) == "string" and name ~= "" then
-    local resolved, missing = ResolveNamedAnchor(name)
-    if resolved and resolved ~= frame then return resolved, nil, name end
-    return anchor, missing or name, name
-  end
-  return anchor, nil, nil
-end
-
 local MAX_ANCHOR_DEPTH = 16
 
 -- Anchor candidates can be foreign frames: a raised index or accessor is a
@@ -218,6 +180,7 @@ local function FinishAnchorDependencyCheck(state, region, result)
   state[region] = selectedValue1
   return result
 end
+
 
 local function AnchorDependsOn(region, target, state, depth)
   if not (region and target) then return false end
@@ -278,52 +241,6 @@ local function AnchorDependsOn(region, target, state, depth)
   return FinishAnchorDependencyCheck(state, region, false)
 end
 
-local function AnchorWouldCreateCycle(frame, anchor)
-  return frame and anchor and anchor ~= UIParent and AnchorDependsOn(anchor, frame) == true
-end
-
--- Materialize the current screen point on UIParent. Out of combat MSUF keeps
--- live SetPoint links to external providers so consumers follow them 1:1; this
--- runs at the combat edge (PLAYER_REGEN_DISABLED delivers before lockdown) to
--- sever that link for the duration of a fight. Callers position the frame
--- logically first, so old profile priorities, offsets, scaling and clamping
--- remain authoritative.
-local function SnapshotFrameToUIParent(frame, preserveSize)
-  if not (frame and frame.GetCenter and UIParent and UIParent.GetCenter) or InCombat() then return false end
-  local frameX, frameY = frame:GetCenter()
-  local parentX, parentY = UIParent:GetCenter()
-  local width = preserveSize == true and frame.GetWidth and frame:GetWidth() or nil
-  local height = preserveSize == true and frame.GetHeight and frame:GetHeight() or nil
-  local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
-  local parentScale = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-  if issecretvalue and (issecretvalue(frameX) or issecretvalue(frameY)
-    or issecretvalue(parentX) or issecretvalue(parentY)
-    or issecretvalue(width) or issecretvalue(height)
-    or issecretvalue(frameScale) or issecretvalue(parentScale)) then return false end
-  if frameX == nil or frameY == nil or parentX == nil or parentY == nil then return false end
-  if frameScale == 0 then frameScale = 1 end
-  if parentScale == 0 then parentScale = 1 end
-  local stableX = ((frameX * frameScale) - (parentX * parentScale)) / frameScale
-  local stableY = ((frameY * frameScale) - (parentY * parentScale)) / frameScale
-  frame:ClearAllPoints()
-  if width and height and frame.SetSize then frame:SetSize(width, height) end
-  frame:SetPoint("CENTER", UIParent, "CENTER", stableX, stableY)
-  return true
-end
-
-local function IsMSUFOwnedAnchor(anchor)
-  if anchor == UIParent then return true end
-  local readable, owned = true, anchor._msufOwnedAnchorRoot
-  return readable and owned == true or false
-end
-
--- Unitframes that share one foreign provider also share one MSUF-owned proxy.
--- The proxy follows the provider natively out of combat (no polling or Lua
--- callbacks), while every protected unit root remains attached to the stable
--- MSUF-owned frame. At the combat edge only this one rectangle has to be
--- materialized on UIParent, regardless of the number of unit consumers.
-local unitExternalAnchorProxies = {}
-
 local function AnchorHasResolvedCenter(anchor)
   local readable, getCenter = true, anchor.GetCenter
   if not readable or type(getCenter) ~= "function" then return false end
@@ -333,118 +250,18 @@ local function AnchorHasResolvedCenter(anchor)
   return true
 end
 
-local function UnitExternalAnchorProxyKey(requestedAnchor, anchor)
-  if type(requestedAnchor) == "string" and requestedAnchor ~= "" then return requestedAnchor end
-  return anchor
-end
-
-local function AttachUnitExternalAnchorProxy(proxy, source)
-  if not (proxy and source) or InCombat() or not AnchorHasResolvedCenter(source) then return false end
-  proxy:ClearAllPoints()
-  proxy:SetAllPoints(source)
-  proxy._msufStableExternalAnchor = source
-  proxy._msufExternalAnchorSource = source
-  proxy._msufExternalAnchorFrozen = nil
-  proxy._msufHasStableExternalRect = true
-  if proxy.Show then proxy:Show() end
-  return true
-end
-
-local function EnsureUnitExternalAnchorProxy(requestedAnchor, source)
-  if not source then return nil end
-  local key = UnitExternalAnchorProxyKey(requestedAnchor, source)
-  local proxy = unitExternalAnchorProxies[key]
-  if not proxy then
-    proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
-    proxy._msufOwnedAnchorRoot = true
-    proxy._msufUnitExternalAnchorProxy = true
-    proxy._msufExternalAnchorProxyKey = key
-    proxy._msufUnitConsumerCount = 0
-    if proxy.EnableMouse then proxy:EnableMouse(false) end
-    unitExternalAnchorProxies[key] = proxy
-  end
-
-  local sourceChanged = proxy._msufExternalAnchorSource ~= source
-  if sourceChanged and proxy._msufHasStableExternalRect and not proxy._msufExternalAnchorFrozen then
-    -- Provider identity transitions are cold. Detach the proxy from the old
-    -- foreign frame first so a temporarily unresolved replacement cannot keep
-    -- dragging the protected unitframe chain.
-    if SnapshotFrameToUIParent(proxy, true) then proxy._msufExternalAnchorFrozen = true end
-  end
-  proxy._msufExternalAnchorSource = source
-  if sourceChanged or proxy._msufExternalAnchorFrozen or not proxy._msufHasStableExternalRect then
-    if not AttachUnitExternalAnchorProxy(proxy, source) then
-      return proxy._msufHasStableExternalRect and proxy or nil
-    end
-  end
-  return proxy
-end
-
-local function SetFrameUnitExternalAnchorProxy(frame, proxy)
-  if not frame then return end
-  local previous = frame._msufUnitExternalAnchorProxy
-  if previous == proxy then return end
-  if previous then
-    previous._msufUnitConsumerCount = math.max(0, (previous._msufUnitConsumerCount or 1) - 1)
-  end
-  frame._msufUnitExternalAnchorProxy = proxy
-  if proxy then proxy._msufUnitConsumerCount = (proxy._msufUnitConsumerCount or 0) + 1 end
-end
-
-local function UpdateAllUnitExternalAnchorProxies()
-  if InCombat() then return false end
-  local updated = false
-  for _, proxy in pairs(unitExternalAnchorProxies) do
-    if (proxy._msufUnitConsumerCount or 0) > 0 then
-      updated = AttachUnitExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource) or updated
-    end
-  end
-  return updated
-end
-
-Factory.UpdateAllExternalAnchorProxies = UpdateAllUnitExternalAnchorProxies
-ExportPublic("MSUF_UpdateAllExternalAnchorProxies", UpdateAllUnitExternalAnchorProxies)
-
--- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
--- named custom anchors logical; only reject targets that would make SetPoint
--- recurse through the frame being positioned.
-Factory.ResolveNamedAnchor = ResolveNamedAnchor
-Factory.AnchorDependsOn = AnchorDependsOn
-Factory.AnchorWouldCreateCycle = AnchorWouldCreateCycle
-Factory.SnapshotFrameToUIParent = SnapshotFrameToUIParent
-ExportPublic("MSUF_SnapshotFrameToUIParentCenter", SnapshotFrameToUIParent)
-function Factory.IsAnchorCandidateAllowed(candidate, unitKey)
-  if not candidate then return false end
-  for key, frame in pairs(UF.frames or {}) do
-    local configKey = UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey)
-    if unitKey == nil or key == unitKey or configKey == unitKey then
-      if candidate == frame or AnchorWouldCreateCycle(frame, candidate) then return false end
-    end
-  end
-  return true
-end
-
-local function ScreenCacheKey(spec, frame)
-  return spec and spec.key or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey)) or frame and frame.MSUFUnitKey
-end
-
---- Keep the visible root inside the screen without replacing its configured
---- anchor. Blizzard performs the final clamp in physical screen space, so this
---- remains correct for CDM/custom anchors with a different effective scale.
---- The flag makes this a creation/cold-path cost only.
-local function EnableScreenClamp(frame)
-  if not (frame and frame.SetClampedToScreen) then return false end
-  if frame._msufScreenClampEnabled == true then return true end
-  frame:SetClampedToScreen(true)
-  frame._msufScreenClampEnabled = true
-  return true
-end
-
-local function ShouldCacheScreenPosition(spec, requestedAnchor)
-  return type(spec and spec.anchorFrameName) == "string"
-    and spec.anchorFrameName ~= ""
-    or COOLDOWN_ANCHORS[requestedAnchor] == true
-end
+local AnchorWouldCreateCycle, AttachUnitExternalAnchorProxy, CanonicalAnchorFrameName, CooldownAnchorSupported, EnableScreenClamp,
+  EnsureUnitExternalAnchorProxy, IsCooldownViewerAnchorUsable,
+  IsGlobalCooldownAnchorEnabled, IsMSUFOwnedAnchor, ResolveAnchor, ResolveNamedAnchor, ScreenCacheKey,
+  SetFrameUnitExternalAnchorProxy, ShouldCacheScreenPosition, SnapshotFrameToUIParent, unitExternalAnchorProxies
+AnchorWouldCreateCycle, AttachUnitExternalAnchorProxy, CanonicalAnchorFrameName, CooldownAnchorSupported, EnableScreenClamp,
+  EnsureUnitExternalAnchorProxy, IsCooldownViewerAnchorUsable,
+  IsGlobalCooldownAnchorEnabled, IsMSUFOwnedAnchor, ResolveAnchor, ResolveNamedAnchor, ScreenCacheKey,
+  SetFrameUnitExternalAnchorProxy, ShouldCacheScreenPosition, SnapshotFrameToUIParent,
+  unitExternalAnchorProxies = RequireFactory("FactoryAnchors")(
+  COOLDOWN_ANCHORS, CreateFrame, ExportPublic, Factory, InCombat, PixelLayoutRegion, UF, UIParent, issecretvalue, type,
+    IsCooldownViewerAnchor, ResolveCooldownViewerAnchor, IsCooldownViewerAnchorFrameUsable, AnchorDependsOn, AnchorHasResolvedCenter
+)
 
 local function MarkPending(unit)
   if unit then
@@ -753,26 +570,7 @@ local function HoldVariantOff(frame)
   end
 end
 
-local function RegisterGlobals(unit, frame)
-  UF.frames[unit] = frame
-  ExportPublic("MSUF_UnitFrames", UF.frames)
-  ExportPublic(UF.FrameName(unit), frame)
-  if unit == "targettarget" then ExportPublic("MSUF_tot", frame) end
-
-  for i = 1, #UF.frameList do
-    if UF.frameList[i] == frame then
-      ExportPublic("MSUF_UnitFramesList", UF.frameList)
-      return
-    end
-  end
-  UF.frameList[#UF.frameList + 1] = frame
-  ExportPublic("MSUF_UnitFramesList", UF.frameList)
-end
-
-function UF.GetSecureUnitButtonTemplate()
-  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
-end
-
+local BuildFactorySpawn = RequireFactory("FactorySpawn")
 function UF.CreateSecureUnitButton(name, parent)
   local button = PixelLayoutRegion(CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate()))
   -- 12.1.5 rounds layout natively when the region carries the attribute, which
@@ -785,362 +583,18 @@ function UF.CreateSecureUnitButton(name, parent)
   return button
 end
 
-function UF.RegisterClickCastFrame(frame)
-  if not frame then return false end
-  _G.ClickCastFrames = type(_G.ClickCastFrames) == "table" and _G.ClickCastFrames or {}
-  _G.ClickCastFrames[frame] = true
-  clickCastRegistered[frame] = true
-  return true
-end
-
-function UF.ResolvePingUnit(frame)
-  if not frame then return nil end
-  if frame.GetAttribute then
-    local unit = frame:GetAttribute("unit")
-    if type(unit) == "string" and unit ~= "" then return unit end
-  end
-  return type(frame.MSUFUnitKey) == "string" and frame.MSUFUnitKey or nil
-end
-
---- Thank you R41z0r
---- 12.1 extends unit ping target information with `isPlayerResource`. Blizzard
---- deliberately keeps the choice of health versus the occasionally supported
---- mana callout inside C_PingSecure; addons can only opt the player frame into
---- that native resource decision. These callbacks run only for an actual ping
---- gesture -- there is no event, timer, or steady-state combat work.
-local function IsPlayerPingPortraitMouseOver(frame)
-  local portrait = frame and (frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait))
-  if not (portrait and portrait.enabled == true) then return false end
-  -- A FULL overlay is the health-bar artwork itself, not a discrete portrait
-  -- hit area. Treating it as Blizzard's portrait would disable resource pings
-  -- everywhere on the Player frame.
-  if portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL" then return false end
-  local holder = frame and frame.MSUFPortraitHolder
-  if not (holder and holder.IsMouseOver) then return false end
-  if holder.IsShown and not holder:IsShown() then return false end
-  return holder:IsMouseOver() and true or false
-end
-
-local function PlayerFramePingGetAllowRadialWheel(frame)
-  -- Match Blizzard PlayerFrame: resource pings are contextual-only, while the
-  -- portrait retains the normal unit-frame radial wheel.
-  return IsPlayerPingPortraitMouseOver(frame)
-end
-
-local function PlayerFramePingGetTargetInfo(frame)
-  return {
-    guid = UnitGUID and UnitGUID("player") or nil,
-    isPlayerResource = not IsPlayerPingPortraitMouseOver(frame),
-  }
-end
-
 local function SupportsPlayerResourcePing(frame)
   -- 12.0's PingableType_UnitFrameMixin exposes GetTargetPingGUID instead.
   -- GetTargetInfo is therefore a direct capability probe for the 12.1 contract.
   return frame and type(frame.GetTargetInfo) == "function"
 end
 
-local function PlayerResourcePingSettingEnabled()
-  local db = _G.MSUF_DB
-  local general = type(db) == "table" and type(db.general) == "table" and db.general or nil
-  return general and general.playerResourcePingEnabled == true or false
-end
-
-function UF.ConfigurePlayerResourcePing(frame, unit)
-  if not frame or unit ~= "player" then return false end
-
-  if frame._msufPlayerPingOriginalsCaptured ~= true then
-    frame._msufPlayerPingOriginalsCaptured = true
-    frame._msufPlayerPingOriginalGetAllowRadialWheel = frame.GetAllowRadialWheel
-    frame._msufPlayerPingOriginalGetTargetInfo = frame.GetTargetInfo
-  end
-
-  local enabled = PlayerResourcePingSettingEnabled() and SupportsPlayerResourcePing(frame)
-  if enabled then
-    frame.GetAllowRadialWheel = PlayerFramePingGetAllowRadialWheel
-    frame.GetTargetInfo = PlayerFramePingGetTargetInfo
-  else
-    frame.GetAllowRadialWheel = frame._msufPlayerPingOriginalGetAllowRadialWheel
-    frame.GetTargetInfo = frame._msufPlayerPingOriginalGetTargetInfo
-  end
-  frame._msufPlayerResourcePingEnabled = enabled and true or nil
-  return enabled
-end
-
-function UF.RefreshPlayerResourcePing()
-  local frame = UF.frames and UF.frames.player
-  if not frame then return false end
-  return UF.ConfigurePlayerResourcePing(frame, "player")
-end
-
-ExportPublic("MSUF_RefreshPlayerResourcePing", UF.RefreshPlayerResourcePing)
-
-function UF.ForEachPingBindingAttribute()
-  return false
-end
-
-function UF.GetSecurePingInitialConfig()
-  return "self:SetAttribute('ping-receiver', true)\n"
-end
-
-function UF.DisablePingCompatibility(frame)
-  if not frame then return false end
-  frame._msufPingCompatInstalled = nil
-  frame._msufNativePingGUID = nil
-  local ping = frame.pingIconFrame or frame.PingIconFrame
-  if ping and ping.Hide then ping:Hide() end
-  return true
-end
-
-function UF.InstallPingCompatibility()
-  return false
-end
-
-function UF.RefreshPingCompatibility()
-  return false
-end
-
-function UF.EnsureNativePingIcon(frame)
-  return nil
-end
-
-function UF.RefreshNativePingIcon(frame)
-  return false
-end
-
-ExportPublic("MSUF_RefreshPingCompatibility", UF.RefreshPingCompatibility)
-ExportPublic("MSUF_DebugPingFrame", function(unitOrFrame)
-  if type(unitOrFrame) == "table" then return unitOrFrame end
-  return UF.frames and UF.frames[unitOrFrame]
-end)
-
-function UF.GetSecureMenuProxy()
-  return nil
-end
-
-function UF.AttachSecureUnitMenu(frame)
-  if not (frame and frame.SetAttribute) or InCombat() then return nil end
-  -- PTR 12.1 blocks delegated secure click actions; use Blizzard's addon
-  -- supported togglemenu action directly on the unit button.
-  frame:SetAttribute("type2", nil)
-  frame:SetAttribute("*type2", "togglemenu")
-  frame:SetAttribute("clickbutton2", nil)
-  frame:SetAttribute("*clickbutton2", nil)
-  return nil
-end
-
-local function ConfigureClickTarget(button, unit)
-  if not (button and button.SetAttribute) or InCombat() then return false end
-  if button._msufSecureUnit ~= unit then
-    button:SetAttribute("unit", unit)
-    button._msufSecureUnit = unit
-  end
-  -- Stamp MSUF's fallback actions once. Click-cast providers replace these
-  -- attributes after ClickCastFrames registration; rewriting them on every
-  -- profile/config apply would silently take routing back from the provider.
-  if button._msufSecureType1Target ~= true then
-    button:SetAttribute("type1", nil)
-    button:SetAttribute("*type1", "target")
-    button._msufSecureType1Target = true
-  end
-  if button._msufSecureType2Menu ~= true then
-    UF.AttachSecureUnitMenu(button)
-    button._msufSecureType2Menu = true
-  end
-  if button._msufSecureToggleVehicle ~= true then
-    button:SetAttribute("toggleForVehicle", true)
-    button._msufSecureToggleVehicle = true
-  end
-  if button.RegisterForClicks and button._msufClicksRegistered ~= true then
-    button:RegisterForClicks("AnyUp")
-    button._msufClicksRegistered = true
-  end
-  if button.EnableMouse and button._msufMouseEnabledForDirectClick ~= true then
-    button:EnableMouse(true)
-    button._msufMouseEnabledForDirectClick = true
-  end
-  return true
-end
-
-local function EnsureClickOverlay(frame, unit)
-  if not frame then return nil end
-  local button = frame._msufClickOverlay
-  if button and not InCombat() then
-    if UnregisterUnitWatch then UnregisterUnitWatch(button) end
-    button._msufClickOverlayWatched = nil
-    if button.EnableMouse then button:EnableMouse(false) end
-    if button.Hide then button:Hide() end
-    frame._msufClickOverlay = nil
-  end
-  return nil
-end
-
-local function SetSecureUnitAttributes(frame, unit)
-  frame.MSUFUnitKey = unit
-  frame.unitKey = unit
-  EnsureClickOverlay(frame, unit)
-  ConfigureClickTarget(frame, unit)
-  UF.RegisterClickCastFrame(frame)
-  UF.ConfigurePlayerResourcePing(frame, unit)
-end
-
-local function FrameOnShow(frame)
-  if not frame then return end
-  local identityRefreshed = frame._msufCoreOnShowIdentityRefreshed == true
-  frame._msufCoreOnShowIdentityRefreshed = nil
-  if frame._msufDisabledByConfig == true or frame._msufRuntimeOnShowBusy == true then return end
-  if not frame.MSUFSpec or frame.MSUFSpec.enabled == false then return end
-  if not frame._msufRuntimeAllPath and not frame._msufIdentityPath then return end
-  if identityRefreshed and frame._msufRuntimeOnShowNeedsFull ~= true then return end
-  frame._msufRuntimeOnShowBusy = true
-  if UF.FrameRuntimeUpdate then UF.FrameRuntimeUpdate(frame, "MSUF_FRAME_SHOWN") end
-  frame._msufRuntimeOnShowBusy = nil
-end
-
-local function EnsureRuntimeOnShow(frame)
-  if not frame or frame._msufRuntimeOnShowHooked == true then return end
-  if frame.HookScript then
-    frame:HookScript("OnShow", FrameOnShow)
-    frame._msufRuntimeOnShowHooked = true
-  end
-end
-
--- Unit-frame tooltip on hover. The UFCore refactor (f17590e5) split the
--- mouseover highlight into MSUF.Highlight and dropped the tooltip trigger that
--- used to live beside it, so unit-frame tooltips stopped firing entirely. These
--- handlers restore it and stay branch-thin: all mode/anchor/dedupe work and the
--- NEVER fast-path live in Tooltips.ShowUnit, and the unit token is a cached
--- plain field (no secure GetAttribute per hover).
-local function ShowUnitTooltip(frame)
-  local tooltips = MSUF.Tooltips
-  -- Combat fast-path: hoverInert is true when a tooltip cannot show right now
-  -- (NEVER, or OOC in combat), so an in-combat hover in those modes costs one
-  -- field read and returns -- zero further Lua.
-  if not tooltips or tooltips.hoverInert then return end
-  if tooltips.ShowUnit then
-    tooltips.ShowUnit(frame, frame and (frame.unitKey or frame.MSUFUnitKey))
-  end
-end
-
-local function HideUnitTooltip(frame)
-  local tooltips = MSUF.Tooltips
-  if not tooltips or tooltips.hoverInert then return end
-  if tooltips.HideUnit then
-    tooltips.HideUnit(frame)
-  end
-end
-
-local function EnsureMouseoverHooks(frame)
-  if not (frame and frame.HookScript) or frame._msufMouseoverHighlightHooked == true then return end
-  if Highlight then
-    frame:HookScript("OnEnter", Highlight.UnitEnter)
-    frame:HookScript("OnLeave", Highlight.UnitLeave)
-  end
-  frame:HookScript("OnEnter", ShowUnitTooltip)
-  frame:HookScript("OnLeave", HideUnitTooltip)
-  frame._msufMouseoverHighlightHooked = true
-end
-
-function UF.PortraitMouseEnter(frame)
-  if Highlight then Highlight.UnitEnter(frame) end
-  ShowUnitTooltip(frame)
-end
-
-function UF.PortraitMouseLeave(frame)
-  if Highlight then Highlight.UnitLeave(frame) end
-  HideUnitTooltip(frame)
-end
-
-local function SpawnFrame(unit)
-  if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
-
-  local name = UF.FrameName(unit)
-  local parent = ResolvePetBattleFrameHider()
-  local frame = _G[name]
-  if not (frame and frame.SetAttribute and frame.RegisterForClicks) then
-    frame = UF.CreateSecureUnitButton(name, parent)
-  elseif frame.SetParent and frame:GetParent() ~= parent and not InCombat() then
-    frame:SetParent(parent)
-  end
-  frame._msufOwnedAnchorRoot = true
-  EnableScreenClamp(frame)
-  UF.AttachFrame(frame, { scope = "single" })
-  EnsureRuntimeOnShow(frame)
-  EnsureMouseoverHooks(frame)
-  SetSecureUnitAttributes(frame, unit)
-  if UF.EnsureHealthVisualRoot then UF.EnsureHealthVisualRoot(frame) end
-  -- Not Enable/Disable: those are the native Button methods of this secure frame.
-  frame._msufActivate = function(self)
-    if RegisterUnitWatch then RegisterUnitWatch(self) end
-    if self.Show then self:Show() end
-    return true
-  end
-  frame._msufDeactivate = function(self)
-    if UnregisterUnitWatch then UnregisterUnitWatch(self) end
-    self._msufUnitWatched = nil
-    if self.Hide then self:Hide() end
-  end
-  if frame.Show then frame:Show() end
-  RegisterGlobals(unit, frame)
-  return frame
-end
-
-local function ApplyFrame(frame, spec, applyMask)
-  if not (frame and spec) then return false end
-  if InCombat() then return DeferApply(frame.MSUFUnitKey) end
-
-  if spec.enabled == false then
-    ClearPendingReenableReload(frame, spec)
-  elseif RequireReloadForReenable(frame, spec) then
-    return true
-  end
-
-  EnsureRuntimeOnShow(frame)
-  EnsureMouseoverHooks(frame)
-  UF.SetFrameSpec(frame, spec, frame.MSUFUnitKey)
-  SetSecureUnitAttributes(frame, frame.MSUFUnitKey)
-
-  if spec.enabled == false then
-    DisableFrame(frame)
-    if frame._msufDisabledByConfig ~= true and VariantSwitchesFrame(frame, spec) then
-      HoldVariantOff(frame)
-      return true
-    end
-    if UF.DetachFrame then UF.DetachFrame(frame) end
-    frame._msufDisabledByConfig = true
-    frame._msufVariantOff = nil
-    return true
-  end
-
-  frame._msufDisabledByConfig = nil
-  -- Back from a variant's off state: every element is applied again, the
-  -- released visibility driver included.
-  local fromVariantOff = frame._msufVariantOff == true
-  if ApplySize(frame, spec) == false or ApplyPosition(frame, spec) == false then
-    return false
-  end
-
-  UF.ApplySpec(frame, spec, "MSUF_APPLY", (applyMask == nil or fromVariantOff) and true or applyMask)
-  frame._msufVariantOff = nil
-
-  local unitWatched = frame._msufUnitWatched == true
-  if UnitWatchRegistered then
-    unitWatched = UnitWatchRegistered(frame) == true
-    frame._msufUnitWatched = unitWatched and true or nil
-  end
-  if frame._msufVisibilityManaged ~= true and not unitWatched then
-    frame:_msufActivate()
-    frame._msufUnitWatched = true
-  end
-  return true
-end
-
-local function ApplyOne(unit, config, applyMask)
-  if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return false end
-  local frame = UF.frames[unit] or SpawnFrame(unit)
-  if not frame then return false end
-  return ApplyFrame(frame, config.GetSpec(unit), applyMask)
-end
+local ApplyOne
+ApplyOne = BuildFactorySpawn(
+  ApplyPosition, ApplySize, ClearPendingReenableReload, DeferApply, DisableFrame, EnableScreenClamp, ExportPublic, Highlight,
+    HoldVariantOff, InCombat, MSUF, RegisterUnitWatch, RequireReloadForReenable, ResolvePetBattleFrameHider, UF, UnitGUID,
+    UnitWatchRegistered, UnregisterUnitWatch, VariantSwitchesFrame, clickCastRegistered, type, SupportsPlayerResourcePing
+)
 
 function Factory.SpawnAll(applyMask)
   if InCombat() then
@@ -1257,10 +711,6 @@ end
 
 -- Out of combat external providers move one shared unitframe proxy, plus the
 -- independent Group/ClassPower consumers, natively with zero recurring work.
--- PLAYER_REGEN_DISABLED delivers before lockdown: sever those links there so
--- nothing can passively move a protected chain mid-fight, then restore them
--- once on the existing post-combat driver. If the event ever arrived after
--- lockdown, freezing is skipped and the frames simply stay live.
 local frozenUnitAnchorProxies = false
 local frozenDirectUnitFrames = false
 local frozenGroupAnchors = false
@@ -1451,37 +901,15 @@ function Factory.EnsureDeferredDriver()
 end
 
 local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" }
-local LATE_GROUP_ANCHOR_KEYS = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
-local COOLDOWN_WIDTH_MODES = {
-  cooldown = "EssentialCooldownViewer",
-  utility = "UtilityCooldownViewer",
-  tracked_buffs = "BuffIconCooldownViewer",
-}
-local COOLDOWN_WIDTH_MODE_BITS = { cooldown = 1, utility = 2, tracked_buffs = 4 }
-local COOLDOWN_WIDTH_SOURCE_BITS = {
-  EssentialCooldownViewer = 1,
-  UtilityCooldownViewer = 2,
-  BuffIconCooldownViewer = 4,
-}
-local COOLDOWN_WIDTH_SOURCE_NAMES = {
-  "EssentialCooldownViewer",
-  "UtilityCooldownViewer",
-  "BuffIconCooldownViewer",
-}
-local COOLDOWN_WIDTH_SOURCE_BIT_ORDER = { 1, 2, 4 }
-local COOLDOWN_WIDTH_CASTBAR_CONTAINERS = {
-  "EssentialCooldownViewer_CDM_Container",
-  "UtilityCooldownViewer_AnchorContainer",
-}
-local COOLDOWN_WIDTH_ALL_SOURCES = 7
-local CASTBAR_WIDTH_CONFIG = {
-  { "castbarPlayerMatchWidth", "enablePlayerCastbar" },
-  { "castbarTargetMatchWidth", "enableTargetCastbar" },
-  { "castbarFocusMatchWidth", "enableFocusCastbar" },
-  { "bossCastbarMatchWidth", "enableBossCastbar" },
-  { "arenaCastbarMatchWidth", "enableArenaCastbar" },
-}
-local CASTBAR_WIDTH_SOURCE_BITS = { essential = 1, utility = 2 }
+local LATE_GROUP_ANCHOR_KEYS, COOLDOWN_WIDTH_MODE_BITS, COOLDOWN_WIDTH_MODES, COOLDOWN_WIDTH_SOURCE_BITS, COOLDOWN_WIDTH_SOURCE_NAMES,
+  COOLDOWN_WIDTH_SOURCE_BIT_ORDER, COOLDOWN_WIDTH_CASTBAR_CONTAINERS, MaskHas, MaskAdd, MaskIntersect, MaskSubtract, NormalizeCooldownWidthMask,
+  ClassPowerAnchorOwnsWidthRefresh, ConfiguredCooldownWidthMask, ScheduleCooldownAnchorMask
+LATE_GROUP_ANCHOR_KEYS, COOLDOWN_WIDTH_MODE_BITS, COOLDOWN_WIDTH_MODES, COOLDOWN_WIDTH_SOURCE_BITS, COOLDOWN_WIDTH_SOURCE_NAMES,
+  COOLDOWN_WIDTH_SOURCE_BIT_ORDER, COOLDOWN_WIDTH_CASTBAR_CONTAINERS, MaskHas, MaskAdd, MaskIntersect, MaskSubtract, NormalizeCooldownWidthMask,
+  ClassPowerAnchorOwnsWidthRefresh, ConfiguredCooldownWidthMask, ScheduleCooldownAnchorMask = RequireFactory("FactoryCooldownWidth")(
+  CanonicalAnchorFrameName, CooldownAnchorSupported, Factory, IsGlobalCooldownAnchorEnabled, LATE_ANCHOR_KEYS, type
+)
+
 local cooldownWidthHooked = setmetatable({}, { __mode = "k" })
 local cooldownWidthActiveGeneration = setmetatable({}, { __mode = "k" })
 local cooldownWidthActiveMask = setmetatable({}, { __mode = "k" })
@@ -1499,132 +927,6 @@ local cooldownWidthRefreshAfterCombatMask = 0
 local cooldownWidthVisualAfterCombatMask = 0
 local cooldownWidthObserverAfterCombat = false
 local cooldownWidthRegenDriver
-
-local function MaskHas(mask, bit)
-  return mask and bit and mask % (bit * 2) >= bit
-end
-
-local function MaskAdd(mask, bit)
-  if not bit or MaskHas(mask, bit) then return mask end
-  return mask + bit
-end
-
-local function MaskIntersect(left, right)
-  local result = 0
-  for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
-    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
-    if MaskHas(left, bit) and MaskHas(right, bit) then result = result + bit end
-  end
-  return result
-end
-
-local function MaskSubtract(left, right)
-  local result = 0
-  for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
-    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
-    if MaskHas(left, bit) and not MaskHas(right, bit) then result = result + bit end
-  end
-  return result
-end
-
-local function NormalizeCooldownWidthMask(source)
-  if source == nil then return COOLDOWN_WIDTH_ALL_SOURCES end
-  if type(source) == "number" then
-    source = math.floor(source)
-    return source >= 0 and source <= COOLDOWN_WIDTH_ALL_SOURCES and source or 0
-  end
-  return COOLDOWN_WIDTH_SOURCE_BITS[source] or COOLDOWN_WIDTH_MODE_BITS[source] or 0
-end
-
-local function ClassPowerAnchorOwnsWidthRefresh(bars, sourceName)
-  return type(bars) == "table"
-    and bars.classPowerAnchorToCooldown == true
-    and COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] == sourceName
-    and sourceName == "EssentialCooldownViewer"
-end
-
-local function ConfiguredCooldownWidthMask()
-  local db = _G.MSUF_DB
-  local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
-  if type(db) ~= "table" then return 0, 0, 0, 0 end
-
-  local mask = 0
-  if bars then
-    local classBit = COOLDOWN_WIDTH_MODE_BITS[bars.classPowerWidthMode or ""]
-    local detachedBit = COOLDOWN_WIDTH_MODE_BITS[bars.detachedPowerBarWidthMode or ""]
-    if bars.showClassPower ~= false then mask = MaskAdd(mask, classBit) end
-
-    for i = 1, #LATE_ANCHOR_KEYS do
-      local key = LATE_ANCHOR_KEYS[i]
-      local conf = db[key]
-      if type(conf) == "table" and conf.powerBarDetached == true and conf.showPowerBar ~= false then
-        local shape = key == "player" and tostring(conf.detachedPowerBarShape or "BAR"):upper() or "BAR"
-        if shape ~= "ORB" then
-          -- The Detached mode owns the width whether or not sync is on, so its
-          -- source is always observed. Sync additionally keeps watching the
-          -- Class Resource source, which is its fallback. Both are nil on
-          -- "Manual", where MaskAdd is a no-op and nothing gets observed.
-          mask = MaskAdd(mask, detachedBit)
-          if key == "player" and conf.detachedPowerBarSyncClassPower ~= false then
-            mask = MaskAdd(mask, classBit)
-          end
-        end
-      end
-    end
-  end
-  local visualMask = mask
-  local castbarMask = 0
-
-  local general = type(db.general) == "table" and db.general or nil
-  if general then
-    for i = 1, #CASTBAR_WIDTH_CONFIG do
-      local config = CASTBAR_WIDTH_CONFIG[i]
-      if general[config[2]] ~= false then
-        local bit = CASTBAR_WIDTH_SOURCE_BITS[general[config[1]]]
-        mask = MaskAdd(mask, bit)
-        castbarMask = MaskAdd(castbarMask, bit)
-      end
-    end
-  end
-  -- Reuse the existing cold CDM observer for anchor snapshots as well as
-  -- widths. This adds no polling: provider Show/Hide/Size events merely queue
-  -- one OOC reapply, and combat events are replayed after regen.
-  local anchorMask = 0
-  -- Only Cooldown Manager frames carry a source bit. A client that cannot host
-  -- one must not observe a viewer name left over in an imported profile.
-  local cooldownSupported = CooldownAnchorSupported()
-  local function AddAnchorName(name)
-    if not cooldownSupported then return end
-    local bit = COOLDOWN_WIDTH_SOURCE_BITS[CanonicalAnchorFrameName(name)]
-    mask = MaskAdd(mask, bit)
-    anchorMask = MaskAdd(anchorMask, bit)
-  end
-  if IsGlobalCooldownAnchorEnabled(general) then AddAnchorName("EssentialCooldownViewer") end
-  AddAnchorName(general and general.anchorName)
-  for i = 1, #LATE_ANCHOR_KEYS do
-    local conf = db[LATE_ANCHOR_KEYS[i]]
-    if type(conf) == "table" then
-      AddAnchorName(conf.anchorFrameName or conf.anchorToUnitframe)
-    end
-  end
-  for i = 1, #LATE_GROUP_ANCHOR_KEYS do
-    local conf = db[LATE_GROUP_ANCHOR_KEYS[i]]
-    if type(conf) == "table" then
-      AddAnchorName(conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
-    end
-  end
-  if bars and bars.classPowerAnchorToCooldown == true then AddAnchorName("EssentialCooldownViewer") end
-  return mask, visualMask, castbarMask, anchorMask
-end
-
-local function ScheduleCooldownAnchorMask(anchorMask, replayOnly)
-  for i = 1, #COOLDOWN_WIDTH_SOURCE_NAMES do
-    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
-    if MaskHas(anchorMask, bit) then
-      Factory.ScheduleExternalAnchorRefresh(COOLDOWN_WIDTH_SOURCE_NAMES[i], replayOnly)
-    end
-  end
-end
 
 local cooldownWidthRegenArmed = false
 
@@ -1870,8 +1172,7 @@ ExportPublic("MSUF_ScheduleCooldownWidthRefresh", ScheduleCooldownWidthRefresh)
 ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 
 -- Rebind consumers after a supported provider changes while out of combat.
--- Unitframes keep their points on a stable shared proxy, so an identity change
--- only reattaches that proxy; Group/ClassPower retain their own direct links.
+
 -- During combat the request is queued and replayed once after regen.
 function Factory.RefreshExternalAnchor(frameName)
   if not IsCooldownViewerAnchor(frameName) then return false end

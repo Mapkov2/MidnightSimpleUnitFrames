@@ -6,7 +6,12 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_PortraitDetails.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Prediction_Glow.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Status_Regions.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Status_Indicators.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Status_GroupRuntime.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Status_Level.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Status.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusAFKTimer.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusStance.lua"/>
@@ -17,8 +22,11 @@
   <Script file="..\..\Range\MSUF_UF_RangeFade_Driver.lua"/>
   <Script file="..\..\Range\MSUF_UF_RangeFade.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Common.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_SlotCompile.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Format.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Layout.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Drain.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Name.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Runtime.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>

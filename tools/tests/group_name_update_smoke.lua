@@ -220,7 +220,8 @@ local runtime = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/"
 local secret = Secrets.New("string")
 names.raid1 = secret
 local stop = Secrets.Watch({ runtime .. "MSUF_UF_Text_Runtime.lua", runtime .. "MSUF_UF_Text_Common.lua",
-    runtime .. "MSUF_UF_Text_Format.lua", root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua" }, { strict = true })
+    runtime .. "MSUF_UF_Text_Format.lua", runtime .. "MSUF_UF_Text_SlotCompile.lua", runtime .. "MSUF_UF_Text_Name.lua",
+    runtime .. "MSUF_UF_Text_Drain.lua", root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua" }, { strict = true })
 ScopedNameEvent(1)
 local violations = stop()
 assert(#violations == 0, table.concat(violations, "\n"))

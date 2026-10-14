@@ -94,6 +94,8 @@ local namespace = {
     },
 }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 Check(registered, "the prediction element did not register")

@@ -3,12 +3,7 @@ local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
---- UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua
----
---- Cold/warm text layout and FontString apply code. Text formatting/runtime
---- lives in the companion text modules; this file positions FontStrings, applies
---- font/color/layer settings, and rebuilds compiled text runtime after layout
---- changes. Hot text updates should use the compiled functions, not layout work.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 
 local CreateFrame = Text.CreateFrame
 local UF = Text.UF
@@ -305,9 +300,6 @@ end
 -- The separator follows the rendered end of a left-justified name. A
 -- self-sized name ends at its own right edge; a bar-anchored name spans the bar,
 -- so the invisible auto-width twin (_msufNameAnchorText, EnsureNameAnchorProxy)
--- marks its glyph end. Anchoring to that edge lets the UI engine carry a
--- restricted name's geometry: GetStringWidth() is SecretWhenAnchoringSecret,
--- and SetPoint and the anchor cache below must never see that secret width.
 local function AnchorInlineToName(frame)
   local name = frame and frame.nameText
   local sep = frame and frame.totInlineSep
@@ -518,13 +510,7 @@ local function ApplyNoEllipsisClip(frame, fs, spec, text, width, side)
   local _, _, _, anchorJustify = ResolveUnitNameAnchor(text and text.nameAnchor, 0)
   local point, justify
   if anchorJustify == "CENTER" then
-    -- Keep TOP/FRAMECENTER names optically centered even when the actual unit
-    -- name is restricted and cannot be measured. The oversized FontString is
-    -- centered behind the clip window, so short and long names share one
-    -- secret-safe center without GetStringWidth or string slicing. The warm
-    -- name path (Text.RefreshNameCenterClipFit) re-anchors measurable names
-    -- that overflow the window so only the configured clip side is cut instead
-    -- of both ends; this cold pass replays its last verdict without measuring.
+    -- ApplyNoEllipsisClip rationale: docs/uf-responsibility-notes.md.
     frame._msufNameCenterClip = true
     point, justify = NameCenterClipAnchor(frame, side)
   else
@@ -807,12 +793,7 @@ local function EnsureNameAnchorProxy(frame, spec)
   local shortenMax = text.nameShorten == true and tonumber(text.nameShortenMax) or 0
   local clipped = text.nameLegacyTruncation ~= true and shortenMax and shortenMax > 0
 
-  -- Shortened names render inside a fixed maxChars-wide window, so the window
-  -- edge is not the glyph edge for names that fit it. Hang the twin off the
-  -- same window corner the visible run starts from; its auto-sized far edge
-  -- then coincides with the rendered glyphs without measuring the (possibly
-  -- secret) name. Status anchoring falls back to the window's cut edge only
-  -- while the warm fit reports a real overflow.
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   local clipTarget, clipPoint
   if clipped and text.directLayout ~= true then
     if text.nameShortenDots ~= true then
@@ -1124,11 +1105,7 @@ local function InvalidateTextForFontEpoch(frame)
   frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
 end
 
--- A separate alpha gate on the existing overlays preserves slot visibility,
--- clipping, text opacity and secret-backed value/color writers. Blizzard live
--- TextStatusBar.lua uses the same enter/leave lifecycle for status text.
--- Hooks are installed once, only for frames that opt in. No polling or DB reads
--- in the mouse path; disabled frames retain no active overlay references.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 local function FinishTextFade(group)
   local overlay = group:GetParent()
   overlay:SetAlpha(overlay._msufHoverTo)
@@ -1274,78 +1251,11 @@ function Text.SyncPlayerPowerOocHidden(frame, hidden)
   end
 end
 
-function Text.Apply(frame, spec)
-  local text = spec and spec.text or {}
-  local powerEbonMight = frame._msufPowerEbonMight == true
-  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
-  if frame._msufTextFontAttemptEpoch ~= fontEpoch then
-    InvalidateTextForFontEpoch(frame)
-  end
-  local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
-  sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
-  -- Run before layout cache returns: toggling hover does not require relayout.
-  ApplyTextMouseover(frame, text)
-  if frame._msufClassPowerOocHidden == true then
-    Text.SyncPlayerPowerOocHidden(frame, true)
-  end
-  local layoutRevision = spec and spec._msufTextLayoutRevision
-  if frame._msufGFPreviewDetached ~= true
-    and not sinksChanged
-    and sinksReady
-    and frame._msufTextFontAttemptEpoch == fontEpoch
-    and frame._msufTextPowerEbonMight == powerEbonMight
-    and layoutRevision ~= nil
-    and frame._msufTextLayoutRevision == layoutRevision
-  then
-    RefreshAppliedTextColors(frame, spec, text)
-    return
-  end
-  local signature = TextApplySignature(spec, text)
-  if frame._msufGFPreviewDetached ~= true
-    and not sinksChanged
-    and sinksReady
-    and frame._msufTextFontAttemptEpoch == fontEpoch
-    and frame._msufTextPowerEbonMight == powerEbonMight
-    and frame._msufTextApplySignature == signature
-  then
-    RefreshAppliedTextColors(frame, spec, text)
-    return
-  end
-  local showName = spec and spec.showName ~= false
-  local inlineEnabled = showName and spec.key == "target" and text.inlineToT and text.inlineToT.enabled == true
-  if inlineEnabled then
-    frame.totInlineSep = EnsureFontString(frame, "totInlineSep", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
-    frame.totInlineText = EnsureFontString(frame, "totInlineText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
-  elseif frame.totInlineSep or frame.totInlineText then
-    SetShownCached(frame.totInlineSep, false)
-    SetShownCached(frame.totInlineText, false)
-    HideDots(frame._msufInlineDotsFS)
-    frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
-  end
-  local fontsReady = SetFont(frame.nameText, spec, spec and spec.nameFontSize, "name") ~= false
-  if inlineEnabled then
-    if SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
-    if SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
-  end
-  local hpLeftSize, hpRightSize, hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect = HealthSlotLayoutKeys(text)
-  if SetFont(frame.hpTextLeft, spec, hpLeftSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
-  if SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
-  if SetFont(frame.hpTextRight, spec, hpRightSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
-  if SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
-  if SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
-  if SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
-  if fontsReady then
-    frame._msufTextFontPending = nil
-  else
-    frame._msufTextFontPending = true
-  end
-  frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
-  frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
-  frame._msufPowerTextColorInitialized = nil
-  frame._msufPowerTextColorType = nil
-  frame._msufPowerTextColorToken = nil
-  frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = nil, nil, nil, nil
-  frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
+
+
+
+local function PositionConfiguredText(frame, spec, text, inlineEnabled,
+  hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect)
   local power = spec and spec.power or {}
   local hasPowerText = frame.powerTextLeft or frame.powerTextCenter or frame.powerTextRight
   local detachedPowerText = hasPowerText and power.enabled == true and power.detached == true and power.textOnDetached == true and frame.targetPowerBar
@@ -1458,6 +1368,83 @@ function Text.Apply(frame, spec)
       ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
     end
   end
+
+end
+
+function Text.Apply(frame, spec)
+  local text = spec and spec.text or {}
+  local powerEbonMight = frame._msufPowerEbonMight == true
+  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  if frame._msufTextFontAttemptEpoch ~= fontEpoch then
+    InvalidateTextForFontEpoch(frame)
+  end
+  local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
+  sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
+  -- Run before layout cache returns: toggling hover does not require relayout.
+  ApplyTextMouseover(frame, text)
+  if frame._msufClassPowerOocHidden == true then
+    Text.SyncPlayerPowerOocHidden(frame, true)
+  end
+  local layoutRevision = spec and spec._msufTextLayoutRevision
+  if frame._msufGFPreviewDetached ~= true
+    and not sinksChanged
+    and sinksReady
+    and frame._msufTextFontAttemptEpoch == fontEpoch
+    and frame._msufTextPowerEbonMight == powerEbonMight
+    and layoutRevision ~= nil
+    and frame._msufTextLayoutRevision == layoutRevision
+  then
+    RefreshAppliedTextColors(frame, spec, text)
+    return
+  end
+  local signature = TextApplySignature(spec, text)
+  if frame._msufGFPreviewDetached ~= true
+    and not sinksChanged
+    and sinksReady
+    and frame._msufTextFontAttemptEpoch == fontEpoch
+    and frame._msufTextPowerEbonMight == powerEbonMight
+    and frame._msufTextApplySignature == signature
+  then
+    RefreshAppliedTextColors(frame, spec, text)
+    return
+  end
+  local showName = spec and spec.showName ~= false
+  local inlineEnabled = showName and spec.key == "target" and text.inlineToT and text.inlineToT.enabled == true
+  if inlineEnabled then
+    frame.totInlineSep = EnsureFontString(frame, "totInlineSep", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
+    frame.totInlineText = EnsureFontString(frame, "totInlineText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
+  elseif frame.totInlineSep or frame.totInlineText then
+    SetShownCached(frame.totInlineSep, false)
+    SetShownCached(frame.totInlineText, false)
+    HideDots(frame._msufInlineDotsFS)
+    frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+  end
+  local fontsReady = SetFont(frame.nameText, spec, spec and spec.nameFontSize, "name") ~= false
+  if inlineEnabled then
+    if SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
+    if SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
+  end
+  local hpLeftSize, hpRightSize, hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect = HealthSlotLayoutKeys(text)
+  if SetFont(frame.hpTextLeft, spec, hpLeftSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.hpTextRight, spec, hpRightSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  if SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  if SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  if fontsReady then
+    frame._msufTextFontPending = nil
+  else
+    frame._msufTextFontPending = true
+  end
+  frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
+  frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
+  frame._msufPowerTextColorInitialized = nil
+  frame._msufPowerTextColorType = nil
+  frame._msufPowerTextColorToken = nil
+  frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = nil, nil, nil, nil
+  frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
+  PositionConfiguredText(frame, spec, text, inlineEnabled,
+    hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect)
 
   if frame.nameText then
     frame.nameText._msufShown = nil

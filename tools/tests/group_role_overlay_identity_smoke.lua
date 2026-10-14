@@ -111,6 +111,10 @@ local stop = Secrets.Watch({
     root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua",
     root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_FrameOverlay.lua",
     root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua",
+    root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Regions.lua",
+    root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua",
+    root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_GroupRuntime.lua",
+    root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Level.lua",
     root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua",
 }, { strict = true })
 h:EnterCombat()

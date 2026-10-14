@@ -1353,3 +1353,13 @@ normalize a profile. Extra-aura callbacks bind shared defaults to scalars at loa
 their exact pre-schema VM/native/allocation budgets remain unchanged. Real
 control declarations, sparse/imported reads and profile switches have focused
 guards; live layout and combat/taint checks remain client-side validation.
+
+### Unit-frame responsibility owners
+
+The Status, Text and Factory engine files at the Lua local ceiling are split into eleven
+provider files that load before their coordinators in every client graph. Moved bodies keep
+their statements and upvalue captures. Budget-sensitive bodies stay in the coordinator: the
+over-absorb painter, the Boss number updater and every optional-callable probe with its
+captured local `type`. Ownership, binding model and the cost pins are in
+`docs/uf-responsibility-split.md`; relocated rationale comments are in
+`docs/uf-responsibility-notes.md`.

@@ -101,7 +101,11 @@ local function Fixture(sourceRoot)
   _G.MSUF_GF_PredictionSync=nil
   _G.MSUF_EventBus_Register=nil
   local prediction
-  local ns={UF={RegisterElement=function(_,e) prediction=e end}}
+  local ns={ExportPublic=function() end,UF={RegisterElement=function(_,e) prediction=e end}}
+  assert(loadfile(sourceRoot.."/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MSUF",ns)
+  if sourceRoot == root then
+    assert(loadfile(sourceRoot.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua"))("MSUF",ns)
+  end
   assert(loadfile(sourceRoot..relative))("MSUF",ns)
   local x={sim=sim,prediction=prediction}
   function x:Frame(mask,mode,flags)
@@ -134,13 +138,16 @@ local function Fixture(sourceRoot)
     log[#log+1]="cacheCfg="..tostring(f._msufPredictionCacheCfg==f._msufPredictionRuntimeCfg)
   end
   function x:Output() local out=table.concat(log,"\n");log={};return out end
-  function x:Measure(f,mask)
-    local flush=assert(f._msufPredictionFlushData)
+  function x:Measure(f,mask,event)
+    local flush=event and function(frame)
+      return prediction.Update(frame,event,frame.MSUFUnitKey)
+    end or assert(f._msufPredictionFlushData)
     flush(f,mask);record=false
     local work,beforeNative=0,native
     debug.sethook(function()
       local info=debug.getinfo(2,"S")
-      if info and info.source:find(sourceRoot..relative,1,true) then work=work+1 end
+      if info and (info.source:find(sourceRoot..relative,1,true) or
+        info.source:find(sourceRoot.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua",1,true)) then work=work+1 end
     end,"",1)
     for i=1,100 do flush(f,mask) end
     debug.sethook()
@@ -154,6 +161,8 @@ local function Fixture(sourceRoot)
   end
   return x
 end
+
+if arg[3] == "fixture" then return Fixture, SECRET end
 
 local function Run(sourceRoot)
   local x=Fixture(sourceRoot)

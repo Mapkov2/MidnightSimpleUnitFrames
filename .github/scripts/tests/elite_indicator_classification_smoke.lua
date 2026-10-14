@@ -31,6 +31,11 @@ do
         RegisterElement = function(name, element) elements[name] = element end,
     }
     local MSUF = { UF = UF, Secrets = {} }
+    -- Status consumes the real factories after the responsibility move.
+    for _, owner in ipairs({ "Regions", "Indicators", "GroupRuntime", "Level" }) do
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_" .. owner .. ".lua"))(
+            "MidnightSimpleUnitFrames", MSUF)
+    end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"))(
         "MidnightSimpleUnitFrames", MSUF)
 

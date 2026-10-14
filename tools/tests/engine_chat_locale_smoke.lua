@@ -107,7 +107,7 @@ for _, raw in ipairs({ 'format("Level %d', '" <AFK>"', '" <DND>"', 'return "Elit
     'return "Rare Elite"', 'return "Boss"', '"  PvP"', 'text = "PvP"' }) do
     Check(not tooltip:find(raw, 1, true), "Runtime/MSUF_UnitTooltips.lua still writes an English " .. raw)
 end
-Check(Code("UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"):find("SetText(fs, MSUF.Translate(text))", 1, true),
+Check(Code("UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"):find("SetText(fs, MSUF.Translate(text))", 1, true),
     "the status text (DEAD, GHOST, OFFLINE, AFK, DND) reaches its font string untranslated")
 -- Chat wrappers whose call sites pass English sentences translate inside.
 for _, file in ipairs({ "Runtime/MSUF_UIScaleRuntime.lua", "Features/Telemetry/MSUF_Analytics.lua" }) do

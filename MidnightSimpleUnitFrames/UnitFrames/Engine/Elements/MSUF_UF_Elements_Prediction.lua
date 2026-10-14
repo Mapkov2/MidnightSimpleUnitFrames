@@ -1,15 +1,22 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua
 --- Heal/absorb prediction element for unitframes.
----
---- WoW prediction APIs can return unknown/secret values during protected states;
---- native StatusBars and clip geometry consume them without unsafe Lua math.
 
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local UF = MSUF.UF
+
+-- Bind mandatory factories once; report both the consumer and received shape.
+local function RequireFactory(key)
+  local factories = MSUF.UFModuleFactories
+  assert(type(factories) == "table", "Elements/MSUF_UF_Elements_Prediction.lua: required UF factory registry for " .. key)
+  local factory = factories[key]
+  local kind = type(factory)
+  assert(kind == "function", "Elements/MSUF_UF_Elements_Prediction.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
+  return factory
+end
 local CreateFrame = CreateFrame
 local UnitExists = UnitExists
 local UnitIsConnected = UnitIsConnected
@@ -62,9 +69,6 @@ end
 local issecretvalue = _G.issecretvalue
 
 -- Heal/absorb prediction element.
--- Owns incoming heal, absorb, and heal-absorb overlays for unitframes. The code supports
--- both modern detailed prediction APIs and older fallbacks, and it must tolerate secret unit
--- tokens without leaking or doing math on protected values.
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local UnitDamageAbsorbClampMode = Enum and Enum.UnitDamageAbsorbClampMode
 local ABSORB_MISSING = UnitDamageAbsorbClampMode
@@ -497,41 +501,10 @@ local function FullHealthAlpha(unit)
   return UnitHealthPercent(unit, true, curve)
 end
 
-local function EnsureOverAbsorbGlow(frame)
-  if not frame then return nil end
-  local hpBar = frame.hpBar or frame.Health
-  if not hpBar then return nil end
-  local holder = frame.overAbsorbGlowBar
-  if holder then return holder end
-  if not CreateFrame then return nil end
 
-  -- UnitGetTotalAbsorbs is secret-returning on Midnight. A 0..1 StatusBar can
-  -- consume that value directly: zero draws nothing and every positive absorb
-  -- clamps to the complete Blizzard edge texture. This avoids branching on a
-  -- protected value and also gives the glow a frame level above the HP bar.
-  holder = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
-  if holder.EnableMouse then holder:EnableMouse(false) end
-  holder:SetMinMaxValues(0, 1)
-  holder:SetValue(0)
-  holder._msufOverAbsorbValue = 0
-  holder._msufOverAbsorbValuePlain = true
-  holder._msufOverAbsorbAlpha = 1
-  holder._msufOverAbsorbAlphaPlain = true
-  holder:SetStatusBarTexture(OVER_ABSORB_TEXTURE)
-  holder:SetStatusBarColor(1, 1, 1, 1)
-  local glow = holder:GetStatusBarTexture()
-  if glow.SetBlendMode then glow:SetBlendMode("ADD") end
-  holder:SetWidth(OVER_ABSORB_GLOW_W)
-  holder:Hide()
-  local oldGlow = frame.overAbsorbGlow
-  if oldGlow and oldGlow ~= glow and oldGlow.Hide then oldGlow:Hide() end
-  -- Only this function sets the holder's status texture, so the handle stays
-  -- valid for the holder's life; the health-tick sinks reuse it.
-  holder._msufOverAbsorbGlowTexture = glow
-  frame.overAbsorbGlowBar = holder
-  frame.overAbsorbGlow = glow
-  return holder
-end
+local PositionOverAbsorbGlow = RequireFactory("PredictionGlow")(
+  CreateFrame, PixelLayoutRegion, OVER_ABSORB_TEXTURE, OVER_ABSORB_GLOW_W, OVER_ABSORB_GLOW_OFFSET, issecretvalue
+)
 
 local function HideOverAbsorbGlow(frame)
   local holder = frame and frame.overAbsorbGlowBar
@@ -560,55 +533,6 @@ local function SetOverAbsorbAlpha(holder, alpha, secret)
   end
 end
 
-local function PositionOverAbsorbGlow(frame, reverse)
-  local holder = EnsureOverAbsorbGlow(frame)
-  local hpBar = frame and (frame.hpBar or frame.Health)
-  if not (holder and hpBar) then return nil end
-  local vertical = frame._msufPredictionVertical == true
-  if holder.SetFrameLevel and hpBar.GetFrameLevel then
-    local baseLevel = hpBar:GetFrameLevel()
-    if issecretvalue(baseLevel) ~= true then
-      local level = (baseLevel or 1) + 4
-      if holder._msufOverAbsorbLevel ~= level then
-        holder:SetFrameLevel(level)
-        holder._msufOverAbsorbLevel = level
-      end
-    end
-  end
-  if holder._msufOverAbsorbReverse == reverse
-    and holder._msufOverAbsorbAnchor == hpBar
-    and holder._msufOverAbsorbVertical == vertical then
-    return holder
-  end
-  holder:ClearAllPoints()
-  if vertical then
-    -- Vertical fill: the over-absorb edge sits at the fill-end (top for
-    -- bottom->top HP, bottom for top->bottom HP) as a horizontal strip. The
-    -- Shield-Overshield art is drawn for a side edge; a rotated stripe is an
-    -- accepted cosmetic trade-off (the presence gate still renders correctly).
-    if reverse then
-      holder:SetPoint("TOPLEFT", hpBar, "BOTTOMLEFT", 0, OVER_ABSORB_GLOW_OFFSET)
-      holder:SetPoint("TOPRIGHT", hpBar, "BOTTOMRIGHT", 0, OVER_ABSORB_GLOW_OFFSET)
-    else
-      holder:SetPoint("BOTTOMLEFT", hpBar, "TOPLEFT", 0, -OVER_ABSORB_GLOW_OFFSET)
-      holder:SetPoint("BOTTOMRIGHT", hpBar, "TOPRIGHT", 0, -OVER_ABSORB_GLOW_OFFSET)
-    end
-    holder:SetHeight(OVER_ABSORB_GLOW_W)
-  else
-    if reverse then
-      holder:SetPoint("TOPRIGHT", hpBar, "TOPLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
-      holder:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
-    else
-      holder:SetPoint("TOPLEFT", hpBar, "TOPRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
-      holder:SetPoint("BOTTOMLEFT", hpBar, "BOTTOMRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
-    end
-    holder:SetWidth(OVER_ABSORB_GLOW_W)
-  end
-  holder._msufOverAbsorbReverse = reverse
-  holder._msufOverAbsorbAnchor = hpBar
-  holder._msufOverAbsorbVertical = vertical
-  return holder
-end
 
 local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
   local hpSecret = issecretvalue(hp) == true
@@ -640,37 +564,7 @@ local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
   return hp, maxHP, hpSecret, maxSecret
 end
 
--- Over-absorb glow with protected values (Midnight absorbs, and often health,
--- are secret). The prediction calculator's MissingHealth clamp reports whether
--- the absorb overflows the missing health, incoming heals counted: `clamped`,
--- approximately the plain rule (hp + incoming + absorb >= max) as a possibly
--- secret boolean. Incoming heals: the plain path adds the player's own
--- (ReadIncomingHeals) unless "all healers" is on; the clamp subtracts the
--- calculator's incoming heals, most likely the all-units amount (the healer
--- passed to UnitGetDetailedHealPrediction only selects amountFromHealer;
--- UnitDocumentation, UnitHealPredictionCalculatorAPIDocumentation); Blizzard's
--- rule (CompactUnitFrame.lua:1257) adds all incoming heals less heal absorbs,
--- so the plain path shares only its >= with it.
--- The calculator documents `clamped` as "in excess of the clamp boundary"
--- (UnitHealPredictionCalculatorAPIDocumentation). When the health and
--- incoming-heal inputs agree with the plain path's, an absorb that exactly
--- fills the missing health is the case where it differs from the plain rule's
--- >=; no secret-safe API reports that edge. Its inputs need not agree: see
--- the next paragraph on its health source. Without the full-health
--- stripe a step curve keeps the plain rule that full health shows no partial
--- glow; with the stripe, `clamped` is already the union of both, because at
--- full health every positive absorb is clamped.
---
--- The step curve reads PREDICTED health, like the plain path, the stripe and
--- the health bar (UnitHealthPercent usePredicted): the calculator's own health
--- source is undocumented, so it supplies only the overflow flag. A health tick
--- costs four native calls (2026-10-02 raid trace: six, about 30 % of core CPU):
--- one calculator fill, its flag, the curve, and one SetAlphaFromBoolean that
--- takes the curve result as its alphaIfTrue (SecretArguments
--- AllowedWhenTainted, SimpleRegionAPIDocumentation), so the texture alpha is
--- clamped AND partial in one sink and the holder stays at full alpha. The glow
--- texture handle is the one EnsureOverAbsorbGlow created.
--- Lua never compares, adds or branches on a protected value here.
+-- ReadHealthForOverAbsorb rationale: docs/uf-responsibility-notes.md.
 local overAbsorbPartialCurve
 local function UngateOverAbsorbGlow(holder)
   if holder._msufOverAbsorbGlowGated == true then
@@ -728,6 +622,7 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   return true
 end
 
+-- Existing budget-sensitive painter: no extra phase dispatch on exported Update.
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha,
   writeAbsorbValue, knownAbsorbSecret)
   if frame and refreshFullHealthAlpha == true then
@@ -739,10 +634,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     HideOverAbsorbGlow(frame)
     return
   end
-  -- Absorb is immutable for this render pass. Determine its protection state
-  -- once instead of re-entering issecretvalue at every native-gate branch.
-  -- The steady UNIT_HEALTH follower can pass the plain classification cached
-  -- by the absorb-data owner, including false as a meaningful known value.
   local absorbSecret = knownAbsorbSecret
   if absorbSecret == nil then
     absorbSecret = issecretvalue(absorb) == true
@@ -774,9 +665,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       end
     end
   end
-  -- Reject the overwhelmingly common plain zero-shield state before
-  -- health/max lookups and layout checks. A protected operand has no Lua
-  -- arithmetic path: the calculator flag renders it (ShowProtectedOverAbsorb).
   if not fullHealthStripeEnabled then
     if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
       HideOverAbsorbGlow(frame)
@@ -808,11 +696,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       return
     end
 
-    -- A protected absorb cannot participate in the optional partial-health
-    -- threshold. Its only renderable result is the native full-health stripe:
-    -- the holder value gates absorb presence and its cached alpha gates health.
-    -- Once both gates are warm, an absorb-data event needs no UnitHealth/
-    -- UnitHealthMax recovery at all.
     if writeAbsorbValue == true
       and absorbSecret
       and not overAbsorbEnabled
@@ -831,9 +714,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     end
   end
 
-  -- Protected health reduces to two native payloads: a step-curve alpha and
-  -- the raw absorb cached by UNIT_ABSORB_AMOUNT_CHANGED. Reuse the warm layout
-  -- and skip general health recovery/threshold work on every health event.
   if cfg and cfg.test ~= true
     and fullHealthStripeEnabled
     and not overAbsorbEnabled
@@ -877,8 +757,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     HideOverAbsorbGlow(frame)
     return
   end
-  -- Apply owns layout/frame-level changes. The combat health path can bypass
-  -- Ensure/position/frame-level work while the compiled anchor is unchanged.
   if not (holder and hpBar
       and holder._msufOverAbsorbReverse == reverse
       and holder._msufOverAbsorbAnchor == hpBar) then
@@ -886,10 +764,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   end
   if not holder then return end
 
-  -- Secret absorb values cannot be inspected in Lua. Feed them into the tiny
-  -- StatusBar instead; its fill is the positive-absorb gate. For protected HP
-  -- values, UnitHealthPercent evaluates a step curve and SetAlpha accepts the
-  -- resulting secret scalar. Rendering therefore performs the logical AND.
   if absorbSecret or hpSecret or maxSecret then
     if overAbsorbEnabled and ShowProtectedOverAbsorb(frame, holder, unit, fullHealthStripeEnabled) then
       return
@@ -956,8 +830,6 @@ end
 -- run AFTER any re-parenting and re-apply unconditionally when the parent just
 -- changed -- otherwise the cached level below still reports the wanted layer
 -- while the widget sits one level lower, and the layout guard never repairs it.
--- Overflow (mode 4) re-parents the overlay from the HP bar to the frame, which
--- is exactly where that mismatch drops the bar behind neighbouring group frames.
 local function SyncBarLayer(frame, hpBar, bar, levelOffset, force)
   if not (frame and hpBar and bar) then
     return
@@ -1037,10 +909,6 @@ end
 
 -- The HP bar's own size changes only on layout/apply -- never on a combat
 -- event -- so measuring it inside the per-event layout guard is pure overhead.
--- Measure once and let the widget invalidate the cache itself. Two independent
--- invalidation sources keep this exact: the bar's own OnSizeChanged (covers any
--- resize, including live Edit Mode drags) and Prediction.Apply (deterministic
--- for every config/layout apply, and the path that installs the hook).
 local function InvalidateHpGeometry(hpBar)
   if hpBar then hpBar._msufPredGeomReady = nil end
 end
@@ -1087,17 +955,7 @@ local function ApplyOverlayOrientation(bar, vertical)
   end
 end
 
--- Overflow host for anchor mode 4.
---
--- Mode 4 overlays keep the HP bar's full scale (value/max over one bar width) so
--- the heal/absorb segment stays proportional, which means an amount larger than
--- the missing health would otherwise draw arbitrarily far past the frame -- into
--- the neighbouring group frame. Blizzard bounds the same overflow at
--- MAX_INCOMING_HEAL_OVERFLOW (1.05) by clamping the amount, but that arithmetic
--- needs current health, which is a secret value here. A clipping host reaches
--- the identical result natively: the bar keeps its true scale and the client
--- trims whatever leaves the allowance. The cross axis is left effectively
--- unclipped so stripe heights and vertical offsets are never cut.
+-- ApplyOverlayOrientation rationale: docs/uf-responsibility-notes.md.
 local OVERFLOW_ALLOWANCE = 0.05
 local OVERFLOW_CROSS_MARGIN = 250
 
@@ -1604,25 +1462,11 @@ local function ClearPredictionCache(frame)
   ClearBarValueCache(frame.healAbsorbBar)
 end
 
--- FLAT prediction writer for the plain-bar archetype: any combination of an
--- incoming-heal bar, an absorb bar, and a heal-absorb bar with STATIC anchors
--- and NO over-absorb overlay/stripe and NO mixed follow-clamp. This is exactly
--- the flat absorb+heal-prediction shape. It skips the general
--- ApplyPredictionValues state machine (per-lane show/refresh branch pairs,
--- follow-layout checks, over-absorb glow) and does the one thing a data event
--- changes: read the dirty lane(s) from the mask and write the bar(s) with
--- ShowValue's own dedup. Only the lanes flagged in the mask are read, matching
--- the general path's refresh gating so a heal event never reads the absorb API
--- and vice versa. Compiled onto the frame only when the archetype matches.
+-- ClearPredictionCache rationale: docs/uf-responsibility-notes.md.
 local function FlushFlatPrediction(frame, mask)
   if type(mask) ~= "number" then mask = 7 end
   local unit = frame.MSUFUnitKey
-  -- Resolve which lanes this event touches before doing any work: the mask
-  -- selects heal(1)/absorb(2)/heal-absorb(4), gated on the lane being active
-  -- and its bar existing. Reading the plain HP max is deferred until we know at
-  -- least one lane will render -- and read at most once, with no per-call
-  -- closure (this is a per-member, per-event hot path; a boxed upvalue frame
-  -- here is pure GC churn a flat writer never pays).
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   local doHeal = (mask % 2) >= 1 and frame._msufPredictionHealActive == true and frame.incomingHealBar
   local doAbsorb = (mask % 4) >= 2 and frame._msufPredictionAbsorbActive == true and frame.absorbBar
   local doHealAbsorb = mask >= 4 and frame._msufPredictionHealAbsorbActive == true and frame.healAbsorbBar
@@ -1652,12 +1496,7 @@ local function FlushFlatPrediction(frame, mask)
       ShowValue(frame.healAbsorbBar, maxHP, healAbsorb, false)
     end
   end
-  -- No reseed-cache bookkeeping here: the cache fields are read only by the
-  -- health-gated glow/stripe and general reseed paths, none of which run for a
-  -- flat frame (no health-dependent visual). A cold general refresh finding the
-  -- cache unset simply reseeds fully -- the safe direction -- so keeping it
-  -- unset costs nothing and saves three field writes + an issecretvalue on
-  -- every per-event flush, which is the whole point of this archetype.
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 end
 
 -- Plain-bar archetype: static anchors (no absorb follow), no over-absorb
@@ -1943,11 +1782,7 @@ local function UpdateMixedFollowHealthValue(frame, unit, cfg, seedHP, seedMaxHP)
   end
 end
 
--- Blizzard's CompactUnitFrame defers the three expensive prediction payload
--- events and resolves them at most once per rendered frame. Keep the same
--- contract here with a dedicated, allocation-free hot path: two reusable
--- arrays allow events raised during a flush to land in the next batch without
--- extending the active loop or allocating closures/tables per event.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 local predictionQueueA, predictionQueueB = {}, {}
 local predictionWriteQueue = predictionQueueA
 local predictionWriteCount = 0
@@ -2007,13 +1842,7 @@ local function QueuePredictionDataEvent(frame, event)
   local bit = PREDICTION_DATA_EVENT_BITS[event]
   if not bit then return end
 
-  -- Flat archetype (plain heal/absorb bars, no health-gated glow/stripe): the
-  -- writer is cheaper than the coalescer's own queue bookkeeping + OnUpdate
-  -- driver arm/disarm, so a same-frame burst that "collapses" to one flush
-  -- still costs more queued than just flushing each lane on the spot. Measured
-  -- net-negative for this archetype -- so render this lane synchronously, which
-  -- is exactly the flat per-event model. Every bar write is value-deduped
-  -- downstream, and the flush touches only StatusBar values (combat-safe).
+  -- QueuePredictionDataEvent rationale: docs/uf-responsibility-notes.md.
   if frame._msufPredictionSimpleAbsorb == true then
     local flush = frame._msufPredictionFlushData
     if flush then
@@ -2026,13 +1855,7 @@ local function QueuePredictionDataEvent(frame, event)
   if (mask % (bit * 2)) < bit then
     frame._msufPredictionDirtyMask = mask + bit
   end
-  -- The flat baseline renders absorb synchronously on the event (one UpdateAbsorb
-  -- call, no render-frame driver). Opt-in parity: flush the accumulated mask
-  -- immediately instead of queuing onto the OnUpdate coalescer. Every bar write
-  -- downstream is value-deduped, so a same-frame burst still collapses to the
-  -- writes that actually changed -- it just drops the per-frame driver arm +
-  -- queue bookkeeping. Default keeps the coalescer (off unless the test toggle
-  -- sets _G.MSUF_GF_PredictionSync).
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   if _G.MSUF_GF_PredictionSync == true then
     frame._msufPredictionQueued = nil
     local syncMask = frame._msufPredictionDirtyMask
@@ -2264,12 +2087,7 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     return Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   end
   local absorb = frame._msufPredictionAbsorb
-  -- This compiled non-stripe route opens for the plain-positive absorb verdict
-  -- published by the data-event owner, and for a protected absorb while the
-  -- partial overlay is on: that one renders through the calculator flag and
-  -- must never reach the plain dedupe compare below. With the glow anchored
-  -- for the live layout, a protected tick is exactly the calculator render;
-  -- anything else takes the authoritative UpdateOverAbsorbGlow.
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   if frame._msufPredictionAbsorbSecret == true then
     local holder = frame.overAbsorbGlowBar
     if holder and frame._msufPredictionOverAbsorbOverlay == true
@@ -2288,14 +2106,7 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     end
     return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true, nil, true)
   end
-  -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is
-  -- a function of the exact health percentage and absorb amount. Fractional
-  -- health changes can cross the spill threshold inside a display bucket.
-  -- Skip only an identical input, without reimplementing the show
-  -- test: a cache miss falls through to the authoritative UpdateOverAbsorbGlow,
-  -- which owns the full-health / partial-spill decision. Every prediction data
-  -- event clears this key (ApplyPredictionValues) so the next tick re-syncs.
-  -- CompilePredictionRuntime binds this function only to non-stripe frames.
+  -- UpdateHealthValue rationale: docs/uf-responsibility-notes.md.
   local bar = frame.hpBar
   local pct = bar and bar._msufHealthPercentValue
   if type(pct) == "number"
@@ -2418,12 +2229,7 @@ end
 local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, maxHP,
     refreshHeal, refreshAbsorb, refreshHealAbsorb,
     showHeal, showAbsorb, showHealAbsorb, forceMax)
-  -- The live health-bar size -- never a stale spec width -- owns prediction
-  -- geometry. Authoritative refreshes (UNIT_MAXHEALTH / UNIT_CONNECTION / full
-  -- plan) therefore drop the cached measurement so both overlay types repair
-  -- themselves here, exactly as they did when every event measured natively.
-  -- High-frequency absorb/heal data events keep serving from the cache, which
-  -- the bar's own OnSizeChanged invalidates the moment it actually resizes.
+  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
   if forceMax == true then
     InvalidateHpGeometry(frame.hpBar or frame.Health)
   end
@@ -2682,12 +2488,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
     showHeal, showAbsorb, showHealAbsorb, forceMax)
 end
 
--- Data events enter only through the compiled queue. Apply installs this
--- pointer for a live non-test plan, while Disable/Suspend clears it. Consume
--- the numeric dirty mask directly instead of re-entering UpdateFull's cold
--- unit/config/test/event-plan state machine on every rendered-frame drain.
--- Recovery alone falls back to UpdateFull so a stale/missing cache can rebuild
--- the authoritative runtime before the next hot drain.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 UpdateBoundPredictionData = function(frame, mask)
   local unit = frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
@@ -2710,11 +2511,7 @@ UpdateBoundPredictionData = function(frame, mask)
     plan[PLAN_SHOW_HEAL], plan[PLAN_SHOW_ABSORB], plan[PLAN_SHOW_HEAL_ABSORB], false)
 end
 
--- Five shared absorb-only writers cover static/follow anchors and glow/stripe
--- combinations beyond the existing flat writer. The cache guard is identical
--- to the general drain: identity, disable and reseed still use UpdateFull.
--- A valid plan for this archetype always reads and displays absorb, so there
--- are no heal lanes or six plan flags to unpack on each event.
+-- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
   return function(frame, mask)
     local unit = frame.MSUFUnitKey
@@ -2808,8 +2605,6 @@ Prediction.HealthVisualGateUpdates = {
 }
 
 --- Reseed live prediction values after Blizzard has finalized world/unit data.
---- This is a cold lifecycle path: it touches only visible frames with an active
---- Prediction element and does not rebuild specs, layouts, or event routing.
 function Prediction.RefreshVisible(reason)
   if InCombatLockdown and InCombatLockdown() then return false end
   local frames = UF and UF.attachedFrameList
