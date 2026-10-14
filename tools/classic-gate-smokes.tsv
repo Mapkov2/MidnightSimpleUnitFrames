@@ -683,3 +683,6 @@ clients+Forever	lua	tools/tests/profile_legacy_precedence_smoke.lua	{root/} {fla
 -	lua	tools/tests/editmode_strategy_engine_lifecycle_smoke.lua	{root}	Real Edit Mode strategy engine lifecycles failed
 -	python	tools/tests/group_roster_allocation_controls_smoke.py	{root}	Roster allocation cold and steady controls failed
 clients+Forever	lua	tools/tests/castbar_namespace_schema_boot_smoke.lua	{root/} {flavor}	Castbar namespace publication lost shared schema: {flavor}
+-	python	tools/tests/search_static_index_generated_smoke.py	{root}	Search index generator or shipped rows are stale	nightly
+-	python	tools/tests/search_static_index_check_mode_smoke.py	{root}	Search index check mode changed files or missed drift
+-	python	tools/tests/search_generator_failure_boundary_smoke.py	{root}	Search generator selected the wrong Lua or accepted a failed child

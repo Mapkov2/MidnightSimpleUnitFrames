@@ -19,6 +19,7 @@
 --
 --   lua .github/scripts/search_static_index_project.lua            -> writes the Mainline file
 --   lua .github/scripts/search_static_index_project.lua --stdout   -> prints it instead
+--   lua .github/scripts/search_static_index_project.lua --check    -> verifies it without writing
 --   lua .github/scripts/search_static_index_project.lua --flavor Vanilla   -> Classic file
 -- The harness can only build one client per process, so each client runs in a child of
 -- this script with --rows-only; that flag is internal and prints rows, not a file.
@@ -45,6 +46,7 @@ local HARNESS_FAILURES_LOCAL = "local pageBuildFailures = {}"
 -- never be mistaken for a complete, shorter index.
 local ROWS_ONLY_FLAG = "--rows-only"
 local ROWS_TERMINATOR = "-- end of flavor rows"
+local CHILD_EXIT_PREFIX = "-- child process exit: "
 -- Collected rows carry where they came from in a leading field that never reaches the
 -- shipped file; it only decides which client's answer survives a shared identity. A
 -- higher rank wins: the default build knows a control's collapsible section, a workspace
@@ -937,22 +939,37 @@ local function BuildFlavorInChild(suffix)
         Fail("cannot re-invoke this script: the interpreter or script path is unknown")
     end
     local command = string.format('"%s" "%s" --flavor %s %s', interpreter, script, suffix, ROWS_ONLY_FLAG)
-    if package.config:sub(1, 1) == "\\" then command = '"' .. command .. '"' end
+    if package.config:sub(1, 1) == "\\" then
+        -- Numeric status tests ignore an inherited ERRORLEVEL variable. The
+        -- outer quote pair protects literal paths through the one CMD parse.
+        local failure = 'echo ' .. CHILD_EXIT_PREFIX .. '1'
+        local success = 'echo ' .. CHILD_EXIT_PREFIX .. '0'
+        local status = ' & if errorlevel 1 (' .. failure .. ') else if errorlevel 0 (' .. success .. ') else (' .. failure .. ')'
+        command = '"' .. command .. status .. '"'
+    else
+        command = command .. '; printf "\\n' .. CHILD_EXIT_PREFIX .. '%s\\n" "$?"'
+    end
     local pipe, err = io.popen(command, "r")
     if not pipe then Fail("could not start the " .. suffix .. " child run: " .. tostring(err)) end
-    local lines, terminated = {}, false
+    local lines, terminated, childExit = {}, false, nil
     for line in pipe:lines() do
         line = line:gsub("\r$", "")
-        if line == ROWS_TERMINATOR then
+        if line:sub(1, #CHILD_EXIT_PREFIX) == CHILD_EXIT_PREFIX then
+            childExit = tonumber(line:sub(#CHILD_EXIT_PREFIX + 1))
+        elseif line == ROWS_TERMINATOR then
             terminated = true
         elseif line ~= "" then
             lines[#lines + 1] = line
         end
     end
-    pipe:close()
+    local closed, closeError = pipe:close()
+    if not closed then
+        Fail("the " .. suffix .. " child run failed: " .. tostring(closeError))
+    end
     if not terminated then
         Fail("the " .. suffix .. " child run did not finish; rerun it directly to see its error")
     end
+    if childExit ~= 0 then Fail("the " .. suffix .. " child exited " .. tostring(childExit)) end
     return lines
 end
 
@@ -966,11 +983,16 @@ for _, target in ipairs(BUILD_FLAVORS) do
 end
 
 local count, text = Render(rows)
-local toStdout = false
+local toStdout, checkOnly = false, false
 for i = 1, #(arg or {}) do
     if arg[i] == "--stdout" then toStdout = true end
+    if arg[i] == "--check" then checkOnly = true end
 end
-if toStdout then
+if checkOnly and toStdout then Fail("--check and --stdout are mutually exclusive") end
+if checkOnly then
+    local current = Read(OUTPUT_PATH):gsub("\r\n", "\n")
+    if current ~= text then Fail(OUTPUT_PATH .. ": stale generated rows; regenerate this client family") end
+elseif toStdout then
     io.write(text)
 else
     local handle, err = io.open(OUTPUT_PATH, "wb")
@@ -979,4 +1001,4 @@ else
     handle:close()
 end
 io.stderr:write(string.format("search static index: %d records from %s, %.0f KB -> %s\n",
-    count, table.concat(BUILD_FLAVORS, "+"), #text / 1024, toStdout and "stdout" or OUTPUT_PATH))
+    count, table.concat(BUILD_FLAVORS, "+"), #text / 1024, checkOnly and "check passed" or (toStdout and "stdout" or OUTPUT_PATH)))

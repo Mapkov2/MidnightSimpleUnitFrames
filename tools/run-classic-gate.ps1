@@ -113,6 +113,8 @@ $pythonSource = Resolve-GateTool -Name "python" -Explicit $PythonPath -Environme
 # go first on PATH for this process only.
 $toolDirectories = @($luaSource, $luacSource, $pythonSource) | ForEach-Object { Split-Path -Parent $_ } | Select-Object -Unique
 $env:PATH = (@($toolDirectories) + @($env:PATH)) -join [IO.Path]::PathSeparator
+# Child tools inherit the interpreter selected by the same parameter precedence.
+$env:MSUF_LUA = $luaSource
 
 $gate = Join-Path $PSScriptRoot "test-classic-prototype.ps1"
 if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) {
