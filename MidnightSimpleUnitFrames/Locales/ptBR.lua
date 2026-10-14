@@ -7274,6 +7274,21 @@ L["|cff00ff00MSUF:|r Absorb bars ENABLED."] = "|cff00ff00MSUF:|r Barras de absor
 L["100 Energy"] = "100 Energia"
 L["Blizzard Aura Frames"] = "Quadros de auras da Blizzard"
 L["First Load 6"] = "Primeiro carregamento 6"
+L["Follow role / any blessing"] = "Seguir função / qualquer bênção"
+L["Blessing of Might"] = "Bênção do Poder"
+L["Blessing of Wisdom"] = "Bênção da Sabedoria"
+L["Blessing of Kings"] = "Bênção dos Reis"
+L["Blessing of Salvation"] = "Bênção da Salvação"
+L["Blessing of Light"] = "Bênção da Luz"
+L["Blessing of Sanctuary"] = "Bênção do Santuário"
+L["Blessing priorities (Forever)"] = "Prioridades de bênçãos (Forever)"
+L["Use blessing priorities"] = "Usar prioridades de bênçãos"
+L["First choice"] = "Primeira opção"
+L["Second choice"] = "Segunda opção"
+L["Third choice"] = "Terceira opção"
+L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Escolha até três bênçãos por função.\nPaladinos usam a primeira opção aprendida. Outras classes usam a primeira opção; membros sem função contam como DPS."
+L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Exceções de classe substituem as prioridades da função. Paladinos precisam conhecer a bênção escolhida."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

@@ -266,6 +266,14 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         name_bar = "nameBarEnabled", party_targets = "targetsEnabled", group_pets = "petsEnabled",
         friendly_bosses = "friendlyBossEnabled", healer_mana = "healerManaEnabled", buff_coverage = "buffCoverageEnabled",
     }
+    if flavor == "Forever" then
+        masters.blessing_priorities = "buffCoverageBlessingPriorities"
+        -- The authored factory snapshot predates these optional policy keys.
+        mw.env.MSUF_TryDecodeCompactString = function()
+            return { addon = "MSUF", fmt = 2, msuf6 = { schema = 600,
+                payload = { general = {}, gf_party = { enabled = true }, gf_raid = { enabled = true } } } }
+        end
+    end
     local state = M.GetPersistentMenuStateTable("accordionState")
     for id in pairs(masters) do state["gf_layout:" .. id] = false end
     mw:Select("gf_layout")
@@ -352,6 +360,38 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             nameToggle:Click("LeftButton")
             mw:RunTimers()
             BodyState(nameBar, false, "feature remains independently disabled")
+        end
+    end
+    if flavor == "Forever" then
+        M.gfScope = "party"
+        local conf = mw.core.GF.GetConf("party")
+        conf.buffCoverageBlessingPriorities, conf.buffCoverageBlessingTank1 = true, 5
+        local section = M.cache.gf_layout.sections.blessing_priorities
+        local more = section._msuf2CollapsibleEntry._msuf2SectionActions
+        more:Click("LeftButton")
+        assert(more._msuf2GetSectionPopup()._msuf2ResetSection())
+        mw:RunTimers()
+        assert(conf.buffCoverageBlessingPriorities == false, "section reset retained priorities")
+        assert(conf.buffCoverageBlessingTank1 == 3 and conf.buffCoverageBlessingHealer1 == 2
+            and conf.buffCoverageBlessingDPS1 == 4, "factory reset missed new role defaults")
+        for _, role in ipairs({ "Tank", "Healer", "DPS" }) do
+            for rank = 2, 3 do assert(conf["buffCoverageBlessing" .. role .. rank] == 0, "reset missed rank choice") end
+        end
+        for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }) do
+            assert(conf["buffCoverageBlessing" .. class] == 0, "reset missed class exception")
+        end
+        -- An untouched source inherits policy defaults; Basics must clear destination overrides.
+        local policy, source, destination = mw.core.GF.BlessingPriorities, conf, mw.core.GF.GetConf("raid")
+        local fields = 0
+        for key, value in pairs(policy.Defaults) do
+            fields = fields + 1
+            source[key] = nil
+            if type(value) == "boolean" then destination[key] = true else destination[key] = 6 end
+        end
+        assert(fields == 19, "policy field inventory changed")
+        assert(M.GroupPage.CopyGroupSettings("party", "raid", { general = true }), "Basics policy copy failed")
+        for key in pairs(policy.Defaults) do
+            assert(destination[key] == nil, "Basics retained a destination policy override: " .. key)
         end
     end
 end

@@ -7444,6 +7444,21 @@ L["|cff00ff00MSUF:|r Absorb bars ENABLED."] = "|cff00ff00MSUF:|r Absorptionsbalk
 L["100 Energy"] = "100 Energie"
 L["Blizzard Aura Frames"] = "Blizzard-Aura-Rahmen"
 L["First Load 6"] = "Erstes Laden 6"
+L["Follow role / any blessing"] = "Rolle folgen / beliebiger Segen"
+L["Blessing of Might"] = "Segen der Macht"
+L["Blessing of Wisdom"] = "Segen der Weisheit"
+L["Blessing of Kings"] = "Segen der Könige"
+L["Blessing of Salvation"] = "Segen der Rettung"
+L["Blessing of Light"] = "Segen des Lichts"
+L["Blessing of Sanctuary"] = "Segen des Refugiums"
+L["Blessing priorities (Forever)"] = "Segen-Prioritäten (Forever)"
+L["Use blessing priorities"] = "Segen-Prioritäten verwenden"
+L["First choice"] = "Erste Wahl"
+L["Second choice"] = "Zweite Wahl"
+L["Third choice"] = "Dritte Wahl"
+L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Wähle bis zu drei Segen pro Rolle.\nPaladine verwenden die erste erlernte Wahl. Andere Klassen verwenden die erste Wahl; Mitglieder ohne Rolle zählen als DPS."
+L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Klassen-Ausnahmen ersetzen die Rollen-Prioritäten. Paladine müssen den gewählten Segen kennen."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

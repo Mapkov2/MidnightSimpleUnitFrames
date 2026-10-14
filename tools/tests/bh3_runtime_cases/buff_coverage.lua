@@ -167,6 +167,9 @@ local function Load(client)
     setfenv(chunk, env)
     local namespace = { Client = client, GF = GF, UF = { Layers = { StatusLevel = function(_, layer, fallback)
         return 100 + (layer or fallback) * 32 + 8 end } } }
+    local policy = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua"))
+    setfenv(policy, env)
+    policy("MidnightSimpleUnitFrames", namespace)
     chunk("MidnightSimpleUnitFrames", namespace)
     return namespace
 end

@@ -913,8 +913,19 @@ function GF.InvalidateConfCache(keepDBReady)
     _confPriority = (type(db.gf_priority) == "table" and db.gf_priority) or nil
 end
 
-function GF.GetDefault(kind, key)
-    return GetDefaultsTable(kind)[key]
+if IS_FOREVER then
+    function GF.GetDefault(kind, key)
+        local value = GetDefaultsTable(kind)[key]
+        if value == nil and (kind == "party" or kind == "raid") then
+            local policy = GF.BlessingPriorities
+            if policy then return policy.Defaults[key] end
+        end
+        return value
+    end
+else
+    function GF.GetDefault(kind, key)
+        return GetDefaultsTable(kind)[key]
+    end
 end
 
 local function ResetConfToDefaults(conf, defaults)

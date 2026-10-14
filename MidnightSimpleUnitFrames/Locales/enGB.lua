@@ -4997,6 +4997,21 @@ L["New-character default"] = "New-character default"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."
 L["Profiles deleted: %d"] = "Profiles deleted: %d"
 
+L["Follow role / any blessing"] = "Follow role / any blessing"
+L["Blessing of Might"] = "Blessing of Might"
+L["Blessing of Wisdom"] = "Blessing of Wisdom"
+L["Blessing of Kings"] = "Blessing of Kings"
+L["Blessing of Salvation"] = "Blessing of Salvation"
+L["Blessing of Light"] = "Blessing of Light"
+L["Blessing of Sanctuary"] = "Blessing of Sanctuary"
+L["Blessing priorities (Forever)"] = "Blessing priorities (Forever)"
+L["Use blessing priorities"] = "Use blessing priorities"
+L["First choice"] = "First choice"
+L["Second choice"] = "Second choice"
+L["Third choice"] = "Third choice"
+L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."
+L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Class exceptions replace role priorities. Paladins must know the chosen blessing."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

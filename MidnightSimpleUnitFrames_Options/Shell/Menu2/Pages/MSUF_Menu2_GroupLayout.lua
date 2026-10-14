@@ -929,6 +929,13 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         end,
     },
     {
+        sectionId = "blessing_priorities", title = "Blessing priorities (Forever)", height = 1330,
+        clientCapability = "IsForever", build = AdditionalSections.BlessingPriorities,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "buffCoverageBlessingPriorities", "Use blessing priorities", "visual")
+        end,
+    },
+    {
         sectionId = "name_bar", title = "Name strip", height = 300, build = AdditionalSections.NameBar,
         prepareShell = function(ctx, section)
             AdditionalSections.PrepareSwitch(ctx, section, "nameBarEnabled", "Show names on a strip above the health bar", "rebuild")

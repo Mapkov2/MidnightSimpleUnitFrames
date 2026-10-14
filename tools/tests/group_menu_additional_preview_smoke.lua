@@ -128,7 +128,10 @@ local sampleEnv=setmetatable({CreateFrame=function(_,_,parent) return Sample(par
 local moduleChunk=assert(loadfile(root..'/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua'))
 rawset(sampleEnv,'_G',sampleEnv);setfenv(moduleChunk,sampleEnv)
 local mgf={RegisterRuntimeObserver=function() end,RegisterFrameRegistryObserver=function() end}
-moduleChunk('MidnightSimpleUnitFrames',{Client={IsForever=true},GF=mgf})
+local sampleNS={Client={IsForever=true},GF=mgf}
+local policyChunk=assert(loadfile(root..'/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua'))
+setfenv(policyChunk,sampleEnv);policyChunk('MidnightSimpleUnitFrames',sampleNS)
+moduleChunk('MidnightSimpleUnitFrames',sampleNS)
 local sampleFrame=Sample()
 mgf.RenderBuffCoveragePreview(sampleFrame,{buffCoverageEnabled=true,buffCoverageWild=true,buffCoverageStamina=true,buffCoverageSize=16,buffCoverageX=3,buffCoverageY=4},.5)
 local row=assert(sampleFrame._msufBuffCoverage,'buff coverage samples were not drawn')

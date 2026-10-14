@@ -158,6 +158,43 @@ local function BuffLabel(entry)
     if name ~= nil and not (secret and secret(name)) and type(name) == "string" and name ~= "" then return name end
     return entry.label
 end
+local BLESSING_CHOICES = {
+    { value = 0, text = "Follow role / any blessing" },
+    { value = 1, text = "Blessing of Might" }, { value = 2, text = "Blessing of Wisdom" },
+    { value = 3, text = "Blessing of Kings" }, { value = 4, text = "Blessing of Salvation" },
+    { value = 5, text = "Blessing of Light" }, { value = 6, text = "Blessing of Sanctuary" },
+}
+local function BuildBlessingPriorities(ctx, b)
+    local section = b:CollapsibleSection("blessing_priorities", "Blessing priorities (Forever)", 1330, false)
+    local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
+    PrepareAdditionalSwitch(ctx, section, "buffCoverageBlessingPriorities", "Use blessing priorities", "visual")
+    W.Text(section, [[Choose up to three blessings per role.
+Paladins use their first learned choice. Other classes use the first choice; unassigned members use DPS.]],
+        32, -82, width * 2 + 32, T.colors.muted)
+    local roles = { { "Tank", "Tank" }, { "Healer", "Healer" }, { "DPS", "DPS" } }
+    local labels = { "First choice", "Second choice", "Third choice" }
+    for row, role in ipairs(roles) do
+        local y = -178 - (row - 1) * 220
+        W.Text(section, role[2], 32, y, width * 2 + 32, T.colors.text)
+        for rank = 1, 3 do
+            local key = "buffCoverageBlessing" .. role[1] .. rank
+            WithExactGroupScope(ScopeDropdown(ctx, section, labels[rank], BLESSING_CHOICES, width,
+                key, rank == 1 and ({ Tank = 3, Healer = 2, DPS = 4 })[role[1]] or 0, "visual",
+                rank == 2 and width + 64 or 32, y - 68 - (rank == 3 and 82 or 0), width, "LEFT"), key)
+        end
+    end
+    W.Text(section, "Class exceptions replace role priorities. Paladins must know the chosen blessing.",
+        32, -840, width * 2 + 32, T.colors.muted)
+    local classes = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+    for i, class in ipairs(classes) do
+        local names = LOCALIZED_CLASS_NAMES_MALE
+        local key = "buffCoverageBlessing" .. class
+        WithExactGroupScope(ScopeDropdown(ctx, section, names and names[class] or class, BLESSING_CHOICES, width,
+            key, 0, "visual", i % 2 == 1 and 32 or width + 64,
+            -934 - math.floor((i - 1) / 2) * 70, width, "LEFT"), key)
+    end
+    BindAdditionalGate(ctx, section, "buffCoverageBlessingPriorities")
+end
 local function BuildBuffCoverage(ctx, b)
     local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 656, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
@@ -213,6 +250,6 @@ end
 
 M.GroupFrameAdditionalSections = {
     Targets = BuildTargets, Pets = BuildPets, FriendlyBosses = BuildFriendlyBosses, HealerMana = BuildHealerMana,
-    NameBar = BuildNameBar, BuffCoverage = BuildBuffCoverage,
+    NameBar = BuildNameBar, BuffCoverage = BuildBuffCoverage, BlessingPriorities = BuildBlessingPriorities,
     SizingTier = BuildSizingTier, ExactScope = WithExactGroupScope, PrepareSwitch = PrepareAdditionalSwitch,
 }

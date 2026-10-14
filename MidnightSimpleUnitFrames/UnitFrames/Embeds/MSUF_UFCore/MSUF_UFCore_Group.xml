@@ -22,6 +22,7 @@
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Indicators.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Runtime.lua"/>
   <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_Additional.lua"/>
+  <Script file="..\..\..\Game\Forever\GroupFrames\MSUF_GroupFrames_BlessingPriorities.lua"/>
   <Script file="..\..\..\Game\Forever\GroupFrames\MSUF_GroupFrames_BuffCoverage.lua"/>
   <Include file="..\..\..\GroupFrames\MSUF_GroupFrames_Additional.xml"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview.lua"/>

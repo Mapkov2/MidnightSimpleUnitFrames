@@ -467,7 +467,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
+    { key = "general", label = "Basics", keys = WL [[showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageBlessingPriorities buffCoverageBlessingTank1 buffCoverageBlessingTank2 buffCoverageBlessingTank3 buffCoverageBlessingHealer1 buffCoverageBlessingHealer2 buffCoverageBlessingHealer3 buffCoverageBlessingDPS1 buffCoverageBlessingDPS2 buffCoverageBlessingDPS3 buffCoverageBlessingWARRIOR buffCoverageBlessingPALADIN buffCoverageBlessingHUNTER buffCoverageBlessingROGUE buffCoverageBlessingPRIEST buffCoverageBlessingSHAMAN buffCoverageBlessingMAGE buffCoverageBlessingWARLOCK buffCoverageBlessingDRUID buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
@@ -674,6 +674,11 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
         -- Nil means inherit; pairs(srcConf) cannot clear an old destination override.
         dstConf.frameBarShape = srcConf.frameBarShape
         dstConf.slantedBarDirection = srcConf.slantedBarDirection
+        local gf = GF()
+        local policy = gf and gf.BlessingPriorities
+        if policy and (srcKind == "party" or srcKind == "raid") and (dstKind == "party" or dstKind == "raid") then
+            for key in pairs(policy.Defaults) do dstConf[key] = srcConf[key] end
+        end
     end
     if scopes.highlight then CopyGroupBarsGatedValues(srcConf, dstConf) end
     if scopes.health then
@@ -762,6 +767,15 @@ local function AttachGroupSectionUX(ctx)
         friendly_bosses = { prefixes = "friendlyBoss" },
         healer_mana = { prefixes = "healerMana" },
         buff_coverage = { prefixes = "buffCoverage" },
+        blessing_priorities = { fields = [[
+            buffCoverageBlessingPriorities buffCoverageBlessingTank1 buffCoverageBlessingTank2
+            buffCoverageBlessingTank3 buffCoverageBlessingHealer1 buffCoverageBlessingHealer2
+            buffCoverageBlessingHealer3 buffCoverageBlessingDPS1 buffCoverageBlessingDPS2
+            buffCoverageBlessingDPS3 buffCoverageBlessingWARRIOR buffCoverageBlessingPALADIN
+            buffCoverageBlessingHUNTER buffCoverageBlessingROGUE buffCoverageBlessingPRIEST
+            buffCoverageBlessingSHAMAN buffCoverageBlessingMAGE buffCoverageBlessingWARLOCK
+            buffCoverageBlessingDRUID
+        ]] },
         name_bar = { prefixes = "nameBar" },
         sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
         scaling = { prefixes = "frameScale tier10 tier20 tier25 tier40", fields = "width height spacing scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize" },
@@ -781,7 +795,14 @@ local function AttachGroupSectionUX(ctx)
         defaults = function(scope)
             local profile = Shared.FactoryProfile()
             local defaults = profile and profile["gf_" .. scope]
-            if defaults then return defaults end
+            if defaults then
+                -- Authored factory profiles predate the optional blessing policy.
+                local gf = GF()
+                for key in sections.blessing_priorities.fields:gmatch("%S+") do
+                    if defaults[key] == nil then defaults[key] = gf.GetDefault(scope, key) end
+                end
+                return defaults
+            end
             local gf = GF()
             if not (gf and gf.GetDefault) then return nil end
             defaults = {}

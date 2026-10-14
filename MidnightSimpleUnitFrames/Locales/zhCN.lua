@@ -7404,6 +7404,21 @@ L["|cff00ff00MSUF:|r Absorb bars ENABLED."] = "|cff00ff00MSUF:|r 吸收条已启
 L["100 Energy"] = "100 能量"
 L["Blizzard Aura Frames"] = "暴雪光环框架"
 L["First Load 6"] = "首次加载 6"
+L["Follow role / any blessing"] = "跟随职责 / 任意祝福"
+L["Blessing of Might"] = "力量祝福"
+L["Blessing of Wisdom"] = "智慧祝福"
+L["Blessing of Kings"] = "王者祝福"
+L["Blessing of Salvation"] = "拯救祝福"
+L["Blessing of Light"] = "光明祝福"
+L["Blessing of Sanctuary"] = "庇护祝福"
+L["Blessing priorities (Forever)"] = "祝福优先级（Forever）"
+L["Use blessing priorities"] = "使用祝福优先级"
+L["First choice"] = "第一选择"
+L["Second choice"] = "第二选择"
+L["Third choice"] = "第三选择"
+L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "为每种职责选择最多三种祝福。\n圣骑士使用已学会的第一个选择。其他职业使用第一个选择；未分配职责的成员按伤害输出处理。"
+L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "职业例外会替代职责优先级。圣骑士必须已学会所选祝福。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

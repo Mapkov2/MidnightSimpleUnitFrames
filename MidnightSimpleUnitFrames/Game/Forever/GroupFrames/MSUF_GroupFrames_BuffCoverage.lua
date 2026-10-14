@@ -25,6 +25,7 @@ local _, MSUF = ...
 local Client = MSUF.Client
 if not (Client and Client.IsForever == true) then return end
 local GF = MSUF.GF
+local Blessings = assert(GF.BlessingPriorities, "BuffCoverage requires the Forever BlessingPriorities provider")
 local UnitAuraAPI = _G.C_UnitAuras
 local GetUnitAuras = UnitAuraAPI and UnitAuraAPI.GetUnitAuras
 if not (GF and type(GetUnitAuras) == "function") then return end
@@ -140,6 +141,7 @@ local function State(unit)
     local state = states[unit]
     if not state then
         state = { known = false, count = {}, instance = {} }
+        if Blessings then Blessings.Init(state) end
         for i = 1, BUFF_COUNT do state.count[i] = 0 end
         states[unit] = state
     end
@@ -158,6 +160,7 @@ local function ReadUnit(unit)
     local count, instance = state.count, state.instance
     for i = 1, BUFF_COUNT do count[i] = 0 end
     wipe(instance)
+    if Blessings and Blessings.enabled then Blessings.Reset(state) end
     state.known = false
     if not Reachable(unit) then return state end
     local auras = GetUnitAuras(unit, "HELPFUL")
@@ -171,7 +174,10 @@ local function ReadUnit(unit)
         if index then
             count[index] = count[index] + 1
             local auraInstanceID = aura.auraInstanceID
-            if auraInstanceID ~= nil and not IsSecret(auraInstanceID) then instance[auraInstanceID] = index end
+            if not IsSecret(auraInstanceID) and auraInstanceID ~= nil then
+                instance[auraInstanceID] = index
+                if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" then Blessings.Add(state, spellID, auraInstanceID) end
+            end
         end
     end
     state.known = true
@@ -197,6 +203,9 @@ local function ApplyUpdate(state, info)
             if index and auraInstanceID ~= nil and instance[auraInstanceID] == nil then
                 instance[auraInstanceID] = index
                 count[index] = count[index] + 1
+                if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" and Blessings.Add(state, spellID, auraInstanceID) then
+                    changed = true
+                end
                 if count[index] == 1 then changed = true end
             end
         end
@@ -213,6 +222,7 @@ local function ApplyUpdate(state, info)
             if index then
                 instance[auraInstanceID] = nil
                 count[index] = max(0, count[index] - 1)
+                if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" and Blessings.Remove(state, auraInstanceID) then changed = true end
                 if count[index] == 0 then changed = true end
             end
         end
@@ -227,12 +237,16 @@ local function ReadRestricted(unit)
     local auras = GetUnitAuras(unit, "HELPFUL")
     if IsSecret(auras) or type(auras) ~= "table" then return false end
     for index = 1, BUFF_COUNT do seen[index] = false end
+    if Blessings and Blessings.enabled then Blessings.BeginReadable() end
     for i = 1, #auras do
         local aura = auras[i]
         if not IsSecret(aura) and type(aura) == "table" then
             local spellID = aura.spellId
-            local index = spellID and not IsSecret(spellID) and BUFF_OF_SPELL[spellID]
-            if index then seen[index] = true end
+            local index = not IsSecret(spellID) and spellID and BUFF_OF_SPELL[spellID]
+            if index then
+                seen[index] = true
+                if Blessings and Blessings.enabled then Blessings.SeeReadable(spellID) end
+            end
         end
     end
     local count, changed = state.count, false
@@ -243,6 +257,7 @@ local function ReadRestricted(unit)
             count[index], changed = 0, true
         end
     end
+    if Blessings and Blessings.enabled and Blessings.ApplyReadable(state) then changed = true end
     return changed
 end
 
@@ -354,7 +369,7 @@ GF.HideBuffCoveragePreview = HideIcons
 
 -- Places `n` icons (BUFFS indices in `list`) as one row at the configured
 -- point. Geometry and textures are written only when they change.
-local function ShowRow(frame, conf, list, n, scale)
+local function ShowRow(frame, conf, list, n, scale, blessing)
     if n == 0 then HideIcons(frame); return end
     local holder = Holder(frame)
     -- 8-48 px, the missing-buff section's icon size range.
@@ -380,7 +395,11 @@ local function ShowRow(frame, conf, list, n, scale)
     for slot = 1, n do
         local icon = Icon(holder, slot)
         local index = list[slot]
-        if icon._msufBuff ~= index then icon:SetTexture(Texture(BUFFS[index])); icon._msufBuff = index end
+        local family = BUFFS[index].key == "Blessings" and blessing or nil
+        if icon._msufBuff ~= index or icon._msufBlessing ~= family then
+            icon:SetTexture(family and Blessings.Texture(family) or Texture(BUFFS[index]))
+            icon._msufBuff, icon._msufBlessing = index, family
+        end
         local placed = resized or not icon:IsShown()
         if placed then
             icon:ClearAllPoints()
@@ -409,7 +428,8 @@ function GF.RenderBuffCoveragePreview(frame, conf, scale)
     for index = 1, BUFF_COUNT do
         if conf[BUFFS[index].setting] == true then n = n + 1; order[n] = index end
     end
-    ShowRow(frame, conf, order, n, tonumber(scale) or 1)
+    local desired = conf.buffCoverageBlessingPriorities and Blessings and Blessings.Desired(conf, "TANK")
+    ShowRow(frame, conf, order, n, tonumber(scale) or 1, desired)
 end
 
 -- "Thorns only on tanks" (on unless turned off) limits the tank buff to members
@@ -435,15 +455,23 @@ local function PaintFrame(frame, unit)
         HideIcons(frame)
         return
     end
+    local desired
+    if conf.buffCoverageBlessingPriorities == true and Blessings then
+        local role = GF.GetUnitGroupRole(unit)
+        if IsSecret(role) then role = nil end
+        desired = Blessings.Desired(conf, role, state.class)
+    end
     local n = 0
     for index = 1, BUFF_COUNT do
         local buff = BUFFS[index]
-        if state.count[index] == 0 and providers[buff.class] and conf[buff.setting] == true and Needs(buff, state, unit, conf) then
+        local missing = state.count[index] == 0
+        if desired and buff.key == "Blessings" then missing = Blessings.Missing(state, desired) end
+        if missing and providers[buff.class] and conf[buff.setting] == true and Needs(buff, state, unit, conf) then
             n = n + 1
             order[n] = index
         end
     end
-    ShowRow(frame, conf, order, n, 1)
+    ShowRow(frame, conf, order, n, 1, desired)
 end
 
 local function PaintUnit(unit)
@@ -582,16 +610,24 @@ function dispatcher.Flush()
     active = AnyScopeEnabled()
     if not active then
         if wasActive then SyncShards(); PaintAll() end
+        dispatcher:UnregisterEvent("SPELLS_CHANGED")
+        if Blessings then Blessings.enabled = false end
         fullPending = false
         wipe(pendingUnits)
         return
     end
     CheckSecrecy()
     if fullPending or not wasActive then
+        if Blessings and Blessings.Sync() then
+            for _, state in pairs(states) do state.known = false end
+        end
+        if Blessings and Blessings.enabled then dispatcher:RegisterEvent("SPELLS_CHANGED")
+        else dispatcher:UnregisterEvent("SPELLS_CHANGED") end
         if not wasActive then
             for _, state in pairs(states) do state.known = false end
         end
         ReadRoster()
+        if Blessings then Blessings.RefreshKnown() end
         SyncShards()
         if not restricted then
             for i = 1, #watched do

@@ -7268,6 +7268,21 @@ L["|cff00ff00MSUF:|r Absorb bars ENABLED."] = "|cff00ff00MSUF:|r Полосы п
 L["100 Energy"] = "100 Энергия"
 L["Blizzard Aura Frames"] = "Рамки аур Blizzard"
 L["First Load 6"] = "Первая загрузка 6"
+L["Follow role / any blessing"] = "По роли / любое благословение"
+L["Blessing of Might"] = "Благословение могущества"
+L["Blessing of Wisdom"] = "Благословение мудрости"
+L["Blessing of Kings"] = "Благословение королей"
+L["Blessing of Salvation"] = "Благословение спасения"
+L["Blessing of Light"] = "Благословение Света"
+L["Blessing of Sanctuary"] = "Благословение неприкосновенности"
+L["Blessing priorities (Forever)"] = "Приоритеты благословений (Forever)"
+L["Use blessing priorities"] = "Использовать приоритеты благословений"
+L["First choice"] = "Первый выбор"
+L["Second choice"] = "Второй выбор"
+L["Third choice"] = "Третий выбор"
+L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Выберите до трёх благословений для каждой роли.\nПаладины используют первый изученный вариант. Другие классы используют первый вариант; участники без роли считаются бойцами."
+L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Исключения для классов заменяют приоритеты ролей. Паладин должен знать выбранное благословение."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -166,6 +166,9 @@ local function Load(client)
     setfenv(chunk, env)
     local namespace = { Client = client, GF = GF, UF = { Layers = { StatusLevel = function(_, layer, fallback)
         return 100 + (layer or fallback) * 32 + 8 end } } }
+    local policy = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua"))
+    setfenv(policy, env)
+    policy("MidnightSimpleUnitFrames", namespace)
     chunk("MidnightSimpleUnitFrames", namespace)
     return namespace
 end
@@ -479,4 +482,114 @@ assert(page:find('"Icon size", 8, 48, 1, width, "buffCoverageSize"', 1, true)
 GF.HideBuffCoveragePreview(mock)
 assert(Keys(mock) == "", "sample hide failed")
 
+-- Absent optional settings use the same non-writing role choices as the menu.
+do
+    local policy = GF.BlessingPriorities
+    local wasEnabled = policy.enabled
+    policy.enabled = true
+    policy.RefreshKnown()
+    assert(policy.Desired({}, "TANK") == 3, "lazy tank choice missing")
+    assert(policy.Desired({}, "HEALER") == 2, "lazy healer choice missing")
+    assert(policy.Desired({}, "NONE") == 4, "lazy DPS choice missing")
+    assert(policy.Desired({ buffCoverageBlessingTank1 = 0 }, "TANK") == nil, "explicit zero overridden")
+    policy.enabled = wasEnabled
+end
+-- Priority policy uses the existing full/delta aura lifecycle, not a second reader.
+confs.party.buffCoverageEnabled, confs.party.buffCoverageBlessingPriorities = true, true
+confs.party.buffCoverageBlessingTank1, confs.party.buffCoverageBlessingHealer1 = 3, 2
+confs.party.buffCoverageBlessingDPS1 = 4
+roles.party1, roles.party3 = "TANK", "HEALER"
+auras.party1, auras.party3 = { Aura(19740, 101) }, { Aura(25290, 102) }
+for _, stateUnit in ipairs({ "party1", "party3" }) do UnitAura(stateUnit, { isFullUpdate = true }) end
+GF.observer("refreshVisuals"); RunTimers(0)
+assert(Keys(f.party1):find("Blessings", 1, true), "Might incorrectly satisfies the tank's Kings priority")
+assert(not Keys(f.party3):find("Blessings", 1, true), "a greater/upper Wisdom rank fails the healer choice")
+reads = 0
+UnitAura("party1", { isFullUpdate = false, addedAuras = { Aura(25898, 103) } })
+assert(not Keys(f.party1):find("Blessings", 1, true) and reads == 0, "Kings arrival was not applied incrementally")
+UnitAura("party1", { isFullUpdate = false, removedAuraInstanceIDs = { 103 } })
+assert(Keys(f.party1):find("Blessings", 1, true) and reads == 0, "Kings removal was hidden by a different blessing")
+confs.party["buffCoverageBlessing" .. classes.party1] = 1
+GF.observer("refreshVisuals"); RunTimers(0)
+assert(not Keys(f.party1):find("Blessings", 1, true), "class exception did not replace tank priorities")
+confs.party["buffCoverageBlessing" .. classes.party1] = 0
+roles.party1 = "NONE"
+Fire("PLAYER_ROLES_ASSIGNED")
+assert(Keys(f.party1):find("Blessings", 1, true), "unassigned member did not follow DPS priority")
+confs.party.buffCoverageBlessingPriorities = false
+GF.observer("refreshVisuals"); RunTimers(0)
+assert(not Keys(f.party1):find("Blessings", 1, true), "disabling priorities did not restore any-blessing behavior")
+assert(not dispatcher.events.SPELLS_CHANGED, "disabled priorities left a spellbook listener")
+confs.party.buffCoverageEnabled, confs.party.buffCoverageBlessingPriorities = true, true
+confs.party.buffCoverageBlessingTank1, roles.party1 = 3, "TANK"
+confs.party["buffCoverageBlessing" .. classes.party1] = 0
+for _, buff in ipairs(buffs) do
+    if buff.key == "Blessings" then
+        for _, id in ipairs(buff.ids) do secrecy[id] = 2 end
+    end
+end
+for _, id in ipairs({ 20217, 25898, 1213408 }) do secrecy[id] = 0 end
+frames, timers, groupFrames = {}, {}, {}
+Load({ IsForever = true, SupportsEvent = function() return true end })
+dispatcher = frames[1]
+for _, unit in ipairs({ "player", "party1", "party2", "party3", "party4" }) do f[unit] = GroupFrame(unit) end
+confs.party.buffCoverageCombat = true
+auras.party1 = { Aura(19740, 901) }
+Fire("PLAYER_ENTERING_WORLD"); RunTimers(0)
+assert(Keys(f.party1):find("Blessings", 1, true), "Kings priority must start missing with Might")
+Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 1)
+auras.party1 = { Aura(25898, 902), SECRET }
+UnitAura("party1", SECRET); RunTimers(1)
+assert(not Keys(f.party1):find("Blessings", 1, true), "readable Kings arrival stayed missing during restriction")
+auras.party1 = { SECRET }
+UnitAura("party1", SECRET); RunTimers(1)
+assert(Keys(f.party1):find("Blessings", 1, true), "NeverSecret Kings family loss stayed covered during restriction")
+Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+auras.party1 = {}; RunTimers(0)
+-- Disabled configuration checks do not allocate a fresh scopes table.
+confs.party.buffCoverageEnabled, confs.raid.buffCoverageEnabled = false, false
+GF.BlessingPriorities.Sync()
+collectgarbage("collect"); collectgarbage("stop")
+local beforeSync = collectgarbage("count")
+for i = 1, 10000 do GF.BlessingPriorities.Sync() end
+local syncBytes = (collectgarbage("count") - beforeSync) * 1024
+collectgarbage("restart")
+assert(syncBytes <= 128, "disabled policy allocates per sync: " .. syncBytes)
+-- Strict secret probes cover the new cold policy boundaries, including truth tests.
+do
+    local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
+    Secrets.Install()
+    Secrets.GUARD_NAMES.truthy.Secret = true
+    env.issecretvalue = Secrets.IsSecret
+    local secret = Secrets.New("number")
+    local stop = Secrets.Watch({
+        root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua",
+        root .. "/" .. MODULE,
+    }, { strict = true })
+    -- The coverage file captures its secret predicate at load, like the client.
+    frames, timers, groupFrames = {}, {}, {}
+    Load({ IsForever = true, SupportsEvent = function() return true end })
+    dispatcher = frames[1]
+    for _, unit in ipairs({ "player", "party1", "party2", "party3", "party4" }) do f[unit] = GroupFrame(unit) end
+    local policy = GF.BlessingPriorities
+    policy.enabled = true
+    confs.party.buffCoverageEnabled, confs.party.buffCoverageBlessingPriorities = true, true
+    GF.observer("refreshVisuals"); RunTimers(0)
+    Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 1)
+    auras.party1 = { { spellId = secret, auraInstanceID = 990 } }
+    UnitAura("party1", secret); RunTimers(1)
+    Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+    auras.party1 = { { spellId = 20217, auraInstanceID = secret } }; RunTimers(0)
+    env.UnitClass = function() return secret, secret end
+    policy.RefreshKnown()
+    assert(policy.playerPaladin == false, "secret class was used as a policy key")
+    env.UnitClass = function() return "Paladin", "PALADIN" end
+    env.C_SpellBook = { FindSpellBookSlotForSpell = function() return secret end }
+    policy.RefreshKnown()
+    assert(policy.Desired({ buffCoverageBlessingTank1 = 3 }, "TANK") == nil, "secret book slot was treated as learned")
+    env.C_Spell.GetSpellTexture = function() return secret end
+    assert(policy.Texture(6) == "Interface\\Icons\\INV_Misc_QuestionMark", "secret texture was evaluated")
+    local violations = stop()
+    assert(#violations == 0, table.concat(violations, "\n"))
+end
 print("forever_group_buff_coverage_smoke: PASS")

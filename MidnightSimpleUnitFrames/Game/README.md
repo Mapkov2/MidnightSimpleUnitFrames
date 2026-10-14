@@ -195,3 +195,15 @@ missing pet happiness fields only when `Client.SupportsPetHappiness` is true,
 including a profile already stamped on a client without that capability. Arena
 and GCD saved values keep their former defaults without enabling unsupported
 runtime modules. Native profile/export schema 600 remains readable by 6.50.
+
+### Forever blessing priorities
+
+Optional Party/Raid blessing priorities reuse Buff Coverage's unit-filtered
+incremental aura state. Each role has three ordered choices; class exceptions
+replace that list. Paladins use their first learned choice, other classes the
+first configured choice, and unassigned members use the DPS list. Restricted
+reads retain unknown presence and only prove a family's loss when all its rank
+IDs are NeverSecret. The policy adds no reader, timer, ticker or frame callback.
+Priorities default off; factory reset supplies new keys missing from older
+authored factory snapshots. Runtime and preview use the same policy helper.
+Optional defaults are read lazily; profile activation keeps older data intact.
