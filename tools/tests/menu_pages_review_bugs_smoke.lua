@@ -214,10 +214,10 @@ end)
 ---------------------------------------------------------------------------
 Section("A Pet aura request takes the targeted unit route", function()
     local service = Check(M.ApplyService, "ApplyService missing")
-    local original, routed = service.RequestUnit, {}
-    service.RequestUnit = function(unit, reason, opts) routed[#routed + 1] = { unit, reason, opts } end
+    local original, routed = service.RequestUnitDomains, {}
+    service.RequestUnitDomains = function(unit, reason, opts) routed[#routed + 1] = { unit, reason, opts } end
     service.RequestAuras("pet", "W16_PET")
-    service.RequestUnit = original
+    service.RequestUnitDomains = original
     Check(#routed == 1 and routed[1][1] == "pet" and routed[1][3] and routed[1][3].auras == true,
         "the Pet aura request did not reach RequestUnit with auras=true (" .. #routed .. " calls)")
 end)

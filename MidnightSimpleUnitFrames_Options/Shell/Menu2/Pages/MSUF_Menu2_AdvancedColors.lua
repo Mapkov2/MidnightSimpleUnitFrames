@@ -47,12 +47,12 @@ local function CurrentApplyService()
 end
 
 local function RequestGeneral(reason, opts)
-    if type(M.RequestGeneralApply) == "function" then
-        return M.RequestGeneralApply(reason, opts)
+    if type(M.RequestGeneralDomains) == "function" then
+        return M.RequestGeneralDomains(reason, opts)
     end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestGeneral) == "function" then
-        return apply.RequestGeneral(reason, opts)
+        return apply.RequestGeneralDomains(reason, opts)
     end
     return false
 end
@@ -97,7 +97,7 @@ local function ApplyUnitframeColorWithReload()
     M.RefreshActiveHealthBackgroundInlinePreview()
 end
 local function ApplyCastbarColors()
-    M.RequestGeneralApply("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
+    M.RequestGeneralDomains("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
 end
 local function ApplyBossTargetHighlightColor()
     local reason = "MSUF2_BOSS_TARGET_HIGHLIGHT_COLOR"
@@ -107,7 +107,7 @@ local function ApplyBossTargetHighlightColor()
     end
     _G.MSUF_UFCore_RefreshSettingsCache(reason)
     if apply and type(apply.RequestUnit) == "function" then
-        return apply.RequestUnit("boss", reason, { preview = true })
+        return apply.RequestUnitDomains("boss", reason, { preview = true })
     end
     return true, _G.MSUF_UFCore_NotifyConfigChanged("boss", true, true, reason)
 end
@@ -193,7 +193,7 @@ local function ApplyPortraitColors(reason)
     reason = reason or "PORTRAIT_COLORS"
     local apply = CurrentApplyService()
     if apply and type(apply.RequestGeneral) == "function" then
-        return apply.RequestGeneral(reason, { preview = true, applyAll = true, colors = true })
+        return apply.RequestGeneralDomains(reason, { preview = true, applyAll = true, colors = true })
     end
     _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, reason)
     _G.MSUF_UFPreview_RequestRefresh(reason)
@@ -1201,7 +1201,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         return conf
     end
     local function ApplyStatusTextColors()
-        M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = StatusTextUnit() })
+        M.RequestGeneralDomains("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = StatusTextUnit() })
     end
     LabelAt(statusText, "Color for a single text indicator on one frame. Unset indicators follow that frame's font color.",
         12, -8, statusTextW - 28, "GameFontHighlightSmall", T.colors.muted)
@@ -1591,7 +1591,7 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         function() return G().petFrameUsePlayerClassColor == true end,
         function(v)
             G().petFrameUsePlayerClassColor = v and true or false
-            M.RequestUnitApply("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+            M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
             if refreshPetColorControl then refreshPetColorControl() end
         end,
         Meta("unit.pet.use_player_class_color"))

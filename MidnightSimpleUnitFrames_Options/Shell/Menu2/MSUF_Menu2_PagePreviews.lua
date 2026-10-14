@@ -292,7 +292,7 @@ local function ResetStatusIndicatorTestModeOnMenuExit()
     end
     if not changed then return false end
     for i = 1, #unitsToApply do
-        M.RequestUnitApply(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
+        M.RequestUnitDomains(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
             preview = false,
         })
     end

@@ -107,7 +107,7 @@ local function LoadPages(client)
     M.EnsureDB = function() return db end
     M.GetUnitDB = function(unit) db[unit] = db[unit] or {}; return db[unit] end
     M.GetGeneralDB = function() return db.general end
-    M.RequestUnitApply = function() end
+    M.RequestUnitDomains = function() end
     assert(loadfile(MENU .. "Pages/MSUF_Menu2_Unit.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local file = assert(io.open(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua", "rb"))
     local source = file:read("*a")

@@ -134,7 +134,7 @@ for scope, section in pairs(SECTION_FOR_SCOPE) do
 end
 
 local applyRequests = 0
-menu.RequestUnitApply = function() applyRequests = applyRequests + 1 end
+menu.RequestUnitDomains = function() applyRequests = applyRequests + 1 end
 for scope in pairs(COPY_CONTRACT) do
     local source, destination = {}, {}
     for _, keys in pairs(COPY_CONTRACT) do

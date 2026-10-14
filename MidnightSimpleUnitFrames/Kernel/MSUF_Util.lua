@@ -1269,11 +1269,10 @@ local FrameRectToUI = MSUF.Geometry.VisibleRect
 U.FrameRectToUI = FrameRectToUI
 ExportPublic("MSUF_UF_FrameRectToUI", FrameRectToUI)
 
--- Edit Mode UI loads before its controller; bind this optional LoD apply route early.
+-- Edit Mode resolves the shared core apply owner after the startup graph loads.
 local function RequestGroupGeometryApply(kind, reason)
     if not kind then return false end
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+    local apply = MSUF.ApplyService
     if not (apply and type(apply.RequestGroup) == "function") then return false end
     apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
     if type(apply.Flush) == "function" then apply.Flush() end

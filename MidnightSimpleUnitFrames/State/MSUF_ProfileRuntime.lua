@@ -40,8 +40,8 @@ end
 --- history refuses while combat locks configuration; the next apply retries,
 --- and every restore path refuses a snapshot of another profile meanwhile.
 local function MSUF_ProfileIO_RebaseHistory()
-    local menu = MSUF.MSUF2
-    local rebase = type(menu) == "table" and menu.RebaseHistoryForProfileChange or nil
+    local history = MSUF.History
+    local rebase = type(history) == "table" and history.RebaseHistoryForProfileChange or nil
     if type(rebase) == "function" then rebase() end
 end
 

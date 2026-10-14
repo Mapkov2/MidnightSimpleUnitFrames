@@ -237,4 +237,6 @@ Castbars\MSUF_CastbarRounded.lua
 Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
 UnitFrames\Effects\MSUF_UF_TextureLayer.lua
 
+State\MSUF_ApplyService.lua
+State\MSUF_History.lua
 Kernel\MSUF_RuntimeContracts.lua

@@ -450,9 +450,7 @@ local function IsCurrentProfile(identity)
 end
 
 local function SharedHistoryService()
-    local menu = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
-    if type(menu) ~= "table" then return nil end
-    return menu
+    return MSUF.History
 end
 
 --- State and Undo read these.

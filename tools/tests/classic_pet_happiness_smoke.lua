@@ -252,7 +252,7 @@ for _, case in ipairs({ { "Vanilla", true }, { "TBC", true }, { "Mists", false }
     end
     local db = { general = {}, pet = { showPetHappinessIndicator = false, petHappinessIndicatorSize = 31 }, target = {} }
     menu.EnsureDB = function() return db end
-    menu.RequestUnitApply = function() end
+    menu.RequestUnitDomains = function() end
     local refreshStatus = _G.MSUF_RefreshStatusIndicators
     _G.MSUF_RefreshStatusIndicators = function() end
     assert(page.CopyUnitSettings("pet", "target", { status = true }) == true, case[1] .. " Status Icons copy refused")

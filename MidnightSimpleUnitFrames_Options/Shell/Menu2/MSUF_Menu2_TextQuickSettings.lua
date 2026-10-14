@@ -186,7 +186,7 @@ local function ApplyTextColors()
     if type(api.PushVisualUpdates) == "function" then
         api.PushVisualUpdates()
     else
-        M.RequestGeneralApply("MSUF2_TEXT_QUICK_COLOR", { colors = true, preview = true, applyAll = false })
+        M.RequestGeneralDomains("MSUF2_TEXT_QUICK_COLOR", { colors = true, preview = true, applyAll = false })
     end
 end
 

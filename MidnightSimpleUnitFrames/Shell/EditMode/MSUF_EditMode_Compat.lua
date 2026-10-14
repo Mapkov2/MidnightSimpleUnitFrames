@@ -96,9 +96,6 @@ local function MSUF_SetMSUFEditModeDirect(active, unitKey)
         MSUF.Require("MSUF_ShowConfigCombatLockMessage", CALLER)()
         return false
     end
-    if active and not MSUF.Require("MSUF_EnsureOptionsLoaded", CALLER)("edit-mode") then
-        return false
-    end
     -- The EllesmereUI bridge loads on the Mainline TOC only.
     local tryOpenExternal = active and MSUF.Optional("MSUF_TryOpenExternalEditMode")
     if tryOpenExternal and tryOpenExternal(unitKey) then

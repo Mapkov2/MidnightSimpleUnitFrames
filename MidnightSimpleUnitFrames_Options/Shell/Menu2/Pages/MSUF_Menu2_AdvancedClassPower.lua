@@ -202,13 +202,13 @@ local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anc
 local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
 local function ApplyClassPowerRuntime(reason, runtime, flags)
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
         RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
+        return ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
     end
     _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
-    M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
+    M.RequestGeneralDomains(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
 end
 local function ApplyClassPower() ApplyClassPowerRuntime("MSUF2_CLASSPOWER", CLASSPOWER_FULL, APPLY_CLASSPOWER_GENERAL) end
 local function ApplyClassPowerSource()
@@ -386,16 +386,16 @@ local CP_APPLY_PLAYER_HP_TEXTURES = { playerHPTextures = true }
 
 local function ApplyClassPowerPage(reason, flags, runtime)
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
         RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER_PAGE", runtime, flags)
+        return ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER_PAGE", runtime, flags)
     end
     _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
-    if type(flags) == "table" and flags.unit and type(M.RequestUnitApply) == "function" then
-        M.RequestUnitApply(flags.unit, reason, flags)
+    if type(flags) == "table" and flags.unit and type(M.RequestUnitDomains) == "function" then
+        M.RequestUnitDomains(flags.unit, reason, flags)
     else
-        M.RequestGeneralApply(reason, flags)
+        M.RequestGeneralDomains(reason, flags)
     end
 end
 local function ApplyDetachedPowerBar() ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER) end
@@ -414,7 +414,7 @@ local function ApplyDetachedPlayerPowerSmoothing()
     local player = Player()
     if player.powerSmoothFill == true then player.powerChunkedFill = false end
     RefreshClassPowerInlinePreview()
-    M.RequestUnitApply("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
+    M.RequestUnitDomains("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
         preview = true, applyAll = false, power = true, classpowerApplied = true,
     })
 end
@@ -692,9 +692,9 @@ local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
     _G.MSUF_EnsureCooldownWidthObservers()
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
         RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPower(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
+        return ApplyService.RequestClassPowerDomains(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
     end
     ApplyClassPower()
     _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)

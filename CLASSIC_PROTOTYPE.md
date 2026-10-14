@@ -285,7 +285,13 @@ calculator would be less correct and more expensive.
   an enforced taint gate because doing so can later poison secure action-button
   clicks and surface as `ADDON_ACTION_FORBIDDEN` at `UseAction()`.
 - Options keeps its original zero-idle LoadOnDemand architecture and has a
-  suffixed TOC for every supported client. The in-game Assistant
+  suffixed TOC for every supported client. Core `State/MSUF_History.lua` owns
+  the shared diff cursor, sessions and undo/redo; `State/MSUF_ApplyService.lua`
+  owns coalesced runtime execution. Edit Mode enters and edits without loading
+  Options. The companion attaches explicit UI bridges to the existing services,
+  retaining the same stacks when opened during an edit session. Internal apply
+  requests use named domain flags and typed builders; historical public request
+  signatures retain their separate compatibility seam. The in-game Assistant
   (`MidnightSimpleUnitFrames_Assistant`) was retired in 6.5: no client ships it,
   and `State/MSUF_RetiredData.lua` removes its saved history once per account.
 

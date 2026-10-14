@@ -108,7 +108,8 @@ local function OptionsListeners(event, fileSuffix)
     for _, frame in ipairs(world.widgets.frames) do
         local handler = frame.events and (frame.events[event] or frame.events["*"]) and frame:GetScript("OnEvent")
         local source = handler and debug.getinfo(handler, "S").source or ""
-        if source:find("MidnightSimpleUnitFrames_Options", 1, true)
+        if (source:find("MidnightSimpleUnitFrames_Options", 1, true)
+            or source:find("State/MSUF_ApplyService.lua", 1, true))
             and (not fileSuffix or source:sub(-#fileSuffix) == fileSuffix) then
             out[#out + 1] = { frame = frame, handler = handler }
         end

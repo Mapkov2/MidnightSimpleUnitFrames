@@ -142,8 +142,8 @@ local function Refresh(kind)
 end
 
 local function SyncHistory()
-    local menu = MSUF.MSUF2 or _G.MSUF2
-    if menu and type(menu.SyncExternalHistoryState) == "function" then menu.SyncExternalHistoryState() end
+    local history = MSUF.History
+    if history and type(history.SyncExternalHistoryState) == "function" then history.SyncExternalHistoryState() end
 end
 
 local CALLBACKS = {

@@ -140,8 +140,8 @@ end
 local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     opts = opts or {}
     opts.history = false
-    if M and type(M.RequestUnitApply) == "function" then
-        local ok = M.RequestUnitApply(unit, reason or "MSUF2_UNIT_SECTION", opts) ~= false
+    if M and type(M.RequestUnitDomains) == "function" then
+        local ok = M.RequestUnitDomains(unit, reason or "MSUF2_UNIT_SECTION", opts) ~= false
         if ok and flushNow then
             local apply = CurrentApplyService()
             if apply and type(apply.Flush) == "function" then apply.Flush() end
@@ -150,7 +150,7 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestUnit) == "function" then
-        apply.RequestUnit(unit, reason or "MSUF2_UNIT_SECTION", opts)
+        apply.RequestUnitDomains(unit, reason or "MSUF2_UNIT_SECTION", opts)
         if flushNow and type(apply.Flush) == "function" then apply.Flush() end
         return true
     end
@@ -637,7 +637,7 @@ local function AttachUnitSectionUX(ctx, unit)
         copy = function(source, target, category) return CopyUnitSettings(source, target, { [category] = true }) end,
         apply = function(scope, id)
             if id == "load_conditions" then UpdateLoadActive(scope) end
-            M.RequestUnitApply(scope, "MSUF2_SECTION_RESET", { preview = true, text = true, fonts = true, power = true, alpha = true })
+            M.RequestUnitDomains(scope, "MSUF2_SECTION_RESET", { preview = true, text = true, fonts = true, power = true, alpha = true })
             -- The frame bar shape decides whether the rounded runtime runs at all.
             if id == "frame_basics" then _G.MSUF_ApplyRoundedUnitframes() end
         end,
@@ -901,7 +901,7 @@ local function BuildBasics(ctx, builder, unit, label)
                 changed = true
             end
             if not changed then return false end
-            M.RequestUnitApply(unit, reason, { preview = true })
+            M.RequestUnitDomains(unit, reason, { preview = true })
             if M.RequestRefresh then M.RequestRefresh(ctx, "unit-health-fill-mode") end
             return true
         end
@@ -962,7 +962,7 @@ local function BuildBasics(ctx, builder, unit, label)
         function(v)
             local conf = GetConf(unit)
             conf.healthColorMode = NormalizeHealthColorMode(v)
-            M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
+            M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
             if M.Refresh then M.Refresh(ctx) end
         end,
         SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
@@ -991,7 +991,7 @@ local function BuildBasics(ctx, builder, unit, label)
             local conf = GetConf(unit)
             conf.reverseFillBars = state.reverse
             conf.verticalFillBars = state.vertical
-            M.RequestUnitApply(unit, "MSUF2_FILL_DIRECTION", { preview = true })
+            M.RequestUnitDomains(unit, "MSUF2_FILL_DIRECTION", { preview = true })
             if M.Refresh then M.Refresh(ctx) end
         end,
         SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"))
@@ -1005,7 +1005,7 @@ local function BuildBasics(ctx, builder, unit, label)
             function() return GetGeneral().petFrameUsePlayerClassColor == true end,
             function(v)
                 GetGeneral().petFrameUsePlayerClassColor = v and true or false
-                M.RequestUnitApply("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+                M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
                 if M.Refresh then M.Refresh(ctx) end
             end,
             SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"))
@@ -1133,7 +1133,7 @@ local function BuildLayout(ctx, builder, unit)
         return "CENTER"
     end
     local function ApplyAnchorChange()
-        M.RequestUnitApply(unit, "MSUF2_ANCHORING", { preview = true })
+        M.RequestUnitDomains(unit, "MSUF2_ANCHORING", { preview = true })
     end
     local anchorTo = W.Dropdown(sec, "Anchor To", AnchorValues, anchorControlW)
     UnitSectionShared.PlaceDropdown(sec, anchorTo, anchorLeftX, -38, anchorControlW)
@@ -1411,7 +1411,7 @@ local function BuildLoadConditions(ctx, builder, unit)
                 local conf = GetConf(unit)
                 conf[spec.key] = v and true or false
                 UpdateLoadActive(unit)
-                M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
+                M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end,
             SettingMeta(ctx, "load_condition." .. tostring(spec.key), unit, spec.key))
     end
@@ -1425,7 +1425,7 @@ local function BuildLoadConditions(ctx, builder, unit)
             function(v)
                 GetConf(unit)[key] = v and true or false
                 UpdateLoadActive(unit)
-                M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
+                M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end,
             SettingMeta(ctx, "load_condition." .. key, unit, key))
         if M.AddTooltip then
@@ -1587,7 +1587,7 @@ local function BuildBossLayout(ctx, builder, unit)
             local conf = GetConf(unit)
             conf.bossLayoutMode = NormalizeBossLayoutMode(v)
             conf.invertBossOrder = nil
-            M.RequestUnitApply(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
+            M.RequestUnitDomains(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
         end,
         SettingMeta(ctx, "boss_layout.mode", unit, "bossLayoutMode"))
 end
@@ -1600,7 +1600,7 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
         })
     end
     local function Apply()
-        M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+        M.RequestUnitDomains("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
     end
     local styles = {
         { value = "OFF", text = "Off" }, { value = "BORDER", text = "Border" },
@@ -1701,7 +1701,7 @@ local function BuildArenaLayout(ctx, builder, unit)
         function(v)
             local conf = GetConf(unit)
             conf.bossLayoutMode = NormalizeBossLayoutMode(v)
-            M.RequestUnitApply(unit, "MSUF2_ARENA_LAYOUT_MODE", { preview = true })
+            M.RequestUnitDomains(unit, "MSUF2_ARENA_LAYOUT_MODE", { preview = true })
         end,
         SettingMeta(ctx, "arena_layout.mode", unit, "bossLayoutMode"))
 end

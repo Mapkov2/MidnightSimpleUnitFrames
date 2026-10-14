@@ -1161,7 +1161,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         elseif (not ui.Enabled) and type(_G.MSUF_ResetGlobalUiScale) == "function" then
             _G.MSUF_ResetGlobalUiScale(true)
         end
-        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
+        if M.RequestGeneralDomains then M.RequestGeneralDomains("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
         RefreshGlobalScale()
     end
     Button(scaling, "1080p", globalX, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1080, "1080p") end,
@@ -1197,8 +1197,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             dbScale.msufUiScale = scaleValue
             pendingMsufScale = nil
             if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
-            if M.RequestGeneralApply then
-                M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
+            if M.RequestGeneralDomains then
+                M.RequestGeneralDomains("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
             end
         end,
     })

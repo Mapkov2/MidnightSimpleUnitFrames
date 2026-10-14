@@ -724,7 +724,7 @@ local function BuildPower(ctx, builder, unit)
             if enabled and conf.powerBarBorderThickness ~= outline then conf.powerBarBorderThickness, changed = outline, true end
             if bars.detachedPowerBarOutline ~= outline then bars.detachedPowerBarOutline, changed = outline, true end
             if not changed then return false end
-            M.RequestUnitApply(unit, reason, POWER_OPTS)
+            M.RequestUnitDomains(unit, reason, POWER_OPTS)
             RefreshClassPowerDetachedState()
             return true
         end
@@ -742,7 +742,7 @@ local function BuildPower(ctx, builder, unit)
         if detachedSync and detachedSync.SetChecked then detachedSync:SetChecked(false) end
         _G.MSUF_EnsureCooldownWidthObservers()
         if sharedSourceChanged then
-            M.RequestGeneralApply(reason, DETACHED_POWER_OPTS)
+            M.RequestGeneralDomains(reason, DETACHED_POWER_OPTS)
         end
         RefreshClassPowerDetachedState()
     end
@@ -798,7 +798,7 @@ local function BuildPower(ctx, builder, unit)
                 changed = true
             end
             if not changed then return false end
-            M.RequestUnitApply(unit, reason, POWER_OPTS)
+            M.RequestUnitDomains(unit, reason, POWER_OPTS)
             if M.RequestRefresh then M.RequestRefresh(ctx, "unit-power-fill-mode") end
             return true
         end
@@ -955,7 +955,7 @@ local function BuildPower(ctx, builder, unit)
                 if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
             _G.MSUF_EnsureCooldownWidthObservers()
-            M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
+            M.RequestUnitDomains(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
         end,
@@ -1001,7 +1001,7 @@ local function BuildPower(ctx, builder, unit)
                 conf.detachedPowerBarShape = v
                 if v == "ORB" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
                 _G.MSUF_EnsureCooldownWidthObservers()
-                M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", DETACHED_POWER_OPTS)
+                M.RequestUnitDomains(unit, "MSUF2_POWER_DETACHED_SHAPE", DETACHED_POWER_OPTS)
                 RefreshPowerEnabled()
                 RefreshClassPowerDetachedState()
             end,
@@ -1099,7 +1099,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
             if fields.backend then g[fields.backend] = backend end
             g[fields.enable] = (backend == "MSUF")
         end
-        M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
+        M.RequestUnitDomains(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
         _G.MSUF_Castbars_OnSettingsChanged("menu2_backend")
         if unit == "player" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         if state.refresh then state.refresh() end

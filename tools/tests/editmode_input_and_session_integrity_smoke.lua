@@ -410,7 +410,7 @@ function cases.snapshot()
             end))
             assert(em.State.Enter("player"))
             Check(env.MSUF_DB.player.offsetX == 111, flavor .. ": entry listener did not run (Options=" .. tostring(options) .. ")")
-            Check(copies == (options and 0 or 1), flavor .. ": redundant/missing local profile copy (Options=" .. tostring(options) .. ")")
+            Check(copies == 0, flavor .. ": redundant local profile copy beside core history (Options=" .. tostring(options) .. ")")
             env.MSUF_DB.player.offsetX = 333
             em.State.CancelAll()
             Check(env.MSUF_DB.player.offsetX == before, flavor .. ": Cancel All failed (Options=" .. tostring(options) .. ")")

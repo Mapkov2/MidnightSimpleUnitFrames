@@ -156,7 +156,9 @@ local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
     panel._msufAPI = {
         ApplySettingsForKey = function()
             local service = M.ApplyService
-            if service and type(service.RequestUnit) == "function" then service.RequestUnit(unitKey, "MSUF2_COLOR_PAINTER", { preview = true }) end
+            if service and type(service.RequestUnitDomains) == "function" then
+                service.RequestUnitDomains(unitKey, "MSUF2_COLOR_PAINTER", { preview = true })
+            end
         end,
     }
     local box = create(parent, panel, width, 132)

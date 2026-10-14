@@ -32,8 +32,8 @@ local function ApplyClassPowerColors()
     local painter = M.ColorPainter
     if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
-    if apply and type(apply.RequestClassPower) == "function" then
-        return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true },
+    if apply and type(apply.RequestClassPowerDomains) == "function" then
+        return apply.RequestClassPowerDomains("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true },
             { preview = true, applyAll = false, colors = true, colorScope = "player" })
     end
     RequestGeneral("MSUF2_CLASSPOWER_COLORS", { preview = true, applyAll = false, colors = true, colorScope = "player" })
@@ -196,7 +196,8 @@ end
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
     if M.ResourceExtrasPage then M.ResourceExtrasPage.BuildColors(ctx,b,Bars,ColorValueAt,function()
         local apply=CurrentApplyService()
-        if apply and apply.RequestClassPower then apply.RequestClassPower("MSUF2_RESOURCE_EXTRAS_COLORS",{full=true},{preview=true,applyAll=false})
+        if apply and apply.RequestClassPowerDomains then
+            apply.RequestClassPowerDomains("MSUF2_RESOURCE_EXTRAS_COLORS", { full = true }, { preview = true, applyAll = false })
         elseif _G.MSUF_ClassPower_Refresh then _G.MSUF_ClassPower_Refresh() end
     end) end
     local power = b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false)

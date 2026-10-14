@@ -59,10 +59,15 @@ local function Input(widget, value)
     mw:RunTimers()
 end
 local unitRequests, gameplayApplies, refreshes = 0, 0, 0
-local request, refresh = M.ApplyService.RequestUnit, M.Refresh
+local request, requestDomains, refresh = M.ApplyService.RequestUnit, M.ApplyService.RequestUnitDomains, M.Refresh
+-- Menu setters request typed unit domains; the historical signature stays a counted compatibility entry.
 M.ApplyService.RequestUnit = function(...)
     unitRequests = unitRequests + 1
     return request(...)
+end
+M.ApplyService.RequestUnitDomains = function(...)
+    unitRequests = unitRequests + 1
+    return requestDomains(...)
 end
 M.Refresh = function(...)
     refreshes = refreshes + 1

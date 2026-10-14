@@ -993,8 +993,8 @@ function Overview.SetLayerValue(row, value)
             if not bars or bars[edit.key] == value then return false end
             bars[edit.key] = value
             local apply = M.ApplyService
-            if apply and type(apply.RequestClassPower) == "function" then
-                apply.RequestClassPower(reason, { full = true, cdm = true, playerHP = true },
+            if apply and type(apply.RequestClassPowerDomains) == "function" then
+                apply.RequestClassPowerDomains(reason, { full = true, cdm = true, playerHP = true },
                     { preview = true, applyAll = false, classpower = true })
             end
             return true
@@ -1004,8 +1004,8 @@ function Overview.SetLayerValue(row, value)
     if edit.kind == "bar-outline" then
         return RunLayerHistory(row, function()
             if not WriteBarOutlineScope(edit.scope, "barOutlineLayer", value) then return false end
-            if type(M.RequestGeneralApply) == "function" then
-                M.RequestGeneralApply(reason, {
+            if type(M.RequestGeneralDomains) == "function" then
+                M.RequestGeneralDomains(reason, {
                     preview = true, applyAll = false, bars = true,
                     barsScope = BarOutlineApplyScope(edit.scope),
                 })
@@ -1047,8 +1047,8 @@ function Overview.SetStrataValue(row, value)
     if edit.kind == "bar-outline" then
         return RunLayerHistory(row, function()
             if not WriteBarOutlineScope(edit.scope, "barOutlineStrata", value) then return false end
-            if type(M.RequestGeneralApply) == "function" then
-                M.RequestGeneralApply(reason, {
+            if type(M.RequestGeneralDomains) == "function" then
+                M.RequestGeneralDomains(reason, {
                     preview = true, applyAll = false, bars = true,
                     barsScope = BarOutlineApplyScope(edit.scope),
                 })

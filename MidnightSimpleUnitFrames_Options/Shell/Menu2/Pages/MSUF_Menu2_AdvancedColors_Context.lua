@@ -874,11 +874,11 @@ local function RegisterCastContextFactories()
             end,
             function(r, g, b)
                 conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = r, g, b
-                M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit })
+                M.RequestGeneralDomains("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit })
             end)
         local state = ContextStoredState(function() return conf end,
             { prefix .. "ColorR", prefix .. "ColorG", prefix .. "ColorB" },
-            function() M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit }) end)
+            function() M.RequestGeneralDomains("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false, colors = true, colorScope = unit }) end)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
@@ -1052,7 +1052,7 @@ local function RegisterPowerContextFactories()
             db[unitKey] = db[unitKey] or {}
             return db[unitKey]
         end
-        local function Apply() M.RequestUnitApply(unitKey, "MSUF2_POWER_BORDER_COLOR", POWER_BORDER_APPLY) end
+        local function Apply() M.RequestUnitDomains(unitKey, "MSUF2_POWER_BORDER_COLOR", POWER_BORDER_APPLY) end
         local function Channel(conf, general, suffix)
             local own = tonumber(conf["powerBarBorderColor" .. suffix])
             if own then return own end

@@ -335,11 +335,11 @@ local function ApplyNameShortening(reason)
     if IsGFScope(scope) then return end
     if scope == "shared" then
         for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
-            M.RequestUnitApply(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
+            M.RequestUnitDomains(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
         end
     elseif UNIT_SCOPE_KEYS[scope] then
-        M.RequestUnitApply(scope, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
-        if scope == "targettarget" then M.RequestUnitApply("target", reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true }) end
+        M.RequestUnitDomains(scope, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
+        if scope == "targettarget" then M.RequestUnitDomains("target", reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true }) end
     end
 end
 local function CurrentFontScopeCanEdit()
@@ -750,7 +750,7 @@ local function BuildFonts(ctx)
         if not shadowOpacityApplyPending then return end
         shadowOpacityApplyPending = nil
         CancelShadowOpacityApplyTimer()
-        M.RequestGeneralApply("MSUF2_FONT_SHADOW_OPACITY", {
+        M.RequestGeneralDomains("MSUF2_FONT_SHADOW_OPACITY", {
             history = false,
             preview = true,
             applyAll = false,

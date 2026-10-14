@@ -242,6 +242,10 @@ do
 end
 
 -- The Options TOC loads this namespace/capability bridge before its XML files.
+-- History and apply execution now precede the companion in the core graph.
+for _, file in ipairs({ "MSUF_ApplyService.lua", "MSUF_History.lua" }) do
+    assert(loadfile(Join(CORE, "State/" .. file)))("MidnightSimpleUnitFrames", MSUF)
+end
 assert(loadfile(Join(OPTIONS, "MSUF_OptionsLOD_Bootstrap.lua")))("MidnightSimpleUnitFrames_Options", MSUF)
 
 -- Load the real Menu2 product modules in their shipped XML order.  No catalog

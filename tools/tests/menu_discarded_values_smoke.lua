@@ -124,7 +124,7 @@ end
 
 -- 2. The history castbar fallback calls both castbar owners.
 do
-    local source = Read(OPTIONS .. "/Shell/Menu2/MSUF_Menu2_Bindings_History.lua")
+    local source = Read("MidnightSimpleUnitFrames/State/MSUF_History.lua")
     local body = source:match("\n(local function ApplyScopedFeatureRuntime%(.-\nend)\n")
     if Check(body, "ApplyScopedFeatureRuntime is gone from the history bindings; update this smoke") then
         local castbar = body:match('if kind == "castbar" then\n(.-)\n    end\n')

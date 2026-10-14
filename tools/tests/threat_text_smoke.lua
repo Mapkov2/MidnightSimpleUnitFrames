@@ -1093,7 +1093,7 @@ do
         local destination = {}
         local db = { general = {}, target = source, focus = destination }
         menu.EnsureDB = function() return db end
-        menu.RequestUnitApply = function() end
+        menu.RequestUnitDomains = function() end
         local statusRefreshes = 0
         _G.MSUF_RefreshStatusIndicators = function() statusRefreshes = statusRefreshes + 1 end
         local applied = page.CopyUnitSettings("target", "focus", { status = true })

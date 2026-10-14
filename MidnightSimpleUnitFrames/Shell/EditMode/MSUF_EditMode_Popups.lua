@@ -217,8 +217,7 @@ local function FrameForUnitKey(key)
 end
 
 local function ApplyPowerLayoutForUnitKey(key, detached)
-    local M = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local ApplyService = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    local ApplyService = MSUF.ApplyService
     if ApplyService and type(ApplyService.ApplyPowerLayout) == "function" then
         return ApplyService.ApplyPowerLayout(key, detached == true, true)
     end

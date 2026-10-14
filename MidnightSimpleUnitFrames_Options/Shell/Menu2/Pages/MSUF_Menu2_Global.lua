@@ -71,7 +71,7 @@ local function SetB(key, value, reason, opts)
     local b = Bars()
     if b[key] == value then return end
     b[key] = value
-    M.RequestGeneralApply(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
+    M.RequestGeneralDomains(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
 end
 local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet pettarget boss arena"
 local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator"
@@ -285,7 +285,7 @@ local function SetGroupTextureOwner(scope, owned)
 end
 local function ApplyFontsFor(scope, reason)
     scope = NormalizeScopeKey(scope)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS", {
+    M.RequestGeneralDomains(reason or "MSUF2_FONTS", {
         preview = true,
         applyAll = false,
         fonts = true,
@@ -472,7 +472,7 @@ local function BarScopeSet(key, value, reason, suppressApply)
     if GROUP_TEXTURE_KEYS[key] then SetGroupTextureOwner(scope, true) end
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
     if suppressApply ~= true then
-        M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+        M.RequestGeneralDomains(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
     end
 end
 local function BarScopeGetBars(key, default)
@@ -482,7 +482,7 @@ local function BarScopeSetBars(key, value, reason, suppressApply)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, "hlOverride", Bars(), key, value)
     if suppressApply ~= true then
-        M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+        M.RequestGeneralDomains(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
     end
 end
 local function NormalizeFontKey(key)
@@ -687,7 +687,7 @@ local function SmoothPowerSet(enabled, reason)
         if conf.powerSmoothFill == enabled and (not enabled or conf.powerChunkedFill == false) then return end
         conf.powerSmoothFill = enabled
         if enabled then conf.powerChunkedFill = false end
-        M.RequestUnitApply(key, reason, { preview = true, power = true })
+        M.RequestUnitDomains(key, reason, { preview = true, power = true })
         return
     end
     local bars = Bars()
@@ -696,7 +696,7 @@ local function SmoothPowerSet(enabled, reason)
     if enabled then bars.chunkedPowerBar = false end
     -- Shared smooth power is a Player fallback. A targeted Player apply is
     -- required to recompile the spec and update StatusBar interpolation live.
-    M.RequestUnitApply("player", reason, { preview = true, power = true })
+    M.RequestUnitDomains("player", reason, { preview = true, power = true })
 end
 local function ChunkedPowerGet()
     local key = CurrentPowerBarScopeUnit()
@@ -717,14 +717,14 @@ local function ChunkedPowerSet(enabled, reason)
         if conf.powerChunkedFill == enabled and (not enabled or conf.powerSmoothFill == false) then return end
         conf.powerChunkedFill = enabled
         if enabled then conf.powerSmoothFill = false end
-        M.RequestUnitApply(key, reason, { preview = true, power = true })
+        M.RequestUnitDomains(key, reason, { preview = true, power = true })
         return
     end
     local bars = Bars()
     if bars.chunkedPowerBar == enabled and (not enabled or bars.smoothPowerBar == false) then return end
     bars.chunkedPowerBar = enabled
     if enabled then bars.smoothPowerBar = false end
-    M.RequestUnitApply("player", reason, { preview = true, power = true })
+    M.RequestUnitDomains("player", reason, { preview = true, power = true })
 end
 local NormalizeHpMode = M.NormalizeHpMode
 local NormalizePowerMode = M.NormalizePowerMode
@@ -892,10 +892,10 @@ local function ApplyFonts(reason)
     ApplyFontsFor(CurrentFontScope(), reason)
 end
 function ApplyBars(reason)
-    M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
+    M.RequestGeneralDomains(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
 end
 local function ApplyCastbars(reason)
-    M.RequestGeneralApply(reason or "MSUF2_CASTBARS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
+    M.RequestGeneralDomains(reason or "MSUF2_CASTBARS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
 end
 local GlobalPage = M.GlobalPage or {}
 M.GlobalPage = GlobalPage

@@ -254,6 +254,7 @@ end
 -- C6.6 ----------------------------------------------------------------------
 local function RunUndoEntries(flavor)
     local world, env, history = Boot(flavor)
+    local coreHistory = world.core.History
     local EM2 = env.MSUF_EM2
     local context = flavor .. " C6.6 undo entries"
     local pf = OpenUnitPopup(world, env, context)
@@ -270,12 +271,12 @@ local function RunUndoEntries(flavor)
 
     -- The fallback stack (Menu2 not loaded) sees the same blur.
     local menu = env.MSUF2
-    env.MSUF2, world.core.MSUF2 = nil, nil
+    env.MSUF2, world.core.MSUF2, world.core.History = nil, nil, nil
     EM2.Undo.Clear()
     pf.xBox.scripts.OnEditFocusLost(pf.xBox)
     world.widgets:RunTimers()
     Check(EM2.Undo.CanUndo() ~= true, context .. ": a blur without an edit pushed a fallback undo entry")
-    env.MSUF2, world.core.MSUF2 = menu, menu
+    env.MSUF2, world.core.MSUF2, world.core.History = menu, menu, coreHistory
 
     -- Copy size to one target: one entry. The menu is clicked like a user does.
     local db = env.MSUF_DB
@@ -314,7 +315,7 @@ local function RunUndoEntries(flavor)
         Check(history.Redo() == true and db.target.width == 271 and db.pet.width == 271,
             context .. ": one Redo did not restore all copied sizes")
         -- With the Menu2 history unavailable the fallback stack holds one per target as well.
-        env.MSUF2, world.core.MSUF2 = nil, nil
+        env.MSUF2, world.core.MSUF2, world.core.History = nil, nil, nil
         EM2.Undo.Clear()
         db.target.width = 150
         copy({ key = "target" })
@@ -331,7 +332,7 @@ local function RunUndoEntries(flavor)
             context .. ": fallback Copy All must restore all targets in one Undo")
         EM2.Undo.DoRedo()
         Check(db.target.width == 271 and db.pet.width == 271, context .. ": fallback Copy All Redo failed")
-        env.MSUF2, world.core.MSUF2 = menu, menu
+        env.MSUF2, world.core.MSUF2, world.core.History = menu, menu, coreHistory
     end
     EM2.State.Exit("test")
     world.widgets:RunTimers()

@@ -721,3 +721,6 @@ clients+Forever	lua	tools/tests/menu_pilot_button_lifecycle_smoke.lua	{root} {fl
 clients+Forever	lua	tools/tests/region_visibility_cache_smoke.lua	{root} {flavor}	One shown cache per region across every owner: {flavor}
 clients+Forever	lua	tools/tests/region_visibility_cost_smoke.lua	{root} {flavor} forward	Shown cache owner complete-operation cost against the parent, forward: {flavor}
 clients+Forever	lua	tools/tests/region_visibility_cost_smoke.lua	{root} {flavor} reverse	Shown cache owner complete-operation cost against the parent, reverse: {flavor}
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root}	Core-only Edit Mode history or late Options attachment failed
+-	lua	tools/tests/apply_typed_domains_smoke.lua	{root}	Typed domains or legacy apply compatibility drifted
+-	lua	tools/tests/apply_legacy_oracle_smoke.lua	{root}	Legacy apply routing parity failed

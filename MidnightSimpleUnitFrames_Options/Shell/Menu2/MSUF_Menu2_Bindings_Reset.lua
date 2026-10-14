@@ -512,25 +512,25 @@ local function ApplyDomainPageResetRuntime(info, reason)
     end
     if kind == "bars" then
         if ApplyService.RequestBars then return ApplyService.RequestBars(reason) ~= false end
-        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { preview = true, applyAll = false, bars = true }) ~= false end
+        if M.RequestGeneralDomains then return M.RequestGeneralDomains(reason, { preview = true, applyAll = false, bars = true }) ~= false end
         return false
     end
     if kind == "fonts" then
         if ApplyService.RequestFonts then return ApplyService.RequestFonts(reason) ~= false end
-        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { preview = true, applyAll = false, fonts = true }) ~= false end
+        if M.RequestGeneralDomains then return M.RequestGeneralDomains(reason, { preview = true, applyAll = false, fonts = true }) ~= false end
         return false
     end
     if kind == "colors" then
         local did = false
         if ApplyService.RequestColors then
             did = ApplyService.RequestColors(reason) ~= false or did
-        elseif M.RequestGeneralApply then
-            M.RequestGeneralApply(reason, { preview = true, applyAll = false, colors = true })
+        elseif M.RequestGeneralDomains then
+            M.RequestGeneralDomains(reason, { preview = true, applyAll = false, colors = true })
             did = true
         end
         did = ApplyAurasPageResetRuntime(reason, true) or did
-        if ApplyService.RequestClassPower then
-            ApplyService.RequestClassPower(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME)
+        if ApplyService.RequestClassPowerDomains then
+            ApplyService.RequestClassPowerDomains(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME)
             did = true
         else
             _G.MSUF_ClassPower_InvalidateColors()
@@ -550,8 +550,8 @@ local function ApplyAfterPageReset(pageKey, info)
         if info.unit == "player" then
             ApplyScopedFeatureRuntime("classpower", reason)
         end
-        if M.RequestUnitApply then
-            M.RequestUnitApply(info.unit, reason, {
+        if M.RequestUnitDomains then
+            M.RequestUnitDomains(info.unit, reason, {
                 history = false, preview = true, power = true, castbar = true, auras = true,
                 classpowerApplied = info.unit == "player",
             })
@@ -567,7 +567,7 @@ local function ApplyAfterPageReset(pageKey, info)
         FinishPageResetApply(pageKey, info)
         return
     end
-    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
+    if M.RequestGeneralDomains then M.RequestGeneralDomains(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
     if info and info.kind == "gameplay" then M.ApplyGameplay() end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.

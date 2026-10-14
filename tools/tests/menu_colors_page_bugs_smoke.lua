@@ -163,10 +163,10 @@ end)
 Section("Colors page unit previews request their apply as (unit, reason, opts)", function()
     Check(#previewPanels > 0, "the Colors page built no unit preview")
     local service = Check(M.ApplyService, "ApplyService missing")
-    local original, calls = service.RequestUnit, {}
-    service.RequestUnit = function(...) calls[#calls + 1] = { ... } end
+    local original, calls = service.RequestUnitDomains, {}
+    service.RequestUnitDomains = function(...) calls[#calls + 1] = { ... } end
     for _, panel in ipairs(previewPanels) do panel._msufAPI.ApplySettingsForKey() end
-    service.RequestUnit = original
+    service.RequestUnitDomains = original
     Check(#calls == #previewPanels, "a preview apply did not reach the apply service")
     for _, call in ipairs(calls) do
         Check(type(call[1]) == "string" and call[2] == "MSUF2_COLOR_PAINTER" and (call[3] == nil or type(call[3]) == "table"),

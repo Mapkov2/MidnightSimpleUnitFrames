@@ -63,6 +63,7 @@ local function Log(name) return function(...) calls[#calls + 1] = { name, ... } 
 local function Reset() for i = #calls, 1, -1 do calls[i] = nil end end
 local menu = core.MSUF2
 local savedApply = menu and menu.ApplyService
+local savedCoreApply = core.ApplyService
 local savedApplyGlobal = env.MSUF_Menu2_ApplyService
 local savedGF = core.GF
 local ALIASES = { "MSUF_GF_RefreshGeometry", "MSUF_GF_RefreshUnitBindings", "MSUF_GF_RefreshVisuals",
@@ -71,7 +72,7 @@ local savedAliases = {}
 for _, name in ipairs(ALIASES) do savedAliases[name] = env[name] end
 
 -- Options loaded: one request through the apply service.
-menu.ApplyService = { RequestGroup = Log("RequestGroup"), Flush = Log("Flush") }
+core.ApplyService = { RequestGroup = Log("RequestGroup"), Flush = Log("Flush") }
 Check(Refresh("raid", "SMOKE_REASON") == true, "the apply-service path did not report success")
 Check(#calls == 2 and calls[1][1] == "RequestGroup" and calls[1][2] == "raid" and calls[1][3] == "geometry"
     and calls[1][4] == "SMOKE_REASON" and calls[2][1] == "Flush", "the apply service did not get one geometry request and a flush")
@@ -79,7 +80,7 @@ Reset()
 Check(Refresh(nil, "SMOKE_REASON") == false and #calls == 0, "no kind still refreshed something")
 
 -- Options not loaded: GF directly.
-menu.ApplyService, env.MSUF_Menu2_ApplyService = nil, nil
+menu.ApplyService, env.MSUF_Menu2_ApplyService, core.ApplyService = nil, nil, nil
 core.GF = { RefreshGeometry = Log("GF.RefreshGeometry"), RefreshVisuals = Log("GF.RefreshVisuals"), DIRTY_LAYOUT = 4 }
 Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] == "GF.RefreshGeometry"
     and calls[1][2] == "party", "without the menu, GF.RefreshGeometry was not the one call")
@@ -96,5 +97,6 @@ core.GF = nil
 Check(Refresh("party", "SMOKE_REASON") == false and #calls == 0, "without GF, the refresh reported success or called an alias")
 
 menu.ApplyService, env.MSUF_Menu2_ApplyService, core.GF = savedApply, savedApplyGlobal, savedGF
+core.ApplyService = savedCoreApply
 for _, name in ipairs(ALIASES) do env[name] = savedAliases[name] end
 print("editmode_group_geometry_util_smoke: ok (one chain in Util; layout reason; HUD reset via GF; 5 steps)")

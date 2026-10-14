@@ -74,12 +74,12 @@ local function StoreValue(unit, key, value)
 end
 
 local function RequestUnitRuntime(unit, reason)
-    if type(M.RequestUnitApply) == "function" then
-        return M.RequestUnitApply(unit, reason, UNIT_APPLY_OPTS)
+    if type(M.RequestUnitDomains) == "function" then
+        return M.RequestUnitDomains(unit, reason, UNIT_APPLY_OPTS)
     end
     local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if service and type(service.RequestUnit) == "function" then
-        return service.RequestUnit(unit, reason, UNIT_APPLY_OPTS)
+    if service and type(service.RequestUnitDomains) == "function" then
+        return service.RequestUnitDomains(unit, reason, UNIT_APPLY_OPTS)
     end
     return false
 end

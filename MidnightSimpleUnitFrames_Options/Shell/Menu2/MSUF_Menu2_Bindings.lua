@@ -48,37 +48,9 @@ local DIRECT_TEXT_GROUPS = {
         defaultX = -4, defaultY = 4 },
 }
 
-local function ProfileSystemNeedsInit()
-    local active = _G.MSUF_ActiveProfile
-    local gdb = _G.MSUF_GlobalDB
-    local profiles = type(gdb) == "table" and gdb.profiles or nil
-    local activeTable = type(active) == "string" and type(profiles) == "table" and profiles[active] or nil
-    return type(active) ~= "string"
-        or active == ""
-        or type(_G.MSUF_DB) ~= "table"
-        or type(activeTable) ~= "table"
-        or _G.MSUF_DB ~= activeTable
-end
+local ProfileSystemNeedsInit = MSUF.History.ProfileSystemNeedsInit
 M.ProfileSystemNeedsInit = ProfileSystemNeedsInit
-local lastEnsuredDB
-function M.EnsureDB()
-    -- Fast path: the exact table we last ensured and exported is still the
-    -- active DB. A profile switch or import replaces _G.MSUF_DB, which breaks
-    -- the identity check and re-runs the full ensure/export sequence below.
-    local db = _G.MSUF_DB
-    if db ~= nil and db == lastEnsuredDB and type(db.general) == "table" and not ProfileSystemNeedsInit() then
-        return db
-    end
-    if ProfileSystemNeedsInit() then
-        _G.MSUF_InitProfiles()
-    end
-    local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then ensure() end
-    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
-    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
-    lastEnsuredDB = _G.MSUF_DB
-    return _G.MSUF_DB
-end
+M.EnsureDB = MSUF.History.EnsureDB
 -- An unknown unit has no table: answering Player's for it wrote the setting of
 -- a mistyped or unsupported unit into the Player frame.
 function M.GetUnitDB(unit)

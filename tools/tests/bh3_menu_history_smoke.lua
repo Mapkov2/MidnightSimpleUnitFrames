@@ -84,7 +84,7 @@ end
 function cases.bars()
     local _, M, db = Boot()
     local requests = {}
-    M.ApplyService.RequestGeneral = function(_, opts) requests[#requests + 1] = opts; return true end
+    M.ApplyService.RequestGeneralDomains = function(_, opts) requests[#requests + 1] = opts; return true end
     assert(M.StartHistorySession("menu"))
     assert(M.CaptureHistory("Outline", "opt_bars:slider:outline", function()
         db.general.barOutlineThickness = (db.general.barOutlineThickness or 1) + 2

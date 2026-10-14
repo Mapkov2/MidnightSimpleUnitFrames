@@ -259,6 +259,7 @@ local function RunFallbackStack(flavor)
     local EM2 = env.MSUF_EM2
     local first, a, b = Seed(env, flavor)
     local context = flavor .. " fallback undo"
+    history = world.core.History
     local saved = {}
     for _, name in ipairs({ "Undo", "Redo", "BeginHistoryTransaction", "PrepareHistoryChange",
         "CommitHistoryTransaction", "CancelHistoryTransaction", "GetHistoryState" }) do

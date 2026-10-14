@@ -260,7 +260,7 @@ function ProfilePrompts.ConfirmReset(name, after)
             if BlockCombatAction() then return end
             _G.MSUF_ResetProfile(name)
             ClearProfileHistory()
-            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
+            if M.RequestGeneralDomains then M.RequestGeneralDomains("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
             after()
             _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
         end,
@@ -637,7 +637,7 @@ function ProfilesPage.ManagementControls(state)
             _G.MSUF_SwitchProfile(wanted)
             if _G.MSUF_ActiveProfile == wanted then ClearProfileHistory() end
         end
-        M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true, applyAll = false, notify = false })
+        M.RequestGeneralDomains("MSUF2_PROFILE_SWITCH", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
         -- The active profile is the switch's completion receipt.
         if wanted and _G.MSUF_ActiveProfile == wanted then ShowProfileSwitchReloadPrompt(wanted) end
@@ -1076,7 +1076,7 @@ function ProfilesPage.ImportActions(state)
         local imported = _G.MSUF_ImportFromString(text)
         if imported ~= true then return false end
         ClearProfileHistory()
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
+        M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
         ShowImportReloadPrompt()
         return true
@@ -1127,7 +1127,7 @@ function ProfilesPage.ImportActions(state)
             return false
         end
         ClearProfileHistory()
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true, applyAll = false, notify = false })
+        M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT_NEW", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
         M.profileImportNewName = ""
         importProfileName:SetText("")

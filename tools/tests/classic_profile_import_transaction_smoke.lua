@@ -342,7 +342,7 @@ local M = {
     BlockCombatAction = function() return false end,
     -- The menu's prompts (MSUF_Menu2_Support.lua M.ShowPrompt) only ask.
     ShowPrompt = Noop,
-    RequestGeneralApply = Noop,
+    RequestGeneralDomains = Noop,
     TrackRefresh = Noop,
     RegisterPage = Noop,
 }

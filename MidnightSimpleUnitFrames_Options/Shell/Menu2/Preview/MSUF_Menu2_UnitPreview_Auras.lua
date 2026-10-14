@@ -229,7 +229,7 @@ local function RefreshRuntime(unit, reason)
         if type(apply.Flush) == "function" then apply.Flush() end
         return true
     elseif apply and type(apply.RequestUnit) == "function" then
-        apply.RequestUnit(unit, reason, { auras = true, preview = true })
+        apply.RequestUnitDomains(unit, reason, { auras = true, preview = true })
         if type(apply.Flush) == "function" then apply.Flush() end
         return true
     end

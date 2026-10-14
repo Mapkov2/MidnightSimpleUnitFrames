@@ -79,14 +79,14 @@ local function MSUF_Gameplay_GetNudgeStep()
 end
 
 local function MSUF_Gameplay_CheckpointHistory(label, source)
-    local h = _G.MSUF2
+    local h = MSUF.History or _G.MSUF2
     local checkpoint = h and h.CheckpointHistory
     if type(checkpoint) ~= "function" then return false end
     return checkpoint(label or "Gameplay position", source or "gameplay:position") or false
 end
 
 local function MSUF_Gameplay_BeginHistory(frame, label, source)
-    local h = _G.MSUF2
+    local h = MSUF.History or _G.MSUF2
     local begin = h and h.BeginHistoryTransaction
     if not (frame and type(begin) == "function") then return false end
     if begin(label or "Gameplay position", source or "gameplay:position") then
@@ -99,7 +99,7 @@ end
 local function MSUF_Gameplay_CommitHistory(frame)
     if not (frame and frame._msufGameplayHistoryTransaction) then return false end
     frame._msufGameplayHistoryTransaction = nil
-    local h = _G.MSUF2
+    local h = MSUF.History or _G.MSUF2
     local commit = h and h.CommitHistoryTransaction
     if type(commit) ~= "function" then return false end
     return commit() or false

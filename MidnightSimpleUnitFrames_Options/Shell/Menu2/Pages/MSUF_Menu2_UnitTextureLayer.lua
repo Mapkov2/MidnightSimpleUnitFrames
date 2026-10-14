@@ -368,8 +368,8 @@ local function TextureLayerActions(ctx, unit, s)
     end
     local function FinishPreset(changed, reason)
         if not changed then return false end
-        if M.RequestUnitApply then
-            M.RequestUnitApply(unit, reason, { preview = true, history = false })
+        if M.RequestUnitDomains then
+            M.RequestUnitDomains(unit, reason, { preview = true, history = false })
         end
         RefreshLayer()
         if M.RequestRefresh then M.RequestRefresh(ctx, reason) end

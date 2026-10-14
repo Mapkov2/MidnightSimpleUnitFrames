@@ -871,7 +871,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
         if scopes.transparency then CopyFields(dst, src, COPY_TRANSPARENCY_FIELDS) end
         if scopes.texlayer then CopyFields(dst, src, COPY_TEXLAYER_FIELDS) end
         if scopes.layout then CopyFields(dst, src, COPY_LAYOUT_FIELDS) end
-        M.RequestUnitApply(dstKey, "MSUF2_COPY_UNIT", {
+        M.RequestUnitDomains(dstKey, "MSUF2_COPY_UNIT", {
             preview = true,
             text = scopes.text or scopes.status,
             power = scopes.power,
@@ -1231,7 +1231,7 @@ local function RefreshStatusRuntime(unit, spec)
     if spec and spec.value == "level" then
         if unit == "boss" and _G.MSUF_BossTestMode then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
     end
-    M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
+    M.RequestUnitDomains(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end
 local SetControlEnabled = W.SetControlEnabled
 -- Text keys are read with a general fallback (ReadText), so no seeding step
@@ -1251,7 +1251,7 @@ local function SetText(unit, key, value, reason)
     if conf[key] == value then return end
     conf[key] = value
     conf.hpPowerTextOverride = nil
-    M.RequestUnitApply(unit, reason or "MSUF2_TEXT", { text = true, preview = true })
+    M.RequestUnitDomains(unit, reason or "MSUF2_TEXT", { text = true, preview = true })
 end
 local function NormalizePortrait(unit)
     local conf = GetConf(unit)

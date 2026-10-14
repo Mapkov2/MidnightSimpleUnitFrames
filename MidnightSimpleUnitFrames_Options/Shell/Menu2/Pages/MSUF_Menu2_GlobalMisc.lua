@@ -232,7 +232,7 @@ function MiscSection.Language(s)
         SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
         local NumberFormat = MSUF.NumberFormat
         if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
-        M.RequestGeneralApply("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
+        M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
         MSUF.GF.RefreshVisuals()
         RefreshAbbrevSample()
     end, Meta("setting.numberAbbrevStyle"))

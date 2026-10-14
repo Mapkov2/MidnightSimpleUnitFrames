@@ -917,7 +917,7 @@ local function BuildScopeSection(ctx, b)
                 -- Group textures follow this switch again, also after a Copy To flag.
                 GP.SetGroupTextureOwner(key, nil)
                 -- Texture refresh alone leaves the unit outline's painted state stale.
-                M.RequestGeneralApply("MSUF2_BARS_OVERRIDE", {
+                M.RequestGeneralDomains("MSUF2_BARS_OVERRIDE", {
                     preview = true, applyAll = false, bars = true,
                     barOutline = not IsGFScope(key), barsScope = key,
                 })
@@ -941,7 +941,7 @@ local function BuildScopeSection(ctx, b)
                     end
                 end
             end
-            M.RequestGeneralApply("MSUF2_BARS_RESET_OVERRIDES", {
+            M.RequestGeneralDomains("MSUF2_BARS_RESET_OVERRIDES", {
                 preview = true, applyAll = false, bars = true, barOutline = true, roundedBars = resetDirections, barsScope = "shared",
             })
             RefreshBarsPage("bars-reset-overrides")
@@ -2469,7 +2469,7 @@ local function BuildPowerSection(ctx, b)
             bars.realtimePowerText = v
             -- Recompile Player and rebind both Power and PowerText events.
             -- A generic Bars layout refresh leaves this event option dead.
-            M.RequestUnitApply("player", "MSUF2_BARS_REALTIME_POWER", {
+            M.RequestUnitDomains("player", "MSUF2_BARS_REALTIME_POWER", {
                 preview = true, power = true, text = true,
             })
         end,

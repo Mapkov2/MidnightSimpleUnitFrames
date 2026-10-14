@@ -181,6 +181,15 @@ local function Boot()
         world.prompt = { key = key, spec = spec }
         return {}
     end
+    -- This isolated host world supplies only the runtime owners it records.
+    -- Load the real relocated history before attaching the Options bridge.
+    namespace.Util.DeepCopy = DeepCopy
+    namespace.Public = { IsConfigCombatLocked = M.IsConfigCombatLocked }
+    namespace.Client = { SupportsEllesmereEditMode = false, SupportsBlizzardEditMode = false }
+    M.ApplyService.UnitKeys = M.KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena")
+    namespace.ApplyService = M.ApplyService
+    local history = assert(LoadChunk(root .. "/MidnightSimpleUnitFrames/State/MSUF_History.lua"))
+    setfenv(history, env)("MidnightSimpleUnitFrames", namespace)
     for _, file in ipairs(CHAIN) do
         local chunk = assert(LoadChunk(MENU2 .. file))
         setfenv(chunk, env)("MidnightSimpleUnitFrames_Options", namespace)

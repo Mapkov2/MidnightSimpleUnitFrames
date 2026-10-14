@@ -53,7 +53,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- allowances. Measured worst LF selections: Mainline/ruRU 9,820,168,
         -- Forever/ruRU 9,460,798, TBC/ruRU 7,707,589. About 30 KB headroom.
         -- The companion's twelve packs remain available for saved menu choices.
-        assert(bytes < (suffix == "Mainline" and 9850000 or 7740000),
+        -- 2026-10-14: shared History/Apply execution adds 113,478 core LF
+        -- bytes on every client (f8202558); ceilings add 116,000,
+        -- under relocation + 5 KB. The enUS Edit Mode session drops from
+        -- 17,009,067 to 9,444,283 Mainline; TBC 14,725,840 to 7,338,657.
+        -- Core-only gesture/late-UI smoke proves no Options request or parse.
+        assert(bytes < (suffix == "Mainline" and 9966000 or 7856000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
