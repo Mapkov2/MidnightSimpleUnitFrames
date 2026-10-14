@@ -1,46 +1,25 @@
---- ClassPower/MSUF_CP_PlayerHP.lua
---- Optional second Player HP bar owned by Class Resources.
---- Loaded before the controller; exposes a small builder so the controller does
---- not carry the feature implementation or hit Lua's chunk-local limit.
----
---- The controller injects WoW APIs, cached DB access, and shared unit-frame
---- helpers through `E`. Keep this file as a feature builder: it may create and
---- maintain the optional HP bar, but it must not create its own event frame or
---- take ownership of ClassPower's refresh loop.
-
+--- PlayerHP native painters, bound to state owned by UF.PlayerHP.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_PlayerHP.lua")
 
 local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
---- Font collaborators; Kernel and Castbars load before ClassPower in each
---- client TOC, so a missing one fails here.
 local FILE = "ClassPower/MSUF_CP_PlayerHP.lua"
 local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
 local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
 local FontPathEquals = MSUF.Require("MSUF_FontPathEquals", FILE)
 local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", FILE)
 
---- The text writers' change-check modes (rt.healthDispatchKeyMode), named where
---- they are compiled: UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua loads
---- before ClassPower in every client TOC.
 local DISPATCH_KEY = MSUF.UFText and MSUF.UFText.DISPATCH_KEY
 if type(DISPATCH_KEY) ~= "table" then
     error("MSUF: missing required dependency 'UFText.DISPATCH_KEY' required by " .. FILE
         .. " - check that MSUF_UF_Text_Format.lua still names it and still loads first in MidnightSimpleUnitFrames.toc.", 2)
 end
---- What each mode stamps, read on every health repaint, so the enum is turned into
---- three sets once, here: the current health, the maximum, the percent (the percent
---- modes stamp the rounded percent in place of the health). A mode in none of them,
---- NONE and an unset mode included, stamps nothing.
 local STAMPS_HP = { [DISPATCH_KEY.CURRENT] = true, [DISPATCH_KEY.CURRENT_MAX] = true }
 local STAMPS_MAX = { [DISPATCH_KEY.MAX] = true, [DISPATCH_KEY.CURRENT_MAX] = true, [DISPATCH_KEY.PERCENT_MAX] = true }
 local STAMPS_PERCENT = { [DISPATCH_KEY.PERCENT] = true, [DISPATCH_KEY.PERCENT_MAX] = true }
 
---- Global abbreviation style (see Runtime/MSUF_NumberFormat.lua). Registered at
---- file scope, not inside the builder, so rebuilding the HP bar never stacks a
---- second sink.
 local NUM_OPTS = nil
 do
     local NumberFormat = MSUF.NumberFormat
@@ -49,27 +28,6 @@ do
     end
 end
 
---- The bar's state table: the controller's PHP, or a new one.
-local function NewPlayerHPState()
-    return {
-        frame = nil,
-        bar = nil,
-        bg = nil,
-        shapeEdge = nil,
-        borderHost = nil,
-        borderEdges = nil,
-        textFrame = nil,
-        left = nil,
-        center = nil,
-        right = nil,
-        visible = false,
-    }
-end
-
---- Bound once by PLAYER_HP at controller load: the controller's state, its
---- cached profile, the APIs it injects and the client values read at that
---- moment (secret check, health percent and its 0-100 curve, the unit-frame
---- shape helpers).
 local PHP, CP, _cpDB
 local UnitHealth, UnitHealthMax, UnitClass, RAID_CLASS_COLORS
 local CreateFrame, GetPlayerFrame, ResolveTexture
@@ -120,26 +78,15 @@ local HP_TEXT_DELIMITERS = {
     [":"] = " : ",
 }
 
-local function Enabled()
-    local b = _cpDB.bars or {}
-    return b.playerHPBarEnabled == true
-end
-
 local function UsePlayerText(b)
     return b and b.playerHPBarUsePlayerText ~= false
 end
 
---- Player HP text can either use its own ClassPower settings or mirror the
---- normal player-frame text. Centralizing that bridge prevents later runtime
---- code from scattering direct profile reads across the hot health update.
 local function PlayerConfig()
     local db = MSUF_DB
     return db and db.player or nil, db and db.general or nil
 end
 
---- showHP is the current unit-frame setting. Preserve support for profiles
---- that only carry the old showHPText alias, but never let that alias veto
---- an explicit current value.
 local function PlayerHealthTextEnabled(player)
     if not player then return true end
     local enabled = player.showHP
@@ -172,9 +119,6 @@ end
 
 local NormalizeHPShape
 
---- FOLLOW_POWER means "look like the detached player power bar if one is in
---- use". This keeps the two auxiliary bars visually linked without making
---- the HP bar depend on the power-bar element's internal objects.
 local function ResolveFollowPowerShape(b)
     local db = MSUF_DB
     local player = db and db.player or nil
@@ -292,12 +236,6 @@ local function PercentText(pct, hidePercentSymbol)
     return string_format("%d%s", pct, hidePercentSymbol and "" or "%")
 end
 
---- Some clients can return protected/secret health values. When raw values
---- are unavailable, use Blizzard's percent helper and let text fall back
---- to percent-only output. Returns the plain rounded percent, or nil plus
---- the secret 0-100 value (UnitHealthPercent is SecretReturns on Midnight)
---- for SetFormattedText; without the ScaleTo100 curve a secret 0-1 value
---- cannot be scaled, so nothing is returned.
 local function UnitPercent()
     if not UnitHealthPercent then return nil end
     local pct
@@ -396,9 +334,6 @@ local function SetText(fs, text)
     fs:SetText(text)
 end
 
---- Percent-only text while health is secret. A plain percent is stamped
---- like any text; a secret one goes unformatted to the native formatter,
---- which rounds it like Percent().
 local function SetPercentText(fs, pct, secretPct, hidePercentSymbol)
     if issecretvalue(secretPct) == true then
         if not fs then return end
@@ -409,9 +344,6 @@ local function SetPercentText(fs, pct, secretPct, hidePercentSymbol)
     SetText(fs, PercentText(pct, hidePercentSymbol))
 end
 
---- Mirroring the already-rendered player-frame text avoids reimplementing
---- every text mode twice. The runtime stamp check makes sure we only copy
---- text that was rendered for the same health inputs.
 local function RenderedTextMatches(rt, hp, maxHP)
     if not (rt and rt.healthSlotCount and rt.healthSlotCount > 0) then return false end
     local keyHP, keyMax = false, false
@@ -432,11 +364,6 @@ local function RenderedTextMatches(rt, hp, maxHP)
         and rt._lastHealthTextMissing == missing
 end
 
---- A slot coloured from secret health ("HP text color by health": Text_Common
---- SetHealthTextSlotColorSecret) keeps no plain colour stamp, and its
---- FontString:GetTextColor reads back secret (SecretReturnsForAspect VertexColor).
---- ReadTextSlot flags such a colour; it goes to SetTextColor unread and clears the
---- copy's stamp, so a later plain colour is painted again.
 local function ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
     if not (dst and dst.SetTextColor) then return end
     if secretColor then
@@ -451,9 +378,6 @@ local function ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
     dst._phpTextR, dst._phpTextG, dst._phpTextB, dst._phpTextA = r, g, b, a
 end
 
---- A slot painted from secret health reads back as a secret string
---- (FontString:GetText). It is handed to SetText as it is: the empty and
---- nil checks run only on plain text.
 local function ReadTextSlot(src)
     local text = ""
     local r, g, b, a
@@ -577,8 +501,6 @@ local function ApplyFont()
     PHP._fontStamp = stamp
 end
 
---- Cold creation path. The bar is parented to the player frame so frame
---- lifetime, scale, and secure anchoring stay with the owning unit frame.
 local function Ensure(playerFrame)
     if PHP.frame then return true end
     if not playerFrame then return false end
@@ -808,9 +730,6 @@ local function ApplyTextLayout(b)
     PHP.right:SetShown(enabled and not compact)
 end
 
---- Hides the whole bar: the frame and the outline host, a sibling parented to
---- the player frame. The edge stamp is cleared so the next layout that shows the
---- bar shows its outline again.
 local function Hide()
     if MSUF.ResourceVisibility then
         MSUF.ResourceVisibility.Unbind(PHP.frame)
@@ -823,15 +742,8 @@ local function Hide()
     PHP.visible = false
 end
 
---- Layout/config path. This can run on profile changes and ClassPower
---- refreshes, so every expensive frame operation is guarded by stamps.
 local function ApplyLayout(playerFrame)
     local b = _cpDB.bars or {}
-    if not Enabled() then
-        Hide()
-        return false
-    end
-    if not Ensure(playerFrame) then return false end
 
     local shape = ResolveHPShape(b)
     local shapeInfo = ShapeTextures(shape)
@@ -955,9 +867,6 @@ local function ApplyLayout(playerFrame)
     return true
 end
 
---- Color is part of the health hotpath. Prefer the shared unit-frame color
---- helpers when available so reaction/class/gradient behavior stays aligned
---- with the main player HP bar.
 local function ApplyColor(hp, maxHP, event)
     local bar = PHP.bar
     if not bar then return end
@@ -1005,9 +914,6 @@ local function ApplyColor(hp, maxHP, event)
     ApplyCachedColor(bar, r, g, bl)
 end
 
---- Text update is deliberately tolerant: copy main-frame text when it is
---- current, synthesize text when safe numeric values exist, and degrade to a
---- percent-only display when health values are protected.
 local function UpdateText(hp, maxHP)
     if not PHP.left then return end
     local b = _cpDB.bars or {}
@@ -1094,14 +1000,11 @@ local function UpdateText(hp, maxHP)
     SetText(PHP.right, ModeText(right, hp, maxHP, delimiter, hideRight))
 end
 
---- Health event entry. Keep this small and cache-aware because ClassPower
---- calls it from frequent UNIT_HEALTH/UNIT_MAXHEALTH style updates.
 local function Update(event)
-    if not PHP.visible or not PHP.bar then return end
+    if not PHP.visible then return end
     local common = _G.MSUF_NS and _G.MSUF_NS.UFBarTextCommon
     local hp, maxHP
-    if type(UnitHealth) == "function" then hp = UnitHealth("player") end
-    if type(UnitHealthMax) == "function" then maxHP = UnitHealthMax("player") end
+    hp, maxHP = UnitHealth("player"), UnitHealthMax("player")
     local hpSecret = issecretvalue(hp) == true
     local maxSecret = issecretvalue(maxHP) == true
     if not hpSecret then hp = tonumber(hp) or 0 end
@@ -1141,9 +1044,7 @@ local function Update(event)
     ApplyColor(hp, maxHP, event)
 end
 
---- Full refresh re-applies layout/config first, then clears cached health
---- values so the following update repaints min/max/value/text/color.
-local function Refresh(playerFrame)
+local function ApplyResource(playerFrame)
     if ApplyLayout(playerFrame or GetPlayerFrame()) then
         PHP._hp = nil
         PHP._maxHP = nil
@@ -1158,13 +1059,22 @@ local function Refresh(playerFrame)
     end
 end
 
---- Binds this module to the ClassPower controller environment. Nothing in
---- this file touches frames at load time; frame creation waits until the
---- player frame exists and the feature is enabled.
-builders.PLAYER_HP = function(E)
-    PHP = E.PHP or NewPlayerHPState()
+local function InjectedAPI(api, name)
+    if type(api) == "function" then return api end
+    -- Preserve callable-table injection in existing whole-client fixtures.
+    -- Missing and wrong-shaped providers still fail at binding readiness.
+    local mt = getmetatable(api)
+    if mt and type(mt.__call) == "function" then return api end
+    error("MSUF: missing required dependency '" .. name .. "' required by " .. FILE, 2)
+end
+builders.PLAYER_HP_API = InjectedAPI
+
+builders.PLAYER_HP_VISUAL = function(E)
+    PHP = assert(E.PHP, "PlayerHP visual provider requires UF-owned state")
     CP, _cpDB = E.CP, E._cpDB
     UnitHealth, UnitHealthMax, UnitClass = E.UnitHealth, E.UnitHealthMax, E.UnitClass
+    UnitHealth = InjectedAPI(UnitHealth, "PlayerHP injected UnitHealth")
+    UnitHealthMax = InjectedAPI(UnitHealthMax, "PlayerHP injected UnitHealthMax")
     RAID_CLASS_COLORS = E.RAID_CLASS_COLORS
     CreateFrame, GetPlayerFrame, ResolveTexture = E.CreateFrame, E.GetPlayerFrame, E.ResolveTexture
     tonumber, type, tostring, pairs = E.tonumber or tonumber, E.type or type, E.tostring or tostring, E.pairs or pairs
@@ -1177,7 +1087,8 @@ builders.PLAYER_HP = function(E)
     ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
     return {
         PHP = PHP,
-        Refresh = Refresh,
+        Apply = ApplyResource,
+        Create = Ensure,
         Update = Update,
         ApplyFont = ApplyFont,
         Hide = Hide,

@@ -125,21 +125,14 @@ local EXPECTED = {
 --- provider, shared modules and controller all carry "ClassPower" in their
 --- path, and no other core TOC entry does.
 local function ClassPowerLoadOrder(tocName)
-    local path = repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. tocName .. ".toc"
-    local file = assert(io.open(path, "rb"), "missing TOC: " .. path)
-    local raw = file:read("*a")
-    file:close()
-    local order = {
-        --- The secret-value helpers load long before ClassPower on every TOC.
-        "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua",
-    }
-    for line in raw:gmatch("[^\r\n]+") do
-        local entry = line:match("^%s*(.-)%s*$")
-        if entry ~= "" and entry:sub(1, 1) ~= "#" and entry:find("ClassPower", 1, true) then
-            order[#order + 1] = entry:gsub("\\", "/")
+    local Manifest = dofile(repo .. "/tools/tests/client_manifest.lua")
+    local order = {}
+    for _, path in ipairs(Manifest.Paths(repo, tocName)) do
+        if path:find("/ClassPower", 1, true) or path:find("/MSUF_UF_Secrets.lua", 1, true)
+            or path:find("/MSUF_UF_PlayerHP.lua", 1, true) then
+            order[#order + 1] = path:match("MidnightSimpleUnitFrames/(.+)$")
         end
     end
-    assert(#order > 3, "no ClassPower entries in " .. path)
     return order
 end
 
@@ -241,56 +234,61 @@ local function Start(client, class)
     end
     t.Record = Record
 
-    --- Wrap exactly the calls a player would notice: event bindings, bar
-    --- values, transparency, parenting, mouse handling and visibility.
-    local methods = env.Methods
-    local baseRegister = methods.RegisterEvent
-    local baseRegisterUnit = methods.RegisterUnitEvent
-    local baseUnregister = methods.UnregisterEvent
-    local baseSetValue = methods.SetValue
-    local baseSetAlpha = methods.SetAlpha
-    local baseSetParent = methods.SetParent
-    local baseEnableMouse = methods.EnableMouse
-    local baseShow = methods.Show
-    local baseHide = methods.Hide
+    -- Establish the real UF collaborators before recording the ClassPower
+    -- stack. Its setup was outside this CP-only trace in the original fixture.
+    local function BeginRecording()
+        --- Wrap exactly the calls a player would notice: event bindings, bar
+        --- values, transparency, parenting, mouse handling and visibility.
+        local methods = env.Methods
+        local baseRegister = methods.RegisterEvent
+        local baseRegisterUnit = methods.RegisterUnitEvent
+        local baseUnregister = methods.UnregisterEvent
+        local baseSetValue = methods.SetValue
+        local baseSetAlpha = methods.SetAlpha
+        local baseSetParent = methods.SetParent
+        local baseEnableMouse = methods.EnableMouse
+        local baseShow = methods.Show
+        local baseHide = methods.Hide
 
-    methods.RegisterEvent = function(self, event)
-        Record("RegisterEvent " .. Label(self) .. " " .. tostring(event))
-        return baseRegister(self, event)
-    end
-    methods.RegisterUnitEvent = function(self, event, unit1, unit2)
-        assert(unit1 ~= nil, "RegisterUnitEvent without a unit: " .. tostring(event))
-        Record("RegisterEvent " .. Label(self) .. " " .. tostring(event)
-            .. " @" .. tostring(unit1) .. (unit2 and ("+" .. tostring(unit2)) or ""))
-        return baseRegisterUnit(self, event, unit1, unit2)
-    end
-    methods.UnregisterEvent = function(self, event)
-        Record("UnregisterEvent " .. Label(self) .. " " .. tostring(event))
-        return baseUnregister(self, event)
-    end
-    methods.SetValue = function(self, value)
-        Record("SetValue " .. Label(self) .. " " .. Number(value))
-        return baseSetValue(self, value)
-    end
-    methods.SetAlpha = function(self, alpha)
-        Record("SetAlpha " .. Label(self) .. " " .. Number(alpha))
-        return baseSetAlpha(self, alpha)
-    end
-    methods.SetParent = function(self, parent)
-        Record("SetParent " .. Label(self) .. " " .. Label(parent))
-        return baseSetParent(self, parent)
-    end
-    methods.EnableMouse = function(self, enabled)
-        Record("EnableMouse " .. Label(self) .. " " .. tostring(enabled))
-        return baseEnableMouse(self, enabled)
-    end
-    methods.Show = function(self)
-        Record("Show " .. Label(self))
-        return baseShow(self)
-    end
-    methods.Hide = function(self)
-        Record("Hide " .. Label(self))
-        return baseHide(self)
+        methods.RegisterEvent = function(self, event)
+            Record("RegisterEvent " .. Label(self) .. " " .. tostring(event))
+            return baseRegister(self, event)
+        end
+        methods.RegisterUnitEvent = function(self, event, unit1, unit2)
+            assert(unit1 ~= nil, "RegisterUnitEvent without a unit: " .. tostring(event))
+            Record("RegisterEvent " .. Label(self) .. " " .. tostring(event)
+                .. " @" .. tostring(unit1) .. (unit2 and ("+" .. tostring(unit2)) or ""))
+            return baseRegisterUnit(self, event, unit1, unit2)
+        end
+        methods.UnregisterEvent = function(self, event)
+            Record("UnregisterEvent " .. Label(self) .. " " .. tostring(event))
+            return baseUnregister(self, event)
+        end
+        methods.SetValue = function(self, value)
+            Record("SetValue " .. Label(self) .. " " .. Number(value))
+            return baseSetValue(self, value)
+        end
+        methods.SetAlpha = function(self, alpha)
+            Record("SetAlpha " .. Label(self) .. " " .. Number(alpha))
+            return baseSetAlpha(self, alpha)
+        end
+        methods.SetParent = function(self, parent)
+            Record("SetParent " .. Label(self) .. " " .. Label(parent))
+            return baseSetParent(self, parent)
+        end
+        methods.EnableMouse = function(self, enabled)
+            Record("EnableMouse " .. Label(self) .. " " .. tostring(enabled))
+            return baseEnableMouse(self, enabled)
+        end
+        methods.Show = function(self)
+            Record("Show " .. Label(self))
+            return baseShow(self)
+        end
+        methods.Hide = function(self)
+            Record("Hide " .. Label(self))
+            return baseHide(self)
+        end
+
     end
 
     local ns = {
@@ -401,6 +399,7 @@ local function Start(client, class)
         if name == "ClassPower" then module = callbacks end
     end
     assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
+    BeginRecording()
     local order = ClassPowerLoadOrder(client.toc)
     for index = 1, #order do
         local path = repo .. "/MidnightSimpleUnitFrames/" .. order[index]

@@ -49,7 +49,7 @@ do
         showClassPower = false, playerHPBarEnabled = true, playerHPBarWidthMode = "custom", playerHPBarWidth = 180,
     }, PlayerHPHooks())
     t.env:RunTimers()
-    local PHP = World.Upvalue(t.CP.DisableNow, "PHP")
+    local PHP = assert(MSUF_NS.UF.PlayerHP.State)
     local function Shown()
         return PHP.frame ~= nil and PHP.frame.shown == true, PHP.borderHost ~= nil and PHP.borderHost.shown == true
     end

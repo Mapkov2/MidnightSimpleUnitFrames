@@ -38,7 +38,8 @@ do
     local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
     local controllers = 0
     for _, path in ipairs(manifest.Paths(repo, flavor)) do
-        if path:find("/ClassPower", 1, true) or path:find("/MSUF_UF_Secrets.lua", 1, true) then
+        if path:find("/ClassPower", 1, true) or path:find("/MSUF_UF_Secrets.lua", 1, true)
+            or path:find("/MSUF_UF_PlayerHP.lua", 1, true) then
             LOAD_ORDER[#LOAD_ORDER + 1] = path
             if path:find("/MSUF_CP_Controller.lua", 1, true) then controllers = controllers + 1 end
         end
@@ -181,13 +182,15 @@ local function Start(spec)
 end
 
 local function Registered(t, event)
-    return t.eventFrame.events[event] == true
+    if t.eventFrame.events[event] == true then return true end
+    local hp = _G.MSUF_ClassPowerPlayerHealthBar
+    return hp and hp.events[event] == true
 end
 
 -- Only registered events are delivered by the client, so refuse anything else.
 local function Fire(t, event, ...)
     assert(Registered(t, event), event .. " is not registered, so the client would never deliver it")
-    t.onEvent(t.eventFrame, event, ...)
+    t.env:FireEvent(event, ...)
 end
 
 local function ExpectBars(t, expected, label)

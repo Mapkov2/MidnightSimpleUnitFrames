@@ -22,7 +22,7 @@
 --- Ebon is fully AuraContainer-owned. Lua polling remains only for active
 --- Stagger or a degraded non-Ebon API path.
 
---- Guard: only load once.
+
 if _G.__MSUF_ClassPower_Loaded then return end
 _G.__MSUF_ClassPower_Loaded = true
 
@@ -31,13 +31,12 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Controller.lua")
 local ExportPublic = MSUF.ExportPublic
 
---- The player-frame resolver is owned by ClassPower/MSUF_CP_Core.lua, which
---- the TOC loads before this file.
+
 local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
 
---- Perf locals (eliminate global lookups in hot paths)
+
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
---- APIs read only to build the split modules below stay plain global reads.
+
 local GetUnitChargedPowerPoints = GetUnitChargedPowerPoints
 local math_floor = math.floor
 local math_min = math.min
@@ -61,11 +60,11 @@ local NotSecret = MSUF.Secrets.NotSecret
 
 local CanAccessTableValue = MSUF.Secrets.CanAccessTable
 
---- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
+
 local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization)
     or GetSpecialization
 
---- Player class (resolved once, never changes)
+
 local PLAYER_CLASS = select(2, UnitClass("player"))
 
 -- A Classic resource can be inactive in the current form/spec but still needs
@@ -85,8 +84,7 @@ local function CP_CanEditInactiveClassResource()
     return false
 end
 
---- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
---- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
+
 local CPConst = _G.MSUF_CP_CONST or {}
 local CPK = CPConst.CPK or {
     MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5,
@@ -97,14 +95,7 @@ local TIP = CPConst.TIP or {}
 local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
---- Target-owned combo points reach this controller through one provider seam.
---- WoW Forever's Game/Forever/ClassPower.lua publishes it as MSUF.CPClient,
---- built from the shared Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua module.
---- The Classic flavors (MSUF.Client.IsClassic, read once) load this controller
---- too: their flavor provider arrives adapted by
---- Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua and also owns the combo
---- point and display-modifier reads of every mode runner. nil on Midnight, so
---- its routing and events stay unchanged.
+
 local ClientCP = MSUF.CPClient
 local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 if IS_CLASSIC then
@@ -124,10 +115,7 @@ if IS_CLASSIC then
     if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
 end
 
---- Cached split registries (load-time only; avoids repeated global table lookups
---- and keeps the post-split core wiring easier to follow). Every builder file
---- loads before this one (TOC order); the AltMana builder lives in
---- ClassPower/MSUF_CP_AltMana.lua.
+
 local CPCoreBuilders = (type(_G.MSUF_CP_CORE_BUILDERS) == "table") and _G.MSUF_CP_CORE_BUILDERS or {}
 local CPModeBuilders = (type(_G.MSUF_CP_MODE_BUILDERS) == "table") and _G.MSUF_CP_MODE_BUILDERS or {}
 local CPFeatureBuilders = (type(_G.MSUF_CP_FEATURE_BUILDERS) == "table") and _G.MSUF_CP_FEATURE_BUILDERS or {}
@@ -139,24 +127,14 @@ local function CP_CallBuilder(builder, env)
 end
 
 local function CP_Noop() end
---- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
 
---- Phase 5 CP split: Balance Druid Astral Power prediction + eclipse colors now
---- live in ClassPower/MSUF_CP_BalanceDruid.lua. The core keeps only the
---- global color invalidation hook call, so this file stays closer to a pure
---- orchestrator.
 
 --- Hunter Survival: Tip of the Spear (talent 260285)
 --- Evoker Augmentation: native 12.1 Ebon Might duration text.
 
---- The TOC-loaded AltMana builder replaces this before any consumer runs.
+
 local NeedsAltManaBar = CP_Noop
 
---- Cold configuration helpers live in ClassPower/MSUF_CP_Controller_Config.lua:
---- the cached DB config (_cpDB), SavedVariables defaults, feature gates,
---- class/spec -> render-mode routing, the structural signature and the per-mode
---- event profile. Hot paths keep _cpDB as an upvalue; everything else runs at
---- FullRefresh cadence and is read through the CPConfig table.
 local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
     CPConst = CPConst,
     CPK = CPK,
@@ -172,17 +150,11 @@ local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
 local _cpDB = CPConfig._cpDB
 local CP_GetModeEventProfile = CPConfig.GetModeEventProfile
 
---- Colour resolution lives in ClassPower/MSUF_CP_Controller_Colors.lua. The
---- resolvers cache per token; mode runners receive them by value through their
---- build env and CP_CompileVisual reads them once per refresh.
 local CPColors = CP_CallBuilder(CPCoreBuilders.CONTROLLER_COLORS, {
     _cpDB = _cpDB,
     POWER_TYPE_TOKENS = POWER_TYPE_TOKENS,
 })
 
---- Charged / Empowered Combo Points (Echoing Reprimand, Supercharged CP, etc.)
---- v6.1 behavior: rebuild the reused 1-based slot map when the charged-point
---- event or a segmented structural refresh requests it.
 local CP
 
 local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
@@ -209,7 +181,6 @@ local function RefreshChargedPoints()
     end
 end
 
---- ClassPower visual: segmented bars (created lazily on player frame)
 CP = {
     chargedMap = {},
     chargedAny = false,
@@ -259,8 +230,6 @@ CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
 }
 
---- The player-aura cache of the aura-driven resources lives in
---- ClassPower/MSUF_CP_Controller_Auras.lua.
 local CPAuras = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_AURAS, {
     CPConst = CPConst,
     CPK = CPK,
@@ -359,17 +328,11 @@ do
     end
 end
 
---- Font / text-offset presentation helpers now live in the PRESENTATION
---- builder of ClassPower/MSUF_CP_Core.lua.
 local CP_ApplyFont
 local CP_ApplyColors
---- Active-mode dispatch (bound below); forward-declared so
---- the presentation builder's colour refresh can reach it.
 local CP_RunActiveUpdate
 local CP_RefreshTexture
 
---- Auto-Hide: visibility check after each update (OOC / Full / Empty)
---- Zero overhead when all three are disabled (early-out on first check).
 
 -- Only combat, Edit Mode and Class Resource lifecycle changes can flip this
 -- flag. The Power element owns the visual surfaces; it never reads power values
@@ -541,9 +504,6 @@ do
     end or nil
 end
 
---- Phase 7A CP split: pure presentation helpers now live in the PRESENTATION
---- builder of ClassPower/MSUF_CP_Core.lua. This keeps the core smaller without
---- touching build/layout/value flow.
 do
     local presentation = CP_CallBuilder(CPCoreBuilders.PRESENTATION, {
             CP = CP,
@@ -600,12 +560,7 @@ end
 --- MSUF_ClassPower_MountEbonMight (the Power element's mount callback) is
 --- exported by the CONTROLLER_SURFACE builder next to the host resolver.
 
---- Legacy color-only refresh / texture refresh now live in the PRESENTATION
---- builder of ClassPower/MSUF_CP_Core.lua.
 
---- CPK.MODE.FRACTIONAL: Destruction Warlock - partial Soul Shard fill.
---- UnitPower(unit, type, true) / UnitPowerDisplayMod(type) gives e.g. 3.7
---- Fractional mode runner moved to ClassPower/MSUF_CP_Modes.lua (FRACTIONAL builder)
 
 --- Rune cooldown animation and the Stagger fallback share one central driver.
 --- Ebon Might is fully native in 12.1 and never enters this driver.
@@ -645,9 +600,6 @@ do
     end
 end
 
---- The central OnUpdate driver (Rune, Stagger and degraded Essence ticks)
---- and the per-mode OnUpdate policy live in
---- ClassPower/MSUF_CP_Controller_Ticker.lua.
 local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {
     CP = CP,
     CPK = CPK,
@@ -663,10 +615,6 @@ local CP_StopCentralTick = CPTicker.Stop
 local CP_SyncRuntimeOnUpdates = CPTicker.SyncRuntimeOnUpdates
 
 
---- Phase 5 CP split: class/resource specials now live in the SPECIALS builder
---- of ClassPower/MSUF_CP_Core.lua. The core builds the handlers from a
---- small feature builder so event wiring stays identical while class-specific
---- logic stops bloating the orchestrator chunk.
 local OnWarlockCastStart
 local OnWarlockCastEnd
 local OnTipOfTheSpearSpellCast
@@ -713,10 +661,6 @@ do
     OnSpellTrackerReset = OnSpellTrackerReset or CP_Noop
 end
 
---- Phase 4 CP split: continuous + stagger mode runners now live in the
---- CONTINUOUS and STAGGER builders of ClassPower/MSUF_CP_Modes.lua.
---- The core keeps only orchestration and event wiring, while the heavy single-bar
---- runners live outside the main chunk.
 
 local CP_RefreshEventBindings
 
@@ -837,9 +781,8 @@ function CP.RefreshSyncedPowerWidth(playerFrame)
     return refresh(playerFrame, power) and true or false
 end
 
-local PHP = { visible = false }
+local PHP
 local CP_PlayerHPRefresh = CP_Noop
-local CP_PlayerHPUpdate = CP_Noop
 local CP_PlayerHPApplyFont = CP_Noop
 
 local function CP_PlayerHPNeedsRefresh()
@@ -847,8 +790,9 @@ local function CP_PlayerHPNeedsRefresh()
 end
 
 do
+    local validate = assert(CP_CallBuilder(CPCoreBuilders.PLAYER_HP_REQUIRE, MSUF.UF.PlayerHP),
+        "MSUF: missing required dependency 'UF.PlayerHP readiness' required by ClassPower/MSUF_CP_Controller.lua")
     local playerHP = CP_CallBuilder(CPCoreBuilders.PLAYER_HP, {
-            PHP = PHP,
             CP = CP,
             _cpDB = _cpDB,
             UnitHealth = UnitHealth,
@@ -865,13 +809,12 @@ do
             math_floor = math_floor,
             string_format = string.format,
         })
-    if playerHP then
-        PHP = playerHP.PHP or PHP
-        CP_PlayerHPRefresh = playerHP.Refresh or CP_PlayerHPRefresh
-        CP_PlayerHPUpdate = playerHP.Update or CP_PlayerHPUpdate
-        CP_PlayerHPApplyFont = playerHP.ApplyFont or CP_PlayerHPApplyFont
+    validate(playerHP)
+        PHP = playerHP.PHP
+        CP.PlayerHP = playerHP
+        CP_PlayerHPRefresh = playerHP.Refresh
+        CP_PlayerHPApplyFont = playerHP.ApplyFont
         CP.PlayerHPHide = playerHP.Hide
-    end
 end
 
 --- Full refresh (called on spec change, form change, config change)
@@ -1203,8 +1146,7 @@ function Refresh.VisibleTextures()
     if CP.visible then CP_RefreshTexture() end
     if AM.visible then AM_RefreshTexture() end
     if PHP.visible then
-        PHP._textureStamp = nil
-        CP_PlayerHPRefresh(GetPlayerFrame())
+        CP.PlayerHP.RefreshTextures(GetPlayerFrame())
     end
 end
 
@@ -1528,9 +1470,6 @@ local function ClassPowerOnRareEvent(event, arg1)
     --- Death/resurrection: reset spell tracker state (Sensei pattern)
     if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
         OnSpellTrackerReset()
-        if PHP.visible then
-            CP_PlayerHPUpdate(event)
-        end
         if CP.visible then
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
@@ -1728,9 +1667,6 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     --- Stagger: health changes affect threshold colors + bar max
     if event == "UNIT_HEALTH" then
         if arg1 == "player" then
-            if PHP.visible then
-                CP_PlayerHPUpdate(event)
-            end
             --- CP stagger: max health = bar max, threshold recalculation
             if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
                 CP_RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -1741,9 +1677,6 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "UNIT_MAXHEALTH" or event == "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" then
         if arg1 == "player" then
-            if PHP.visible then
-                CP_PlayerHPUpdate(event)
-            end
             if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
                 CP_RunActiveUpdate(CP.powerType, CP.currentMax)
             end
@@ -1809,8 +1742,7 @@ end
 CP.PlayerHPRefreshTextures = function()
     CPConfig.RefreshConfig()
     if PHP.visible then
-        PHP._textureStamp = nil
-        CP_PlayerHPRefresh(GetPlayerFrame())
+        CP.PlayerHP.RefreshTextures(GetPlayerFrame())
     end
 end
 
@@ -1900,7 +1832,6 @@ CP.ApplyFontsPublic = function()
         if CP.ebonStyleRetryPending == true then CP_RefreshEventBindings() end
     end
     if PHP.visible then
-        PHP._fontStamp = nil
         CP_PlayerHPApplyFont()
     end
     if CP.resourceExtras then CP.resourceExtras.Refresh() end
@@ -1925,9 +1856,7 @@ CP.RefreshVisualsPublic = function()
     end
     if AM.visible and AM_RefreshTexture then AM_RefreshTexture() end
     if PHP.visible then
-        PHP._textureStamp = nil
-        PHP._fontStamp = nil
-        CP_PlayerHPRefresh(GetPlayerFrame())
+        CP.PlayerHP.RefreshTextures(GetPlayerFrame(), true)
     end
     if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
@@ -2075,8 +2004,8 @@ function CP.DisableNow()
     if CP.container then CP.container:Hide() end
     if AM.container then AM.container:Hide() end
     --- The second Player HP bar lives in PHP.frame plus a sibling outline host.
-    if CP.PlayerHPHide then CP.PlayerHPHide() elseif PHP.frame then PHP.frame:Hide() end
-    CP.visible, AM.visible, PHP.visible = false, false, false
+    CP.PlayerHPHide()
+    CP.visible, AM.visible = false, false
     if augWasActive or displayPowerWasOverridden then CPConst.PowerOwnership:NotifyChanged() end
 end
 

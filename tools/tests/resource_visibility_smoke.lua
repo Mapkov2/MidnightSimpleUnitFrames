@@ -52,7 +52,9 @@ local ns = { UFBarTextCommon = { ResolveDisplayedPowerIdentity = ResolvePower },
     PowerText = { Update = function() textPaints = textPaints + 1 end },
 } } }
 ns.ExportPublic = function(name, value) _G[name] = value end
-assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
+-- This section tests only ResourceVisibility with its injected Power painters;
+-- the real controller/UF lifecycle is exercised in the per-client section below.
+assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns, false)
 ResolvePower = assert(loadstring("local MSUF, POWER_TYPE_MANA = ..., 0\n" .. resolver
     .. "\nreturn ResolveDisplayedPowerIdentity"))(ns)
 ns.UFBarTextCommon.ResolveDisplayedPowerIdentity = ResolvePower

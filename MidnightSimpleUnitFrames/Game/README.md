@@ -29,6 +29,13 @@ Client-only code belongs here. A Classic difference in a shared file stays there
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
 
+All five client families load `ClassPower/MSUF_CP_PlayerHP.xml` at the existing
+Class Resources injection boundary. It loads the native PlayerHP visual
+provider followed by `UnitFrames/Engine/Elements/MSUF_UF_PlayerHP.lua`, the
+independent UF state/lifecycle/event owner, before the ClassPower controller.
+Extra Health retains every option and its ResourceVisibility parent/scale
+rules; Player unit-frame enablement or detachment does not own this resource.
+
 The group XML manifests load the shared `GroupFrames/MSUF_GroupFrames_Additional`
 Lua/XML pair after the group runtime, for optional target, pet, friendly-boss and
 healer-mana views. These additive modules remain in the shared group subsystem;

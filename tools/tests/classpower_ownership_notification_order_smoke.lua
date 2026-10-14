@@ -55,10 +55,6 @@ local function Run(name, class, spec, primary, bars, script, opts)
             InCombatLockdown = function() return S.inCombat == true end
             local ns, power = MSUF_NS
             ns.UF.Layers = {}
-            ns.UF.RegisterElement = function(name, element)
-                assert(name == "Power", "unexpected element")
-                power = element
-            end
             assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"))(
                 "MidnightSimpleUnitFrames", ns)
             _G.MSUF_RefreshPlayerPowerBar = function()
@@ -67,7 +63,7 @@ local function Run(name, class, spec, primary, bars, script, opts)
                 local line = assert(expected[index + 1], "unexpected Power notification")
                 local mana, aug = line:match(" dm=(%d)") == "1", line:match(" aug=(%d)") == "1"
                 local kind, token, displayedMana = ns.UFBarTextCommon.ResolveDisplayedPowerIdentity("player", S.primary, "PRIMARY")
-                local showsEbon = World.Upvalue(assert(power).Apply, "PowerShowsEbonMight")
+                local showsEbon = World.Upvalue(assert(ns.UF.elements.Power).Apply, "PowerShowsEbonMight")
                 local frame = _G.MSUF_player
                 frame.MSUFUnitKey = "player"
                 assert(showsEbon(frame) == aug, name .. ": Power read stale Ebon ownership at notification " .. (notifications + 1))

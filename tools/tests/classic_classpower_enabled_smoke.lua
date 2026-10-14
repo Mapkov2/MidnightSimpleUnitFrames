@@ -45,6 +45,7 @@ local LOAD_ORDER = {
     "ClassPower/MSUF_CP_Core.lua",
     "ClassPower/MSUF_CP_AltMana.lua",
     "ClassPower/MSUF_CP_PlayerHP.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_PlayerHP.lua",
     "ClassPower/MSUF_CP_Controller_Config.lua",
     "ClassPower/MSUF_CP_Controller_Colors.lua",
     "ClassPower/MSUF_CP_Controller_Surface.lua",

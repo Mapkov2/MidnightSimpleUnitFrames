@@ -35,6 +35,8 @@ UF.attachedFrames = UF.attachedFrames or {}
 UF.attachedFrameList = UF.attachedFrameList or {}
 UF.elements = UF.elements or {}
 UF.elementOrder = UF.elementOrder or {}
+local elementOrder = UF.elementOrder
+local scopedElementOrders = {}
 UF.pendingApply = UF.pendingApply or {}
 UF.pendingElementRefreshes = UF.pendingElementRefreshes or {}
 UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
@@ -361,7 +363,26 @@ function UF.RegisterElement(name, element, traits)
   if type(name) ~= "string" or type(element) ~= "table" then return false end
   if UF.elements[name] ~= nil and UF.elements[name] ~= element then return false end
   if not UF.elements[name] then
-    UF.elementOrder[#UF.elementOrder + 1] = name
+    local scope = traits and traits.scope
+    local order = elementOrder
+    if scope then
+      order = scopedElementOrders[scope]
+      if not order then
+        order = {}
+        scopedElementOrders[scope] = order
+      end
+      -- Scoped owners do not enter the ordinary single/group recipe. Their
+      -- declared updates still participate in the same stable route caches.
+      local cache = Compiler.Cache
+      if element.Update then cache.elementFunctions[element.Update] = true end
+      local updates = element.NoDispatchUpdates
+      if updates then
+        for update, noDispatch in pairs(updates) do
+          if noDispatch == true then cache.noDispatchFunctions[update] = true end
+        end
+      end
+    end
+    order[#order + 1] = name
   end
   UF.elements[name] = element
   Elements[name] = element
@@ -857,14 +878,16 @@ local Intern = {
   routeSnapshots = {},
   sharedRouteSnapshots = {},
   runtimeRoutePlans = {},
+  scopedRuntimeRoutePlans = {},
+  routeBuildPool = { { routes = {}, events = {}, selections = {} } },
 }
 
 local function IsRegisteredElementFunction(fn)
   if type(fn) ~= "function" then return false end
   if RouteCache.elementFunctions[fn] == true then return true end
   if RouteCache.nonElementFunctions[fn] == true then return false end
-  for i = 1, #UF.elementOrder do
-    local element = UF.elements[UF.elementOrder[i]]
+  for i = 1, #elementOrder do
+    local element = UF.elements[elementOrder[i]]
     if type(element) == "table" then
       for _, candidate in pairs(element) do
         if candidate == fn then
@@ -880,8 +903,8 @@ end
 
 local function IsNoDispatchElementFunction(fn)
   if RouteCache.noDispatchFunctions[fn] == true then return true end
-  for i = 1, #UF.elementOrder do
-    local element = UF.elements[UF.elementOrder[i]]
+  for i = 1, #elementOrder do
+    local element = UF.elements[elementOrder[i]]
     local updates = type(element) == "table" and element.NoDispatchUpdates or nil
     if type(updates) == "table" and updates[fn] == true then
       RouteCache.noDispatchFunctions[fn] = true
@@ -1211,8 +1234,9 @@ end
 local function FrameNeedsIdentityLifecycle(frame)
   local active = frame and frame._msufActiveElements
   if not active then return false end
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
+  local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+  for i = 1, #order do
+    local name = order[i]
     if (IDENTITY_ELEMENTS[name] == true or IDENTITY_BAR_ELEMENTS[name] == true)
       and active[name] == true
       and ElementUpdateFunction(frame, name) then
@@ -1361,8 +1385,9 @@ local function BuildRuntimeSequencePlan(frame, include, identity)
   local active = frame and frame._msufActiveElements
   local count = 0
   if active then
-    for i = 1, #UF.elementOrder do
-      local name = UF.elementOrder[i]
+    local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+    for i = 1, #order do
+      local name = order[i]
       if include[name] == true and active[name] == true then
         local update = ElementUpdateFunction(frame, name)
         if update then
@@ -1464,12 +1489,25 @@ local function RuntimeRouteSnapshot(update, events, unitlessEvents)
   return route
 end
 
-local function InternRuntimeRoutePlan(routes)
+local function CopyRuntimeRoutePlan(routes)
+  local plan = {}
+  for name, route in pairs(routes) do plan[name] = route end
+  return plan
+end
+
+local function InternRuntimeRoutePlan(routes, order)
   local node = Intern.runtimeRoutePlans
-  for i = 1, #UF.elementOrder do
-    local route = routes[UF.elementOrder[i]]
+  if order ~= elementOrder then
+    node = Intern.scopedRuntimeRoutePlans[order]
+    if not node then
+      node = {}
+      Intern.scopedRuntimeRoutePlans[order] = node
+    end
+  end
+  for i = 1, #order do
+    local route = routes[order[i]]
     if route and Intern.sharedRouteSnapshots[route] ~= true then
-      return routes
+      return CopyRuntimeRoutePlan(routes)
     end
     local key = route or NIL_ROUTE_KEY
     local nextNode = node[key]
@@ -1478,8 +1516,9 @@ local function InternRuntimeRoutePlan(routes)
   end
   local plan = node.plan
   if plan then return plan end
-  node.plan = routes
-  return routes
+  plan = CopyRuntimeRoutePlan(routes)
+  node.plan = plan
+  return plan
 end
 
 -- Every SelectElementEventUpdate result of a compile, in AddEventHandler order.
@@ -1487,27 +1526,40 @@ end
 -- event paths, so RetargetFrameUnitEvents can prove a unit shift needs no
 -- recompile. The scratch list is cleared after each compile, so it retains no
 -- update function.
-local eventRouteSelectionScratch = {}
 
 local function RebuildFrameEvents(frame)
   if not frame then return false end
   local previousSelections = frame._msufEventRouteSelections
   ClearFrameEvents(frame)
-  local routes = {}
+  -- Recipes normally intern across identical frames. Reuse only their build
+  -- scratch; every retained shared or frame-specific plan owns its table.
+  local pool = Intern.routeBuildPool
+  local scratch = pool[#pool]
+  pool[#pool] = nil
+  if not scratch then scratch = { routes = {}, events = {}, selections = {} } end
+  local routes = scratch.routes
+  for name in pairs(routes) do routes[name] = nil end
   frame._msufElementEventRoutes = routes
   frame._msufEventRouteUnit = frame.MSUFUnitKey
   local active = frame._msufActiveElements
   if not active then
-    frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
+    frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes, scopedElementOrders[frame._msufCoreScope] or elementOrder)
     frame._msufEventRouteNeedsIdentity = false
+    pool[#pool + 1] = scratch
     UF.RebuildRuntimeStatusState(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
   end
-  local selections = eventRouteSelectionScratch
+  -- Only the per-event lists can be captured by a generic compiled route.
+  -- The event->list build map is private and is released after compilation.
+  local buildEvents = scratch.events
+  for event in pairs(buildEvents) do buildEvents[event] = nil end
+  frame._msufEvents = buildEvents
+  local selections = scratch.selections
   local selectionCount = 0
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
+  local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+  for i = 1, #order do
+    local name = order[i]
     if active[name] == true and EventElementAllowed(name) == true then
       local element = UF.elements[name]
       local update = ElementUpdateFunction(frame, name)
@@ -1565,7 +1617,7 @@ local function RebuildFrameEvents(frame)
     else
       recycled = {}
     end
-    eventRouteSelectionScratch = recycled
+    scratch.selections = recycled
   end
   frame._msufEventRouteSelections = keptSelections
   frame._msufEventRouteScope = frame._msufCoreScope
@@ -1604,7 +1656,10 @@ local function RebuildFrameEvents(frame)
   -- Compiled routes either capture only the one generic list they need or use
   -- a shared prototype. The event->builder map itself has no runtime reader.
   frame._msufEvents = nil
-  frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
+  frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes, scopedElementOrders[frame._msufCoreScope] or elementOrder)
+  for name in pairs(routes) do routes[name] = nil end
+  for event in pairs(buildEvents) do buildEvents[event] = nil end
+  pool[#pool + 1] = scratch
   UF.RebuildRuntimeStatusState(frame)
   if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
   return true
@@ -1633,8 +1688,9 @@ local function FrameEventRoutingMatches(frame)
   local routes = frame._msufElementEventRoutes
   if type(routes) ~= "table" then return false end
   local active = frame._msufActiveElements
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
+  local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+  for i = 1, #order do
+    local name = order[i]
     if EventElementAllowed(name) == true then
       local route = routes[name]
       local element = active and active[name] == true and UF.elements[name] or nil
@@ -1689,8 +1745,9 @@ local function FrameEventRouteInputsMatch(frame)
   end
   local spec = frame.MSUFSpec
   local count = 0
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
+  local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+  for i = 1, #order do
+    local name = order[i]
     if EventElementAllowed(name) == true then
       local route = routes[name]
       local element = active[name] == true and UF.elements[name] or nil
@@ -2098,8 +2155,9 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
 
   if selectionIsMask == true then
     local full = selection == true
-    for i = 1, #UF.elementOrder do
-      local name = UF.elementOrder[i]
+    local order = scopedElementOrders[frame._msufCoreScope] or elementOrder
+    for i = 1, #order do
+      local name = order[i]
       if full or selection[name] == true then
         UF.ApplyElementToFrame(frame, name, nil, updateReason)
       end

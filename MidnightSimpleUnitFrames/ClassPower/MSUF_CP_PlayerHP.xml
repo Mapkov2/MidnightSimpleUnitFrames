@@ -1,0 +1,4 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="MSUF_CP_PlayerHP.lua"/>
+  <Script file="..\UnitFrames\Engine\Elements\MSUF_UF_PlayerHP.lua"/>
+</Ui>

@@ -711,3 +711,10 @@ clients+Forever	lua	tools/tests/menu_pilot_action_owner_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/menu_context_shortcut_optin_smoke.lua	{root} {flavor}	Opt-in shortcut changed automatic or unconverted owners: {flavor}
 clients+Forever	lua	tools/tests/menu_pilot_section_delegate_smoke.lua	{root} {flavor}	Pilot section stopped delegating shared popup actions: {flavor}
 clients+Forever	lua	tools/tests/menu_pilot_button_lifecycle_smoke.lua	{root} {flavor}	Pilot complete native button lifecycle/owner drifted: {flavor}
+-	lua	tools/tests/player_health_element_lifecycle_smoke.lua	{root}	Player health UF lifecycle ownership failed
+-	lua	tools/tests/player_health_element_parity_smoke.lua	{root}	Player health actual old/new parity failed
+-	lua	tools/tests/player_health_element_cost_smoke.lua	{root}	Player health exact baseline costs failed
+-	lua	tools/tests/player_health_element_providers_smoke.lua	{root}	Player health required providers failed
+-	lua	tools/tests/uf_scoped_route_plans_smoke.lua	{root}	Scoped UF recipe ownership and immutable plans failed
+-	lua	tools/tests/player_health_registered_delivery_smoke.lua	{root}	Player health complete registered delivery cost failed
+-	lua	tools/tests/classpower_health_registration_smoke.lua	{root}	ClassPower health consumer registration failed

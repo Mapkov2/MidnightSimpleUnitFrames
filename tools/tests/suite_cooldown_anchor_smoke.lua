@@ -594,6 +594,7 @@ local CP_LOAD_ORDER = {
     "ClassPower/MSUF_CP_Core.lua",
     "ClassPower/MSUF_CP_AltMana.lua",
     "ClassPower/MSUF_CP_PlayerHP.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_PlayerHP.lua",
     "ClassPower/MSUF_CP_BalanceDruid.lua",
     "ClassPower/MSUF_CP_Ironfur.lua",
     "ClassPower/MSUF_CP_EbonMight.lua",

@@ -58,7 +58,13 @@ end
 
 --- Gives ns the real MSUF.Require / MSUF.Optional and defines every stand-in
 --- the harness did not define.
-function Collaborators.Install(root, ns)
+function Collaborators.Install(root, ns, lifecycle)
+    -- Native health/affecting-combat functions exist on every supported client.
+    -- Sparse CP-only fixtures previously left them absent while Extra Health
+    -- was off. Model the same inert 0/1/false values as callable native APIs.
+    if _G.UnitHealth == nil then _G.UnitHealth = function() return 0 end end
+    if _G.UnitHealthMax == nil then _G.UnitHealthMax = function() return 1 end end
+    if _G.UnitAffectingCombat == nil then _G.UnitAffectingCombat = function() return false end end
     if type(ns.Require) ~= "function" then
         ns.ExportPublic = ns.ExportPublic or function(name, value) _G[name] = value return value end
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
@@ -69,6 +75,57 @@ function Collaborators.Install(root, ns)
     -- Native power identity is available on every supported client.
     _G.Enum = _G.Enum or {}
     Enum.PowerType = Enum.PowerType or { Mana = 0, Rage = 1, Focus = 2, Energy = 3, ComboPoints = 4 }
+    -- PlayerHP now uses the real UF lifecycle and combat refusal. Retain
+    -- explicit fixture injection, but never replace those owners with no-ops.
+    if lifecycle ~= false and not (ns.UF and ns.UF.AttachFrame) then
+        local injected = {}
+        for name in pairs(Collaborators.STANDINS) do injected[name] = _G[name] end
+        local roundLayout, refreshPower = _G.MSUF_SetRoundLayoutToNearestPixel, _G.MSUF_RefreshPlayerPowerBar
+        local load = function(path)
+            assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
+        end
+        load("Shell/EditMode/MSUF_EditMode_Geometry.lua")
+        load("Kernel/MSUF_Util.lua")
+        for name, value in pairs(injected) do _G[name] = value end
+        load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
+        load("Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")
+        load("Kernel/MSUF_EventBus.lua")
+        load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
+        load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua")
+        local shapes = {}
+        for _, name in ipairs({ "MSUF_UF_NormalizeClassPowerShape", "MSUF_UF_NormalizePlayerHPShape", "MSUF_UF_ShapeOutlineAlpha" }) do
+            shapes[name] = _G[name]
+        end
+        load("UnitFrames/Engine/MSUF_UF_Shared.lua")
+        for name, value in pairs(shapes) do _G[name] = value end
+        _G.MSUF_SetRoundLayoutToNearestPixel = roundLayout
+        if refreshPower then _G.MSUF_RefreshPlayerPowerBar = refreshPower end
+        local player = _G.MSUF_player
+        if player then ns.UF.frames.player = player end
+        -- This widget kit normally leaves Show/Hide scripts to its caller.
+        -- Model the native edges of the newly attached resource host so the
+        -- real engine can suspend and restore its event recipe.
+        local createFrame = _G.CreateFrame
+        _G.CreateFrame = function(kind, name, parent, ...)
+            local frame = createFrame(kind, name, parent, ...)
+            if name == "MSUF_ClassPowerPlayerHealthBar" then
+                local show, hide = frame.Show, frame.Hide
+                frame.Show = function(self)
+                    local wasShown = self:IsShown()
+                    show(self)
+                    local script = self:GetScript("OnShow")
+                    if not wasShown and script then script(self) end
+                end
+                frame.Hide = function(self)
+                    local wasShown = self:IsShown()
+                    hide(self)
+                    local script = self:GetScript("OnHide")
+                    if wasShown and script then script(self) end
+                end
+            end
+            return frame
+        end
+    end
     -- Load the real Power element, which owns the ClassPower subscription in
     -- every client before the ClassPower stack. Stand-alone CP fixtures have
     -- no unit-frame registry or value updates to drive.

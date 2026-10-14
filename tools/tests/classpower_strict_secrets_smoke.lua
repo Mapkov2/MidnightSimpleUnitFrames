@@ -37,14 +37,11 @@ end
 
 --- Every ClassPower file of the Mainline TOC (Forever reads the same TOC).
 local function WatchedFiles()
-    local file = assert(io.open(repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc", "rb"))
-    local raw = file:read("*a")
-    file:close()
     local paths = {}
-    for line in raw:gmatch("[^\r\n]+") do
-        local entry = line:match("^%s*(.-)%s*$")
-        if entry ~= "" and entry:sub(1, 1) ~= "#" and entry:find("ClassPower", 1, true) then
-            paths[#paths + 1] = repo .. "/MidnightSimpleUnitFrames/" .. entry:gsub("\\", "/")
+    local Manifest = dofile(repo .. "/tools/tests/client_manifest.lua")
+    for _, path in ipairs(Manifest.Paths(repo, "Mainline")) do
+        if path:find("/ClassPower", 1, true) or path:find("/MSUF_UF_PlayerHP.lua", 1, true) then
+            paths[#paths + 1] = path
         end
     end
     return paths

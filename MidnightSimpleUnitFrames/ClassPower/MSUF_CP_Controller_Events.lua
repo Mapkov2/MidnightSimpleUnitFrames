@@ -4,7 +4,8 @@
 ---     Class Resource feature is enabled;
 ---   * hot-path events (power, aura, rune, health, spellcast, combat) only
 ---     while the active render mode's event profile needs them ("lite"
----     bindings), or all of them when lite bindings are switched off;
+---     bindings), or the broad legacy set when lite bindings are off;
+---     health stays with the active consumer in either policy;
 ---   * the startup events (login, world entry, addon load).
 --- A Classic client never registers an event its MSUF.Client.SupportsEvent
 --- rejects, and Mists vehicle combo points add the vehicle unit.
@@ -262,8 +263,11 @@ local function CP_RefreshEventBindings()
         CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", supportsRunes)
         if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", supportsRunes) end
-        CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
-        local wantMaxHealth = PHP.visible or (CP.visible and CP.renderMode == CPK.MODE.STAGGER)
+        local profile = CP.modeProfile or CP_GetModeEventProfile(CP.renderMode, CP.powerType, CP.isAuraPower)
+        --- PlayerHP has its own UF subscription. Retain health only for an
+        --- active CP consumer, including Stagger in either binding policy.
+        local wantMaxHealth = CP.visible and profile.health == true
+        CP_SetEventBound(eventFrame, "UNIT_HEALTH", wantMaxHealth, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", true, "player")
@@ -285,8 +289,8 @@ local function CP_RefreshEventBindings()
     local wantMaxPower = CP_ShouldUseMaxPowerEvent()
     local wantAura = CP.visible and profile.aura == true
     local wantRune = CP.visible and profile.rune == true
-    local wantHealth = (CP.visible and profile.health == true) or PHP.visible
-    local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
+    local wantHealth = (CP.visible and profile.health == true)
+    local wantMaxHealth = (CP.visible and profile.health == true)
     local wantPointCharge = CP.visible
         and profile.pointCharge == true
         and PLAYER_CLASS == "ROGUE"
@@ -303,7 +307,7 @@ local function CP_RefreshEventBindings()
         or CP.ebonStyleRetryPending == true
         or CP.augLifecycleRetryPending == true
         or CP.augLifecycleDisablePending == true
-    local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible
+    local wantDeadAlive = (CP.visible and profile.deadAlive == true)
 
     local wantFrequentPower = wantPower and CP_ShouldUseFrequentPowerEvents()
     CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower and not wantFrequentPower, "player")

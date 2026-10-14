@@ -193,6 +193,26 @@ scanned with `MSUF.Client.DispellableDebuffFilter`: Classic Era uses
 debuffs, because it does not honour `RAID_PLAYER_DISPELLABLE`; TBC and Mists
 use `HARMFUL|RAID_PLAYER_DISPELLABLE`.
 
+Every client runs the optional Extra Health surface through the independent UF `PlayerHP` element
+(`UnitFrames/Engine/Elements/MSUF_UF_PlayerHP.lua`). Its state, attachment,
+enable/disable, health subscriptions, and combat-deferred apply belong to UF;
+ClassPower forwards cold settings, font, media, and anchor refreshes. The
+element registers a `resource` scope recipe, leaving ordinary single/group
+element orders unchanged. Cold route builders reuse temporary maps while
+retained shared and frame-specific plans own immutable snapshots; nested
+compilation acquires another scratch entry. This keeps roster CPU/allocation
+costs below the reviewed baseline without changing event dispatch closures.
+The
+`ClassPower/MSUF_CP_PlayerHP.xml` load unit retains the original injection and
+font/media readiness boundary: the native visual/text provider loads first,
+then the UF owner, before the controller. ResourceVisibility still owns its
+configured parent, scale, alpha gates and outline sibling. Extra Health uses
+only its own option; disabling, hiding, or detaching the Player unit button
+does not change that option or its independent resource host. The real native
+health/secret sinks and Class Resources shape/text getters are shared with
+previews. `player_health_element_*` smokes cover actual ownership, a frozen
+old/new visual oracle, named dependencies, and exact dispatcher costs.
+
 Class resources have separate providers per client. Every client runs the
 shared ClassPower core (`ClassPower/MSUF_CP_Constants.lua`,
 `MSUF_CP_Modes.lua`, `MSUF_CP_Core.lua` and `MSUF_CP_Controller.lua`). Mode

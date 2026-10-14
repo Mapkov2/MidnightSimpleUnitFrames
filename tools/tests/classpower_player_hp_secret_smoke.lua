@@ -53,6 +53,8 @@ local function Build(bars, player)
     _G.MSUF_CP_CONST = nil
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(PLAYER_HP))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PlayerHP.lua"))(
+        "MidnightSimpleUnitFrames", ns)
 
     local b = { playerHPBarEnabled = true, playerHPBarWidthMode = "custom", playerHPBarWidth = 180,
         playerHPBarHeight = 8 }

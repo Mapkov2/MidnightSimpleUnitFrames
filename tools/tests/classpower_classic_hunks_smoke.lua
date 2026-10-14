@@ -44,15 +44,12 @@ local CLASSIC_TOKENS = {
 }
 
 local function ClassPowerLoadOrder(tocName)
-    local path = repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. tocName .. ".toc"
-    local file = assert(io.open(path, "rb"), "missing TOC: " .. path)
-    local raw = file:read("*a")
-    file:close()
-    local order = { "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua" }
-    for line in raw:gmatch("[^\r\n]+") do
-        local entry = line:match("^%s*(.-)%s*$")
-        if entry ~= "" and entry:sub(1, 1) ~= "#" and entry:find("ClassPower", 1, true) then
-            order[#order + 1] = entry:gsub("\\", "/")
+    local Manifest = dofile(repo .. "/tools/tests/client_manifest.lua")
+    local order = {}
+    for _, path in ipairs(Manifest.Paths(repo, tocName)) do
+        if path:find("/ClassPower", 1, true) or path:find("/MSUF_UF_Secrets.lua", 1, true)
+            or path:find("/MSUF_UF_PlayerHP.lua", 1, true) then
+            order[#order + 1] = path:match("MidnightSimpleUnitFrames/(.+)$")
         end
     end
     return order
