@@ -81,6 +81,7 @@ end
 local function Start(spec)
     local env = Stubs.New({ timer = "queue", registerGlobalNames = true, time = 100 })
     env:InstallGlobals({ secretValue = true, time = true })
+    Enum = { PowerType = { Mana = 0, Rage = PT_RAGE, Energy = PT_ENERGY, ComboPoints = PT_COMBO_POINTS } }
     for i = 1, #CLEARED_GLOBALS do _G[CLEARED_GLOBALS[i]] = nil end
 
     local S = { combo = spec.combo or 1, affecting = spec.startInCombat == true }

@@ -591,7 +591,7 @@ classics	lua	tools/tests/rc1_f_smoke.lua	{root} {flavor}	Corner Custom Spell Sho
 clients+Forever	lua	tools/tests/rc1_f_smoke.lua	{root} {flavor} menu	Corner Show when missing offered where it cannot work (rc1 F, C15-A7 menu): {flavor}
 -	lua	tools/tests/rc1_a_smoke.lua	{root}	rc1 package A: MSUF leaves no taint in Blizzard-owned castbar, Damage Meter, buff frame and popup state
 -	lua	tools/tests/rc1_e_smoke.lua	{root}	rc1 E: re-encoded UTF-8, untranslated menu text or a glued translation regressed
--	lua	tools/tests/welcome_release_summary_smoke.lua	{root}	Welcome 6.50 release summary on WoW 12.1.5 and newer
+-	lua	tools/tests/welcome_release_summary_smoke.lua	{root}	Welcome message without release counters
 clients+Forever	lua	tools/tests/castbar_preview_toolbar_layout_smoke.lua	{root} {flavor}	Castbar preview toolbar clips or overlaps: {flavor}
 clients+Forever	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} {flavor} classicGlass	Accordion preset palette survives lazy build: {flavor}
 -	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} Forever midnightDark	Dark accordion preset palette survives lazy build
@@ -599,3 +599,4 @@ clients+Forever	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} {flavor}
 clients+Forever	lua	tools/tests/preview_layer_rail_smoke.lua	{root} {flavor}	Preview layer rail layout failed: {flavor}
 -	lua	tools/tests/color_menu_lifecycle_smoke.lua		Colors preview surfaces and hidden lifecycle regressions
 -	lua	tools/tests/resource_visibility_smoke.lua	{root}	Resource visibility isolation and secret curves failed
+clients+Forever	lua	tools/tests/power_event_identity_smoke.lua	{root} {flavor}	Power event identity smoke failed

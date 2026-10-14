@@ -707,6 +707,7 @@ local function InstallClient(world, env)
     }
     env.Enum = rawget(env, "Enum") or {}
     env.Enum.DurationTextBindingProperty = { RemainingDuration = 0, ElapsedDuration = 1, TotalDuration = 2 }
+    env.Enum.PowerType = { Mana = 0, Rage = 1, Energy = 3, ComboPoints = 4 }
     env.Enum.NumericRuleFormatRounding = { Nearest = 0, Floor = 1, Ceil = 2 }
     env.Enum.StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 }
     env.Enum.StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 }

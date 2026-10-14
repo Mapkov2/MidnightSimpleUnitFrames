@@ -48,6 +48,28 @@ local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
 local EMPTY_EVENTS = {}
+-- UnitPowerType's display token can name encounter-specific art (for example
+-- POWER_TYPE_VOID_ENERGY). UNIT_POWER_* instead names the numeric resource.
+-- Keep these identities separate; unfamiliar resources/events stay unfiltered.
+local POWER_EVENT_TOKENS, POWER_EVENT_TYPES = {}, {}
+do
+  local powerTypes = Enum.PowerType
+  local tokens = {
+    Mana = "MANA", Rage = "RAGE", Focus = "FOCUS", Energy = "ENERGY",
+    ComboPoints = "COMBO_POINTS", Runes = "RUNES", RunicPower = "RUNIC_POWER",
+    SoulShards = "SOUL_SHARDS", LunarPower = "LUNAR_POWER", HolyPower = "HOLY_POWER",
+    Alternate = "ALTERNATE", Maelstrom = "MAELSTROM", Chi = "CHI", Insanity = "INSANITY",
+    BurningEmbers = "BURNING_EMBERS", DemonicFury = "DEMONIC_FURY",
+    ArcaneCharges = "ARCANE_CHARGES", Fury = "FURY", Pain = "PAIN", Essence = "ESSENCE",
+  }
+  for name, token in pairs(tokens) do
+    local powerType = powerTypes[name]
+    if powerType ~= nil then
+      POWER_EVENT_TOKENS[powerType] = token
+      POWER_EVENT_TYPES[token] = powerType
+    end
+  end
+end
 -- Group power bars never show alternate power, so they skip the BAR_SHOW/HIDE
 -- registrations (matches the lean per-unit tracker baseline).
 local POWER_EVENTS_GROUP = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
@@ -150,7 +172,7 @@ local function ReadPowerTypeCached(bar, unit, force)
   if typeSecret or tokenSecret then
     if bar then
       bar._msufPowerType = nil
-      bar._msufPowerToken = nil
+      bar._msufPowerToken, bar._msufPowerEventToken = nil, nil
       bar._msufPowerTypeKnown = nil
       bar._msufPowerTypeUnit = nil
       bar._msufPowerDisplayMana = nil
@@ -160,6 +182,7 @@ local function ReadPowerTypeCached(bar, unit, force)
   if bar then
     bar._msufPowerType = powerType
     bar._msufPowerToken = token
+    bar._msufPowerEventToken = powerType ~= nil and POWER_EVENT_TOKENS[powerType] or nil
     bar._msufPowerTypeKnown = true
     bar._msufPowerTypeUnit = unit
     bar._msufPowerDisplayMana = displayMana
@@ -173,7 +196,8 @@ end
 -- deferred. The helper is called only for an already-mismatched token.
 -- A rejected tick returns true in the sixth slot: the compiled Power ->
 -- PowerText route then skips the text, which shows this same resource.
-local function CachedDisplayPowerIdentityIsCurrent(bar, unit)
+local function CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken)
+  if POWER_EVENT_TYPES[eventPowerToken] == nil then return false end
   if unit ~= "player" or not ResolveDisplayedPowerIdentity then return true end
   local _, _, displayMana = ResolveDisplayedPowerIdentity(unit)
   return bar._msufPowerDisplayMana == (displayMana == true)
@@ -931,7 +955,7 @@ function Power.Apply(frame, spec)
   bar._msufPowerMaxType = nil
   bar._msufPowerPercentValue = nil
   bar._msufPowerType = nil
-  bar._msufPowerToken = nil
+  bar._msufPowerToken, bar._msufPowerEventToken = nil, nil
   bar._msufPowerTypeKnown = nil
   bar._msufPowerTypeUnit = nil
   bar._msufPowerDisplayMana = nil
@@ -1104,9 +1128,9 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   local shown = bar._msufShown
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
-    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
+    and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
+    and bar._msufPowerEventToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1133,9 +1157,9 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   local shown = bar._msufShown
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
-    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
+    and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
+    and bar._msufPowerEventToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1157,9 +1181,9 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   local shown = bar._msufShown
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
-    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
+    and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
+    and bar._msufPowerEventToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1187,9 +1211,9 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   local shown = bar._msufShown
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
-    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
+    and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
+    and bar._msufPowerEventToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1217,9 +1241,9 @@ local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
-    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
+    and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
+    and bar._msufPowerEventToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then
     return UpdatePercentPath(frame, event, unit, eventPowerToken)
   end

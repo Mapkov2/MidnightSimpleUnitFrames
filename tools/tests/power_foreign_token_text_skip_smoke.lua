@@ -24,9 +24,9 @@ local power = Slice.Read(root .. "/" .. POWER)
 local core = Slice.Read(root .. "/" .. CORE)
 
 -- Every site that compares the event token must flag its rejection.
-local _, checks = power:gsub("bar%._msufPowerToken ~= eventPowerToken", "")
+local _, checks = power:gsub("bar%._msufPowerEventToken ~= eventPowerToken", "")
 local _, flagged = power:gsub(
-    "CachedDisplayPowerIdentityIsCurrent%(bar, unit%) then return nil, nil, nil, nil, nil, true end", "")
+    "CachedDisplayPowerIdentityIsCurrent%(bar, unit, eventPowerToken%) then return nil, nil, nil, nil, nil, true end", "")
 Check(checks == 5, "expected 5 power token checks, found " .. checks)
 Check(flagged == checks, "every power token check must return the foreign flag (" .. flagged .. "/" .. checks .. ")")
 
@@ -59,6 +59,7 @@ local function EnergyFrame(shown)
             _msufShown = shown,
             _msufPowerTypeKnown = true,
             _msufPowerToken = "ENERGY",
+            _msufPowerEventToken = "ENERGY",
         },
     }
 end

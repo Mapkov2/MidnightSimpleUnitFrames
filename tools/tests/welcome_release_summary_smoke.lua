@@ -1,11 +1,7 @@
 -- welcome_release_summary_smoke.lua <repoRoot>
---
--- The 6.50 login greeting sums up the 6.5 line (CHANGELOG_6.5_DRAFT.md totals)
--- on WoW 12.1.5 and newer only: not on 12.1.0, not on WoW Forever or the
--- Classic clients, not for another version, and not when only the preview
--- warning is printed. Every locale pack translates the three labels with
--- exactly one %d each.
-
+-- Login keeps title, client patch and menu hint, with no release-count line.
+-- The optional greeting toggle and old-preview compatibility warning retain
+-- their independent behavior.
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
 local failures = {}
 local function Check(condition, message)
@@ -13,7 +9,7 @@ local function Check(condition, message)
     return condition
 end
 
-local function Load(interface, version)
+local function Load(interface, version, enabled)
     local ns = {
         ExportPublic = function() end,
         Translate = function(text) return text end,
@@ -24,70 +20,70 @@ local function Load(interface, version)
             IsForever = interface == 16001,
         },
     }
+    local messages = {}
     local env = setmetatable({}, { __index = _G })
-    env.CreateFrame = nil
-    env.MSUF_DB = { general = {} }
+    env._G, env.CreateFrame = env, false
+    env.MSUF_DB = { general = { showWelcomeMessage = enabled } }
+    env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, text) messages[#messages + 1] = text end }
     local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_WelcomeMessage.lua"))
     setfenv(chunk, env)
     chunk("MidnightSimpleUnitFrames", ns)
-    return ns.WelcomeMessage
+    return ns.WelcomeMessage, messages
 end
 
-local function Summary(lines)
-    for i = 1, #lines do
-        if lines[i]:find("New features & changes", 1, true) then return lines[i] end
-    end
-end
-
-local welcome = Load(120105, "6.50")
-local greeting = welcome.GetLines(false)
-Check(greeting[1]:find("v6.50", 1, true) and not greeting[1]:lower():find("beta", 1, true),
-    "Retail release title must show v6.50 without beta")
-for _, case in ipairs({
-    { 120007, "12.0.7" }, { 120100, "12.1" }, { 120105, "12.1.5" }, { 120200, "12.2" },
-    { 16001, "1.60" }, { 11509, "1.15" }, { 20506, "2.5" }, { 50504, "5.5" },
-}) do
-    local lines = Load(case[1], "6.50").GetLines(false)
-    Check(lines[2]:find("Welcome to Patch " .. case[2] .. "|r", 1, true),
-        "wrong welcome patch for interface " .. case[1] .. ": " .. lines[2])
-end
-local line = Summary(welcome.GetLines(false))
-Check(line ~= nil, "12.1.5 with 6.50: the greeting has no release summary")
-if line then
-    Check(line:find("MSUF 6.50", 1, true) and line:find("New features & changes: 104", 1, true)
-        and line:find("Bug fixes: 103", 1, true) and line:find("Performance improvements: 20", 1, true),
-        "12.1.5 with 6.50: the summary does not name 6.50 with 104 / 103 / 20: " .. line)
-end
-Check(#welcome.GetLines(false) == 4, "12.1.5 with 6.50: expected title, patch, summary and /msuf lines")
-Check(Summary(welcome.GetLines(true)) == nil, "the warning-only greeting printed the release summary")
-Check(Summary(Load(120200, "6.50").GetLines(false)) ~= nil, "12.2 with 6.50: the summary is missing")
-Check(Summary(Load(120100, "6.50").GetLines(false)) == nil, "12.1.0 printed the 6.50 summary")
-Check(Summary(Load(16001, "6.50").GetLines(false)) == nil, "WoW Forever printed the 12.1.5 summary")
-Check(Summary(Load(11509, "6.50").GetLines(false)) == nil, "Classic Era printed the 12.1.5 summary")
-Check(Summary(Load(120105, "6.5-beta19").GetLines(false)) == nil, "a beta build printed the 6.50 summary")
-Check(Summary(Load(120105, "6.51").GetLines(false)) == nil, "a later version printed the 6.50 totals")
-Check(Summary(Load(nil, "6.50").GetLines(false)) == nil, "an unknown interface printed the summary")
-
-local KEYS = { "New features & changes: %d", "Bug fixes: %d", "Performance improvements: %d" }
-local LOCALES = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
-for _, locale in ipairs(LOCALES) do
-    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Locales/" .. locale .. ".lua", "rb"))
-    local text = handle:read("*a")
-    handle:close()
-    for _, key in ipairs(KEYS) do
-        local escaped = key:gsub("[%%%.%-%+%*%?%[%]%^%$%(%)]", "%%%0")
-        local value = text:match('L%["' .. escaped .. '"%]%s*=%s*"([^"\r\n]*)"')
-        if Check(value ~= nil, locale .. " lacks " .. key) then
-            local _, count = value:gsub("%%d", "")
-            Check(count == 1 and not value:find("%%[^d]"), locale .. " " .. key .. " needs exactly one %d: " .. value)
-            if locale ~= "enUS" and locale ~= "enGB" then
-                Check(value ~= key, locale .. " leaves " .. key .. " untranslated")
-            end
+local function NoCounts(lines, label)
+    for _, line in ipairs(lines) do
+        for _, key in ipairs({ "New features & changes", "Bug fixes", "Performance improvements" }) do
+            Check(not line:find(key, 1, true), label .. ": unwanted release counts: " .. line)
         end
     end
 end
 
+for _, version in ipairs({ "6.50", "6.501" }) do
+    for _, case in ipairs({
+        { 120007, "12.0.7" }, { 120100, "12.1" }, { 120105, "12.1.5" }, { 120200, "12.2" },
+        { 16001, "1.60" }, { 11509, "1.15" }, { 20506, "2.5" }, { 50504, "5.5" },
+    }) do
+        local label = version .. "/" .. case[1]
+        local welcome = Load(case[1], version, true)
+        local lines = welcome.GetLines(false)
+        Check(#lines == 3, label .. ": expected title, patch and /msuf lines only")
+        Check(lines[1]:find("v" .. version, 1, true) and not lines[1]:lower():find("beta", 1, true),
+            label .. ": release title changed")
+        Check(lines[2]:find("Welcome to Patch " .. case[2] .. "|r", 1, true),
+            label .. ": client patch changed")
+        Check(lines[3] and lines[3]:find("/msuf", 1, true), label .. ": menu hint missing")
+        Check(welcome.GetReleaseSummaryLine == nil, label .. ": removed summary helper remains")
+        NoCounts(lines, label)
+        NoCounts(welcome.GetLines(true), label .. "/warning-only")
+        local muted, messages = Load(case[1], version, false)
+        Check(muted.IsEnabled() == false and muted.Show() == false and #messages == 0,
+            label .. ": disabled welcome printed")
+        Check(muted.Show(true) == true and #messages == 3, label .. ": forced replay failed")
+        NoCounts(messages, label .. "/forced")
+    end
+end
+
+local unknown = Load(nil, "6.501", true)
+Check(#unknown.GetLines(false) == 3, "unknown client lost ordinary greeting")
+NoCounts(unknown.GetLines(false), "unknown client")
+
+local preview, messages = Load(120007, "6.0 RC18", false)
+Check(preview.IsEnabled() == false and preview.IsPreviewWarningRequired() == true,
+    "old-client preview warning was tied to the optional greeting")
+Check(preview.Show() == true and #messages == 2, "old-client preview warning was hidden")
+Check(messages[2] and messages[2]:find("Built for WoW 12.1 PTR.", 1, true)
+    and messages[2]:find("Blizzard's native 12.1 system.", 1, true), "preview compatibility text changed")
+NoCounts(messages, "preview warning")
+local fullPreview = Load(120007, "6.0 RC18", true).GetLines(false)
+Check(#fullPreview == 4 and fullPreview[3]:find("Thanks for testing!", 1, true)
+    and fullPreview[4]:find("/msuf", 1, true), "enabled preview greeting changed")
+local currentPreview, currentMessages = Load(120100, "6.0 RC18", false)
+Check(currentPreview.IsPreviewWarningRequired() == false
+    and currentPreview.Show() == false and #currentMessages == 0,
+    "compatible preview ignored the disabled greeting")
+
 if #failures > 0 then
     error("welcome_release_summary_smoke failed:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("welcome_release_summary_smoke: ok (6.50 summary on 12.1.5+, silent on 12.1.0, Forever, Classic and other versions; 12 locale packs)")
+print("welcome_release_summary_smoke: ok (6.50/6.501 without counts on all clients; toggle and preview warnings preserved)")

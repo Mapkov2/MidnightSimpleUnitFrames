@@ -124,7 +124,7 @@ local CAPABILITY_GATED = {
 -- member stays the harness stub.
 local function WithoutEditModeSystem(world)
     local stub = world.env.MSUF_REQUIRED_OWNERS_UNMODELLED
-    world.env.Enum = setmetatable({}, { __index = function(_, key)
+    world.env.Enum = setmetatable({ PowerType = { Mana = 0, Rage = 1, Energy = 3, ComboPoints = 4 } }, { __index = function(_, key)
         if key == "EditModeSystem" then return nil end
         return stub
     end })

@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E73F0A9FB2C96776FE14B283D52590D321FBE99EA01E3D7788393647A342B5FA",
-    currentVersion = "6.50",
+    sourceSha256 = "32859D0039F2CB400DC30FEAB7FDEB7070AC1D66604686BE4C9EAA6F1B7DAFFB",
+    currentVersion = "6.501",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.50",
+    rangeLabel = "6.02 -> 6.501",
     entries = {
+        {
+            version = "6.501",
+            date = "2026-10-14",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed boss power bars and power text freezing on Target and Boss frames when an encounter uses a custom resource name.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed delayed or missing party and raid member names after joining a group or changing zones. Names now refresh when the client receives the unit's name.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        {
+                            text = "Removed the feature, bug fix and performance counters from the login welcome message.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.50",
             date = "2026-10-13",

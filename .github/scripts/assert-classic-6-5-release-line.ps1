@@ -23,9 +23,9 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # contract and changelog check below without reading a single file. When the
 # Classic release line moves past 6.5, retarget this script deliberately.
 # 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
-# collides with 6.05 and ranks above 6.20).
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cne '6.50') {
-    throw "Classic release-line contract covers 6.5 alpha/beta and 6.50 only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
+# collides with 6.05 and ranks above 6.20). 6.501 is its maintenance release.
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501')) {
+    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501 only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()

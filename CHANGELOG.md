@@ -1,5 +1,19 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.501 - 2026-10-14
+
+### Bug Fixes
+
+- Fixed boss power bars and power text freezing on Target and Boss frames when an encounter uses a custom resource name.
+<!-- msuf-menu-link: none -->
+- Fixed delayed or missing party and raid member names after joining a group or changing zones. Names now refresh when the client receives the unit's name.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Removed the feature, bug fix and performance counters from the login welcome message.
+<!-- msuf-menu-link: none -->
+
 ## 6.50 - 2026-10-13
 
 Stable release of MSUF 6.50 for all supported clients, including Retail WoW 12.1.5.
