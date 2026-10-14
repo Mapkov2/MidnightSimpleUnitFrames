@@ -228,8 +228,9 @@ Genuine strings from this repository's history (`<commit>:<path>`):
   schema-600 profile table. Imported.
 - `hist_2026-08-06_msuf3_full_schema1`:
   `157c8c53a:MidnightSimpleUnitFrames/State/MSUF_Defaults.lua`. MSUF3, portable
-  envelope whose native section is schema 1 (6.0 beta era). Refused: "MSUF 6.x
-  profile required (schema 600)".
+  envelope whose native section is schema 1 (6.0 beta era). Accepted through
+  validated full-profile migration; the native table has real player/target
+  geometry. Invalid embedded beta payloads remain refused.
 - `hist_2026-08-15_classic_factory`:
   `3413e0a8f:MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua`.
   MSUF3, portable envelope with a schema-600 native section, Classic-authored.
@@ -311,8 +312,8 @@ a line in the lists above.
 
 ## What the baseline shows
 
-Behaviour of the 6.50 baseline (a97896f5) that the golden files record. None of
-it was changed here.
+Historical 6.50 baseline findings (a97896f5), followed by the current migration
+contract. The original inputs remain immutable.
 
 - Export then import is not identical. Besides the documented opt-ins (Blizzard
   Edit Mode layout, Suite modules) and the screen reference stamp, the import
@@ -354,3 +355,24 @@ it was changed here.
   Retail-authored one gains the Forever-only group threat text keys. Binding
   the login profile again gives the same settings (`rebindChangedPaths = 0`
   everywhere).
+
+## State schema 700
+
+The ordered ledger in `State/MSUF_Defaults.lua` records `_msufStateSchema = 700`
+after factory seeding, while keeping schema-600 storage and native exports for
+downgrade compatibility. Newly missing revision-17 fields now store their existing
+runtime fallbacks; explicit values are preserved. Tracked buff strata now store
+the existing inherited value (legacy frame strata, spell-indicator strata or AUTO).
+The August beta native full snapshot is accepted after profile shape and generic
+value validation; invalid beta data is refused transactionally. Other historical
+refusals are unchanged. The relevant `filledOnImport` exceptions remain guards
+for historical holes outside this narrow migration scope; this change does not
+accept any new round-trip exception.
+
+The migration package compares the complete effective output of all 31 cases with
+its immutable parent before writing goldens. Every changed path, including the
+new beta profile and sorted-pool shift, is listed with before/after and justification
+in the package's local `.checks/golden-path-changes.md`. Its audit refuses any
+changed pre-existing setting or unclassified delta. The 6.50 downgrade proof uses
+the frozen source and serialized scratch fixtures, with cold-load controls; it
+never writes real SavedVariables.

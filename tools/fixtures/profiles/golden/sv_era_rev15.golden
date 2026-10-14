@@ -26,6 +26,7 @@ resolve["Char02-Realm02"] = "Default <- Profile01"
 resolve["Char03-Realm01"] = "Profile01 <- Profile01"
 resolve["NewChar-NewRealm"] = "Default <- Profile01"
 profile["Profile01"]._msufDefaultsRevision = 17
+profile["Profile01"]._msufStateSchema = 700
 profile["Profile01"].arena.portraitBlizzardDirection = "AUTO"
 profile["Profile01"].arena.portraitBlizzardElite = false
 profile["Profile01"].arena.portraitDragonArtwork = false

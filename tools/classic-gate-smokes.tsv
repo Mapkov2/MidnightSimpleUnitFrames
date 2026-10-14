@@ -689,3 +689,6 @@ clients+Forever	lua	tools/tests/castbar_namespace_schema_boot_smoke.lua	{root/} 
 -	lua	tools/tests/runtime_media_ownership_smoke.lua	{root}	Shared font and media policy escaped Runtime ownership
 clients+Forever	lua	tools/tests/runtime_media_parity_smoke.lua	{root} {flavor}	Shared media/font resolution, readiness or profile parity failed: {flavor}
 clients+Forever	lua	tools/tests/color_palette_lifecycle_smoke.lua	{root} {flavor}	Public palette lifecycle or original color getter precedence failed: {flavor}
+clients+Forever	lua	tools/tests/profile_data_boundaries_smoke.lua	{root/} {flavor}	Profile data migration boundaries failed: {flavor}
+-	lua	tools/tests/profile_printsafe_bound_smoke.lua	{root/}	Print-safe profile decode exceeded its early bound
+clients+Forever	lua	tools/tests/profile_external_transport_smoke.lua	{root/} {flavor}	External profile transport fallback, limits and rollback failed: {flavor}

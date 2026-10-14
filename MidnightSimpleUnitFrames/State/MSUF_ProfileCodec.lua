@@ -300,7 +300,7 @@ do
     --- LibDeflate's print codec has existed in multiple implementations; to be robust,
     --- we try BOTH bit-order variants (LSB-first and MSB-first) and accept whichever
     --- yields a payload that successfully decompresses/deserializes.
-    local function DecodeForPrint_Variants(data)
+    local function DecodeForPrint_Variants(data, rawLSB, rawMSB)
         if type(data) ~= "string" or data == "" then  return nil, nil end
         data = StripWS(data)
         local map = EnsurePrintMap()
@@ -344,7 +344,31 @@ do
             end
             return table.concat(out)
         end
+        if rawLSB ~= nil then
+            return rawLSB and decode_lsb() or nil, rawMSB and decode_msb() or nil
+        end
         return decode_lsb(), decode_msb()
+    end
+    -- Raw legacy tables have a self-identifying CBOR table/tag head, an Ace
+    -- header or a text-literal head. Inspect two print characters, not two full
+    -- decoded byte tables, before permitting a stream above the deflate cap.
+    local function RawTableHead(byte)
+        return (byte >= 128 and byte <= 155) or byte == 159
+            or (byte >= 160 and byte <= 187) or byte == 191
+            or (byte >= 192 and byte <= 219)
+            or byte == 123 or byte == 94 or byte == 32 or (byte >= 9 and byte <= 13)
+    end
+    local function RawPrintDirections(data)
+        local map = EnsurePrintMap()
+        local a, b = map[data:sub(1, 1)], map[data:sub(2, 2)]
+        if a == nil or b == nil then return false, false end
+        return RawTableHead((a + b * 64) % 256), RawTableHead(a * 4 + math.floor(b / 16))
+    end
+    local function RawBase64Head(data)
+        local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        local a = alphabet:find(data:sub(1, 1), 1, true)
+        local b = alphabet:find(data:sub(2, 2), 1, true)
+        return a ~= nil and b ~= nil and RawTableHead((a - 1) * 4 + math.floor((b - 1) / 16))
     end
     local TryDeserialize
     -- Legacy format readers may reject bytes by returning nil. The native
@@ -452,6 +476,19 @@ do
     local function EncodeCompactTableMSUF3(tbl)
         return EncodeCompactTable(tbl, "MSUF3")
     end
+    local function TryDecodeExternalPrint(E, payload)
+        local ld = _G.LibDeflate
+        if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
+            local raw = ld.DecodeForPrint(ld, payload)
+            if type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then
+                local plain = ld.DecompressDeflate(ld, raw)
+                if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
+                    local t = TryDeserialize(E, plain)
+                    if t then  return t end
+                end
+            end
+        end
+    end
     local function TryDecodeCompactString(str)
         if type(str) ~= "string" then  return nil end
         if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
@@ -478,6 +515,31 @@ do
             local payload = s:match("^MSUF2:%s*(.+)$")
             if not payload then  return nil end
             payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
+            --- Bound own decoding before native or Lua byte-table work. Alphabet
+            --- overlap cannot identify an external transport: retain its fallback,
+            --- with compressed/decoded limits checked after its inverse decoder.
+            local printPayload = StripWS(payload)
+            if not printPayload:find("[^0-9A-Za-z()]")
+                and math.floor(#printPayload * 3 / 4) > MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then
+                if math.floor(#printPayload * 3 / 4) > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
+                    return TryDecodeExternalPrint(E, payload)
+                end
+                -- Raw legacy tables retain their decoded-size allowance. Only
+                -- a recognizable raw head may bypass the compressed-size cap.
+                if RawBase64Head(printPayload) then
+                    local base64 = CleanBase64(printPayload)
+                    local blob = base64 and E.DecodeBase64(base64)
+                    local result = blob and TryDeserialize(E, blob)
+                    if result then return result end
+                end
+                local lsb, msb = RawPrintDirections(printPayload)
+                if lsb or msb then
+                    local rawLSB, rawMSB = DecodeForPrint_Variants(printPayload, lsb, msb)
+                    local result = (rawLSB and TryDeserialize(E, rawLSB)) or (rawMSB and TryDeserialize(E, rawMSB))
+                    if result then return result end
+                end
+                return TryDecodeExternalPrint(E, payload)
+            end
             --- 1) Try Blizzard base64 first (older internal MSUF2 variant)
             local b64 = CleanBase64(payload)
             if b64 then
@@ -499,18 +561,7 @@ do
             end
             --- 3) LibDeflate (from another addon): print-decode then deflate;
             --- Wago-style payloads are always compressed on this route.
-            local ld = _G.LibDeflate
-            if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
-                local raw = ld.DecodeForPrint(ld, payload)
-                if type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then
-                    local plain = ld.DecompressDeflate(ld, raw)
-                    if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
-                        local t = TryDeserialize(E, plain)
-                        if t then  return t end
-                    end
-                end
-            end
-             return nil
+            return TryDecodeExternalPrint(E, payload)
         end
      end
     ExportPublic("MSUF_EncodeCompactTable", EncodeCompactTable)

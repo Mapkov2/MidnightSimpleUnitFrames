@@ -675,6 +675,53 @@ unless `tools/feature_inventory_allowlist.json` lists it with a basis
 gate runs it as `tools/tests/feature_inventory_gate_smoke.py`, and `--diff` lists
 every removal and addition. A feature is never deleted to pass it.
 
+### Profile data migration boundaries
+
+`State/MSUF_Defaults.lua` owns `MSUF.ProfileMigrations`, an ordered ledger ending
+in `_msufStateSchema = 700`. The existing `_msufProfileSchema = 600` and native
+export schema stay portable to 6.50. FirstLoad still applies the same pre-6
+archive and standalone precedence decisions before migration. Fresh profiles
+receive their authored factory seed before the ledger can write any stamp.
+
+The cold lifecycle translates aliases and migrates the selected profile before
+binding it. Profile init migrates the pool once; create, copy, reset, switch,
+detached export and import staging also finish their own profile at mutation
+boundaries. `MSUF_EnsureDB` never walks inactive profiles. The revision-17 fast
+path materializes only the missing portrait dragon, GCD, interrupt-marker,
+arena trinket and capability-dependent pet happiness fallbacks. Explicit false,
+zero and customized values survive. Group buff `trackedStrata` follows its old
+runtime inheritance (`trackedFrameStrata`, then spell indicators, then AUTO).
+Group tooltip removal is one-shot. Legacy media names have one State mapping;
+the existing late-LSM timer still delegates to that owner and remains retained.
+
+Import candidates receive one heavy defaults pass before commit. Commit adopts
+the completed table without a second pass; selected-owner imports still commit
+only their explicit owners. A narrow group-font completion keeps the previous
+post-repair ownership decision. Staging, rollback, runtime and Suite notification
+order stay at their original boundaries. Valid beta native schema-1 full profiles
+are admitted only through decoded import migration with real frame geometry;
+invalid beta wrappers and pre-6 saved installs keep their refusals/archive policy.
+
+The MSUF2 print reader inspects length and raw transport heads before allocating
+decoded print-byte tables. Compressed payloads retain the 192 KiB cap; raw legacy
+CBOR/Ace/text tables retain the larger decoded-size allowance and both print bit
+orders. The print alphabet also admits external representations (including a
+reversible alphanumeric hex transport), so rejecting an oversized own stream does
+not reject an external interpretation. If an external decoder is installed, its
+inverse decode is conditionally required before the unchanged 192 KiB compressed
+and 32 MiB decoded checks. Alphabet/encoded length cannot universally bound that
+decoder's work or allocation; the existing 8 MiB input cap still applies. Without
+an external decoder, identifiable oversized own streams stop before full Lua
+byte-table or native base64 decoding. Decoded-size rejection happens after inflate
+because neither supported decompressor accepts an output ceiling.
+Behaviour guards: `profile_data_boundaries_smoke`, `profile_printsafe_bound_smoke`,
+`profile_external_transport_smoke`, the existing transaction suite and the 31-case
+profile corpus. The complete external smoke uses real reversible transport, CBOR,
+deflate and public import, including compressed-limit refusal and rollback. It
+pins the production decoded limit and exercises that branch at a smaller test
+ceiling to fit the numeric output tables of the 32-bit offline inflater; it does
+not claim a full 32 MiB native allocation or live-client bound.
+
 ### Old-profile corpus
 
 `tools/fixtures/profiles` holds anonymized SavedVariables files and genuine

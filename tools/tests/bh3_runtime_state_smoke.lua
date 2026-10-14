@@ -37,7 +37,8 @@ end)
 Check("C03-A1", function()
     for _,locale in ipairs({"koKR","zhCN","zhTW","enUS"}) do
         local native={general={fontKey="Expressway",menuFontKey="Expressway"}}
-        local env={MSUF={Client={IsForever=true}},MSUF_FACTORY_DEFAULT_PROFILE_COMPACT="payload",
+        local env={MSUF={Client={IsForever=true},ProfileMigrations={Apply=function(profile) return profile end}},
+          MSUF_FACTORY_DEFAULT_PROFILE_COMPACT="payload",
           MSUF_Defaults_DeepCopy=function(out,input) out.general={fontKey=input.general.fontKey,menuFontKey=input.general.menuFontKey} end,
           MSUF_Defaults_GetGlobalFontDefault=function() return locale end,
           MSUF_Defaults_GetMenuFontDefault=function() return "menu_"..locale end}

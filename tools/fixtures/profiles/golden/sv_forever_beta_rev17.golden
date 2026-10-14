@@ -4,6 +4,7 @@
 # @overlay <profile>: its reference is its own stored (or imported) table over the base it would
 # otherwise be compared with (a fresh install's Default).
 # [common] holds what every client of the entry shares, [<client>] the rest.
+@overlay profile["Profile01"]
 [common]
 login.activeProfile = "Profile01"
 login.boundDBIsActiveProfile = true
@@ -18,24 +19,22 @@ exists.archive = {}
 exists.profiles[1] = "Profile01"
 resolve["Char01-Realm01"] = "Profile01 <- Profile01"
 resolve["NewChar-NewRealm"] = "Default <- Profile01"
+profile["Profile01"].arena.portraitBlizzardDirection = nil
+profile["Profile01"].boss.portraitBlizzardDirection = nil
+profile["Profile01"].focus.portraitBlizzardDirection = nil
+profile["Profile01"].focustarget.portraitBlizzardDirection = nil
+profile["Profile01"].pet.portraitBlizzardDirection = nil
 profile["Profile01"].pettarget.offsetX = -109.99999999999986
 profile["Profile01"].pettarget.offsetY = -116.00000000000003
+profile["Profile01"].pettarget.portraitBlizzardDirection = nil
 profile["Profile01"].pettarget.screenPositionHeight = 1080
+profile["Profile01"].targettarget.portraitBlizzardDirection = nil
 roundtrip.Profile01.excepted[".arena.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".arena.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
-roundtrip.Profile01.excepted[".arena.trinketAnchor"] = "filledOnImport added: nil -> \"RIGHT\""
-roundtrip.Profile01.excepted[".arena.trinketLayer"] = "filledOnImport added: nil -> 10"
-roundtrip.Profile01.excepted[".arena.trinketOffsetX"] = "filledOnImport added: nil -> 4"
-roundtrip.Profile01.excepted[".arena.trinketOffsetY"] = "filledOnImport added: nil -> 0"
-roundtrip.Profile01.excepted[".arena.trinketSize"] = "filledOnImport added: nil -> 20"
 roundtrip.Profile01.excepted[".boss.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".boss.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".boss.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".focus.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".focus.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".focus.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".focustarget.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".focustarget.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".focustarget.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".general.blizzardEditModeSnapshot.bags.forever"] = "editModeOptIn dropped: true -> nil"
 roundtrip.Profile01.excepted[".general.blizzardEditModeSnapshot.bags.point"] = "editModeOptIn dropped: \"BOTTOMLEFT\" -> nil"
@@ -94,11 +93,8 @@ roundtrip.Profile01.excepted[".gf_mythicraid.screenPositionHeight"] = "screenRef
 roundtrip.Profile01.excepted[".gf_party.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".gf_raid.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".pet.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".pet.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".pet.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".pettarget.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".pettarget.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
-roundtrip.Profile01.excepted[".player.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".player.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".suiteModules.actionTracker.accentColor"] = "suiteOwned dropped: \"d4a64c\" -> nil"
 roundtrip.Profile01.excepted[".suiteModules.actionTracker.borderColor"] = "suiteOwned dropped: \"563938\" -> nil"
@@ -265,10 +261,8 @@ roundtrip.Profile01.excepted[".suiteModules.waypoints.superTrack"] = "suiteOwned
 roundtrip.Profile01.excepted[".suiteModules.xpBar.customBorder"] = "suiteOwned dropped: \"aab8c4\" -> nil"
 roundtrip.Profile01.excepted[".suiteModules.xpBar.customFill"] = "suiteOwned dropped: \"6fc3a0\" -> nil"
 roundtrip.Profile01.excepted[".suiteModules.xpBar.customPanel"] = "suiteOwned dropped: \"111820\" -> nil"
-roundtrip.Profile01.excepted[".target.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".target.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Profile01.excepted[".targettarget.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
-roundtrip.Profile01.excepted[".targettarget.portraitDragonArtwork"] = "filledOnImport added: nil -> false"
 roundtrip.Profile01.excepted[".targettarget.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 [Forever]
 roundtrip.Profile01.excepted[".arena.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"

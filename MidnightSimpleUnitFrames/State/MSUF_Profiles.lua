@@ -240,6 +240,10 @@ function MSUF_InitProfiles(startup)
     if MSUF_ProfileIO_TranslateProfilesToCurrent then
         MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "init")
     end
+    if MSUF.ProfileMigrations then
+        MSUF.ProfileMigrations.ApplyStoredProfiles(profiles)
+        MSUF.ProfileMigrations.PrepareBinding(profiles[active])
+    end
     char.activeProfile = active
     MSUF_ActiveProfile = active
     MSUF_DB = profiles[active]
@@ -343,6 +347,7 @@ function MSUF_SwitchProfile(name)
             trustNormalizationMarker = true,
         })
     end
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.PrepareBinding(profiles[name]) end
     char.activeProfile = name
     MSUF_ActiveProfile = name
     MSUF_DB = profiles[name]
@@ -511,6 +516,7 @@ function MSUF_CopyProfile(sourceName, destName)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.Apply(profiles[destName]) end
     local ok,reason=MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
     if ok==false then profiles[destName]=nil; return false,reason end
     ProfileChat("ok", "Copied '%s' -> '%s'.", sourceName, destName)
@@ -1305,6 +1311,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if type(conf) ~= "table" then return end
     if type(conf.auras) ~= "table" then return end
 
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.SeedGroupBuffStrata(conf) end
     local auras = conf.auras
     if auras.renderer ~= "CUSTOM" and auras.renderer ~= "NATIVE_12_1" then
         auras.renderer = "NATIVE_12_1"
@@ -1509,6 +1516,7 @@ end
 
 local function MSUF_ProfileIO_NormalizeGroupFrameForWago(conf)
     if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.SeedGroupBuffStrata(conf) end
     local auras = conf.auras
     if auras.renderer ~= "CUSTOM" and auras.renderer ~= "BLIZZARD" then
         auras.renderer = "BLIZZARD"
@@ -2407,6 +2415,7 @@ function ImportTx.Stage(plan, base)
         --- candidate; the commit copies only the selected owners back.
         candidate = MSUF_DeepCopy(base)
         UnitSelection.Commit(payload, plan.selectedUnits, candidate)
+        candidate._msufStateSchema = nil
         _G.MSUF_NormalizeProfileDefaults(candidate, true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
         plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
@@ -2422,12 +2431,14 @@ function ImportTx.Stage(plan, base)
         ImportTx.Merge(kind, payload, candidate)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
+    candidate._msufStateSchema = nil
     _G.MSUF_NormalizeProfileDefaults(candidate, true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
     --- The group-frame and aura modules load after this file; the import
     --- refreshes below treat them as optional the same way.
     local gf, auras = MSUF.GF, MSUF.MSUF_Auras3
     if type(gf) == "table" and type(gf.RepairGroupDB) == "function" then gf.RepairGroupDB(candidate) end
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.CompleteImportedGroupFontOwnership(candidate) end
     if type(auras) == "table" and type(auras.NormalizeProfileDB) == "function" then auras.NormalizeProfileDB(candidate) end
     --- Local variants kept across a full import are checked against the new
     --- settings they will overlay. They stay stored either way (they are the
@@ -2499,8 +2510,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     if kind ~= "unitselection" then
-        MSUF_ProfileIO_RunEnsureDB(true)
-        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+        if MSUF.ProfileMigrations then MSUF.ProfileMigrations.AdoptNormalizedProfile(MSUF_DB) end
     end
     if ProfileSync then ProfileSync.Rebase() end
     if not plan.isSnapshot then
@@ -2712,7 +2722,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         end
         if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
         MSUF_GlobalDB.profiles[profileKey] = target
-        MSUF_ProfileIO_RunEnsureDB(true)
+        if MSUF.ProfileMigrations then MSUF.ProfileMigrations.AdoptNormalizedProfile(target) end
         if ProfileSync then ProfileSync.Rebase() end
         MSUF.ProfileIOCompleteFirstLoadImport()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()

@@ -181,3 +181,9 @@ Gameplay native drags join Edit Mode session teardown on every client. Cancel,
 combat and close stop held movement before restoring settings; late releases
 leave coordinates and history intact. Ordinary release keeps native cache and
 slider sync. See [engine lifecycle details](../../docs/EDITMODE_ENGINE_DELTA.md).
+
+Profile data stays portable between clients. The State schema-700 ledger fills
+missing pet happiness fields only when `Client.SupportsPetHappiness` is true,
+including a profile already stamped on a client without that capability. Arena
+and GCD saved values keep their former defaults without enabling unsupported
+runtime modules. Native profile/export schema 600 remains readable by 6.50.

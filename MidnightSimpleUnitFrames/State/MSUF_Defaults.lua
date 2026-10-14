@@ -1733,7 +1733,7 @@ local function MSUF_Defaults_CreateFactoryProfile()
         out.general._msufFactoryProfileApplied = true
         out.general.fontKey = MSUF_Defaults_GetGlobalFontDefault()
         out.general.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
-        return out
+        return MSUF.ProfileMigrations.Apply(out)
     end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
     if type(payload) ~= "table" then  return nil end
@@ -1855,7 +1855,7 @@ local function MSUF_Defaults_CreateFactoryProfile()
     out.general = out.general or {}
     out.general._msufFactoryProfileApplied = true
     out._msufFactoryPlayerDefensivesEnabled_v1 = MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED
-    return out
+    return MSUF.ProfileMigrations.Apply(out)
 end
 local MSUF_DEFAULTS_FACTORY_BOOTSTRAP_ROOTS = {
     gameplay = true,
@@ -2265,51 +2265,6 @@ end
 
 ExportPublic("MSUF_MigrateDispelPriorityProfile", MSUF_Defaults_MigrateDispelPriorityProfile)
 ExportPublic("MSUF_MigrateDispelPriorityProfiles", MSUF_Defaults_MigrateDispelPriorityProfiles)
-
-local function MSUF_Defaults_MigrateGroupTooltipProfile(db)
-    if type(db) ~= "table" then return false end
-    local changed = false
-    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
-        local scope = db[key]
-        if type(scope) == "table" and (scope.tooltipMode ~= nil or scope.tooltipModifier ~= nil) then
-            scope.tooltipMode = nil
-            scope.tooltipModifier = nil
-            changed = true
-        end
-    end
-    return changed
-end
-
-local function MSUF_Defaults_MigrateGroupTooltipProfiles()
-    local changed = false
-    if type(MSUF_GlobalDB) == "table"
-        and type(MSUF_GlobalDB.profiles) == "table" then
-        for _, profile in pairs(MSUF_GlobalDB.profiles) do
-            changed = MSUF_Defaults_MigrateGroupTooltipProfile(profile) or changed
-        end
-    end
-    if type(MSUF_DB) == "table" then
-        changed = MSUF_Defaults_MigrateGroupTooltipProfile(MSUF_DB) or changed
-    end
-    return changed
-end
-
---- Classic only, called from the gate in MSUF_EnsureDB. Every stored profile,
---- not only the active one: the persisted fast path skips the heavy pass for
---- them, and an owner is repaired or kept by its own shape.
-local function MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()
-    local changed = false
-    if type(MSUF_GlobalDB) == "table"
-        and type(MSUF_GlobalDB.profiles) == "table" then
-        for _, profile in pairs(MSUF_GlobalDB.profiles) do
-            changed = MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) or changed
-        end
-    end
-    if type(MSUF_DB) == "table" then
-        changed = MSUF_Defaults_RepairSparseFactoryAuraOwners(MSUF_DB) or changed
-    end
-    return changed
-end
 
 local function MSUF_ResolveFontShadowMetrics(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
     if legacyStrength ~= nil then
@@ -3214,6 +3169,127 @@ end
 --- keys and seed the new fill/background alphas across unit and group confs.
 local MSUF_Defaults_Stage_MigrateUnifiedAlpha = sharedUnitsDefaults.MSUF_Defaults_Stage_MigrateUnifiedAlpha
 
+-- State schema is independent of the schema-600 wire/storage contract read by 6.50.
+-- Factory seeding must precede this ledger: a stamp is saved data, never bootstrap.
+MSUF.ProfileMigrations = (function()
+    local Migrations = { Schema = 700 }
+    local groups = { "gf_party", "gf_raid", "gf_mythicraid" }
+    local units = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
+    local barNames = { ["MSUF Flat"] = "Solid" }
+    for _, suffix in ipairs({ "Charcoal", "Minimalist", "Slickrock", "Smooth", "Smooth v2", "Smoother" }) do
+        barNames["Midnight " .. suffix] = "MSUF " .. suffix
+    end
+    function Migrations.RepairBarNames(profile)
+        local g = type(profile) == "table" and profile.general
+        if type(g) ~= "table" then return false end
+        local changed = false
+        for _, key in ipairs({ "barTexture", "castbarTexture" }) do
+            local value = g[key]
+            if type(value) == "string" and barNames[value] then
+                g[key] = barNames[value]
+                changed = true
+            end
+        end
+        return changed
+    end
+    local function Fill(scope, values)
+        if type(scope) ~= "table" then return end
+        for key, value in pairs(values) do if scope[key] == nil then scope[key] = value end end
+    end
+    -- These values materialize the existing runtime fallbacks, without replaying
+    -- the broader defaults stages against a persisted revision-17 profile.
+    local dragon = {
+        portraitDragonArtwork = false, portraitDragonScale = 100, portraitDragonX = 0, portraitDragonY = 0,
+        portraitDragonFlip = false, portraitDragonInInstances = true, portraitDragonLayer = "OVERLAY", portraitDragonLevel = 1,
+    }
+    local gcd = {
+        gcdBarDetached = false, gcdBarIdle = false, gcdBarCombatOnly = false, gcdBarWidth = 180, gcdBarHeight = 12,
+        gcdBarX = 0, gcdBarY = -180, gcdBarOpacity = 100, kickReadyTimeMarker = false,
+    }
+    local trinket = { showTrinket = true, trinketSize = 20, trinketAnchor = "RIGHT", trinketOffsetX = 4, trinketOffsetY = 0, trinketLayer = 10 }
+    local happiness = {
+        showPetHappinessIndicator = true, petHappinessIndicatorSize = 24, petHappinessIndicatorAnchor = "RIGHT",
+        petHappinessIndicatorOffsetX = -7, petHappinessIndicatorOffsetY = -4, petHappinessIndicatorLayer = 7,
+    }
+    local function SeedAdditions(profile)
+        Fill(profile.general, gcd)
+        Fill(profile.arena, trinket)
+        for _, key in ipairs(units) do Fill(profile[key], dragon) end
+        if MSUF.Client.SupportsPetHappiness == true then Fill(profile.pet, happiness) end
+    end
+    local function StripGroupTooltips(profile)
+        for _, key in ipairs(groups) do
+            local scope = profile[key]
+            if type(scope) == "table" then
+                scope.tooltipMode = nil
+                scope.tooltipModifier = nil
+            end
+        end
+    end
+    function Migrations.SeedGroupBuffStrata(scope)
+        local auras = type(scope) == "table" and scope.auras
+        local buff = type(auras) == "table" and auras.buff
+        if type(buff) == "table" and buff.trackedStrata == nil then
+            local indicators = type(scope.spellIndicators) == "table" and scope.spellIndicators
+            buff.trackedStrata = buff.trackedFrameStrata or (indicators and indicators.strata) or "AUTO"
+        end
+    end
+    local function SeedTrackedStrata(profile)
+        for _, key in ipairs(groups) do Migrations.SeedGroupBuffStrata(profile[key]) end
+    end
+    -- Ordered ledger. Existing versioned repairs retain their own data-format
+    -- decisions; the final stamp only records completion of these cold steps.
+    Migrations.Ledger = {
+        { "legacy_bar_names", Migrations.RepairBarNames },
+        { "dispel_priority", MSUF_Defaults_MigrateDispelPriorityProfile },
+        { "classic_sparse_aura_owners", function(profile)
+            if IS_CLASSIC_FAMILY then MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) end
+        end },
+        { "retired_group_tooltips", StripGroupTooltips },
+        { "revision_17_additions", SeedAdditions },
+        { "group_buff_strata", SeedTrackedStrata },
+    }
+    function Migrations.Apply(profile, skipMedia)
+        if type(profile) ~= "table" or MSUF_Defaults_IsFreshInstallProfileDB(profile) then return profile end
+        if (tonumber(profile._msufStateSchema) or 0) >= Migrations.Schema then
+            if skipMedia ~= true then Migrations.RepairBarNames(profile) end
+            -- Older clients may save their own legacy migration versions again.
+            Migrations.Ledger[2][2](profile)
+            Migrations.Ledger[3][2](profile)
+            -- Capability-dependent nil fills are portable across client changes.
+            SeedAdditions(profile)
+            SeedTrackedStrata(profile)
+            return profile
+        end
+        for _, step in ipairs(Migrations.Ledger) do
+            if step[1] ~= "legacy_bar_names" or skipMedia ~= true then step[2](profile) end
+        end
+        profile._msufStateSchema = Migrations.Schema
+        return profile
+    end
+    function Migrations.CompleteImportedGroupFontOwnership(profile)
+        -- Group repair may create owners after the defaults translator ran.
+        -- Finish only its font ownership decision, previously made by the
+        -- second heavy pass; do not replay broad normalization on commit.
+        for _, key in ipairs(groups) do
+            local scope = profile[key]
+            if type(scope) == "table" then
+                if scope.fontOverride == nil and StateHelpers.HasScopedFontOverrideValue(scope, StateHelpers.ProfileIOSpec) then
+                    scope.fontOverride = true
+                end
+                if scope.fontOverride == true and not StateHelpers.HasScopedFontOverrideValue(scope, MSUF_DEFAULTS_SPEC) then
+                    scope.fontOverride = false
+                end
+            end
+        end
+    end
+    function Migrations.ApplyStoredProfiles(profiles)
+        -- Inactive/donor media names retain their stored value until activation.
+        for _, profile in pairs(profiles) do Migrations.Apply(profile, true) end
+    end
+    return Migrations
+end)()
+
 --- Main DB repair pass. This is deliberately broad and cold: it may normalize
 --- several systems in one run, but it is protected by MSUF_DB_LastHeavyRun in
 --- the public wrapper below so normal callers do not pay for it repeatedly.
@@ -3229,7 +3305,6 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_RepairModernFactoryPlayerStack(profileDB)
     MSUF_Defaults_RepairModernFactoryNamePresentation(profileDB)
     MSUF_Defaults_MigrateDispelPriorityProfile(profileDB)
-    MSUF_Defaults_MigrateGroupTooltipProfile(profileDB)
     MSUF_Defaults_NormalizePortraitRenderDB(profileDB)
     local nativeDispelMigration = tonumber(profileDB._msufNativeDispelTriggerMigration) or 0
     if nativeDispelMigration < 1 then
@@ -3295,6 +3370,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     end
     profileDB._msufProfileSchema = MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA
     profileDB._msufDefaultsRevision = MSUF_DEFAULTS_CURRENT_REVISION
+    MSUF.ProfileMigrations.Apply(profileDB)
     return profileDB
 end
 
@@ -3344,6 +3420,8 @@ end
 --- MSUF_NormalizeProfileDefaults, which never touches that session cache.
 local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     assert(type(profile) == "table", "MSUF profile must be a table")
+    MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall(profile)
+    MSUF.ProfileMigrations.Apply(profile)
     MSUF_Defaults_PruneRetiredClassPowerTextFields(profile)
     if force ~= true and allowPersistedFastPath == true and MSUF_Defaults_IsCurrentProfileDB(profile) then
         return profile
@@ -3363,14 +3441,16 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
         MSUF.ProfilePolicy.NoteSessionProfileDB(profile)
     end
     if force ~= true and MSUF_DB_LastHeavyRun == profile then return profile end
-    MSUF_Defaults_MigrateDispelPriorityProfiles()
-    MSUF_Defaults_MigrateGroupTooltipProfiles()
-    if IS_CLASSIC_FAMILY then
-        MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()
-    end
     MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     MSUF_DB_LastHeavyRun = profile
     return profile
+end
+function MSUF.ProfileMigrations.PrepareBinding(profile)
+    return MSUF_NormalizeProfileDefaults(profile, false, true)
+end
+function MSUF.ProfileMigrations.AdoptNormalizedProfile(profile)
+    assert(type(profile) == "table", "MSUF staged profile must be a table")
+    MSUF_DB_LastHeavyRun = profile
 end
 ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)
 --- Optional exports for other modules

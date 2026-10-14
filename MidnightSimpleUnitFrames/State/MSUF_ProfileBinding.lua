@@ -5,17 +5,8 @@ local _, MSUF = ...
 local Binding = {}
 MSUF.ProfileBinding = Binding
 
-local BAR_NAMES = { ["MSUF Flat"] = "Solid" }
-for _, suffix in ipairs({ "Charcoal", "Minimalist", "Slickrock", "Smooth", "Smooth v2", "Smoother" }) do
-    BAR_NAMES["Midnight " .. suffix] = "MSUF " .. suffix
-end
-
 function Binding.MigrateLegacyBarTextures(profile)
-    local general = type(profile) == "table" and profile.general
-    if type(general) ~= "table" then return end
-    local bar, castbar = general.barTexture, general.castbarTexture
-    if type(bar) == "string" and BAR_NAMES[bar] then general.barTexture = BAR_NAMES[bar] end
-    if type(castbar) == "string" and BAR_NAMES[castbar] then general.castbarTexture = BAR_NAMES[castbar] end
+    return MSUF.ProfileMigrations.RepairBarNames(profile)
 end
 
 function Binding.Migrate(legacy, clearLegacy)
@@ -29,7 +20,10 @@ function Binding.Migrate(legacy, clearLegacy)
     if type(profiles) ~= "table" or profiles[active] ~= source then
         profile = type(source) == "table" and CopyTable(source) or nil
     end
-    Binding.MigrateLegacyBarTextures(profile)
+    if type(profile) == "table" then
+        MSUF.ProfileNormalize.TranslateProfileToCurrent(profile, { source = "init", trustNormalizationMarker = true })
+        MSUF.Require("MSUF_NormalizeProfileDefaults", "State/MSUF_ProfileBinding.lua")(profile, false, true)
+    end
     return { legacyDB = legacy, profile = profile }
 end
 

@@ -37,6 +37,19 @@ function ProfilePolicy.AcceptsSnapshot(snapshot)
         and tonumber(snapshot.fmt) == 2
 end
 
+local function HasBetaProfileData(profile)
+    if type(profile) ~= "table" or type(profile.general) ~= "table"
+        or next(profile.general) == nil then return false end
+    -- Genuine beta full profiles have real frame owners and geometry. Empty
+    -- wrappers or arbitrary decoded tables are not migration candidates.
+    for _, key in ipairs({ "player", "target" }) do
+        local owner = profile[key]
+        if type(owner) ~= "table" or type(owner.width) ~= "number" or owner.width <= 0
+            or type(owner.height) ~= "number" or owner.height <= 0 then return false end
+    end
+    return true
+end
+
 function ProfilePolicy.SelectSupportedDecodedProfile(decoded)
     if ProfilePolicy.AcceptsProfile(decoded) or ProfilePolicy.AcceptsSnapshot(decoded) then
         return decoded
@@ -52,7 +65,8 @@ function ProfilePolicy.SelectSupportedDecodedProfile(decoded)
         and type(decoded.payload) == "table" then
         local full = decoded.msuf6
         if full == nil then return decoded end
-        if HasCurrentSnapshotData(full) then
+        if HasCurrentSnapshotData(full) or (type(full) == "table" and tonumber(full.schema) == 1
+            and full.kind == "all" and HasBetaProfileData(full.payload)) then
             return {
                 addon = "MSUF",
                 fmt = 2,

@@ -570,38 +570,7 @@ RegisterBundledFonts = function()
 
     --- DB migration: eliminate broken legacy selections ("MSUF Flat"/"MSUF Smooth")
     local function MigrateLegacyBarKeys()
-        local db = _G.MSUF_DB
-        if type(db) ~= "table" or type(db.general) ~= "table" then return end
-        local g = db.general
-        local changed = false
-
-        --- Migrate old Midnight texture names to new MSUF names (renaming only)
-        local map = {
-            ["Midnight Charcoal"] = "MSUF Charcoal",
-            ["Midnight Minimalist"] = "MSUF Minimalist",
-            ["Midnight Slickrock"] = "MSUF Slickrock",
-            ["Midnight Smooth"] = "MSUF Smooth",
-            ["Midnight Smooth v2"] = "MSUF Smooth v2",
-            ["Midnight Smoother"] = "MSUF Smoother",
-        }
-        if type(g.barTexture) == "string" and map[g.barTexture] then
-            g.barTexture = map[g.barTexture]
-            changed = true
-        end
-        if type(g.castbarTexture) == "string" and map[g.castbarTexture] then
-            g.castbarTexture = map[g.castbarTexture]
-            changed = true
-        end
-        if g.barTexture == "MSUF Flat" then
-            g.barTexture = "Solid"
-            changed = true
-        end
-
-        if g.castbarTexture == "MSUF Flat" then
-            g.castbarTexture = "Solid"
-            changed = true
-        end
-
+        local changed = MSUF.ProfileMigrations.RepairBarNames(_G.MSUF_DB)
         if changed then
             -- Runs one frame after the core loaded (C_Timer below), when the
             -- texture and castbar owners are present.

@@ -129,7 +129,7 @@ local GUARDS = {
     { "the Classic Pet XP factory defaults",
         "if IS_CLASSIC_FAMILY then\n    profileDB.pet = profileDB.pet or {}", 1 },
     { "the sparse factory aura owner repair",
-        "if IS_CLASSIC_FAMILY then\n        MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()", 1 },
+        "if IS_CLASSIC_FAMILY then MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) end", 1 },
 }
 for _, row in ipairs(GUARDS) do
     Check(CountPlain(source, row[2]) == row[3],

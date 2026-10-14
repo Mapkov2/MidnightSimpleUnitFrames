@@ -102,6 +102,16 @@ local function NewWorld(startInCombat)
         return nil
     end
     world.ns = ns
+    -- Libs schedules the legacy callback while files load; State supplies its
+    -- migration owner before the next frame. Load that real owner here too.
+    local defaults = assert(io.open(addon .. "State/MSUF_Defaults.lua", "rb"))
+    local source = defaults:read("*a"):gsub("\r\n", "\n")
+    defaults:close()
+    local first = assert(source:find("MSUF.ProfileMigrations = (function()", 1, true))
+    local last = assert(source:find("\nend)()", first, true))
+    local owner = assert(loadstring(source:sub(first, last + 7), "@State/ProfileMigrations"))
+    setfenv(owner, setmetatable({ MSUF = ns }, { __index = _G }))
+    owner()
     assert(loadfile(addon .. "Kernel/MSUF_Libs.lua"))("MidnightSimpleUnitFrames", ns)
 
     -- The keyed scheduler loads after Libs.lua; model its next-frame queue.
