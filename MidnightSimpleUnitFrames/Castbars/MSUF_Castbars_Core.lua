@@ -20,50 +20,16 @@ local IsSecret = MSUF.Util.IsSecret
 local type = type
 local tonumber = tonumber
 local tostring = tostring
-local pairs = pairs
 local math_max = math.max
 local math_floor = math.floor
-
-local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
-local fontList = _G.MSUF_FONT_LIST
-
-local function GetLSM()
-    local resolved = (MSUF and MSUF.LSM) or _G.MSUF_LSM or lsm
-    if resolved then lsm = resolved end
-    return resolved
-end
-
-local function IsKnownAsset(path)
-    if type(path) ~= "string" or path == "" then return false end
-
-    local validator = _G.MSUF_IsKnownFileAsset
-    if type(validator) == "function" and validator(path) == false then
-        return false
-    end
-    return true
-end
 
 --- Providers that load before this file in every client TOC (State defaults,
 --- Kernel, the Runtime font registry, the Edit Mode castbar popup). A missing
 --- one is a load-order bug, so it fails here, loudly.
 local FILE = "Castbars/MSUF_Castbars_Core.lua"
 local Require = MSUF.Require
-local EnsureDBProvider = Require("MSUF_EnsureDB", FILE)
-local NormalizeFontPath = Require("MSUF_NormalizeFontPath", FILE)
-local InternalFontPathByKey = Require("MSUF_GetInternalFontPathByKey", FILE)
 local UpdateCastbarEditInfo = Require("MSUF_UpdateCastbarEditInfo", FILE)
 local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
-
---- Providers that load after this file (Utils, Anchors, Visuals; the Classic
---- visual compat wraps MSUF_RefreshCastbarFrame), resolved when they are
---- used: every caller runs after the core finished loading.
-local function ResolveFontPath(path, size, flags)
-    local resolver = _G.MSUF_ResolveFontPath
-    if type(resolver) == "function" then
-        return resolver(path, size, flags)
-    end
-    return NormalizeFontPath(path)
-end
 
 local IsInCombat = _G.MSUF_IsPlayerInCombat
 
@@ -229,108 +195,22 @@ end
 Core.ApplyCastbarUnitAndSync = ApplyCastbarUnitAndSync
 Publish("MSUF_ApplyCastbarUnitAndSync", Core.ApplyCastbarUnitAndSync)
 
-local GetGlobalFontFlags
-
+local Media = MSUF.Media
+local ResolveTextureCandidate = Media.ResolveTextureCandidate
 local function EnsureDB()
     return Config.EnsureSource()
 end
-
-local function GetFontPath()
-    local db = EnsureDB()
-    local general = db.general
-    local fontKey = general.fontKey
-
-    local resolver = _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-    if type(resolver) == "function" and fontKey and fontKey ~= "" then
-        local path = resolver(fontKey)
-        if path then return ResolveFontPath(path, general.fontSize or 14, GetGlobalFontFlags()) end
-    end
-
-    local internalPath = InternalFontPathByKey(fontKey)
-    if internalPath then return ResolveFontPath(internalPath, general.fontSize or 14, GetGlobalFontFlags()) end
-
-    local media = lsm or (MSUF and MSUF.LSM) or _G.MSUF_LSM
-    if media and fontKey and fontKey ~= "" then
-        local normalizer = _G.MSUF_NormalizeFontKey
-        local normalized = normalizer(fontKey)
-        local fetched
-        if type(media.Fetch) == "function" then
-            fetched = media:Fetch("font", normalized, true)
-            if not fetched and normalized ~= fontKey then fetched = media:Fetch("font", fontKey, true) end
-        end
-        if fetched then return ResolveFontPath(fetched, general.fontSize or 14, GetGlobalFontFlags()) end
-    end
-
-    local fallback = (fontList and fontList[1] and fontList[1].path) or "Fonts\\FRIZQT__.TTF"
-    return ResolveFontPath(fallback, general.fontSize or 14, GetGlobalFontFlags())
-end
-
-GetGlobalFontFlags = function()
-    local db = EnsureDB()
-    local general = db.general
-
-    if general.fontSlug then
-        if general.noOutline then return "SLUG" end
-        return "OUTLINE,SLUG"
-    end
-    if general.noOutline then
-        if general.fontMonochrome then return "MONOCHROME" end
-        return ""
-    elseif general.boldText then
-        if general.fontMonochrome then return "THICKOUTLINE,MONOCHROME" end
-        return "THICKOUTLINE"
-    end
-
-    if general.fontMonochrome then return "OUTLINE,MONOCHROME" end
-    return "OUTLINE"
-end
-
-local function GetGlobalFontSettings()
-    local db = EnsureDB()
-    local general = db.general or {}
-    local fontPath = GetFontPath()
-    local fontFlags = GetGlobalFontFlags()
-    local red, green, blue = 1, 1, 1
-    if MSUF and type(MSUF.MSUF_GetConfiguredFontColor) == "function" then
-        red, green, blue = MSUF.MSUF_GetConfiguredFontColor()
-    end
-    local fontSize = general.fontSize or 14
-    local textBackdrop = general.textBackdrop ~= false
-        and not tostring(fontFlags):upper():find("SLUG", 1, true)
-    return fontPath, fontFlags, red, green, blue, fontSize, textBackdrop
-end
-MSUF.MSUF_GetGlobalFontSettings = GetGlobalFontSettings
-Core.GetGlobalFontSettings = GetGlobalFontSettings
-Publish("MSUF_GetGlobalFontSettings", Core.GetGlobalFontSettings)
-
-local function ResolveTextureCandidate(key)
-    if type(key) ~= "string" or key == "" then return nil, true end
-
-    local builtin = Core.BUILTIN_BAR_TEXTURES
-    if type(builtin) == "table" then
-        local path = builtin[key]
-        if type(path) == "string" and path ~= "" then
-            if IsKnownAsset(path) then return path, true end
-            return nil, false
-        end
-    end
-
-    if key:find("\\") or key:find("/") then
-        if IsKnownAsset(key) then return key, true end
-        return nil, false
-    end
-
-    local media = GetLSM()
-    if media and media.Fetch then
-        local path = media:Fetch("statusbar", key, true)
-        if type(path) == "string" and path ~= "" then
-            if IsKnownAsset(path) then return path, true end
-            return nil, false
-        end
-    end
-
-    return nil, false
-end
+-- Compatibility readers retain identity; all shared policy lives in Runtime.
+Core.GetFontPath = Require("MSUF_GetFontPath", FILE)
+Core.GetFontFlags = Require("MSUF_GetFontFlags", FILE)
+Core.GetGlobalFontSettings = Require("MSUF_GetGlobalFontSettings", FILE)
+Core.GetBarTexture = Require("MSUF_GetBarTexture", FILE)
+Core.GetBarBackgroundTexture = Require("MSUF_GetBarBackgroundTexture", FILE)
+Core.ResolveStatusbarTextureKey = Require("MSUF_ResolveStatusbarTextureKey", FILE)
+Core.ClearResolvedStatusbarTextureCache = Require("MSUF_ClearResolvedStatusbarTextureCache", FILE)
+Core.BUILTIN_BAR_TEXTURES = Require("MSUF_BUILTIN_BAR_TEXTURES", FILE)
+MSUF.Castbars._GetFontPath = Core.GetFontPath
+MSUF.Castbars._GetFontFlags = Core.GetFontFlags
 
 local function GetCastbarTexture()
     local db = EnsureDB()
@@ -360,8 +240,6 @@ local function GetCastbarTexture()
 end
 Core.GetCastbarTexture = GetCastbarTexture
 Publish("MSUF_GetCastbarTexture", Core.GetCastbarTexture)
-
-local ResolveStatusbarTextureKey
 
 local function GetCastbarBackgroundTexture()
     local db = EnsureDB()
@@ -485,99 +363,6 @@ Core.UpdateCastbarTextures = UpdateCastbarTextures
 Publish("MSUF_UpdateCastbarTextures", Core.UpdateCastbarTextures)
 Core.UpdateCastbarTextures_Immediate = UpdateCastbarTextures
 Publish("MSUF_UpdateCastbarTextures_Immediate", Core.UpdateCastbarTextures_Immediate)
-
-local resolvedStatusbarTextureCache = {}
-
-local function ClearResolvedStatusbarTextureCache()
-    resolvedStatusbarTextureCache = {}
-    local castbarTextureCache = Core.CastbarTextureCache
-    if type(castbarTextureCache) == "table" then
-        for key in pairs(castbarTextureCache) do castbarTextureCache[key] = nil end
-    end
-
-    GetLSM()
-end
-Core.ClearResolvedStatusbarTextureCache = ClearResolvedStatusbarTextureCache
-Publish("MSUF_ClearResolvedStatusbarTextureCache", Core.ClearResolvedStatusbarTextureCache)
-
-function ResolveStatusbarTextureKey(key)
-    if type(key) ~= "string" or key == "" then return "Interface\\TargetingFrame\\UI-StatusBar" end
-
-    local cached = resolvedStatusbarTextureCache[key]
-    if cached then return cached end
-
-    local resolved
-    local cacheable = false
-    local builtin = Core.BUILTIN_BAR_TEXTURES
-    if type(builtin) == "table" then
-        local path = builtin[key]
-        if type(path) == "string" and path ~= "" and IsKnownAsset(path) then
-            resolved = path
-            cacheable = true
-        end
-    end
-
-    if not resolved then
-        if key:find("\\") or key:find("/") then
-            if IsKnownAsset(key) then
-                resolved = key
-                cacheable = true
-            end
-        else
-            local media = GetLSM()
-            if media and type(media.Fetch) == "function" then
-                local fetched = media:Fetch("statusbar", key, true)
-                if type(fetched) == "string" and fetched ~= "" and IsKnownAsset(fetched) then
-                    resolved = fetched
-                    cacheable = true
-                end
-            end
-        end
-    end
-
-    if resolved then
-        if cacheable then resolvedStatusbarTextureCache[key] = resolved end
-        return resolved
-    end
-
-    local fallback = "Interface\\TargetingFrame\\UI-StatusBar"
-    if cacheable then resolvedStatusbarTextureCache[key] = fallback end
-    return fallback
-end
-Core.ResolveStatusbarTextureKey = ResolveStatusbarTextureKey
-Publish("MSUF_ResolveStatusbarTextureKey", Core.ResolveStatusbarTextureKey)
-
-Core.BUILTIN_BAR_TEXTURES = Core.BUILTIN_BAR_TEXTURES or {
-    Blizzard = "Interface\\TargetingFrame\\UI-StatusBar",
-    Flat = "Interface\\Buttons\\WHITE8x8",
-    ["MSUF Lucent"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga",
-    RaidHP = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
-    RaidPower = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill",
-    Skills = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",
-    Outline = "Interface\\Tooltips\\UI-Tooltip-Background",
-    TooltipBorder = "Interface\\Tooltips\\UI-Tooltip-Border",
-    DialogBG = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    Parchment = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground",
-}
-Publish("MSUF_BUILTIN_BAR_TEXTURES", Core.BUILTIN_BAR_TEXTURES)
-
-local function GetBarTexture()
-    local db = EnsureDB()
-    local general = (db and db.general) or nil
-    return ResolveStatusbarTextureKey(general and general.barTexture)
-end
-Core.GetBarTexture = GetBarTexture
-Publish("MSUF_GetBarTexture", Core.GetBarTexture)
-
-local function GetBarBackgroundTexture()
-    local db = EnsureDB()
-    local general = (db and db.general) or nil
-    local key = general and general.barBackgroundTexture
-    if key == nil or key == "" then key = general and general.barTexture end
-    return ResolveStatusbarTextureKey(key)
-end
-Core.GetBarBackgroundTexture = GetBarBackgroundTexture
-Publish("MSUF_GetBarBackgroundTexture", Core.GetBarBackgroundTexture)
 
 local function ApplySparkLayout(frame, statusBar, general, height)
     local enabled = general and general.castbarShowSpark == true
@@ -980,13 +765,3 @@ do
         end)
     end
 end
-
-MSUF.Castbars = MSUF.Castbars or {}
-MSUF.Castbars._GetFontPath = GetFontPath
-MSUF.Castbars._GetFontFlags = GetGlobalFontFlags
-MSUF.MSUF_GetFontPath = GetFontPath
-MSUF.MSUF_GetFontFlags = GetGlobalFontFlags
-Core.GetFontPath = GetFontPath
-Publish("MSUF_GetFontPath", Core.GetFontPath)
-Core.GetFontFlags = GetGlobalFontFlags
-Publish("MSUF_GetFontFlags", Core.GetFontFlags)

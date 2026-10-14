@@ -193,7 +193,7 @@ local ns = { Client = { IsForever = true } }
 ns.ExportPublic = function(key, value) _G[key] = value end
 ns.LSM = { Fetch = function() return nil end, List = function() return {} end, HashTable = function() return {} end,
     RegisterCallback = function() end }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua"))("MSUF", ns)
+assert(loadfile(root .. "/tools/tests/runtime_media_fixture.lua"))().LoadFonts(root, ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF", ns)
 _G.MSUF_DB = {}
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("MSUF", ns)

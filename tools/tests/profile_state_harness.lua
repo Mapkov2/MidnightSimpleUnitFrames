@@ -64,7 +64,9 @@ function Harness.Load(root, flavor)
     function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
     _G.MSUF_NS, _G.MSUF = ns, ns
     manifest.LoadSelected(root, flavor, ns, {
-        "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua", "Kernel/MSUF_SuiteLink.lua", "Locales/MSUF_Localization.lua",
+        "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua",
+        "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua",
+        "Kernel/MSUF_Util.lua", "Kernel/MSUF_SuiteLink.lua", "Locales/MSUF_Localization.lua",
         "State/MSUF_StateHelpers.lua",
         "State/MSUF_ProfileCodec.lua", "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
         "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
@@ -72,7 +74,6 @@ function Harness.Load(root, flavor)
     })
     ns.ProfileRuntime = { Apply = function() end, BeforeMutation = function() end }
     MSUF_GF_InvalidateConfCache = function() end
-    MSUF_NormalizeFontKey = function(key) return key end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("MidnightSimpleUnitFrames", ns)
 

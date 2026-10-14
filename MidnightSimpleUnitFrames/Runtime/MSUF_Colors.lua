@@ -17,6 +17,264 @@ _G.MSUF = _G.MSUF or MSUF
 MSUF.Public = MSUF.Public or {}
 
 local ExportPublic = MSUF.ExportPublic
+local G = _G
+local string_lower = string.lower
+
+-- Keep the namespace defaults distinct from the replaceable public palette.
+local DEFAULT_FONT_COLORS = {
+    white     = { 1.0, 1.0, 1.0 },
+    black     = { 0.0, 0.0, 0.0 },
+    red       = { 1.0, 0.0, 0.0 },
+    green     = { 0.0, 1.0, 0.0 },
+    blue      = { 0.0, 0.0, 1.0 },
+    yellow    = { 1.0, 1.0, 0.0 },
+    cyan      = { 0.0, 1.0, 1.0 },
+    magenta   = { 1.0, 0.0, 1.0 },
+    orange    = { 1.0, 0.5, 0.0 },
+    purple    = { 0.6, 0.0, 0.8 },
+    pink      = { 1.0, 0.6, 0.8 },
+    turquoise = { 0.0, 0.9, 0.8 },
+    grey      = { 0.5, 0.5, 0.5 },
+    brown     = { 0.6, 0.3, 0.1 },
+    gold      = { 1.0, 0.85, 0.1 },
+}
+MSUF.MSUF_FONT_COLORS = DEFAULT_FONT_COLORS
+G.MSUF_FONT_COLORS = G.MSUF_FONT_COLORS or DEFAULT_FONT_COLORS
+
+G.MSUF_GetNPCReactionColor = function(kind)
+    local defaultR, defaultG, defaultB
+    if kind == "friendly" then
+        defaultR, defaultG, defaultB = 0, 1, 0
+    elseif kind == "neutral" then
+        defaultR, defaultG, defaultB = 1, 1, 0
+    elseif kind == "enemy" then
+        defaultR, defaultG, defaultB = 0.85, 0.10, 0.10
+    elseif kind == "dead" then
+        defaultR, defaultG, defaultB = 0.4, 0.4, 0.4
+    else
+        defaultR, defaultG, defaultB = 1, 1, 1
+    end
+    if not G.MSUF_EnsureDB then
+        return defaultR, defaultG, defaultB
+    end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
+    G.MSUF_DB.npcColors = G.MSUF_DB.npcColors or {}
+    local t = G.MSUF_DB.npcColors[kind]
+    if t and t.r and t.g and t.b then
+        return t.r, t.g, t.b
+    end
+    return defaultR, defaultG, defaultB
+end
+
+G.MSUF_GetClassBarColor = function(classToken)
+    local defaultR, defaultG, defaultB = 0, 1, 0
+    if not classToken then
+        return defaultR, defaultG, defaultB
+    end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
+    G.MSUF_DB.classColors = G.MSUF_DB.classColors or {}
+    local override = G.MSUF_DB.classColors[classToken]
+    if override and override.r and override.g and override.b then
+        return override.r, override.g, override.b
+    end
+    if type(override) == "string" and DEFAULT_FONT_COLORS and DEFAULT_FONT_COLORS[override] then
+        local c = DEFAULT_FONT_COLORS[override]
+        return c[1], c[2], c[3]
+    end
+    local color = G.RAID_CLASS_COLORS and G.RAID_CLASS_COLORS[classToken]
+    if color then
+        return color.r, color.g, color.b
+    end
+    return defaultR, defaultG, defaultB
+end
+
+-- Some NPC unit tokens expose only the numeric UnitPowerType metadata. Keep
+-- their configured resource color on the same token-keyed override path used
+-- by players and previews instead of falling back to Blizzard's default RGB.
+local POWER_TOKEN_BY_TYPE = {}
+local CONFIGURABLE_POWER_TOKENS = {}
+do
+    local powerTypeEnum = G.Enum and G.Enum.PowerType
+    local function RegisterPowerToken(enumKey, fallbackType, token)
+        local numericType = powerTypeEnum and powerTypeEnum[enumKey]
+        if type(numericType) ~= "number" then numericType = fallbackType end
+        POWER_TOKEN_BY_TYPE[numericType] = token
+        CONFIGURABLE_POWER_TOKENS[token] = true
+    end
+
+    RegisterPowerToken("Mana", 0, "MANA")
+    RegisterPowerToken("Rage", 1, "RAGE")
+    RegisterPowerToken("Focus", 2, "FOCUS")
+    RegisterPowerToken("Energy", 3, "ENERGY")
+    RegisterPowerToken("RunicPower", 6, "RUNIC_POWER")
+    RegisterPowerToken("LunarPower", 8, "LUNAR_POWER")
+    RegisterPowerToken("Maelstrom", 11, "MAELSTROM")
+    RegisterPowerToken("Insanity", 13, "INSANITY")
+    RegisterPowerToken("Fury", 17, "FURY")
+    RegisterPowerToken("Pain", 18, "PAIN")
+    RegisterPowerToken("Essence", 19, "ESSENCE")
+end
+
+local function NormalizePowerToken(powerType, powerToken)
+    if type(powerToken) == "string" and powerToken ~= "" then return powerToken end
+    return type(powerType) == "number" and POWER_TOKEN_BY_TYPE[powerType] or nil
+end
+
+local function MSUF_GetPowerBarColor(powerType, powerToken)
+    powerToken = NormalizePowerToken(powerType, powerToken)
+    if not powerToken then
+        return nil
+    end
+    if not G.MSUF_EnsureDB then
+        return nil
+    end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
+    local g = G.MSUF_DB.general
+    local ov = g and g.powerColorOverrides
+    local c = ov and ov[powerToken] or nil
+    if type(c) ~= "table" then
+        return nil
+    end
+    local r, gg, b
+    if type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
+        r, gg, b = c.r, c.g, c.b
+    else
+        r, gg, b = c[1], c[2], c[3]
+    end
+    if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+        return r, gg, b
+    end
+    return nil
+end
+G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
+
+local function MSUF_GetResolvedPowerColor(powerType, powerToken)
+    powerToken = NormalizePowerToken(powerType, powerToken)
+    local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return r, g, b
+    end
+
+    local snap = MSUF._PBCSnap
+    if type(snap) == "table" then
+        if type(powerToken) == "string" and snap[powerToken] then
+            local c = snap[powerToken]
+            return c.r, c.g, c.b
+        end
+        if type(powerType) == "number" and snap[powerType] then
+            local c = snap[powerType]
+            return c.r, c.g, c.b
+        end
+    end
+
+    local pbc = G.PowerBarColor
+    if type(powerToken) == "string" and pbc and pbc[powerToken] then
+        local c = pbc[powerToken]
+        local r = c.r or c[1]
+        local g = c.g or c[2]
+        local b = c.b or c[3]
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+    if type(powerType) == "number" and pbc and pbc[powerType] then
+        local c = pbc[powerType]
+        local r = c.r or c[1]
+        local g = c.g or c[2]
+        local b = c.b or c[3]
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+    if CONFIGURABLE_POWER_TOKENS[powerToken] == true then
+        -- Matches the Colors menu's PowerDefaultRGB fallback. Essence has no
+        -- Blizzard PowerBarColor entry on current PTR/live data, so without
+        -- this final branch Reset would preview gray but render as Mana blue.
+        return 0.8, 0.8, 0.8
+    end
+    return nil
+end
+G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
+MSUF.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
+
+local function MSUF_GetConfiguredFontColor()
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
+    local g = G.MSUF_DB.general or {}
+    if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
+        return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
+    end
+    local key = (g.fontColor or "white"):lower()
+    local color = DEFAULT_FONT_COLORS[key] or DEFAULT_FONT_COLORS.white
+    return color[1], color[2], color[3]
+end
+G.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
+MSUF.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
+
+local MSUF_COLOR_OBJECT_CACHE = {}
+local MSUF_DEFAULT_COLOR_OBJECT
+
+local function DefaultColorObject()
+    if not MSUF_DEFAULT_COLOR_OBJECT then
+        MSUF_DEFAULT_COLOR_OBJECT = G.CreateColor(1, 1, 1, 1)
+    end
+    return MSUF_DEFAULT_COLOR_OBJECT
+end
+
+local function MSUF_GetColorFromKey(key, fallbackColor)
+    if type(key) ~= "string" then
+        if fallbackColor then
+            return fallbackColor
+        end
+        return DefaultColorObject()
+    end
+    -- Stored palette keys are already canonical. Avoid creating a lowered
+    -- string on every runtime color refresh; mixed-case external callers keep
+    -- the same case-insensitive fallback.
+    local normalized = key
+    local rgb = DEFAULT_FONT_COLORS[normalized]
+    if not rgb then
+        normalized = string_lower(key)
+        rgb = DEFAULT_FONT_COLORS[normalized]
+    end
+    if rgb then
+        local r, g, b = rgb[1], rgb[2], rgb[3]
+        r, g, b = r or 1, g or 1, b or 1
+        local cached = MSUF_COLOR_OBJECT_CACHE[normalized]
+        if cached and cached.r == r and cached.g == g and cached.b == b then
+            return cached.object
+        end
+        local object = G.CreateColor(r, g, b, 1)
+        MSUF_COLOR_OBJECT_CACHE[normalized] = { r = r, g = g, b = b, object = object }
+        return object
+    end
+    if fallbackColor then
+        return fallbackColor
+    end
+    return DefaultColorObject()
+end
+MSUF.MSUF_GetColorFromKey = MSUF_GetColorFromKey
+G.MSUF_GetColorFromKey = MSUF_GetColorFromKey
+
+-- Numeric-only runtime consumers should not force a ColorObject into
+-- existence. Share the canonical palette lookup while retaining the object
+-- API above for consumers that need it.
+local function MSUF_GetColorRGBFromKey(key)
+    if type(key) ~= "string" then return nil end
+    local rgb = DEFAULT_FONT_COLORS[key]
+    if not rgb then rgb = DEFAULT_FONT_COLORS[string_lower(key)] end
+    if not rgb then return nil end
+    return rgb[1] or 1, rgb[2] or 1, rgb[3] or 1
+end
+MSUF.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
+G.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
+
+G.MSUF_DARK_TONES = {
+    black    = { 0.0, 0.0, 0.0 },
+    darkgray = { 0.08, 0.08, 0.08 },
+    softgray = { 0.16, 0.16, 0.16 },
+}
+
+
 
 ---
 --- Local shortcuts (core only - no UI-framework refs)

@@ -686,3 +686,6 @@ clients+Forever	lua	tools/tests/castbar_namespace_schema_boot_smoke.lua	{root/} 
 -	python	tools/tests/search_static_index_generated_smoke.py	{root}	Search index generator or shipped rows are stale	nightly
 -	python	tools/tests/search_static_index_check_mode_smoke.py	{root}	Search index check mode changed files or missed drift
 -	python	tools/tests/search_generator_failure_boundary_smoke.py	{root}	Search generator selected the wrong Lua or accepted a failed child
+-	lua	tools/tests/runtime_media_ownership_smoke.lua	{root}	Shared font and media policy escaped Runtime ownership
+clients+Forever	lua	tools/tests/runtime_media_parity_smoke.lua	{root} {flavor}	Shared media/font resolution, readiness or profile parity failed: {flavor}
+clients+Forever	lua	tools/tests/color_palette_lifecycle_smoke.lua	{root} {flavor}	Public palette lifecycle or original color getter precedence failed: {flavor}

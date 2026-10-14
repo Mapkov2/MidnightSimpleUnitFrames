@@ -1200,3 +1200,36 @@ CVar turns off, so the module re-asserts it after that CVar changes and on every
 apply. A target change only re-reads the range of checked hands, a haste proc
 does nothing unless a weapon was equipped or removed, and spell-state events are
 registered only for classes with next-swing attacks.
+
+### Shared Runtime media, fonts and colors
+
+`Runtime/MSUF_Fonts.lua` loads immediately after the Kernel library adapter,
+before State. It owns the catalogue, key/path normalization, resolution,
+application caches and diagnostics, plus the active-profile font/flags getters.
+Defaults and Profiles share this path; registry availability remains a forward
+provider resolved at use time. No profile is read while the font owner loads.
+`Runtime/MSUF_FontRegistry.lua` owns availability metadata and preview objects.
+The Kernel adapter retains library registration and its one coalesced media callback.
+
+`Runtime/MSUF_MediaRuntime.lua` owns built-in statusbar media and its resolution
+cache. Castbars consume that service and retain castbar styling/revision caches.
+`Runtime/MSUF_Colors.lua` owns palette and font/color resolution, including the
+existing public color APIs. Public font/media globals, Host API and Suite readers
+retain their names; the old Castbars.Core and Castbars font slots are aliases.
+Ownership and real-client-graph parity probes cover these boundaries without
+replacing their providers. Live font metrics, textures and profile-switch rendering
+still require client verification.
+
+Colors retains two established palette contracts within this single owner.
+The namespace palette and configured-font/object/RGB accessors keep the original
+default RGB values and namespace-table mutation behavior. The existing public
+`MSUF_FONT_COLORS` table is preserved at load; Colors global/castbar and cast-color
+palette getters read that public binding on each call, so same-table edits,
+missing entries and later table replacement keep their previous effect.
+Configured custom RGB wins over palette selection, and complete castbar RGB
+wins over the global color. Root-profile or `general` replacement refreshes
+the cached Colors profile resolver. These contracts differ when another addon
+provides a public palette: using the configured-font getter for the Colors
+global getter changed effective colors, so the original Colors resolution
+body is retained. The lifecycle smoke exercises actual shipped getters on every
+client; optional immutable-base comparison checks the old owner directly.

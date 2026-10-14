@@ -43,6 +43,7 @@ State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
 State\MSUF_GuidedTour.lua
 Kernel\MSUF_Libs.lua
+Runtime\MSUF_Fonts.lua
 
 # ---------------------------------------------------------------
 # LOCALES
@@ -151,6 +152,7 @@ Features\Versioning\MSUF_VersionCheck.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
+Runtime\MSUF_MediaRuntime.lua
 Game\Vanilla\UnitFrames.xml
 Game\Vanilla\Auras.xml
 Integrations\MSUF_Integration_NicknameProviders.lua

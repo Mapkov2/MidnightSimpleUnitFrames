@@ -928,8 +928,8 @@ local function MSUF_ProfileIO_FontPathAvailable(path)
     --- Runtime/MSUF_FontRegistry.lua answers availability from registry
     --- metadata (MSUF_IsAvailableFontPath); the SetFont probe it replaced,
     --- MSUF_FontPathIsLoadable, no longer exists.
-    local isAvailable = _G.MSUF_IsAvailableFontPath
-    if type(isAvailable) == "function" then
+    local isAvailable = MSUF.Optional("MSUF_IsAvailableFontPath")
+    if isAvailable then
         return isAvailable(path) == true
     end
     local isKnown = _G.MSUF_IsKnownFileAsset
@@ -939,28 +939,9 @@ end
 
 local function MSUF_ProfileIO_FontKeyAvailable(key)
     if type(key) ~= "string" or key == "" then return true end
-    local normalize = _G.MSUF_NormalizeFontKey
-    local normalized = normalize(key)
-    local internal = _G.MSUF_GetInternalFontPathByKey
-    if type(internal) == "function" then
-        local path = internal(normalized) or internal(key)
-        if MSUF_ProfileIO_FontPathAvailable(path) then return true end
-    end
-    if MSUF_ProfileIO_LooksLikeMediaPath(key) then
-        return MSUF_ProfileIO_FontPathAvailable(key)
-    end
-    local lsm = MSUF_ProfileIO_GetLSM()
-    if lsm and type(lsm.HashTable) == "function" then
-        local fonts = lsm:HashTable("font")
-        local path = fonts and (fonts[normalized] or fonts[key])
-        if MSUF_ProfileIO_FontPathAvailable(path) then return true end
-    end
-    if lsm and type(lsm.Fetch) == "function" then
-        local path = lsm:Fetch("font", normalized, true)
-        if (not path) and normalized ~= key then path = lsm:Fetch("font", key, true) end
-        if MSUF_ProfileIO_FontPathAvailable(path) then return true end
-    end
-    return false
+    if MSUF_ProfileIO_LooksLikeMediaPath(key) then return MSUF_ProfileIO_FontPathAvailable(key) end
+    local path = MSUF.Fonts.InternalPathForKey(key)
+    return MSUF_ProfileIO_FontPathAvailable(path)
 end
 
 local MSUF_ProfileIO_TextureProbeHost

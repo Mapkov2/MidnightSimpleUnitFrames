@@ -163,6 +163,8 @@ do
     local helpersOK, helpersResult = pcall(helpersChunk, "MidnightSimpleUnitFrames", MSUF)
     assert(helpersOK, helpersPath .. ": " .. tostring(helpersResult))
     local defaultsPath = Join(CORE, "State/MSUF_Defaults.lua")
+    local mediaFixture = assert(loadfile(Join(ROOT, "tools/tests/runtime_media_fixture.lua")))()
+    mediaFixture.LoadFonts(ROOT, MSUF)
     local chunk, err = loadfile(defaultsPath)
     assert(chunk, defaultsPath .. ": " .. tostring(err))
     local ok, result = pcall(chunk, "MidnightSimpleUnitFrames", MSUF)

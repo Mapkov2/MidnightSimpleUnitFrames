@@ -315,6 +315,16 @@ function Fixture.Loader(original)
         if not root or not normalized:find("/Castbars/", 1, true) then return chunk, why end
         return function(addon, ns)
             Fixture.Attach(root, ns, original, getfenv(chunk))
+            if normalized:match("/MSUF_Castbars_Core%.lua$") then
+                local env = getfenv(chunk)
+                local mediaFixture = assert(original(root .. "/tools/tests/runtime_media_fixture.lua"))()
+                mediaFixture.LoadFonts(root, ns, original, env)
+                if not ns.Media then
+                    local owner = assert(original(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua"))
+                    setfenv(owner, env)
+                    owner("MidnightSimpleUnitFrames", ns)
+                end
+            end
             local result = chunk(addon, ns)
             Fixture.Bind(ns, getfenv(chunk))
             return result

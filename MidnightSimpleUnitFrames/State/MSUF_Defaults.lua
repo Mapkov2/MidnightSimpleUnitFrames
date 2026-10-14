@@ -2047,24 +2047,6 @@ end
 --- as "ensure roots, migrate old profile shapes, then fill missing defaults".
 --- Keep migrations idempotent: EnsureDB can be forced after imports/profile
 --- switches and must be safe to run repeatedly on the same profile table.
-local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
-    ["Friz Quadrata TT"]        = "FRIZQT",
-    ["Arial Narrow"]            = "ARIALN",
-    ["Morpheus"]                = "MORPHEUS",
-    ["Skurri"]                  = "SKURRI",
-    ["Friz Quadrata (default)"] = "FRIZQT",
-    ["Arial (default)"]         = "ARIALN",
-    ["Morpheus (default)"]      = "MORPHEUS",
-    ["Skurri (default)"]        = "SKURRI",
-    ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
-    ["Expressway (MSUF)"]         = "EXPRESSWAY",
-    ["Expressway Bold (MSUF)"]    = "EXPRESSWAY_BOLD",
-    ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
-    ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
-    ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
-    ["Fritz Soundscape"] = "SOUNDSCAPE",
-}
-
 local MSUF_DEFAULTS_UNIT_DISPEL_KEYS = {
     "unitDispelOverlayEnabled", "unitDispelOverlayStyle", "unitDispelOverlayOnHealth",
     "unitDispelOverlayAlpha", "unitDispelOverlayTrigger",
@@ -2099,20 +2081,14 @@ local function MSUF_Defaults_MigrateUnitDispelOwnership(db)
     general.unitDispelOwnershipVersion = 1
 end
 
-local function MSUF_Defaults_NormalizeFontKey(key)
-    if type(key) ~= "string" or key == "" then return key end
-    return MSUF_DEFAULTS_FONT_KEY_ALIASES[key] or key
-end
+local MSUF_Defaults_NormalizeFontKey = MSUF.Require("MSUF_NormalizeFontKey", "State/MSUF_Defaults.lua")
 
 local function MSUF_Defaults_NormalizeFontField(tbl)
     if type(tbl) ~= "table" then return end
     local normalized = MSUF_Defaults_NormalizeFontKey(tbl.fontKey)
-    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
-    if type(resolveKeyPath) == "function" then
-        local resolved = resolveKeyPath(normalized)
-        if type(resolved) == "string" and resolved ~= "" then
-            normalized = resolved
-        end
+    local resolved = MSUF.Fonts.ResolveKeyPath(normalized)
+    if type(resolved) == "string" and resolved ~= "" then
+        normalized = resolved
     end
     if normalized ~= tbl.fontKey then
         tbl.fontKey = normalized

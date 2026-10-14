@@ -56,7 +56,7 @@ Contract("font availability API", function()
     local registry = Read(CORE .. "Runtime/MSUF_FontRegistry.lua")
     assert(not profiles:find("_G.MSUF_FontPathIsLoadable", 1, true),
         "MSUF_Profiles.lua reads MSUF_FontPathIsLoadable, which nothing defines")
-    assert(profiles:find("_G.MSUF_IsAvailableFontPath", 1, true),
+    assert(profiles:find('MSUF.Optional("MSUF_IsAvailableFontPath")', 1, true),
         "MSUF_Profiles.lua no longer asks MSUF_IsAvailableFontPath for imported font paths")
     assert(registry:find("G.MSUF_IsAvailableFontPath = MSUF_IsAvailableFontPath", 1, true),
         "MSUF_FontRegistry.lua no longer exports MSUF_IsAvailableFontPath")

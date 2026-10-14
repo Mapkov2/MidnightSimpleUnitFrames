@@ -92,6 +92,10 @@ function Manifest.LoadSelected(repo, flavor, namespace, required, loadChunk)
     for _, relative in ipairs(required) do remaining[normalize(repo .. "/MidnightSimpleUnitFrames/" .. relative)] = true end
     for _, path in ipairs(Manifest.Paths(repo, flavor)) do
         if remaining[path] then
+            if path:match("/State/MSUF_Defaults%.lua$") and not namespace.Fonts then
+                local fixture = assert(loadChunk(repo .. "/tools/tests/runtime_media_fixture.lua"))()
+                fixture.LoadFonts(repo, namespace, loadChunk)
+            end
             assert(loadChunk(path))("MidnightSimpleUnitFrames", namespace)
             remaining[path] = nil
         end

@@ -87,16 +87,16 @@ MSUF_GF_*	dynamic	-	!!!MSUFPerfy:Commands.lua:441	1	1	external	static	prefix
 MSUF_GetActiveCooldownAnchorProvider	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:976	integration:MSUF_Integration_ThirdPartyAnchors.lua:976	0	0	integration	all	
 MSUF_GetArcUICooldownAnchor	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:972	integration:MSUF_Integration_ThirdPartyAnchors.lua:972	0	0	integration	all	
 MSUF_GetAutomaticCooldownAnchorProvider	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:445	integration:MSUF_Integration_ThirdPartyAnchors.lua:445	0	0	integration	all	
-MSUF_GetConfiguredFontColor	function	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua:393	Auras2:MSUF_A2_CooldownText.lua:132	1	1	external	all	
+MSUF_GetConfiguredFontColor	function	MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua:210	Auras2:MSUF_A2_CooldownText.lua:132	1	1	external	all	shared Runtime owner; compatibility aliases retained
 MSUF_GetCooldownAnchorConsentDecision	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:457	integration:MSUF_Integration_ThirdPartyAnchors.lua:457	0	0	integration	all	
 MSUF_GetCooldownAnchorScaledWidth	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:542	integration:MSUF_Integration_ThirdPartyAnchors.lua:542	0	0	integration	all	
 MSUF_GetCoolinatorCooldownAnchor	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:964	integration:MSUF_Integration_ThirdPartyAnchors.lua:964	0	0	integration	all	
 MSUF_GetDefaultProfileForNewCharacters	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:145	MSUF_Suite:Core/HostBridge.lua:594	1	1	suite	all	
 MSUF_GetEllesmereCooldownAnchor	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:968	integration:MSUF_Integration_ThirdPartyAnchors.lua:968	0	0	integration	all	
-MSUF_GetFontFlags	function	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua:92	MSUF_Suite:Core/NameplateStyle.lua:309	1	1	suite	all	castbar public compatibility
-MSUF_GetFontPath	function	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua:93	MSUF_Suite:Core/NameplateStyle.lua:301|MSUF_Suite_Skin:Core/Typography.lua:74|MSUF_Suite:Core/Platform.lua:419	3	2	suite	all	castbar public compatibility
-MSUF_GetFontPathForKey	function	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua:578	MSUF_Suite:Core/Platform.lua:328	1	1	suite	all	
-MSUF_GetGlobalFontSettings	function	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua:94	Auras2:MSUF_A2_Apply.lua:642|MidnightRogueBars:MidnightRogueBars_EnergyBar.lua:99	2	2	external	all	castbar public compatibility
+MSUF_GetFontFlags	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:417	MSUF_Suite:Core/NameplateStyle.lua:309	1	1	suite	all	shared Runtime owner; compatibility aliases retained
+MSUF_GetFontPath	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:416	MSUF_Suite:Core/NameplateStyle.lua:301|MSUF_Suite_Skin:Core/Typography.lua:74|MSUF_Suite:Core/Platform.lua:419	3	2	suite	all	shared Runtime owner; compatibility aliases retained
+MSUF_GetFontPathForKey	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:347	MSUF_Suite:Core/Platform.lua:328	1	1	suite	all	shared Runtime owner; compatibility aliases retained
+MSUF_GetGlobalFontSettings	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:410	Auras2:MSUF_A2_Apply.lua:642|MidnightRogueBars:MidnightRogueBars_EnergyBar.lua:99	2	2	external	all	shared Runtime owner; compatibility aliases retained
 MSUF_GetPixelPerfectScale	function	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua:509	MSUF_Suite:Core/HostBridge.lua:595	1	1	suite	all	
 MSUF_GetSkironCooldownAnchorProxy	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:822	integration:MSUF_Integration_ThirdPartyAnchors.lua:822	0	0	integration	all	
 MSUF_GetSuiteCooldownAnchor	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:960	MSUF_Suite:Core/HostBridge.lua:586|integration:MSUF_Integration_ThirdPartyAnchors.lua:960	1	1	suite,integration	all	
@@ -145,8 +145,8 @@ MSUF_Profiles_ImportFromString	function	MidnightSimpleUnitFrames/State/MSUF_Prof
 MSUF_Profiles_ImportIntoNewProfile	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2820	MSUF_Suite:Core/HostBridge.lua:535|MapkoSkin:Core/SuiteProfiles.lua:7	2	2	suite,external	all	
 MSUF_RegisterAnyEditModeListener	function	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:70	MSUF_Suite_Modules:EditMode.lua:46|Auras2:MSUF_A2_Events.lua:460	2	2	suite,external	all	
 MSUF_ResetGlobalUiScale	function	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua:506	MSUF_Suite:Core/HostBridge.lua:124	1	1	suite	all	
-MSUF_ResolveFontKeyPath	function	MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua:451	MSUF_Suite:Core/Platform.lua:328	1	1	suite	all	
-MSUF_ResolveStatusbarTextureKey	function	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua:129	MSUF_Suite:Core/Platform.lua:340	1	1	suite	all	castbar public compatibility
+MSUF_ResolveFontKeyPath	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:322	MSUF_Suite:Core/Platform.lua:328	1	1	suite	all	shared Runtime owner; compatibility aliases retained
+MSUF_ResolveStatusbarTextureKey	function	MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua:94	MSUF_Suite:Core/Platform.lua:340	1	1	suite	all	shared Runtime owner; compatibility aliases retained
 MSUF_SetCooldownAnchorEnabled	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:461	integration:MSUF_Integration_ThirdPartyAnchors.lua:461	0	0	integration	all	
 MSUF_SetCurrentProfileScreenReferenceHeight	function	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua:1855	MSUF_Suite:Core/HostBridge.lua:599	1	1	suite	all	
 MSUF_SetDefaultProfileForNewCharacters	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:150	MSUF_Suite:Core/HostBridge.lua:600	1	1	suite	all	

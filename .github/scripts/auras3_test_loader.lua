@@ -328,11 +328,10 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("MSUF.Optional(") and not namespace.Optional and namespace.ExportPublic then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
     end
-    -- Castbars/MSUF_Castbars_Core.lua publishes the global font settings after
-    -- the aura backend loads. Aura harnesses load no castbar core: fonts keep
-    -- their defaults unless a smoke installs its own settings.
-    if Uses("MSUF.MSUF_GetGlobalFontSettings()") and namespace.MSUF_GetGlobalFontSettings == nil then
-        namespace.MSUF_GetGlobalFontSettings = function() end
+    if Uses("MSUF_NormalizeFontKey") or Uses("MSUF.MSUF_GetGlobalFontSettings()")
+        or Uses("A3.NormalizeProfileDB") or Uses("MSUF.DefaultsStageFactories") then
+        local fixture = assert(originalLoadfile("tools/tests/runtime_media_fixture.lua"))()
+        fixture.LoadFonts(".", namespace, originalLoadfile)
     end
     -- The Auras3 core's strata helpers, bound from their owner for harnesses
     -- that stand in for the core with a hand-built A3 table.
@@ -372,13 +371,11 @@ local function PrepareDirectContracts(source, namespace)
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
+        if not namespace.ProfilePolicy then
+            assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua")))("MSUF", namespace)
+        end
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_StateHelpers.lua")))("MSUF", namespace)
             assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")))("MSUF", namespace)
-    end
-    if Uses("MSUF_NormalizeFontKey") and not _G.MSUF_NormalizeFontKey then
-        local text = Read(SourcePath("MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"))
-        local keys = assert(text:match("local MSUF_INTERNAL_LSM_FONT_KEYS = %b{}"))
-        _G.MSUF_NormalizeFontKey = Bind("MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua", "MSUF_NormalizeFontKey", keys .. "\n")
     end
     local M = namespace.MSUF2
     if M and (Uses("M.TranslateText") or Uses("M.Tr")) and not M.Tr then

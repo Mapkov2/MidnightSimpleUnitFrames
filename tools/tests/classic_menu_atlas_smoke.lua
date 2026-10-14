@@ -32,6 +32,8 @@ assert(ns.Client.IsForever == false, "shipped client detection reported WoW Fore
 if forever then ns.Client.IsForever = true end
 assert(not tinted or forever, "the tinted run exercises the Forever skin; pass Forever")
 load("MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua")
+load("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua")
+load("MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua")
 local prefix = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 load(prefix .. "MSUF_Menu2_Support.lua")
 load(prefix .. "MSUF_Menu2_Theme_Forever.lua")

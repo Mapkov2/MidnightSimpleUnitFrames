@@ -204,15 +204,15 @@
     "reason": "Kernel event drivers, hidden parents and probes; no visible addon surface"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua",
+    "path": "MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua",
     "call": "CreateFontString ( nil , \"OVERLAY\" )",
     "count": 1,
-    "reason": "Kernel event drivers, hidden parents and probes; no visible addon surface"
+    "reason": "Hidden font diagnostic probe moved from Kernel; no visible addon surface"
   },
   {
     "path": "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua",
     "call": "CreateFrame ( \"Frame\" )",
-    "count": 3,
+    "count": 2,
     "reason": "Kernel event drivers, hidden parents and probes; no visible addon surface"
   },
   {
@@ -562,5 +562,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Hidden unparented PLAYER_LOGOUT drivers; native error isolation for restore, sync and alias clearing; no visual geometry"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Hidden font diagnostic probe moved from Kernel; no visible addon surface"
   }
 ]

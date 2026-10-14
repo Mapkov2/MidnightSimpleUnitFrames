@@ -59,6 +59,7 @@ local STRICT_MT = {
 }
 
 local REGION = {}
+function REGION.SetScaleAnimationMode(self, mode) self.scaleAnimationMode = mode end
 function REGION.ClearAllPoints(self) self.points = {} end
 function REGION.SetPoint(self, point, relativeTo, relativePoint, x, y)
     self.points = self.points or {}

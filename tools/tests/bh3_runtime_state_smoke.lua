@@ -24,7 +24,7 @@ local function Check(id, fn)
     else failed = failed + 1; print("FAIL " .. id .. ": " .. tostring(message)) end
 end
 Check("CX1-04", function()
-    local f = Compile(Slice("State/MSUF_Defaults.lua", "local function MSUF_Defaults_MigrateUnitDispelOwnership", "local function MSUF_Defaults_NormalizeFontKey") .. "return MSUF_Defaults_MigrateUnitDispelOwnership", {MSUF_DEFAULTS_UNIT_DISPEL_KEYS={"enabled"}})()
+    local f = Compile(Slice("State/MSUF_Defaults.lua", "local function MSUF_Defaults_MigrateUnitDispelOwnership", "local MSUF_Defaults_NormalizeFontKey") .. "return MSUF_Defaults_MigrateUnitDispelOwnership", {MSUF_DEFAULTS_UNIT_DISPEL_KEYS={"enabled"}})()
     local db={general={enabled=true},player={hlOverride=true,enabled=false},target={enabled=false}}
     f(db); assert(db.player.enabled == false); assert(db.target.enabled == true)
 end)
@@ -80,11 +80,11 @@ Check("CX1-07", function()
     assert(db.gameplay.key==1 and db.classColors.key==2 and db.npcColors.key==3 and db.target.key==7)
 end)
 Check("C03-A2", function()
-    local f=Compile(Slice("Runtime/MSUF_Colors.lua", "local function GetGlobalFontColor()", "local function SetGlobalFontColor").."return GetGlobalFontColor",{_general=function()return {fontColor="red"}end,MSUF_FONT_COLORS={red={1,.2,.3}}})()
+    local f=Compile(Slice("Runtime/MSUF_Colors.lua", "local function MSUF_GetConfiguredFontColor()", "G.MSUF_GetConfiguredFontColor =").."return MSUF_GetConfiguredFontColor",{G={MSUF_DB={general={fontColor="red"}}},DEFAULT_FONT_COLORS={red={1,.2,.3}}})()
     local r,g,b=f();assert(r==1 and g==.2 and b==.3)
 end)
 Check("C03-A3", function()
-    local source=Slice("Runtime/MSUF_FontRegistry.lua", "local FONT_LIST = {", "\ndo\n")
+    local source=Slice("Runtime/MSUF_Fonts.lua", "local FONT_LIST = {", "\ndo\n")
     local list=Compile(source.."return FONT_LIST")()
     for _,font in ipairs(list) do if font.key=="ARIALN" then assert(font.path=="Fonts\\ARIALN.TTF");return end end
     error("Arial absent")

@@ -43,6 +43,7 @@ State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
 State\MSUF_GuidedTour.lua
 Kernel\MSUF_Libs.lua
+Runtime\MSUF_Fonts.lua
 
 # ---------------------------------------------------------------
 # LOCALES
@@ -159,6 +160,7 @@ Features\Versioning\MSUF_ClientVersionWarning.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
+Runtime\MSUF_MediaRuntime.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
 # Client-language aura aliases, selected before Lua parsing; menu language is independent. WoW Forever (game type camelot) skips the Retail catalog and loads its own.
 Auras3\AliasData\MSUF_Auras3_AliasData_Common.lua [ExcludeLoadGameType camelot]

@@ -259,6 +259,11 @@ function World.New(root, backend, options)
         local name = path:match("([^/]+)$")
         local inCastbars = path:find("/Castbars/", 1, true) or path:find("/Kernel/", 1, true)
         if inCastbars and (BASE_FILES[name] or extra[name] or (options.pools and IsPoolFile(name))) then
+            if name == "MSUF_Castbars_Core.lua" then
+                local mediaFixture = assert(loadfile(root .. "/tools/tests/runtime_media_fixture.lua"))()
+                mediaFixture.LoadFonts(root, ns)
+                assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua"))("MidnightSimpleUnitFrames", ns)
+            end
             assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
             if name == "MSUF_Castbars_PublicAPI.lua" then Fixture.Seed(ns) end
             if ns.Castbars then Fixture.Bind(ns) end

@@ -11,6 +11,7 @@ end
 -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
 load("Kernel/MSUF_Require.lua")
 load("Kernel/MSUF_Libs.lua")
+load("Runtime/MSUF_Fonts.lua")
 load("UnitFrames/Engine/MSUF_UF_Shared.lua")
 local path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Bold.ttf"
 local count = 0

@@ -5,6 +5,7 @@ local root = arg[1]
 local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local registered = {}
 local LSM = {}
+function LSM.RegisterCallback() end
 function LSM:Fetch(kind, key, noDefault)
     if kind == "statusbar" then return registered[key] end
     return nil

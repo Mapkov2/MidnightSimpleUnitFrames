@@ -20,7 +20,6 @@ MSUF_EnsureDB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	Kernel
 MSUF_FocusKick_ApplyTimeTextFont	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua	a font apply can run while the core loads, before the castbars
 MSUF_GetEmpowerStageBlinkTime	optional-module	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	the empower castbar module loads on the Mainline TOC only; the Classic castbar page preview reads empowerStageBlinkTime directly
 MSUF_IsEmpowerStageBlinkEnabled	optional-module	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	the empower castbar module loads on the Mainline TOC only; the Classic castbar page preview reads empowerStageBlink directly
-MSUF_NormalizeFontKey	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua	Kernel/MSUF_Libs.lua resolves font paths before the font registry loads
 MSUF_OpenPage	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
 MSUF_OpenStandaloneOptionsWindow	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
 MSUF_RefreshStatusIconPacks	load-order	MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua	media registered while the core loads refreshes at once in combat
@@ -37,3 +36,5 @@ MSUF_UpdateAllFonts	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime
 MSUF_UpdateAllFonts_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateCastbarTextures	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh during the core load leaves the castbars to their own first apply
 MSUF_DB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	SavedVariables can be absent until profile initialization; Config reads them only at an apply/login boundary.
+MSUF_IsAvailableFontPath	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua	early Fonts resolution precedes registry metadata; look up at use time
+MSUF_GetConfiguredFontColor	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua	early Fonts settings precede Colors; default white until its owner loads

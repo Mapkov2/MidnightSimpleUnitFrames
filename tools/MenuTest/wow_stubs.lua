@@ -223,6 +223,7 @@ local mediaLibrary = {
         return {}
     end,
     Register = function() return true end,
+    RegisterCallback = function() end,
     IsValid = function() return true end,
 }
 
