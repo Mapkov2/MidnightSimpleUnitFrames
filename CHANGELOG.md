@@ -12,7 +12,7 @@
 ### Changes
 
 - Removed the feature, bug fix and performance counters from the login welcome message.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_startup","controlId":"menu2.opt.misc.global.setting.show.welcome.message","settingKey":"general.showWelcomeMessage","prepareKind":"","prepareValue":"","query":"show welcome message","label":"Show welcome message"} -->
 
 ## 6.50 - 2026-10-13
 

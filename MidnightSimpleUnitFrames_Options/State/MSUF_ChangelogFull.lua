@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "32859D0039F2CB400DC30FEAB7FDEB7070AC1D66604686BE4C9EAA6F1B7DAFFB",
+    sourceSha256 = "563E3985581B9B427A9A2DD69E28186C0BF6C62F2D2CBD563175D8223001EC72",
     currentVersion = "6.501",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
@@ -36,7 +36,14 @@ local data = {
                     bullets = {
                         {
                             text = "Removed the feature, bug fix and performance counters from the login welcome message.",
-                            linkless = true,
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show welcome message",
+                                label = "Show welcome message",
+                                sectionId = "misc_startup",
+                                controlId = "menu2.opt.misc.global.setting.show.welcome.message",
+                                settingKey = "general.showWelcomeMessage",
+                            },
                         },
                     },
                 },
