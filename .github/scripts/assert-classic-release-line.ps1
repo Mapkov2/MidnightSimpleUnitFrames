@@ -43,7 +43,8 @@ if ($releaseChannel.Channel -ceq "release") {
 
 $addons = @(
     "MidnightSimpleUnitFrames",
-    "MidnightSimpleUnitFrames_Options"
+    "MidnightSimpleUnitFrames_Options",
+    "MidnightSimpleUnitFrames_Locales"
 )
 $clientMatrixPath = Join-Path $RepositoryRoot "tools/classic-client-matrix.tsv"
 $clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath `

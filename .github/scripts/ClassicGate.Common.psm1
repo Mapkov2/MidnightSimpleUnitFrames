@@ -127,13 +127,13 @@ function Get-MsufTocEntries {
     #>
     param([Parameter(Mandatory = $true)][string]$Path, [string]$TextLocale = "", [string]$GameType = "")
     # An unspecified locale or game type inventories the union, for packaging
-    # and parity. A line may stack conditions, e.g.
-    # "file.lua [AllowLoadTextLocale deDE] [ExcludeLoadGameType camelot]".
+    # and parity. The client honors only the first bracket condition; trailing
+    # conditions are ignored. The Lua load-graph lint forbids stacking in shipped TOCs.
     foreach ($line in (Get-Content -LiteralPath $Path)) {
         $entry = $line.Trim()
         if (-not $entry -or $entry.StartsWith('#')) { continue }
         $selected = $true
-        while ($entry -match '^(?<file>.+?)\s+\[(?<kind>AllowLoadTextLocale|AllowLoadGameType|ExcludeLoadGameType)\s+(?<values>[A-Za-z, ]+)\]$') {
+        if ($entry -match '^(?<file>.+?)\s+\[(?<kind>AllowLoadTextLocale|AllowLoadGameType|ExcludeLoadGameType)\s+(?<values>[A-Za-z, ]+)\]') {
             $file, $kind = $Matches['file'], $Matches['kind']
             $values = @($Matches['values'] -split ',' | ForEach-Object { $_.Trim() })
             if ($kind -eq 'AllowLoadTextLocale' -and $TextLocale -and $TextLocale -notin $values) { $selected = $false }
@@ -162,9 +162,8 @@ function Get-MsufLoadGraph {
         -Duplicates Repeat emits every occurrence and fails on an include cycle,
         which is what a load-order comparison needs.
         -RequireFiles fails when a TOC entry or an XML reference names a file
-        that does not exist. Every condition stacked on a TOC line is read, so a
-        line such as "x.lua [AllowLoadTextLocale enUS] [ExcludeLoadGameType
-        camelot]" is a load of x.lua like any other.
+        that does not exist. Only the first bracket condition selects a TOC line,
+        matching the client. The Lua load-graph lint forbids stacked conditions.
         -VisitedXml shares the XML dedup set across calls, so a manifest that
         several TOCs include is walked once.
     #>
@@ -627,7 +626,7 @@ function Assert-MsufStagedLoadGraph {
         Every Lua and XML file a staged TOC reaches must exist in the stage.
         .DESCRIPTION
         Walks every TOC below -StageRoot with Get-MsufLoadGraph -RequireFiles, so
-        a TOC line with several load conditions counts like any other and a file
+        a TOC line is selected by its first condition, and a file
         a staging rule removed fails the build instead of shipping a broken load
         graph. A Lua or XML file whose name looks like tooling ships only when
         the load graph reaches it. Returns the TOC count and the reached count.

@@ -54,3 +54,6 @@ MidnightSimpleUnitFrames/docs/
 # Python bytecode cache from the Lua test harness tooling.
 __pycache__/
 *.pyc
+
+# Local worktree verification logs and transfer bundles.
+/.checks/

@@ -152,7 +152,7 @@ for _, client in ipairs({ false, { IsForever = false, IsRetail = true } }) do
     assert(count(out) == 1 and out[17] == true, "non-Forever client must keep the explicit-alias Retail expander")
 end
 
--- 3. WoW Forever: the full Mainline order, Retail catalog included.
+-- 3. WoW Forever: parsed Retail partitions return before touching its catalog.
 local namespace = newNamespace({ IsForever = true, IsRetail = true })
 local A3 = namespace.MSUF_Auras3
 loadRetailData(namespace)
@@ -174,10 +174,10 @@ end
 
 run(aliasPath("Auras3/AliasData", "Common"), namespace)
 run(aliasPath("Auras3/AliasData", "enUS"), namespace)
-assert(A3.AuraAliasCatalog.build == "12.1.0.69587", "Retail catalog precondition")
+assert(A3.AuraAliasCatalog == nil, "Forever must not execute the parsed Retail locale partition")
 loadForeverCatalog(namespace)
 local catalog = A3.AuraAliasCatalog
-assert(catalog.build == "Forever-" .. FOREVER_BUILD, "WoW Forever must replace the Retail catalog")
+assert(catalog.build == "Forever-" .. FOREVER_BUILD, "WoW Forever must own its catalog")
 assert(catalog.locale == "enUS", "only the active locale may load its Forever partition")
 assert(type(catalog.common) == "string" and type(catalog.localized) == "string",
     "the Forever catalog must provide common and localized blobs")

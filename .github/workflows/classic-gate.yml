@@ -25,6 +25,7 @@ on:
     paths:
       - "MidnightSimpleUnitFrames/**"
       - "MidnightSimpleUnitFrames_Options/**"
+      - "MidnightSimpleUnitFrames_Locales/**"
       - "tools/**"
       - ".github/**"
       - "VERSION"
@@ -35,6 +36,7 @@ on:
     paths:
       - "MidnightSimpleUnitFrames/**"
       - "MidnightSimpleUnitFrames_Options/**"
+      - "MidnightSimpleUnitFrames_Locales/**"
       - "tools/**"
       - ".github/**"
       - "VERSION"

@@ -16,3 +16,7 @@ MidnightSimpleUnitFrames_Options	line	## Dependencies: MidnightSimpleUnitFrames
 MidnightSimpleUnitFrames_Options	line	## LoadOnDemand: 1
 MidnightSimpleUnitFrames_Options	line	## X-MSUF-Options: 1
 MidnightSimpleUnitFrames_Options	absent	## SavedVariables:
+MidnightSimpleUnitFrames_Locales	line	## Dependencies: MidnightSimpleUnitFrames
+MidnightSimpleUnitFrames_Locales	line	## LoadOnDemand: 1
+MidnightSimpleUnitFrames_Locales	line	## X-MSUF-Locales: 1
+MidnightSimpleUnitFrames_Locales	absent	## SavedVariables:

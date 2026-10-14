@@ -24,7 +24,7 @@ from pathlib import Path
 
 root = Path(sys.argv[1]).resolve()
 SCRIPT = root / ".github" / "scripts" / "assert-classic-release-line.ps1"
-ADDONS = ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options")
+ADDONS = ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options", "MidnightSimpleUnitFrames_Locales")
 PAYLOADS = ("MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua",
             "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua")
 failures = []
@@ -73,11 +73,11 @@ def build(base, case):
     for addon in ADDONS:
         for suffix in suffixes:
             relative = "%s/%s_%s.toc" % (addon, addon, suffix)
-            text = (root / relative).read_text(encoding="utf-8")
+            text = (root / relative).read_bytes().decode("utf-8").replace("\r\n", "\n")
             use = case.get("stale_toc_version") if relative == case.get("stale_toc") else toc_version
             destination = target / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(VERSION_LINE.sub(lambda m: m.group(1) + use, text), encoding="utf-8", newline="")
+            destination.write_bytes(VERSION_LINE.sub(lambda m: m.group(1) + use, text).encode("utf-8"))
     (target / "VERSION").write_text(case.get("version_file", version) + "\n", encoding="utf-8", newline="")
     section = case.get("changelog_section", version)
     changelog = "# Changelog\n\n## %s - fixture\n- change\n" % section

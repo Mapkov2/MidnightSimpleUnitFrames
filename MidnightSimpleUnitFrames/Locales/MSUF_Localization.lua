@@ -142,6 +142,7 @@ local LocaleLoaders = {}
 local LocaleFinalizers = {}
 local LocaleCallbacks = {}
 local localeFinalized = false
+local localeFinalizing = false
 
 --- Defensive sink for third-party callers that try to register an inactive pack.
 --- Built-in packs return before registration, so this table never receives data.
@@ -216,10 +217,32 @@ local function Wipe(tableRef)
 end
 
 function MSUF.FinalizeLocale()
-    if localeFinalized then return MSUF.LOCALE end
-    localeFinalized = true
-
+    if localeFinalized or localeFinalizing then return MSUF.LOCALE end
+    localeFinalizing = true
     MSUF.LOCALE = NormalizeLocale(SavedLocale())
+    if not LocaleLoaders[MSUF.LOCALE] then
+        local requested = MSUF.LOCALE
+        local addons = C_AddOns
+        local loadAddon = addons and addons.LoadAddOn
+        MSUF.LocaleAddonName = "MidnightSimpleUnitFrames_Locales"
+        if InCombatLockdown() then
+            MSUF.LocaleAddonLoaded, MSUF.LocaleAddonLoadError = false, "combat"
+        elseif loadAddon then
+            MSUF.LocaleAddonLoaded, MSUF.LocaleAddonLoadError = loadAddon(MSUF.LocaleAddonName)
+        else
+            MSUF.LocaleAddonLoaded, MSUF.LocaleAddonLoadError = false, "unavailable"
+        end
+        if not LocaleLoaders[requested] then
+            local fallback = NormalizeLocale(CLIENT_LOCALE)
+            MSUF.LOCALE = LocaleLoaders[fallback] and fallback or "enUS"
+            print("MSUF: menu language " .. requested .. " unavailable; using " .. MSUF.LOCALE
+                .. ". Install/enable MidnightSimpleUnitFrames_Locales and /reload outside combat.")
+        end
+    end
+    -- Companion chunks register synchronously before this seal. Nested
+    -- ADDON_LOADED callbacks cannot finalize twice while they are loading.
+    localeFinalized = true
+    localeFinalizing = false
     Wipe(L)
     local meta = getmetatable(L)
     if IDENTITY_FREE_LOCALES[MSUF.LOCALE] and meta and meta.__newindex == nil then
@@ -251,9 +274,9 @@ if type(_G.CreateFrame) == "function" then
     end)
 end
 
---- All language packs follow this file directly in the main TOC. They retain
---- only loader bytecode during startup; FinalizeLocale executes the selected
---- pack and releases every inactive loader immediately afterward.
+--- Core TOCs select the client text locale. The companion registers every
+--- pack only when a saved menu language has no loader; finalization executes
+--- the selected pack and releases every inactive loader afterward.
 MSUF.LocaleAddonName = nil
 MSUF.LocaleAddonLoaded = nil
 MSUF.LocaleAddonLoadError = nil

@@ -28,6 +28,7 @@ from pathlib import Path
 root = Path(sys.argv[1]).resolve()
 CORE = "MidnightSimpleUnitFrames"
 OPTIONS = "MidnightSimpleUnitFrames_Options"
+LOCALES = "MidnightSimpleUnitFrames_Locales"
 REGENERATE = "lua tools/load-graph.lua --write"
 failures = []
 
@@ -79,6 +80,8 @@ def build(base):
                      "Auras3\\AliasData\\Midnight.lua [ExcludeLoadGameType camelot]"]
         write(base, "%s/%s_%s.toc" % (CORE, CORE, suffix), toc(core))
         write(base, "%s/%s_%s.toc" % (OPTIONS, OPTIONS, suffix), toc(["Menu\\Menu.lua"]))
+        write(base, "%s/%s_%s.toc" % (LOCALES, LOCALES, suffix), toc(["..\\" + CORE + "\\Locales\\enUS.lua"]))
+    write(base, CORE + "/Locales/enUS.lua", "-- shared locale fixture\n")
     write(base, CORE + "/Embeds/Elements.xml",
           '<Ui><!-- <Script file="../Ghost.lua"/> --><Script file="../Elements/Health.lua"/>'
           '<Script file="../Elements/Power.lua"/></Ui>')
@@ -181,6 +184,10 @@ try:
 
     # 3. Invariants: the tool refuses to bless, and --check reports, a graph that breaks one.
     cases = [
+        ("stacked TOC conditions", CORE + "/MidnightSimpleUnitFrames_Mainline.toc",
+         "Game\\Shared\\Initialize.lua\n",
+         "Game\\Shared\\Initialize.lua [AllowLoadTextLocale enUS] [AllowLoadGameType camelot]\n",
+         "stacked TOC conditions: only the first is honored"),
         ("Midnight loading a Classic tree", CORE + "/MidnightSimpleUnitFrames_Mainline.toc",
          "Game\\Shared\\Initialize.lua\n", "Game\\Shared\\Initialize.lua\nGame\\Classic\\Initialize.lua\n",
          "Mainline (%s, any game type) loads Classic-only code" % CORE),

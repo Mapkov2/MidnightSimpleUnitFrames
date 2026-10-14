@@ -20,97 +20,43 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local all = Manifest.Paths(root, suffix)
     for _, locale in ipairs(locales) do
         local selected = Manifest.Paths(root, suffix, locale, GAME_TYPES[client])
-        local bytes, aliases, menuLocales, index = 0, {}, 0, {}
+        local bytes, aliases, index = 0, {}, {}
         for i, path in ipairs(selected) do
             -- Counted with LF line ends: the shipped package holds the LF blobs,
             -- and a CRLF checkout (core.autocrlf) must not read as growth.
             bytes = bytes + #(Read(path):gsub("\r\n", "\n"))
             index[path] = i
             if path:find("/AliasData/", 1, true) then aliases[#aliases + 1] = path end
-            if path:match("/Locales/%a%a%u%u%.lua$") then menuLocales = menuLocales + 1 end
             assert(not path:find("_Options/", 1, true), "optional UI was added to startup")
         end
-        assert(menuLocales == 12, client .. ": client locale restricted saved menu language")
-        -- A tripwire for large startup additions (a whole catalog or the Options
-        -- addon), not for ordinary growth: every pack carries each new menu label.
-        -- 2026-10-01: 16,000,000 -> 16,050,000 for the review fixes plus the
-        -- restored options (largest selection koKR/standard 16,004,468).
-        -- 2026-10-02: 16,050,000 -> 16,150,000 for the wave-2 quality splits
-        -- (Edit Mode, engine and class power modules: file headers and imports)
-        -- plus translated group and Edit Mode feedback; no catalog was added.
-        -- 2026-10-02 (wave 4, W4-C2): 16,150,000 -> 16,200,000 and 14,000,000 ->
-        -- 14,050,000 for about 49 KB of translations: the engine and state chat
-        -- lines, key binding labels, unit tooltip and status words in the ten
-        -- translated packs (every pack is parsed at startup); no catalog was added.
-        -- 2026-10-03: bytes are counted with LF line ends (checkout-independent);
-        -- the LF tree measured Mainline 15,979,430 and Vanilla 13,830,064.
-        -- 2026-10-04: complete menu translations add about 503 KB across twelve
-        -- packs; raise only this source-size tripwire by that translation budget.
-        -- 2026-10-09 (rc1 E): 16,710,000 -> 16,770,000 and 14,560,000 ->
-        -- 14,620,000 for about 54 KB of aura filter labels and tooltips in the
-        -- twelve packs (largest selections Mainline 16,709,048, TBC 14,592,928);
-        -- no catalog was added.
-        -- 2026-10-09 (6.50 changelog): 16,770,000 -> 16,860,000 and 14,620,000 ->
-        -- 14,710,000: the core's compact changelog (State/MSUF_Changelog.lua) now
-        -- carries the full 6.5 notes with their menu links as the 6.50 entry,
-        -- about 82 KB more (largest selections Mainline 16,807,225, TBC 14,690,089);
-        -- no catalog was added.
-        -- 2026-10-10 (6.50 arena PvP trinket): 16,860,000 -> 16,880,000 and
-        -- 14,710,000 -> 14,730,000 for the trinket placement runtime, its preview and
-        -- four menu strings in the twelve packs (about 12 KB); no catalog was added.
-        -- 2026-10-10 (fixed portrait dragon artwork): Classic 14,730,000 ->
-        -- 14,734,000 for 3,637 LF bytes of two labels/help keys across twelve packs
-        -- and the fixed-art runtime flag/branch. TBC measured 14,727,732 before,
-        -- 14,731,369 after; startup file counts are unchanged; no catalog added.
-        -- 2026-10-10 (Forever cursor-free unit menus): Classic 14,734,000 ->
-        -- 14,740,000 for 5,076 LF bytes: the CLICK binding owner in
-        -- Kernel/MSUF_Keybinds.lua and three binding labels in the twelve packs;
-        -- the menu runtime itself is Forever-only; no catalog was added.
-        -- 2026-10-11 (resource visibility): Classic 14,740,000 -> 14,765,000
-        -- for the event-driven resource visibility owner, its profile sync keys
-        -- and three translated labels/tooltips in twelve packs (about 23 KB).
-        -- No Options code or catalog was added to startup.
-        -- 2026-10-11 (raid-trace perf round): Mainline 16,880,000 -> 16,890,000
-        -- for 3,717 LF bytes of runtime code: the combat-end raid-group label
-        -- replay, the once-per-lane aura signature builder and the PvP-only arena
-        -- cooldown subscription (largest selection koKR 16,877,115 before,
-        -- 16,880,832 after); no catalog or Options code was added.
-        -- 2026-10-12: rectangular aura geometry and one translated height control
-        -- add under 5 KB to Classic startup; no catalog or Options code added.
-        -- 2026-10-13 (delete several profiles): Mainline 16,890,000 -> 16,905,000
-        -- and Classic 14,770,000 -> 14,785,000 for 15 labels/prompts in the twelve
-        -- packs plus MSUF_DeleteProfiles (16,626 LF bytes; largest selection koKR
-        -- 16,883,294 -> 16,899,920, TBC/enUS 14,766,022 -> 14,782,648). The list
-        -- itself is Options code; no catalog was added.
-        -- 2026-10-13 (7.0 wave-1 bug fixes): Mainline 16,905,000 -> 16,925,000 and
-        -- Classic 14,785,000 -> 14,805,000, one bounded allowance for the wave-1 fixes
-        -- (combat-deferred spawn, secret role reads, empower interrupts, spec refresh
-        -- coalescing measured TBC 14,785,456 and Mainline 16,902,728; the remaining
-        -- wave-1 packages draw on the rest). Wave 2 removes dead code and must bring
-        -- both selections back under the 6.50 values above; no catalog was added.
-        -- W1-2 uses 11,946 LF bytes of this shared allowance on Mainline/Forever
-        -- and 1,988 on Classic; measured totals are Mainline/koKR 16,914,674 and
-        -- TBC/enUS 14,787,444. No additional package budget increase is needed.
-        -- 2026-10-13 (7.0 wave 2 duty met): kernel/media/UF-library dead code removed and the
-        -- compact changelog moved to the Options addon (largest selections Mainline koKR
-        -- 16,761,021, TBC 14,636,117), so the wave-1 allowance is withdrawn and both limits
-        -- return to the 6.50 values 16,905,000 / 14,785,000; no catalog was added.
-        -- 2026-10-13 (7.0 menu translations): Mainline 16,905,000 -> 16,980,000 and
-        -- Classic 14,785,000 -> 14,855,000 for +202,506 LF bytes for 280 translated keys
-        -- in ten packs (largest selections Mainline koKR 16,971,902, TBC 14,846,998); no
-        -- catalog was added. Locale-selective loading is being investigated as a
-        -- follow-up to win this back.
-        -- 2026-10-14 (7.0 wave 4 engine structure): Mainline 16,980,000 -> 17,010,000 and Classic
-        -- 14,855,000 -> 14,880,000 for the route/decorator, Auras3 host and lifecycle modules
-        -- (largest selections Mainline 16,990,107, TBC 14,862,303). Temporary: locale-selective
-        -- loading (W2-L, about 7.5 MB less per client) replaces these limits once proven in game.
-        -- 2026-10-14 (7.0 wave 3 state ledger + media owners): Mainline 17,010,000 -> 17,030,000 and
-        -- Classic 14,880,000 -> 14,900,000 (largest selections Mainline 17,010,029, TBC 14,881,561).
-        -- Still temporary: locale-selective loading (W2-L) removes about 7.5 MB per client.
-        assert(bytes < (suffix == "Mainline" and 17030000 or 14900000),
+        local companion = Manifest.Paths(root, suffix, nil, nil, "MidnightSimpleUnitFrames_Locales")
+        local available = {}
+        for _, path in ipairs(companion) do
+            local pack = assert(path:match("/Locales/(%a%a%u%u)%.lua$"), "companion contains non-pack code")
+            assert(not available[pack], "duplicate companion pack")
+            available[pack] = true
+        end
+        local menuLocales = 0
+        for _ in pairs(available) do menuLocales = menuLocales + 1 end
+        assert(menuLocales == 12, client .. ": companion restricted saved menu language")
+        local expectedPack = locale == "ptPT" and "enUS" or locale
+        local startupPacks = 0
+        for _, path in ipairs(selected) do
+            local pack = path:match("/Locales/(%a%a%u%u)%.lua$")
+            if pack then
+                assert(pack == expectedPack or (locale == "enGB" and pack == "enUS"), "inactive menu pack parsed")
+                startupPacks = startupPacks + 1
+            end
+        end
+        assert(startupPacks == (locale == "xxXX" and 0 or locale == "enGB" and 2 or 1), "wrong startup pack count")
+        -- 2026-10-14: locale-selective core TOCs replace the temporary all-pack
+        -- allowances. Measured worst LF selections: Mainline/ruRU 9,820,168,
+        -- Forever/ruRU 9,460,798, TBC/ruRU 7,707,589. About 30 KB headroom.
+        -- The companion's twelve packs remain available for saved menu choices.
+        assert(bytes < (suffix == "Mainline" and 9850000 or 7740000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
-        assert(#aliases == perCatalog * CATALOGS[client],
+        assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
             client .. ": wrong count of selected alias files for " .. locale)
         local base = (root == "." and "" or root .. "/") .. "MidnightSimpleUnitFrames/"
         assert(index[base .. "Game/Shared/Initialize.lua"] < index[base .. "Kernel/MSUF_Bootstrap.lua"],
@@ -118,12 +64,8 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         local resolver = index[base .. "Auras3/MSUF_Auras3_AuraAliases.lua"]
         assert((resolver ~= nil) == (CATALOGS[client] > 0), client .. ": catalog resolver presence is wrong")
         for _, path in ipairs(aliases) do assert(index[path] < resolver, "data loaded after resolver") end
-        if client == "Forever" then
-            for _, path in ipairs(aliases) do
-                assert(path:find("/Game/Forever/Auras/AliasData/", 1, true),
-                    "WoW Forever must not parse the Retail catalog: " .. path)
-            end
-        end
+        -- The locale-gated Retail partition also parses on camelot: its Lua
+        -- guard returns before touching the Forever catalog (first condition only).
 
         local expected = locale == "enGB" and "enUS" or locale == "ptPT" and "ptBR" or locale
         for _, path in ipairs(aliases) do
@@ -131,7 +73,7 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(pack == "Common" or pack == expected, client .. ": wrong locale partition")
         end
 
-        -- Only inactive alias files and, outside WoW Forever, its gamepad files
+        -- Only inactive alias/menu packs and, outside WoW Forever, gamepad files
         -- ([AllowLoadGameType camelot]) may disappear; every other script retains
         -- the exact union order, including the final RuntimeContracts chunk.
         local at = 1
@@ -140,7 +82,8 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                 assert(selected[at] == path, "startup order changed for " .. path)
                 at = at + 1
             else
-                assert(path:find("/AliasData/", 1, true)
+                assert(path:match("/Locales/%a%a%u%u%.lua$")
+                    or path:find("/AliasData/", 1, true)
                     or (GAME_TYPES[client] ~= "camelot" and path:find("/Game/Forever/Pad", 1, true)),
                     "lost non-alias startup file: " .. path)
             end

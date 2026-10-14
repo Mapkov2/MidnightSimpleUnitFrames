@@ -1,0 +1,24 @@
+## Interface: 20506
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Locales |cff9b9b9b(TBC)|r
+## Notes: Load-on-demand menu language packs for Midnight Simple Unit Frames.
+## Author: Mapko
+## Category: Combat
+## Version: 6.50
+## X-MSUF-Client: TBC
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## Dependencies: MidnightSimpleUnitFrames
+## LoadOnDemand: 1
+## X-MSUF-Locales: 1
+
+..\MidnightSimpleUnitFrames\Locales\enUS.lua
+..\MidnightSimpleUnitFrames\Locales\enGB.lua
+..\MidnightSimpleUnitFrames\Locales\deDE.lua
+..\MidnightSimpleUnitFrames\Locales\esES.lua
+..\MidnightSimpleUnitFrames\Locales\esMX.lua
+..\MidnightSimpleUnitFrames\Locales\frFR.lua
+..\MidnightSimpleUnitFrames\Locales\itIT.lua
+..\MidnightSimpleUnitFrames\Locales\koKR.lua
+..\MidnightSimpleUnitFrames\Locales\ptBR.lua
+..\MidnightSimpleUnitFrames\Locales\ruRU.lua
+..\MidnightSimpleUnitFrames\Locales\zhCN.lua
+..\MidnightSimpleUnitFrames\Locales\zhTW.lua

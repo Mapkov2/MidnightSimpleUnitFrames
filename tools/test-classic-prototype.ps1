@@ -612,7 +612,8 @@ if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
 
 $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames"; Base = "MidnightSimpleUnitFrames" },
-    @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" }
+    @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" },
+    @{ Folder = "MidnightSimpleUnitFrames_Locales"; Base = "MidnightSimpleUnitFrames_Locales" }
 )
 # tools/classic-addon-tombstones.txt names the addons this tree retired and the
 # files of the shipped addons that retired with them. The manifest is proven

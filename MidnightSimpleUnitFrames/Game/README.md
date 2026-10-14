@@ -41,12 +41,20 @@ payloads and matches ranked and cast-versus-aura IDs by aura name at runtime.
 The Mainline core TOC places the Retail and Forever catalogs (common part plus
 client-language partition) between `MSUF_UFCore_Elements.xml` and
 `MSUF_UFCore_Auras.xml`. Native TOC `AllowLoadTextLocale` conditions skip
-inactive alias partitions before Lua parsing, and `[ExcludeLoadGameType
-camelot]` keeps the Retail catalog off WoW Forever; the Forever files keep
-their runtime guard. Menu translations remain independent: all twelve still
-load for the saved menu language. Gate/package inventories include all locale
-and game-type branches, while boot simulations filter by client locale and
-game type.
+inactive alias partitions before Lua parsing. Retail 12.x honors only the first
+bracket condition (owner probe, 2026-10-14); the load-graph lint rejects stacking.
+The Retail common catalog keeps its camelot TOC exclusion. Its client-language
+partition still parses on Forever, but guards the catalog in Lua; Forever retains
+its own catalog. Menu translations use client-locale conditions on every core TOC.
+Menu auto resolution preserves the baseline: `ptPT` loads `enUS`, while aliases retain `ptBR`.
+Saved menu language remains independent: `MidnightSimpleUnitFrames_Locales` is a
+LoadOnDemand companion with a core dependency and all twelve packs, reused by
+relative path. Finalization loads it only for an absent requested loader, outside
+combat, before sealing registration. Missing/disabled falls back to the client
+language/English with one hint; ignoring locale directives safely loads all packs.
+The release package and identity/load-graph pins include its four client TOCs.
+Gate/package inventories include all locale and game-type branches, while boot
+simulations filter by client locale and game type.
 
 `tools/classic-client-matrix.tsv` maps each client to the branch of the local
 Blizzard UI source mirror (`_local_workflows/references/wow-ui-source`) that

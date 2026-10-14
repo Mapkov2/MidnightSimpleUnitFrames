@@ -481,7 +481,20 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Finalize.lua
-@ Forever MidnightSimpleUnitFrames (329 files)
+@ Mainline MidnightSimpleUnitFrames_Locales (12 files)
+MidnightSimpleUnitFrames/Locales/enUS.lua
+MidnightSimpleUnitFrames/Locales/enGB.lua
+MidnightSimpleUnitFrames/Locales/deDE.lua
+MidnightSimpleUnitFrames/Locales/esES.lua
+MidnightSimpleUnitFrames/Locales/esMX.lua
+MidnightSimpleUnitFrames/Locales/frFR.lua
+MidnightSimpleUnitFrames/Locales/itIT.lua
+MidnightSimpleUnitFrames/Locales/koKR.lua
+MidnightSimpleUnitFrames/Locales/ptBR.lua
+MidnightSimpleUnitFrames/Locales/ruRU.lua
+MidnightSimpleUnitFrames/Locales/zhCN.lua
+MidnightSimpleUnitFrames/Locales/zhTW.lua
+@ Forever MidnightSimpleUnitFrames (340 files)
 MidnightSimpleUnitFrames/Libs/LibStub/LibStub.lua
 MidnightSimpleUnitFrames/Libs/WagoAnalyticsShim/Shim.lua
 MidnightSimpleUnitFrames/Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
@@ -659,6 +672,17 @@ MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_enUS.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_deDE.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_frFR.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_esES.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_esMX.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_itIT.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_ptBR.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_ruRU.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_koKR.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_zhCN.lua
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_zhTW.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua
@@ -953,6 +977,19 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Finalize.lua
+@ Forever MidnightSimpleUnitFrames_Locales (12 files)
+MidnightSimpleUnitFrames/Locales/enUS.lua
+MidnightSimpleUnitFrames/Locales/enGB.lua
+MidnightSimpleUnitFrames/Locales/deDE.lua
+MidnightSimpleUnitFrames/Locales/esES.lua
+MidnightSimpleUnitFrames/Locales/esMX.lua
+MidnightSimpleUnitFrames/Locales/frFR.lua
+MidnightSimpleUnitFrames/Locales/itIT.lua
+MidnightSimpleUnitFrames/Locales/koKR.lua
+MidnightSimpleUnitFrames/Locales/ptBR.lua
+MidnightSimpleUnitFrames/Locales/ruRU.lua
+MidnightSimpleUnitFrames/Locales/zhCN.lua
+MidnightSimpleUnitFrames/Locales/zhTW.lua
 @ Vanilla MidnightSimpleUnitFrames (283 files)
 MidnightSimpleUnitFrames/Libs/LibStub/LibStub.lua
 MidnightSimpleUnitFrames/Libs/WagoAnalyticsShim/Shim.lua
@@ -1378,6 +1415,19 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Finalize.lua
+@ Vanilla MidnightSimpleUnitFrames_Locales (12 files)
+MidnightSimpleUnitFrames/Locales/enUS.lua
+MidnightSimpleUnitFrames/Locales/enGB.lua
+MidnightSimpleUnitFrames/Locales/deDE.lua
+MidnightSimpleUnitFrames/Locales/esES.lua
+MidnightSimpleUnitFrames/Locales/esMX.lua
+MidnightSimpleUnitFrames/Locales/frFR.lua
+MidnightSimpleUnitFrames/Locales/itIT.lua
+MidnightSimpleUnitFrames/Locales/koKR.lua
+MidnightSimpleUnitFrames/Locales/ptBR.lua
+MidnightSimpleUnitFrames/Locales/ruRU.lua
+MidnightSimpleUnitFrames/Locales/zhCN.lua
+MidnightSimpleUnitFrames/Locales/zhTW.lua
 @ Mists MidnightSimpleUnitFrames (281 files)
 MidnightSimpleUnitFrames/Libs/LibStub/LibStub.lua
 MidnightSimpleUnitFrames/Libs/WagoAnalyticsShim/Shim.lua
@@ -1801,6 +1851,19 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Finalize.lua
+@ Mists MidnightSimpleUnitFrames_Locales (12 files)
+MidnightSimpleUnitFrames/Locales/enUS.lua
+MidnightSimpleUnitFrames/Locales/enGB.lua
+MidnightSimpleUnitFrames/Locales/deDE.lua
+MidnightSimpleUnitFrames/Locales/esES.lua
+MidnightSimpleUnitFrames/Locales/esMX.lua
+MidnightSimpleUnitFrames/Locales/frFR.lua
+MidnightSimpleUnitFrames/Locales/itIT.lua
+MidnightSimpleUnitFrames/Locales/koKR.lua
+MidnightSimpleUnitFrames/Locales/ptBR.lua
+MidnightSimpleUnitFrames/Locales/ruRU.lua
+MidnightSimpleUnitFrames/Locales/zhCN.lua
+MidnightSimpleUnitFrames/Locales/zhTW.lua
 @ TBC MidnightSimpleUnitFrames (283 files)
 MidnightSimpleUnitFrames/Libs/LibStub/LibStub.lua
 MidnightSimpleUnitFrames/Libs/WagoAnalyticsShim/Shim.lua
@@ -2226,3 +2289,16 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Finalize.lua
+@ TBC MidnightSimpleUnitFrames_Locales (12 files)
+MidnightSimpleUnitFrames/Locales/enUS.lua
+MidnightSimpleUnitFrames/Locales/enGB.lua
+MidnightSimpleUnitFrames/Locales/deDE.lua
+MidnightSimpleUnitFrames/Locales/esES.lua
+MidnightSimpleUnitFrames/Locales/esMX.lua
+MidnightSimpleUnitFrames/Locales/frFR.lua
+MidnightSimpleUnitFrames/Locales/itIT.lua
+MidnightSimpleUnitFrames/Locales/koKR.lua
+MidnightSimpleUnitFrames/Locales/ptBR.lua
+MidnightSimpleUnitFrames/Locales/ruRU.lua
+MidnightSimpleUnitFrames/Locales/zhCN.lua
+MidnightSimpleUnitFrames/Locales/zhTW.lua

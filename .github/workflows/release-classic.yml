@@ -151,7 +151,7 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
-      - name: Build and validate Classic multi-client package
+      - name: Build and validate core, Options and Locales multi-client package
         shell: pwsh
         run: |
           & "./.github/scripts/build_classic_release_package.ps1" `

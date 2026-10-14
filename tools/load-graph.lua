@@ -17,10 +17,11 @@
 --      mention (a line gated to a third game type is still Mainline code): loading one would
 --      already cost Midnight start-up time.
 --   2. No Classic client loads the Retail Auras3 runtime; Classic has its own aura backend.
---   3. No client loads one Lua file twice, across the core and the Options addon.
+--   3. No client loads one Lua file twice, except core locale packs deliberately
+--      referenced again by the companion for a missing saved-language loader.
 local LOCK = "tools/load-graph.lock"
 local MATRIX = "tools/classic-client-matrix.tsv"
-local ADDONS = { "MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options" }
+local ADDONS = { "MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options", "MidnightSimpleUnitFrames_Locales" }
 local REGENERATE = "lua tools/load-graph.lua --write"
 
 -- Files of the Retail Auras3 runtime that a Classic client must never load.
@@ -86,6 +87,8 @@ local function Walk(clients)
     local sections, unions, seen = {}, {}, {}
     for _, client in ipairs(clients) do
         for _, addon in ipairs(ADDONS) do
+            local toc = addon .. "/" .. addon .. "_" .. client.flavor .. ".toc"
+            Manifest.LintToc(assert(ReadAll(toc), toc .. " not found"), toc)
             local paths = Manifest.Paths(".", client.flavor, nil, client.gameType, addon)
             sections[#sections + 1] = { view = client.view, addon = addon, paths = paths, client = client }
             local key = client.flavor .. " " .. addon
@@ -133,7 +136,12 @@ local function CheckInvariants(clients, sections, unions)
                 problems[#problems + 1] = string.format("%s (%s) loads the Retail aura runtime %s; Classic selects its own aura backend",
                     client.view, section.addon, path)
             end
-            if loadedBy[client.view][path] then
+            -- The companion deliberately reuses the core's conditional packs.
+            -- It loads only when a requested pack was absent from the core.
+            local sharedPack = section.addon == "MidnightSimpleUnitFrames_Locales"
+                and path:match("^MidnightSimpleUnitFrames/Locales/%a%a%u%u%.lua$")
+                and loadedBy[client.view][path] == "MidnightSimpleUnitFrames"
+            if loadedBy[client.view][path] and not sharedPack then
                 problems[#problems + 1] = string.format("%s loads %s twice (%s and %s)", client.view, path,
                     loadedBy[client.view][path], section.addon)
             end
@@ -251,4 +259,4 @@ if locked ~= rendered then
         .. table.concat(report, "\n") .. "\nRegenerate it and review the diff: " .. REGENERATE)
 end
 print(string.format("Load-graph lock: current (%d clients x %d addons, %d loaded Lua paths); Mainline and Forever load no "
-    .. "Classic-only code, Classic loads no Retail aura runtime, no file loads twice", #clients, #ADDONS, total))
+    .. "Classic-only code, Classic loads no Retail aura runtime, only companion locale packs may be shared", #clients, #ADDONS, total))

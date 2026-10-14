@@ -12,7 +12,8 @@ game-type condition, were neither reached nor reported missing.
    reference inside an XML comment is no load; a tooling-named file nothing
    loads fails.
 2. The real core Mainline TOC: Get-MsufLoadGraph -RequireFiles reaches every
-   entry the TOC lists, the stacked-condition alias catalog lines included.
+   entry, and no shipped line stacks conditions. A contradictory fixture
+   proves the second condition cannot alter the first condition's selection.
 3. The packager calls the shared function and keeps no walker of its own.
 
 Usage: python tools/tests/staged_load_graph_smoke.py <repository root>
@@ -108,6 +109,9 @@ foreach ($line in [IO.File]::ReadAllLines($CasesPath)) {
 foreach ($path in (Get-MsufLoadGraph -Path $CoreToc -Duplicates Skip -RequireFiles).AllPaths) {
     [Console]::Out.WriteLine("REACHED`t" + $path)
 }
+$firstStage = ([IO.File]::ReadAllLines($CasesPath)[0].Split([char]9))[1]
+$selected = @(Get-MsufTocEntries -Path (Join-Path $firstStage "Core/Core_Mainline.toc") -TextLocale "enUS" -GameType "camelot")
+[Console]::Out.WriteLine("SEMANTICS`t" + ($selected -contains 'Data\Alias_enUS.lua'))
 """
 
 
@@ -125,12 +129,16 @@ def run_powershell(scratch, names):
                               "-CoreToc", str(CORE_TOC)],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     verdicts, reached = {}, set()
+    semantics = False
     for line in process.stdout.decode("utf-8", "replace").splitlines():
         fields = line.split("\t")
         if fields[0] == "CASE" and len(fields) >= 3:
             verdicts[fields[1]] = fields[2:]
         elif fields[0] == "REACHED" and len(fields) == 2:
             reached.add(os.path.normcase(os.path.normpath(fields[1].replace("\\", "/"))))
+        elif fields[0] == "SEMANTICS" and len(fields) == 2:
+            semantics = fields[1] == "True"
+    check(semantics, "PowerShell honors the first locale condition and ignores the contradictory second game-type condition")
     if len(verdicts) != len(names) or not reached:
         check(False, "PowerShell answered every fixture and walked the core TOC (exit %d): %s" % (
             process.returncode, process.stderr.decode("utf-8", "replace").strip()[:600]))
@@ -172,7 +180,7 @@ for line in CORE_TOC.read_text(encoding="utf-8").splitlines():
     listed.append(entry)
 stacked = [line for line in CORE_TOC.read_text(encoding="utf-8").splitlines()
            if line.count("[") >= 2 and not line.startswith("#")]
-check(len(stacked) >= 10, "the core Mainline TOC still carries its stacked-condition alias catalog lines (%d)" % len(stacked))
+check(len(stacked) == 0, "the core Mainline TOC carries no stacked conditions (%d)" % len(stacked))
 unreached = [entry for entry in listed
              if os.path.normcase(os.path.normpath(str(CORE_TOC.parent / entry.replace("\\", "/")))) not in reached]
 check(reached and not unreached, "the shared walker reaches every entry the core Mainline TOC lists%s" % (

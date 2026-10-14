@@ -130,6 +130,7 @@ foreach ($case in $cases) {
     }
 }
 # The real pin against the real TOCs: it holds, and removing any pinned line from any client fails.
+$folders += "MidnightSimpleUnitFrames_Locales"
 $rows = Import-MsufTocIdentity -Path (Join-Path $RepoRoot "tools/classic-toc-identity.tsv") -Addons $folders
 $matrix = @(Import-MsufClientMatrix -Path (Join-Path $RepoRoot "tools/classic-client-matrix.tsv"))
 foreach ($client in $matrix) {
@@ -187,9 +188,9 @@ try:
         real = results[len(CASES):]
         passing = [r for r in real if r[0].endswith("passes the pin")]
         removed = [r for r in real if " without [" in r[0]]
-        check(len(passing) == 8 and all(r[1] == "PASS" for r in passing),
-              "the real pin holds for the core and Options TOC of all four clients (%d checked)" % len(passing))
-        check(len(removed) >= 8 * 3 and all(r[1] == "FAIL" and "tools/classic-toc-identity.tsv pins it" in r[2] for r in removed),
+        check(len(passing) == 12 and all(r[1] == "PASS" for r in passing),
+              "the real pin holds for core, Options and Locales TOCs of all four clients (%d checked)" % len(passing))
+        check(len(removed) >= 12 * 3 and all(r[1] == "FAIL" and "tools/classic-toc-identity.tsv pins it" in r[2] for r in removed),
               "removing any pinned line from any real TOC fails (%d removals checked)" % len(removed))
 finally:
     remove_tree(scratch)

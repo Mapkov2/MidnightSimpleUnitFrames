@@ -14,7 +14,8 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $expectedProjectId = "1384660"
 $addonNames = @(
     "MidnightSimpleUnitFrames",
-    "MidnightSimpleUnitFrames_Options"
+    "MidnightSimpleUnitFrames_Options",
+    "MidnightSimpleUnitFrames_Locales"
 )
 $clientMatrixPath = Join-Path $repoRoot "tools/classic-client-matrix.tsv"
 $clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath)
@@ -150,8 +151,8 @@ Set-Alias -Name Test-ToolingNameToken -Value Test-MsufToolingLeaf
 
 # Every Lua and XML file a staged TOC reaches must exist in the stage, so a
 # file removed by a staging rule fails the build instead of shipping a broken
-# load graph. The shared walker reads every condition stacked on a TOC line
-# (the alias catalog lines carry a locale and a game-type condition). A Lua or
+# load graph. The load-graph lint rejects stacked TOC conditions because the
+# client honors only the first condition. A Lua or
 # XML file whose name looks like tooling ships only when the load graph reaches
 # it; otherwise the build stops and asks for a decision.
 function Assert-StagedLoadGraph {

@@ -101,17 +101,25 @@ AuraContainer path cannot read aura names at runtime. The core Mainline TOC
 places them between `MSUF_UFCore_Elements.xml` and `MSUF_UFCore_Auras.xml`
 (the shared resolver `Auras3/MSUF_Auras3_AuraAliases.lua` loads there). Native
 `AllowLoadTextLocale` TOC conditions exclude inactive partitions before Lua
-parsing, and the Retail catalog lines also carry `[ExcludeLoadGameType
-camelot]`, so WoW Forever parses only its own catalog (about 1.4 MB less at
-every login). The Forever files keep their `MSUF.Client.IsForever` runtime
-guard for every other Mainline game type. Blizzard's own Forever TOCs stack
-conditions on one line the same way (`[AllowLoadTextLocale ruRU] [AllowLoad
-glue] [ExcludeLoadGameType camelot]`); a client that ignored the game-type
-condition would simply load both catalogs, as before. Regenerate the Forever
-catalog with `.github/scripts/generate_classic_aura_alias_catalog.py` from
-wago.tools `SpellName` CSV exports, one `<locale>/SpellName.csv` per locale.
-`enGB` shares `enUS` and `ptPT` shares `ptBR`. All twelve menu translations
-still load because saved menu language is independent of client language.
+parsing. The owner verified on Retail 12.x (2026-10-14) that only the first
+bracket condition on a TOC line is honored. `tools/load-graph.lua` rejects
+stacked conditions. The Retail common catalog keeps its camelot exclusion;
+its localized partitions guard Forever in Lua before touching the catalog.
+Forever therefore parses the client-language Retail partition as well as its
+own data, while retaining only its own catalog. The Forever files keep their
+`MSUF.Client.IsForever` guard for every other Mainline game type.
+Regenerate the Forever catalog with
+`.github/scripts/generate_classic_aura_alias_catalog.py` from wago.tools
+`SpellName` CSV exports, one `<locale>/SpellName.csv` per locale.
+Alias `enGB` shares `enUS` and `ptPT` shares `ptBR`.
+Core TOCs load the resolved client menu pack (`ptPT` uses `enUS`; `enGB` also gets `enUS`). Saved menu
+choices remain independent: finalization requests the LoadOnDemand companion
+`MidnightSimpleUnitFrames_Locales` when the selected loader is absent, before
+sealing registration. It reuses the twelve core pack files by relative path.
+A missing/disabled companion or combat falls back to the client pack/English
+with one chat hint and leaves the saved choice untouched. Classic directive
+support is unproven in game; ignoring it safely restores all-pack loading.
+The release packager includes all three addon folders and twelve suffixed TOCs.
 Gates and packages inventory the union of all locale and game-type branches;
 boot simulations select their actual client locale and, for WoW Forever, the
 camelot game type. `tools/tests/startup_locale_manifest_smoke.lua` checks all

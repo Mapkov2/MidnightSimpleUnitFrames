@@ -221,7 +221,6 @@ local results = {}
 local function Measure(case, fn)
     local ticks = 0
     local function Tick() ticks = ticks + 1 end
-    collectgarbage("collect")
     collectgarbage("stop")
     local kb = collectgarbage("count")
     debug.sethook(Tick, "", 1000)
@@ -233,6 +232,13 @@ local function Measure(case, fn)
 end
 
 -- Warm both directions once so first-use caches do not count.
+-- 2026-10-14: collect before warming, not before each measured shift. Selective
+-- locale loading reduces interned strings; collecting in every window shrank
+-- the VM string table and repeatedly charged its rehash to the same operation.
+-- Control: all-pack startup 23.4 KB, selective 26.0 KB with repeated collection;
+-- warming after collection gives 20.8 KB at the same 22k instructions. Caps stay.
+-- This measures warmed shifts, not the first operation after a full collection.
+collectgarbage("collect")
 UF.OnUnitChanged(frame3, "raid3", "raid4")
 UF.OnUnitChanged(frame3, "raid4", "raid3")
 local identityBefore = PrivatePathsOf(frame3)

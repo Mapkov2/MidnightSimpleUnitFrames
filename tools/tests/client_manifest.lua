@@ -10,9 +10,8 @@ local function normalize(path)
     end
     return prefix .. table.concat(parts, "/")
 end
--- Nil locale / game type inventories every branch; a value models the client
--- selection. A line may stack conditions ("x.lua [AllowLoadTextLocale deDE]
--- [ExcludeLoadGameType camelot]"); each is peeled off the end in turn.
+-- Nil locale / game type inventories every branch. The client honors only
+-- the first bracket condition; trailing conditions have no effect.
 local function Listed(values, name)
     for value in values:gmatch("%a+") do if value == name then return true end end
     return false
@@ -20,23 +19,31 @@ end
 function Manifest.TocReference(line, locale, gameType)
     line = line:match("^%s*(.-)%s*$")
     if line == "" or line:sub(1, 1) == "#" then return end
-    local selected = true
-    while true do
-        local file, kind, values = line:match("^(.-)%s+%[(%a+)%s+([^%]]+)%]$")
-        if not file then break end
-        if kind == "AllowLoadTextLocale" then
-            if locale ~= nil and not Listed(values, locale) then selected = false end
-        elseif kind == "AllowLoadGameType" then
-            if gameType ~= nil and not Listed(values, gameType) then selected = false end
-        elseif kind == "ExcludeLoadGameType" then
-            if gameType ~= nil and Listed(values, gameType) then selected = false end
-        else
-            error("unsupported TOC directive: " .. line)
-        end
-        line = file
+    local file, kind, values = line:match("^(.-)%s+%[(%a+)%s+([^%]]+)%]")
+    if not file then
+        assert(not line:find("[", 1, true), "unsupported TOC directive: " .. line)
+        return line
     end
-    assert(not line:find("[", 1, true), "unsupported TOC directive: " .. line)
-    if selected then return line end
+    if kind == "AllowLoadTextLocale" then
+        if locale ~= nil and not Listed(values, locale) then return end
+    elseif kind == "AllowLoadGameType" then
+        if gameType ~= nil and not Listed(values, gameType) then return end
+    elseif kind == "ExcludeLoadGameType" then
+        if gameType ~= nil and Listed(values, gameType) then return end
+    else
+        error("unsupported TOC directive: " .. line)
+    end
+    return file
+end
+function Manifest.LintToc(source, path)
+    local number = 0
+    for line in (source .. "\n"):gmatch("([^\n]*)\n") do
+        number = number + 1
+        if not line:match("^%s*#%s") then
+            local _, conditions = line:gsub("%[%a+%s+[^%]]+%]", "")
+            assert(conditions <= 1, path .. ":" .. number .. ": stacked TOC conditions: only the first is honored")
+        end
+    end
 end
 -- addon: the addon folder whose TOC is walked; the core addon when omitted.
 -- Returns { lua = ordered Lua loads, xml = XML manifests in first-visit order }. A Lua file
