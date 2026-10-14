@@ -104,7 +104,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 14,855,000 -> 14,880,000 for the route/decorator, Auras3 host and lifecycle modules
         -- (largest selections Mainline 16,990,107, TBC 14,862,303). Temporary: locale-selective
         -- loading (W2-L, about 7.5 MB less per client) replaces these limits once proven in game.
-        assert(bytes < (suffix == "Mainline" and 17010000 or 14880000),
+        -- 2026-10-14 (7.0 wave 3 state ledger + media owners): Mainline 17,010,000 -> 17,030,000 and
+        -- Classic 14,880,000 -> 14,900,000 (largest selections Mainline 17,010,029, TBC 14,881,561).
+        -- Still temporary: locale-selective loading (W2-L) removes about 7.5 MB per client.
+        assert(bytes < (suffix == "Mainline" and 17030000 or 14900000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
