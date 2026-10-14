@@ -698,3 +698,5 @@ clients+Forever	lua	tools/tests/group_name_update_smoke.lua	{root} {flavor}	Grou
 clients+Forever	lua	tools/tests/power_event_identity_smoke.lua	{root} {flavor}	Power event identity smoke failed: {flavor}
 clients+Forever	lua	tools/tests/locale_companion_boot_smoke.lua	{root} {flavor}	Locale companion client boot failed: {flavor}
 -	lua	tools/tests/toc_condition_semantics_smoke.lua	{root}	TOC first-condition semantics failed
+-	lua	tools/tests/suite_host_surface_contract_smoke.lua	{root} Mainline	Suite host surface contract: Mainline
+-	lua	tools/tests/suite_host_surface_contract_smoke.lua	{root} Forever	Suite host surface contract: Forever

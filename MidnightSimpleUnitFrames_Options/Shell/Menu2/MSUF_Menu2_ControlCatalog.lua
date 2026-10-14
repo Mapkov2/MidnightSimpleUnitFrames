@@ -496,7 +496,8 @@ local function InheritTabPreparation(widget, record)
     local prepare = function(self, target)
         if previous then
             if not previous(self, target) then return false end
-        elseif target.prepareKind ~= view.kind or target.prepareValue ~= view.value then return false end
+        elseif target ~= nil and (type(target) ~= "table"
+            or target.prepareKind ~= view.kind or target.prepareValue ~= view.value) then return false end
         for i = #views, 1, -1 do views[i].select(views[i].value) end
         return true
     end

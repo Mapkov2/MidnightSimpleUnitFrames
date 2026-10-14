@@ -25,25 +25,92 @@ BINDING_NAME_MSUF_VARIANT_7	binding	MidnightSimpleUnitFrames/Kernel/MSUF_Keybind
 BINDING_NAME_MSUF_VARIANT_8	binding	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:56	blizzard:Bindings:56	0	0	blizzard-contract	all	dynamic
 MSUF	table	MidnightSimpleUnitFrames/Game/Shared/Initialize.lua:15	MSUF_Suite:Locales/deDE.lua:4|MSUF_Suite:Locales/esES.lua:4|MSUF_Suite:Locales/esMX.lua:4	10	1	suite	all	
 MSUF2	table	MidnightSimpleUnitFrames/Kernel/MSUF_OptionsLoader.lua:15	MSUF_Suite:Core/HostBridgeMenu.lua:165|MSUF_Suite_Options:Menu/Bridge.lua:7|MSUF_Suite_Skin:Rendering/WindowControls.lua:59	6	4	suite	all	
-MSUF2.BeginHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1107	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:151	1	1	suite	all	
-MSUF2.CancelHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1172	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:174	1	1	suite	all	
-MSUF2.CommitHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1160	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:187	1	1	suite	all	
-MSUF2.ControlMeta	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua:996	MSUF_Suite_Options:Menu/Bridge.lua:533	1	1	suite	all	
-MSUF2.GetControlLabel	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:86	MSUF_Suite:Core/HostBridgeMenu.lua:215	1	1	suite	all	
-MSUF2.GetHistoryState	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1204	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:120	1	1	suite	all	
-MSUF2.IsHistoryCapturing	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:920	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:147	1	1	suite	all	
-MSUF2.Redo	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1242	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:240	1	1	suite	all	
-MSUF2.RegisterControlMetadata	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua:997	MSUF_Suite_Options:Menu/Bridge.lua:590	1	1	suite	all	
-MSUF2.RequestRefresh	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua:310	MSUF_Suite_Options:Menu/Bridge.lua:340	1	1	suite	all	
-MSUF2.ResumeForeverPadNavigation	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:2243	MSUF_Suite_Skin_Options:Shell/Embedded.lua:30	1	1	suite	Forever	
-MSUF2.RunWithHistory	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:960	MSUF_Suite_Options:Menu/Bridge.lua:200|MSUF_Suite_Skin:Rendering/WindowControls.lua:60	2	2	suite	all	
-MSUF2.ShowStatusFeedback	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:1641	MSUF_Suite_Options:Menu/Bridge.lua:438	1	1	suite	static	
-MSUF2.Theme	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua:7	MSUF_Suite:Core/HostBridgeMenu.lua:166|MSUF_Suite_Options:Menu/Bridge.lua:9	2	2	suite	all	
-MSUF2.Tr	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua:95	MSUF_Suite_Options:Menu/Bridge.lua:19	1	1	suite	all	
-MSUF2.TrackRefresh	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1327	MSUF_Suite_Options:Menu/Bridge.lua:592	1	1	suite	all	
-MSUF2.Undo	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1220	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:234	1	1	suite	all	
-MSUF2.Widgets	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua:9	MSUF_Suite_Options:Menu/Bridge.lua:9|MSUF_Suite_Skin_Options:Shell/WidgetsColor.lua:62	2	2	suite	all	
-MSUF2.frame	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:2099	MSUF_Suite_Options:Menu/Bridge.lua:732	1	1	suite	static	
+MSUF2.ALIASES	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Navigation.lua:215	MSUF_Suite_Options:Menu/Register.lua:155	1	1	suite	all	Suite Menu2 reader
+MSUF2.AddNavIcon	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:186	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.AddTooltip	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:237	MSUF_Suite_Options:Menu/SectionActions.lua:176	1	1	suite	all	Suite Menu2 reader
+MSUF2.AllowCombatClick	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:62	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.ApplyPopupFramePriority	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1159	MSUF_Suite_Options:Menu/SectionActions.lua:147	1	1	suite	all	Suite Menu2 reader
+MSUF2.BeginHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1107	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:151	1	1	suite	all	Suite Menu2 reader
+MSUF2.BindBoolWidget	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:731	MSUF_Suite_Options:Menu/Controls.lua:706	1	1	suite	all	Suite Menu2 reader
+MSUF2.BindDropdownAt	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:766	MSUF_Suite_Options:Menu/PreviewClasses.lua:38	1	1	suite	all	Suite Menu2 reader
+MSUF2.BindSegment	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua:532	MSUF_Suite_Options:Pages/NameplatesWorkspace.lua:124	1	1	suite	all	Suite Menu2 reader
+MSUF2.BindSwitchAt	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:755	MSUF_Suite_Options:Pages/ActionBars.lua:167	1	1	suite	all	Suite Menu2 reader
+MSUF2.BindTextInputAt	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:771	MSUF_Suite_Options:Menu/Controls.lua:381	1	1	suite	all	Suite Menu2 reader
+MSUF2.BuildPageResetWarning	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:709	MSUF_Suite:Core/HostBridge.lua:366	1	1	suite	all	Suite Menu2 reader
+MSUF2.CancelHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1172	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:174	1	1	suite	all	Suite Menu2 reader
+MSUF2.CommitHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1160	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:187	1	1	suite	all	Suite Menu2 reader
+MSUF2.ControlMeta	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua:996	MSUF_Suite_Options:Menu/Bridge.lua:533	1	1	suite	all	Suite Menu2 reader
+MSUF2.CreateMenuPopupPanel	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1174	MSUF_Suite_Options:Menu/SectionActions.lua:98	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetControlLabel	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:86	MSUF_Suite:Core/HostBridgeMenu.lua:215	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetControlSearchMeta	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:90	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetControlTitle	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:81	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetHistoryState	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1204	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:120	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetMissingSectionResolver	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:161	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetRawSetText	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:94	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSearchTargetPrepare	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:72	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSectionCursor	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:119	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSectionEnsureVisible	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:145	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSectionEntry	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:103	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSectionRefreshState	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:153	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GetSectionWidth	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:111	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.GlobalPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Global.lua:901	MSUF_Suite_Options:Menu/Controls.lua:167	1	1	suite	all	Suite nested fields (contract smoke): FontValues
+MSUF2.HOST_API_VERSION	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:54	MSUF_Suite:Core/HostBridge.lua:400	1	1	suite	all	Suite Menu2 reader
+MSUF2.InvalidatePage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageLifecycle.lua:561	MSUF_Suite_Options:Pages/Appearance.lua:316	1	1	suite	all	Suite Menu2 reader
+MSUF2.InvalidateSearchProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua:2141	MSUF_Suite_Options:Menu/Search.lua:599	1	1	suite	all	Suite Menu2 reader
+MSUF2.IsHistoryCapturing	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:920	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:147	1	1	suite	all	Suite Menu2 reader
+MSUF2.MarkContextColorHost	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:127	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.MenuTimer	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:133	MSUF_Suite_Options:Pages/CooldownManagerBars.lua:29	1	1	suite	all	Suite Menu2 reader
+MSUF2.OpenExactSettingControl	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua:64	MSUF_Suite_Options:Pages/NameplatesEditorLayers.lua:119	1	1	suite	all	Suite Menu2 reader
+MSUF2.PageHasReset	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:704	MSUF_Suite:Core/HostBridge.lua:366	1	1	suite	all	Suite Menu2 reader
+MSUF2.PreviewHelpers	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua:11	MSUF_Suite_Options:Pages/DamageMeterPreviewEditor.lua:79	1	1	suite	all	Suite nested fields (contract smoke): ApplyPreviewChrome ArrowKeyDown CreateLayerButton EnsurePreviewBackgroundButton FlowLayerChips FocusKeyboardTarget IsTextInputFocused LayerChipButtonOpts NotePreviewElementMoved NudgeStep PreviewChromePalette RefreshSelectedLayerButtons ReleaseKeyboardCapture ShouldSkipDuplicateNudge ShowPreviewMoveCue
+MSUF2.PreviewSelectionBar	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua:19	MSUF_Suite_Options:Pages/DamageMeterPreviewEditor.lua:127	1	1	suite	all	Suite nested fields (contract smoke): Create CreatePicker CycleHandle Refresh SetShown
+MSUF2.RebuildPageKeepingScroll	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window_PageNavigation.lua:279	MSUF_Suite_Options:Pages/Appearance.lua:315	1	1	suite	all	Suite Menu2 reader
+MSUF2.Redo	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1242	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:240	1	1	suite	all	Suite Menu2 reader
+MSUF2.RefreshSectionLayout	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:176	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterControlMetadata	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua:997	MSUF_Suite_Options:Menu/Bridge.lua:590	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterHistoryProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:162	MSUF_Suite_Options:Menu/Register.lua:13	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterLayerOverviewProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua:221	MSUF_Suite_Options:Menu/Register.lua:251	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageLifecycle.lua:220	MSUF_Suite_Options:Menu/Register.lua:186	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterPageResetProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua:81	MSUF_Suite:Core/HostBridge.lua:351	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterSearchAvailability	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua:2133	MSUF_Suite_Options:Menu/Search.lua:598	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterSearchProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua:2119	MSUF_Suite_Options:Menu/Search.lua:11	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterSearchWidget	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua:1365	MSUF_Suite_Options:Pages/QualityOfLife.lua:458	1	1	suite	all	Suite Menu2 reader
+MSUF2.ReleaseColorShortcut	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:98	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.RequestRefresh	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua:310	MSUF_Suite_Options:Menu/Bridge.lua:340	1	1	suite	all	Suite Menu2 reader
+MSUF2.ReserveSectionActions	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:168	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.ResetPageToDefaults	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:732	MSUF_Suite:Core/HostBridge.lua:367	1	1	suite	all	Suite Menu2 reader
+MSUF2.ResumeForeverPadNavigation	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:2243	MSUF_Suite_Skin_Options:Shell/Embedded.lua:30	1	1	suite	Forever	Suite Menu2 reader
+MSUF2.RunWithHistory	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:960	MSUF_Suite_Options:Menu/Bridge.lua:200|MSUF_Suite_Skin:Rendering/WindowControls.lua:60	2	2	suite	all	Suite Menu2 reader
+MSUF2.SearchBridge	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua:11	MSUF_Suite_Options:Pages/DamageMeterPreviewEditor.lua:36	1	1	suite	all	Suite nested fields (contract smoke): OpenSearchTarget
+MSUF2.SelectPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageLifecycle.lua:387	MSUF_Suite_Options:Pages/HUD.lua:23	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetBuilderInsets	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:135	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetCommandAction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:76	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetFixedPreviewHeight	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:131	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetMissingSectionResolver	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:157	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetPreviewArrowBindings	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:302	MSUF_Suite_Options:Pages/DamageMeterPreviewEditor.lua:78	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSearchTargetPrepare	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:67	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionCursor	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:123	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionEnsureVisible	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:141	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionEntry	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:107	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionPopupGetter	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:181	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionRefreshState	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:149	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.SetSectionWidth	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:115	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.ShouldExpandFixedPreview	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua:235	MSUF_Suite_Options:Pages/NameplatesPreviewLayout.lua:81	1	1	suite	all	Suite Menu2 reader
+MSUF2.ShowPageResetConfirm	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:746	MSUF_Suite:Core/HostBridge.lua:367	1	1	suite	all	Suite Menu2 reader
+MSUF2.ShowStatusFeedback	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:1641	MSUF_Suite_Options:Menu/Bridge.lua:438	1	1	suite	static	Suite Menu2 reader
+MSUF2.SkipHistoryCheckpoint	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:57	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.StatusBarTextureItems	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1007	MSUF_Suite_Options:Menu/Controls.lua:181	1	1	suite	all	Suite Menu2 reader
+MSUF2.SyncExternalHistoryState	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:370	MSUF_Suite:Core/HostBridge.lua:382	1	1	suite	all	Suite Menu2 reader
+MSUF2.Theme	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua:7	MSUF_Suite:Core/HostBridgeMenu.lua:166|MSUF_Suite_Options:Menu/Bridge.lua:9	2	2	suite	all	Suite nested fields (contract smoke): ApplySurface Button CenterButtonLabel Font MeasureButtonWidth Panel SetTranslatedText SkinEditBox StyleScrollFrame ApplyMaterial StyleFontString colors navIconGrid navIconColors navIconAtlasVersion; optional fallback reads: Color ApplyFontRole
+MSUF2.Tr	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua:95	MSUF_Suite_Options:Menu/Bridge.lua:19	1	1	suite	all	Suite Menu2 reader
+MSUF2.TrackRefresh	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1327	MSUF_Suite_Options:Menu/Bridge.lua:592	1	1	suite	all	Suite Menu2 reader
+MSUF2.Undo	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1220	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:234	1	1	suite	all	Suite Menu2 reader
+MSUF2.UnitSectionsShared	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua:14	MSUF_Suite_Options:Pages/ActionBars.lua:368	1	1	suite	all	Suite nested fields (contract smoke): MakeScopeCopyPopup
+MSUF2.Widgets	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua:9	MSUF_Suite_Options:Menu/Bridge.lua:9|MSUF_Suite_Skin_Options:Shell/WidgetsColor.lua:62	2	2	suite	all	Suite nested fields (contract smoke): AttachContextColorShortcut AttachFixedPreviewExpander AttachPinnedPreview AttachStickyPageHeader CloseDropdown Description DescriptionDetails DividerAt Dropdown EnsureSectionContent FixedPreviewSection FocusCollapsibleSection HelpButton MeasureScopeOverrideBar MoveWidget OpenContextColors OpenDropdown PageBuilder RoleButton ScopeOverrideBar SectionSwitch SegmentTabs SetCollapsibleBadges SetCollapsibleSummary SetControlDisabledReason SetControlEnabled SetControlShown SettingsRows StyleSectionActionButton SwitchAt TopButton
+MSUF2.cache	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageLifecycle.lua:17	MSUF_Suite_Options:Pages/HUD.lua:25	1	1	suite	all	Suite Menu2 reader
+MSUF2.frame	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:2099	MSUF_Suite_Options:Menu/Bridge.lua:732	1	1	suite	static	Suite Menu2 reader
+MSUF2.navItems	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Navigation.lua:43	MSUF_Suite_Options:Menu/Register.lua:128	1	1	suite	all	Suite Menu2 reader
+MSUF2.navPrimaryForKey	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua:3423	MSUF_Suite_Options:Menu/Register.lua:152	1	1	suite	all	Suite Menu2 reader
 MSUF2NativeDropdownList	frame	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua:383	MSUF_Suite_Options:Pages/CooldownManagerWidgets.lua:77	1	1	suite	static	
 MSUF2_Open	function	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua:17	MSUF_Suite:Core/Menu.lua:53|MapkoSkin:Core/Suite.lua:274|MSUF_Suite_Skin:Adapters/OwnedMicroBarEditMode.lua:198	3	3	suite,external	all	
 MSUF2_Window	frame	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:827	blizzard:UISpecialFrames:827	0	0	blizzard-contract	static	
@@ -61,8 +128,8 @@ MSUF_CreateProfile	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:283
 MSUF_DB	savedvar	MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc:9	MSUF_Suite:Core/HostBridge.lua:135|Auras2:MSUF_A2_Apply.lua:48|Auras2:MSUF_A2_Colors.lua:48|blizzard:SavedVariables:9	6	2	sv,suite,external	all	
 MSUF_DeleteProfile	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2833	MSUF_Suite:Core/HostBridge.lua:540|MapkoSkin:Core/SuiteProfiles.lua:9	2	2	suite,external	all	
 MSUF_EM2	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua:15	MSUF_Suite:Core/HostBridge.lua:485|MapkoSkin_Suite:Movers.lua:118|MSUF_Suite_Modules:EditMode.lua:275	3	3	suite,external	all	
-MSUF_EM2.ExternalElements	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:13	MSUF_Suite:Core/HostBridge.lua:486	1	1	suite	all	
-MSUF_EM2.State	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:18	MSUF_Suite_Modules:EditMode.lua:276|MapkoSkin_Suite:Movers.lua:119	2	2	suite,external	all	
+MSUF_EM2.ExternalElements	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:13	MSUF_Suite:Core/HostBridge.lua:486	1	1	suite	all	Suite nested fields (contract smoke): GetRecord
+MSUF_EM2.State	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:18	MSUF_Suite_Modules:EditMode.lua:276|MapkoSkin_Suite:Movers.lua:119	2	2	suite,external	all	Suite nested fields (contract smoke): Enter
 MSUF_EM2.Undo	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua:20	MapkoSkin_Suite:Movers.lua:205	1	1	external	all	
 MSUF_EditModeAPI	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:24|MapkoSkin_Suite:EditMode.lua:106|MSUF_Suite_Skin:Adapters/OwnedMicroBarEditMode.lua:41	4	3	suite,external	all	
 MSUF_EditModeAPI.EnterEditMode	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:269|MapkoSkin_Suite:Movers.lua:168|MSUF_Suite_Skin:Adapters/OwnedMicroBarEditMode.lua:231	3	3	suite,external	all	dynamic
@@ -107,7 +174,7 @@ MSUF_GroupAdditionalUnitTemplate	frame	MidnightSimpleUnitFrames/GroupFrames/MSUF
 MSUF_GroupHeaderUnitButtonTemplate	frame	MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml:7	blizzard:MSUF_GroupFrames_Additional.xml:7	0	0	blizzard-contract	static	
 MSUF_HostAPI	table	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:25	1	1	suite	all	
 MSUF_HostAPI.ApplyUIScaleProfile	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:36	1	1	suite	all	dynamic
-MSUF_HostAPI.GetKickReady	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:87	1	1	suite	all	dynamic
+MSUF_HostAPI.GetKickReady	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:87	1	1	suite	all	dynamic; Suite nested fields (contract smoke): MSUF.KickReady.version MSUF.KickReady.Register MSUF.KickReady.Unregister MSUF.KickReady.SetActive MSUF.KickReady.Look MSUF.KickReady.RGBA MSUF.KickReady.FillColors MSUF.KickReady.SelectColor MSUF.KickReady.SlotCount MSUF.KickReady.Cooldown; Look.show Look.style Look.marker Look.segment Look.readyR Look.readyG Look.readyB Look.readyA Look.outline Look.boxSize Look.boxAnchor Look.boxOffsetX Look.boxOffsetY Look.texture
 MSUF_HostAPI.SetResourceStack	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:36	1	1	suite	all	dynamic
 MSUF_HostAPI.version	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:35	1	1	suite	all	dynamic
 MSUF_IsCooldownAnchorEnabled	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:449	integration:MSUF_Integration_ThirdPartyAnchors.lua:449	0	0	integration	all	
@@ -117,26 +184,26 @@ MSUF_Keybind_ToggleEditMode	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybin
 MSUF_Keybind_ToggleOptions	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:197	blizzard:Bindings.xml:4	0	0	blizzard-contract	all	
 MSUF_Keybind_TogglePriorityFrame	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:292	blizzard:Bindings.xml:16	0	0	blizzard-contract	all	
 MSUF_NS	table	MidnightSimpleUnitFrames/Game/Shared/Initialize.lua:16	MSUF_Suite:Core/HostBridge.lua:20|MSUF_Suite:Core/Platform.lua:2|MSUF_Suite:Locales/deDE.lua:4	12	1	suite	all	
-MSUF_NS.BossTargetIndicator	nsfield	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_BossTargetIndicator.lua:4	MSUF_Suite:Core/HostBridge.lua:617	1	1	suite	all	
-MSUF_NS.Client	nsfield	MidnightSimpleUnitFrames/Game/Shared/Initialize.lua:79	MSUF_Suite:Core/Platform.lua:48	1	1	suite	all	
-MSUF_NS.FirstLoad6	nsfield	MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua:330	MSUF_Suite:Core/HostBridge.lua:558	1	1	suite	all	
-MSUF_NS.GF	nsfield	MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua:10	MSUF_Suite:Core/HostBridge.lua:554	1	1	suite	all	
+MSUF_NS.BossTargetIndicator	nsfield	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_BossTargetIndicator.lua:4	MSUF_Suite:Core/HostBridge.lua:617	1	1	suite	all	Suite nested fields (contract smoke): Apply Style HasBorder HasMarker IsPaired PortraitExtents SetPreviewInteractive
+MSUF_NS.Client	nsfield	MidnightSimpleUnitFrames/Game/Shared/Initialize.lua:79	MSUF_Suite:Core/Platform.lua:48	1	1	suite	all	Suite nested fields (contract smoke): Flavor IsForever SupportsEvent
+MSUF_NS.FirstLoad6	nsfield	MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua:330	MSUF_Suite:Core/HostBridge.lua:558	1	1	suite	all	Suite nested fields (contract smoke): IsFirstRunPending
+MSUF_NS.GF	nsfield	MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua:10	MSUF_Suite:Core/HostBridge.lua:554	1	1	suite	all	Suite nested fields (contract smoke): FrameForUnit
 MSUF_NS.L	nsfield	MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua:117	MSUF_Suite:Core/Platform.lua:235|MSUF_Suite:Locales/deDE.lua:6|MSUF_Suite:Locales/esES.lua:6	11	1	suite	all	
 MSUF_NS.LOCALE	nsfield	MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua:114	MSUF_Suite:Locales/deDE.lua:5|MSUF_Suite:Locales/esES.lua:5|MSUF_Suite:Locales/esMX.lua:5	10	1	suite	all	
-MSUF_NS.MSUF_Auras3	nsfield	MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua:148	MSUF_Suite:Core/HostBridge.lua:101	1	1	suite	all	
+MSUF_NS.MSUF_Auras3	nsfield	MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua:148	MSUF_Suite:Core/HostBridge.lua:101	1	1	suite	all	Suite nested fields (contract smoke): TargetDotData
 MSUF_NS.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT	nsfield	MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua:5	MSUF_Suite:Core/HostBridge.lua:466	1	1	suite	all	
 MSUF_NS.MSUF_FOREVER_FACTORY_DEFAULT_PROFILE_COMPACT	nsfield	MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_ForeverFactory.lua:3	MSUF_Suite:Core/HostBridge.lua:463	1	1	suite	Forever	
 MSUF_NS.MSUF_MODERN_DARK_PROFILE_COMPACT	nsfield	MidnightSimpleUnitFrames_Options/State/MSUF_Defaults_ModernDark.lua:3	MSUF_Suite:Core/HostBridge.lua:423	1	1	suite	Mainline,Forever	
-MSUF_NS.ProfileFields	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua:5	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	
-MSUF_NS.ProfilePolicy	nsfield	MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua:19	MSUF_Suite:Core/HostBridge.lua:431	1	1	suite	all	
-MSUF_NS.ProfileRuntime	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileRuntime.lua:201	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	
-MSUF_NS.ProfileSync	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua:5	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	
-MSUF_NS.ProfileVariants	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua:3	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	
+MSUF_NS.ProfileFields	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua:5	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	Suite nested fields (contract smoke): RegisterExternal
+MSUF_NS.ProfilePolicy	nsfield	MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua:19	MSUF_Suite:Core/HostBridge.lua:431	1	1	suite	all	Suite nested fields (contract smoke): SelectSupportedDecodedProfile
+MSUF_NS.ProfileRuntime	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileRuntime.lua:201	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	Suite nested fields (contract smoke): Apply
+MSUF_NS.ProfileSync	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua:5	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	Suite nested fields (contract smoke): RegisterModule RebaseExternal
+MSUF_NS.ProfileVariants	nsfield	MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua:3	MSUF_Suite:Core/HostBridge.lua:550	1	1	suite	all	Suite nested fields (contract smoke): BaseSnapshot HasExternalOverlay IsRecording IsMaterialized Restore ResolveCurrent
 MSUF_NS.RegisterLocale	nsfield	MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua:156	MSUF_Suite:Locales/deDE.lua:6|MSUF_Suite:Locales/esES.lua:6|MSUF_Suite:Locales/esMX.lua:6	10	1	suite	all	
-MSUF_NS.UF	nsfield	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Bridge.lua:14	MSUF_Suite:Core/Platform.lua:7	1	1	suite	all	
+MSUF_NS.UF	nsfield	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Bridge.lua:14	MSUF_Suite:Core/Platform.lua:7	1	1	suite	all	Suite nested fields (contract smoke): Layers.ApplyOwnedSurface Layers.ElementLevel
 MSUF_NSRTNicknames_ApplySetting	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_NSRTNicknames.lua:261	integration:MSUF_Integration_NSRTNicknames.lua:261	0	0	integration	all	
 MSUF_PRIORITY_TOGGLE	binding	MidnightSimpleUnitFrames/Bindings.xml:16	blizzard:Bindings.xml:16	0	0	blizzard-contract	static	
-MSUF_PadNavigation	table	MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua:37	MSUF_Suite:Core/Platform.lua:102	1	1	suite	Forever	
+MSUF_PadNavigation	table	MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua:37	MSUF_Suite:Core/Platform.lua:102	1	1	suite	Forever	Suite nested fields (contract smoke): Attach Activate Release
 MSUF_PixelLayoutRegion	function	MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua:1073	MSUF_Suite_Modules:Surfaces.lua:6	1	1	suite	all	
 MSUF_ProfileWasUnboundAtLogin	value	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:197	MSUF_Suite:Core/HostBridge.lua:613	1	1	suite	all	
 MSUF_Profiles_ExportSelectionToString	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2817	MSUF_Suite:Core/HostBridge.lua:596|ImportCondenser:addons/midnightSimpleUnitFrames.lua:25|MapkoSkin:Core/SuiteProfiles.lua:6	3	3	suite,external	all	
@@ -161,7 +228,7 @@ MSUF_TryCloseExternalEditMode	function	MidnightSimpleUnitFrames/Integrations/MSU
 MSUF_TryDecodeCompactString	function	MidnightSimpleUnitFrames/State/MSUF_ProfileCodec.lua:518	MSUF_Suite:Core/Catalog/CooldownManager.lua:16|MSUF_Suite_Skin:Core/DatabaseProfiles.lua:88|MSUF_Suite:Core/Database.lua:63	5	2	suite	all	
 MSUF_TryOpenExternalEditMode	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua:151	integration:MSUF_Integration_EllesmereUnlock.lua:151	0	0	integration	Mainline,Forever	
 MSUF_UFCore_NotifyConfigChanged	function	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:539	MSUF_Suite:Core/HostBridge.lua:307|MidnightArcaneSalvo:MidnightArcaneSalvo.lua:757	2	2	suite,external	all	
-MSUF_UI	table	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua:16	MSUF_Suite:Core/HostBridgeMenu.lua:167	1	1	suite	all	
+MSUF_UI	table	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua:16	MSUF_Suite:Core/HostBridgeMenu.lua:167	1	1	suite	all	Suite nested fields (contract smoke): Button Color ApplyFontRole ApplyMaterial colors
 MSUF_UnitEditModeActive	value	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:38	MSUF_Suite_Modules:Runtime.lua:5|Auras2:MSUF_A2_Events.lua:74|MapkoSkin_Suite:Runtime.lua:5	5	3	suite,external	static	
 MSUF_UnitFrames	table	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:535	Auras2:MSUF_A2_Events.lua:200|CooldownCompanion:Core/FrameAnchoring.lua:466|EnhanceQoL:Modules/Aura/CooldownPanels_AnchorHelper.lua:224	8	6	external	all	
 MSUF_UnitFrames.boss1	nsfield	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:535	EnhanceQoL:Modules/Aura/CooldownPanels_AnchorHelper.lua:225|EnhanceQoLCooldownPanels:CooldownPanels_AnchorHelper.lua:314	2	2	external	Mainline,Mists,Forever	dynamic
