@@ -31,6 +31,17 @@ local function FireScript(frame, name, ...)
     end
     return result
 end
+local function Pack(...) return { n = select("#", ...), ... } end
+local function FireButtonScript(frame, name, ...)
+    local base = frame.scripts and frame.scripts[name]
+    local result
+    if base then result = Pack(base(frame, ...)) end
+    local hooks = frame._clientHooks and frame._clientHooks[name]
+    if hooks then
+        for i = 1, #hooks do hooks[i](frame, ...) end
+    end
+    if result then return unpack(result, 1, result.n) end
+end
 MenuWorld.FireScript = FireScript
 
 local function FireVisibilityScripts(frame)
@@ -50,7 +61,7 @@ local function FireVisibilityScripts(frame)
     function frame:SetShown(shown) if shown then self:Show() else self:Hide() end end
 end
 MenuWorld.FireVisibilityScripts = FireVisibilityScripts
-local function InstallClientScriptBindings(Methods)
+local function InstallClientScriptBindings(Methods, nativeButtons)
     Methods.SetScript = function(self, name, handler) self.scripts[name] = handler end
     Methods.GetScript = function(self, name) return self.scripts[name] end
     Methods.HasScript = function(self, name)
@@ -66,7 +77,18 @@ local function InstallClientScriptBindings(Methods)
         hooks[#hooks + 1] = handler
         return true
     end
-    Methods.Click = function(self, button) return FireScript(self, "OnClick", button or "LeftButton") end
+    if not nativeButtons then
+        Methods.Click = function(self, button) return FireScript(self, "OnClick", button or "LeftButton") end
+        return
+    end
+    Methods.Click = function(self, button, down)
+        if self.IsEnabled and not self:IsEnabled() then return end
+        button, down = button or "LeftButton", down == true
+        FireButtonScript(self, "PreClick", button, down)
+        local result = Pack(FireButtonScript(self, "OnClick", button, down))
+        FireButtonScript(self, "PostClick", button, down)
+        return unpack(result, 1, result.n)
+    end
 end
 
 function Handle:Frames() return #self.world.widgets.frames end
@@ -136,7 +158,7 @@ function MenuWorld.Open(root, flavor, options)
         if value == nil then value = self.minimum or 0 end
         return value
     end
-    if options.clientScriptBindings == true then InstallClientScriptBindings(Methods) end
+    if options.clientScriptBindings == true then InstallClientScriptBindings(Methods, options.nativeButtonLifecycle) end
     -- Harness gap only: every client defines it, and the core reads it at load.
     world.env.MAX_BOSS_FRAMES = 5
     if type(options.beforeOptions) == "function" then

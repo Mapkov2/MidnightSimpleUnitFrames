@@ -9,6 +9,7 @@ local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local SettingMeta = UP.SettingMeta
+local Schema = M.ControlSchema
 local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet pettarget boss arena"
 local function RangeFadeSectionHeight(_, _, unit)
     return unit == "boss" and 350 or 230
@@ -34,14 +35,11 @@ local function MaybeShowBossUpdateRateWarning(rate)
 end
 local function BuildRangeFade(ctx, builder, unit)
     local ReadBool = UP.ReadBool
-    local SetBool = UP.SetBool
     local ReadNumber = UP.ReadNumber
-    local SetNumber = UP.SetNumber
-    local SetString = UP.SetString
     local SetControlEnabled = UP.SetControlEnabled
     local GetConf = UP.GetConf
-    if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf) then return end
-    local sec = builder:CollapsibleSection("range_fade", "Range Fade", RangeFadeSectionHeight(nil, nil, unit), false)
+    if not (ReadBool and ReadNumber and SetControlEnabled and GetConf) then return end
+    local sec = Schema.Section(builder:CollapsibleSection("range_fade", "Range Fade", RangeFadeSectionHeight(nil, nil, unit), false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
@@ -52,41 +50,63 @@ local function BuildRangeFade(ctx, builder, unit)
     local mainCard = W.ControlCard(sec, "Behavior", nil, leftX, -38, leftW, 166)
     local alphaCard = W.ControlCard(sec, "Out of range", nil, rightX, -38, rightW, 166)
     local RefreshRangeControls = M.RefreshProxy()
-    local enabled = W.ToggleAt(mainCard, "Enable Range Fade", 16, -54, leftW - 32)
-    M.BindBoolWidget(ctx, enabled,
-        function() return ReadBool(unit, "rangeFadeEnabled", true) end,
-        function(v)
-            SetBool(unit, "rangeFadeEnabled", v, "MSUF2_RANGE_FADE", { preview = true })
-            RefreshRangeControls()
-        end,
-        SettingMeta(ctx, "range_fade.enabled", unit, "rangeFadeEnabled"))
-    local slider = W.Slider(alphaCard, "", 0, 1, 0.05, rightW - 58)
-    M.UsePercentInput(slider)
-    -- The card title names the slider on screen; search needs it as the label.
-    local alphaMeta = SettingMeta(ctx, "range_fade.alpha", unit, "rangeFadeAlpha")
-    alphaMeta.label = "Out of range"
-    M.BindNumberWidget(ctx, slider,
-        function() return ReadNumber(unit, "rangeFadeAlpha", 0.4) end,
-        function(v) SetNumber(unit, "rangeFadeAlpha", v, "MSUF2_RANGE_FADE_ALPHA", { preview = true }) end,
-        0.4,
-        alphaMeta)
+    local function Row(path, key, kind, label)
+        local meta = SettingMeta(ctx, path, unit, key)
+        return {
+            id = meta.controlId, kind = kind, labelKey = label, key = key, scope = unit,
+            settingPath = unit .. "." .. key, applyDomain = "range", meta = meta,
+            defaultSource = function() return Schema.Default(unit, key) end,
+        }
+    end
+    local enabledRow = Row("range_fade.enabled", "rangeFadeEnabled", "toggle", "Enable Range Fade")
+    enabledRow.get = function() return ReadBool(unit, enabledRow.key, enabledRow.defaultSource()) end
+    enabledRow.set = function(value)
+        Schema.SetUnit("range", unit, enabledRow.key, value, "MSUF2_RANGE_FADE", "toggle")
+        RefreshRangeControls()
+    end
+    local enabled = Schema.Render(ctx, mainCard, enabledRow,
+        { x = 16, y = -54, width = leftW - 32, moveWidth = leftW - 32, align = "LEFT" })
+    local alphaRow = Row("range_fade.alpha", "rangeFadeAlpha", "slider", "")
+    alphaRow.meta.label = "Out of range"
+    alphaRow.range, alphaRow.percent = { 0, 1, 0.05 }, true
+    alphaRow.get = function() return ReadNumber(unit, alphaRow.key, alphaRow.defaultSource()) end
+    alphaRow.set = function(value)
+        Schema.SetUnit("range", unit, alphaRow.key, value, "MSUF2_RANGE_FADE_ALPHA", "slider")
+    end
+    local slider = Schema.Render(ctx, alphaCard, alphaRow, { width = rightW - 58 })
     if M.BindSliderDragPreview and M.SetRangeFadePreviewState then
         M.BindSliderDragPreview(slider, function(active, value)
-            local layerMode = GetConf(unit).rangeFadeLayerMode == "health" and "health" or "frame"
+            local layerMode = GetConf(unit).rangeFadeLayerMode == "health" and "health" or Schema.Default(unit, "rangeFadeLayerMode")
             M.SetRangeFadePreviewState("unit", active, value, layerMode)
         end)
     end
     W.MoveWidget(slider, alphaCard, 16, -54, rightW - 58, "LEFT")
-    local mode = W.Segment(alphaCard, "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32)
-    M.BindSegment(ctx, mode,
-        function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or "frame" end,
-        function(v) SetString(unit, "rangeFadeLayerMode", v == "health" and "health" or "frame", "MSUF2_RANGE_FADE_LAYER", { preview = true }) end,
-        SettingMeta(ctx, "range_fade.layer_mode", unit, "rangeFadeLayerMode"))
-    W.MoveWidget(mode, alphaCard, 16, -104, rightW - 32, "LEFT")
+    local modeRow = Row("range_fade.layer_mode", "rangeFadeLayerMode", "segment", "Affects")
+    modeRow.values = VT("frame", "Whole", "health", "HP")
+    modeRow.get = function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or Schema.Default(unit, "rangeFadeLayerMode") end
+    modeRow.set = function(value)
+        Schema.SetUnit("range", unit, modeRow.key, value == "health" and "health" or modeRow.defaultSource(), "MSUF2_RANGE_FADE_LAYER", "segment")
+    end
+    local mode = Schema.Render(ctx, alphaCard, modeRow,
+        { x = 16, y = -104, width = rightW - 32, moveWidth = rightW - 32, align = "LEFT" })
     local updateRate
     if unit == "boss" then
         local updateCard = W.ControlCard(sec, "Boss update rate", nil, leftX, -220, innerW, 106)
-        updateRate = W.Slider(updateCard, "Updates per second", 0, 20, 1, innerW - 58)
+        local rateRow = Row("range_fade.update_rate", "rangeFadeUpdateRate", "slider", "Updates per second")
+        rateRow.range = { 0, 20, 1 }
+        rateRow.meta.step, rateRow.meta.roundStep = 1, true
+        rateRow.get = function() return ReadNumber(unit, rateRow.key, rateRow.defaultSource()) end
+        rateRow.set = function(value)
+            local rate = floor((tonumber(value) or 0) + 0.5)
+            if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
+            Schema.SetUnit("range", unit, rateRow.key, rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")
+            if updateRate and updateRate._msuf2SliderActive then
+                updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
+            else
+                MaybeShowBossUpdateRateWarning(rate)
+            end
+        end
+        updateRate = Schema.Render(ctx, updateCard, rateRow, { width = innerW - 58 })
         if updateRate.SetValueBoxWidth then updateRate:SetValueBoxWidth(76) end
         if updateRate.SetValueFormatter then updateRate:SetValueFormatter(BossUpdateRateValue) end
         if updateRate.SetValueParser then
@@ -95,23 +115,6 @@ local function BuildRangeFade(ctx, builder, unit)
                 return tonumber(value) or 0
             end)
         end
-        local updateMeta = SettingMeta(ctx, "range_fade.update_rate", unit, "rangeFadeUpdateRate")
-        updateMeta.step = 1
-        updateMeta.roundStep = true
-        M.BindNumberWidget(ctx, updateRate,
-            function() return ReadNumber(unit, "rangeFadeUpdateRate", 0) end,
-            function(v)
-                local rate = floor((tonumber(v) or 0) + 0.5)
-                if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
-                SetNumber(unit, "rangeFadeUpdateRate", rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", { preview = true })
-                if updateRate and updateRate._msuf2SliderActive then
-                    updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
-                else
-                    MaybeShowBossUpdateRateWarning(rate)
-                end
-            end,
-            0,
-            updateMeta)
         local function PaintBossRateValue(value)
             local editBox = updateRate and updateRate.editBox
             local text = editBox and editBox.GetFontString and editBox:GetFontString()
@@ -127,7 +130,7 @@ local function BuildRangeFade(ctx, builder, unit)
             end)
             updateRate:HookScript("OnValueChanged", function(_, value) PaintBossRateValue(value) end)
         end
-        PaintBossRateValue(ReadNumber(unit, "rangeFadeUpdateRate", 0))
+        PaintBossRateValue(ReadNumber(unit, "rangeFadeUpdateRate", Schema.Default(unit, "rangeFadeUpdateRate")))
         W.MoveWidget(updateRate, updateCard, 16, -54, innerW - 58, "LEFT")
         if M.AddTooltip then
             M.AddTooltip(updateRate, "Boss range update rate",
@@ -136,7 +139,7 @@ local function BuildRangeFade(ctx, builder, unit)
         end
     end
     RefreshRangeControls = RefreshRangeControls(function()
-        local on = ReadBool(unit, "rangeFadeEnabled", true)
+        local on = ReadBool(unit, "rangeFadeEnabled", Schema.Default(unit, "rangeFadeEnabled"))
         SetControlEnabled(slider, on)
         SetControlEnabled(mode, on)
         if updateRate then SetControlEnabled(updateRate, on) end
@@ -151,6 +154,7 @@ if type(UP.RegisterSection) == "function" then
         placement = "after_load_conditions",
         order = 10,
         units = RANGE_FADE_UNITS,
+        prepareShell = function(_, section, unit) Schema.Section(section, unit) end,
         build = BuildRangeFade,
     })
 end

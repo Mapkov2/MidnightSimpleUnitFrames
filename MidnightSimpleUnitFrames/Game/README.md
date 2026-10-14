@@ -196,6 +196,18 @@ including a profile already stamped on a client without that capability. Arena
 and GCD saved values keep their former defaults without enabling unsupported
 runtime modules. Native profile/export schema 600 remains readable by 6.50.
 
+The five-page Options control schema preserves these runtime owners and client
+gates; it delegates to the existing input/history/apply paths. The native aura
+resource defaults are shared with its menu declarations through
+`CPBuilders.ExtraAuraDefaults`. See [control schema](../../docs/MENU_CONTROL_SCHEMA.md).
+
+The five Menu2 pilot pages preserve legacy UI fallbacks through the compatibility
+owner documented in docs/MENU_CONTROL_SCHEMA.md. It does not seed saved keys or
+normalize a profile. Extra-aura callbacks bind shared defaults to scalars at load;
+their exact pre-schema VM/native/allocation budgets remain unchanged. Real
+control declarations, sparse/imported reads and profile switches have focused
+guards; live layout and combat/taint checks remain client-side validation.
+
 ### Forever blessing priorities
 
 Optional Party/Raid blessing priorities reuse Buff Coverage's unit-filtered

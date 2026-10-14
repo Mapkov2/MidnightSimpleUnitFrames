@@ -4,6 +4,7 @@ if not (MSUF.Client and MSUF.Client.IsForever) then return end
 local M = MSUF.MSUF2
 local W, AP = M.Widgets, M.AdvancedPage
 local Swing = MSUF.SwingTimer
+local Schema = M.ControlSchema
 local HANDS = { "main", "off", "ranged" }
 local LABELS = { main = "Main Hand", off = "Off Hand", ranged = "Ranged" }
 local COLORS = {
@@ -25,33 +26,37 @@ local function TextureItems(followText)
     return items
 end
 local SPECS = {
-    { "visibility", "dropdown", "Visibility", function() return M.ValueTextList("always", "Always", "combat", "In combat") end },
-    { "display", "dropdown", "Display mode", function() return M.ValueTextList("bar", "Bar and timer", "text", "Number only") end },
-    { "width", "number", "Width", 40, 1200 },
-    { "height", "number", "Height", 4, 100 },
-    { "scale", "number", "Scale %", 50, 200 },
-    { "opacity", "number", "Opacity %", 0, 100 },
-    { "x", "number", "X offset", -2000, 2000 },
-    { "y", "number", "Y offset", -1200, 1200 },
-    { "texture", "dropdown", "Bar texture", function() return TextureItems() end },
-    { "backgroundTexture", "dropdown", "Background texture", function() return TextureItems("Use foreground texture") end },
-    { "backgroundOpacity", "number", "Background opacity", 0, 100 },
-    { "borderSize", "number", "Border thickness", 0, 8 },
-    { "fill", "dropdown", "Timer progression", function() return M.ValueTextList("elapsed", "Fill up", "remaining", "Drain") end },
-    { "direction", "dropdown", "Fill direction", function() return M.ValueTextList(
+    { key = "visibility", kind = "dropdown", labelKey = "Visibility",
+        values = function() return M.ValueTextList("always", "Always", "combat", "In combat") end },
+    { key = "display", kind = "dropdown", labelKey = "Display mode",
+        values = function() return M.ValueTextList("bar", "Bar and timer", "text", "Number only") end },
+    { key = "width", kind = "slider", labelKey = "Width", range = { 40, 1200, 1 } },
+    { key = "height", kind = "slider", labelKey = "Height", range = { 4, 100, 1 } },
+    { key = "scale", kind = "slider", labelKey = "Scale %", range = { 50, 200, 1 } },
+    { key = "opacity", kind = "slider", labelKey = "Opacity %", range = { 0, 100, 1 } },
+    { key = "x", kind = "slider", labelKey = "X offset", range = { -2000, 2000, 1 } },
+    { key = "y", kind = "slider", labelKey = "Y offset", range = { -1200, 1200, 1 } },
+    { key = "texture", kind = "dropdown", labelKey = "Bar texture", values = function() return TextureItems() end },
+    { key = "backgroundTexture", kind = "dropdown", labelKey = "Background texture", values = function() return TextureItems("Use foreground texture") end },
+    { key = "backgroundOpacity", kind = "slider", labelKey = "Background opacity", range = { 0, 100, 1 } },
+    { key = "borderSize", kind = "slider", labelKey = "Border thickness", range = { 0, 8, 1 } },
+    { key = "fill", kind = "dropdown", labelKey = "Timer progression",
+        values = function() return M.ValueTextList("elapsed", "Fill up", "remaining", "Drain") end },
+    { key = "direction", kind = "dropdown", labelKey = "Fill direction", values = function() return M.ValueTextList(
             "RIGHT", "Horizontal (left -> right)", "LEFT", "Horizontal (right -> left)",
             "UP", "Vertical (bottom -> top)", "DOWN", "Vertical (top -> bottom)") end },
-    { "title", "boolean", "Show bar title" },
-    { "time", "boolean", "Show remaining time" },
-    { "font", "dropdown", "Timer font", function() return M.GlobalPage.FontValues(true) end },
-    { "fontSize", "number", "Font size", 6, 72 },
-    { "outline", "dropdown", "Font outline", function() return M.ValueTextList("", "None", "OUTLINE", "Outline", "THICKOUTLINE", "Thick outline") end },
-    { "textAlign", "dropdown", "Timer text alignment", function() return M.ValueTextList(
+    { key = "title", kind = "toggle", labelKey = "Show bar title" },
+    { key = "time", kind = "toggle", labelKey = "Show remaining time" },
+    { key = "font", kind = "dropdown", labelKey = "Timer font", values = function() return M.GlobalPage.FontValues(true) end },
+    { key = "fontSize", kind = "slider", labelKey = "Font size", range = { 6, 72, 1 } },
+    { key = "outline", kind = "dropdown", labelKey = "Font outline",
+        values = function() return M.ValueTextList("", "None", "OUTLINE", "Outline", "THICKOUTLINE", "Thick outline") end },
+    { key = "textAlign", kind = "dropdown", labelKey = "Timer text alignment", values = function() return M.ValueTextList(
             "AUTO", "Automatic", "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right") end },
-    { "textX", "number", "Timer text X offset", -300, 300 },
-    { "textY", "number", "Timer text Y offset", -200, 200 },
-    { "reachCheck", "boolean", "Grey out while the target is out of reach" },
-    { "reachOpacity", "number", "Out-of-reach opacity (%)", 0, 100 },
+    { key = "textX", kind = "slider", labelKey = "Timer text X offset", range = { -300, 300, 1 } },
+    { key = "textY", kind = "slider", labelKey = "Timer text Y offset", range = { -200, 200, 1 } },
+    { key = "reachCheck", kind = "toggle", labelKey = "Grey out while the target is out of reach" },
+    { key = "reachOpacity", kind = "slider", labelKey = "Out-of-reach opacity (%)", range = { 0, 100, 1 } },
 }
 local GROUPS = {
     { key = "behavior", title = false, indices = { 1, 2 } },
@@ -95,48 +100,41 @@ local function Position(widget, section, index, layout)
     local row = math.floor((index - 1) / layout.columns)
     AP.MoveWidget(widget, section, 28 + column * (layout.controlWidth + 36), -44 - row * 58, layout.controlWidth)
 end
-local function BindSetting(ctx, section, hand, spec, ui, layout, index)
-    local key, kind, label = spec[1], spec[2], spec[3]
+local function HandRow(hand, key, kind, label, ui)
     local meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
         function() ui.SelectHand(hand) return true end)
-    local function Get()
-        local value = Swing.Get(hand, key)
-        if (key == "texture" or key == "backgroundTexture") and value ~= "" then
-            return Swing.ResolveTexture(value, "Interface\\TargetingFrame\\UI-StatusBar")
-        end
-        return value
-    end
-    local function Set(value)
-        Swing.Set(hand, key, value)
-        ui.Paint()
-    end
-    local widget
-    if kind == "number" then
-        widget = W.Slider(section, label, spec[4], spec[5], 1, layout.controlWidth)
-        M.BindNumberWidget(ctx, widget, Get, Set, Get(), meta)
-    elseif kind == "boolean" then
-        widget = W.Toggle(section, label)
-        M.BindBoolWidget(ctx, widget, Get, Set, meta)
-    else
-        widget = W.Dropdown(section, label, spec[4], layout.controlWidth)
-        M.BindDropdownWidget(ctx, widget, Get, Set, meta)
-    end
-    AP.RegisterControl(widget, meta, label, kind == "number" and "slider" or kind == "boolean" and "toggle" or kind)
+    return {
+        id = meta.controlId, kind = kind, labelKey = label, key = key, meta = meta,
+        settingPath = "swingTimers." .. hand .. "." .. key, scope = hand, applyDomain = "swing",
+        defaultSource = function() return Swing.Get(hand, key) end,
+        get = function()
+            local value = Swing.Get(hand, key)
+            if (key == "texture" or key == "backgroundTexture") and value ~= "" then
+                return Swing.ResolveTexture(value, "Interface\\TargetingFrame\\UI-StatusBar")
+            end
+            return value
+        end,
+        set = function(value) Swing.Set(hand, key, value) ui.Paint() end,
+        register = true,
+    }
+end
+local function BindSetting(ctx, section, hand, spec, ui, layout, index)
+    local row = HandRow(hand, spec.key, spec.kind, spec.labelKey, ui)
+    row.range, row.values = spec.range, spec.values
+    local widget = Schema.Render(ctx, section, row, { width = layout.controlWidth })
     Position(widget, section, index, layout)
-    if M.AddTooltip and (key == "texture" or key == "backgroundTexture") then
-        M.AddTooltip(widget, label, "Use Preview and drag Swing Timers to see textures without attacking.")
+    if M.AddTooltip and (spec.key == "texture" or spec.key == "backgroundTexture") then
+        M.AddTooltip(widget, spec.labelKey, "Use Preview and drag Swing Timers to see textures without attacking.")
     end
 end
 local function BindHeader(ctx, section, hand, key, label, ui)
-    local toggle = W.SectionSwitch(section, label)
-    local meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
-        function() ui.SelectHand(hand) return true end)
-    M.BindBoolWidget(ctx, toggle, function() return Swing.Get(hand, key) end,
-        function(value) Swing.Set(hand, key, value) ui.Paint() end, meta)
-    AP.RegisterControl(toggle, meta, label, "toggle")
+    local row = HandRow(hand, key, "toggle", label, ui)
+    row.view = "header"
+    Schema.Render(ctx, section, row)
 end
 local function AddHandSection(ctx, b, hand, id, title, height, open, ui)
     local section = b:CollapsibleSection(id, title, height, open)
+    Schema.Section(section, hand)
     local entry = section._msuf2CollapsibleEntry
     ui.handEntries[hand][#ui.handEntries[hand] + 1] = entry
     entry._msuf2EnsureVisible = function() ui.SelectHand(hand) end
@@ -161,13 +159,8 @@ local function BuildHand(ctx, b, hand, ui, layout)
             BindSetting(ctx, section, hand, SPECS[group.indices[j]], ui, layout, j)
         end
         if extra > 0 then
-            local lane = W.Toggle(section, "Show the off-hand timer as a lane in the main-hand bar")
-            M.BindBoolWidget(ctx, lane, function() return Swing.Get("main", "offhandLane") end,
-                function(value) Swing.Set("main", "offhandLane", value) ui.Paint() end,
-                Meta("main.offhandLane", "swingTimers.main.offhandLane", nil, function() ui.SelectHand("main") return true end))
-            AP.RegisterControl(lane, Meta("main.offhandLane", "swingTimers.main.offhandLane", nil,
-                function() ui.SelectHand("main") return true end),
-                "Show the off-hand timer as a lane in the main-hand bar", "toggle")
+            local lane = Schema.Render(ctx, section,
+                HandRow("main", "offhandLane", "toggle", "Show the off-hand timer as a lane in the main-hand bar", ui))
             Position(lane, section, count, layout)
         end
     end
@@ -177,23 +170,18 @@ local function BuildCue(ctx, b, ui, width)
     local cue = AddHandSection(ctx, b, "main", "swing_next", "Next-swing attacks", 90 + #attacks * 58, false, ui)
     BindHeader(ctx, cue, "main", "nextSwingCue", "Show the queued next-swing attack", ui)
     AttachColors(cue, "main", { 6 }, ui)
-    local cueText = W.Toggle(cue, "Name the queued attack on the main-hand bar")
-    M.BindBoolWidget(ctx, cueText, function() return Swing.Get("main", "nextSwingText") end,
-        function(value) Swing.Set("main", "nextSwingText", value) ui.Paint() end,
-        Meta("main.nextSwingText", "swingTimers.main.nextSwingText", nil, function() ui.SelectHand("main") return true end))
-    AP.RegisterControl(cueText, Meta("main.nextSwingText", "swingTimers.main.nextSwingText", nil,
-        function() ui.SelectHand("main") return true end), "Name the queued attack on the main-hand bar", "toggle")
+    local cueText = Schema.Render(ctx, cue,
+        HandRow("main", "nextSwingText", "toggle", "Name the queued attack on the main-hand bar", ui))
     AP.MoveWidget(cueText, cue, 28, -42)
     for i, attack in ipairs(attacks) do
         local key = attack.key
         local label = M.Format("Text for %s (empty: spell name)", attack.name or tostring(attack.id))
-        local edit = M.BindTextInputAt(ctx, cue, M.Format("Text for %s (empty: spell name)", attack.name or tostring(attack.id)),
-            28, -82 - (i - 1) * 58, math.min(400, width - 80),
-            function() return Swing.Get("main", key) end,
-            function(value) Swing.Set("main", key, value) ui.Paint() end,
-            true, Meta("main." .. key, "swingTimers.main." .. key, nil, function() ui.SelectHand("main") return true end))
-        AP.RegisterControl(edit, Meta("main." .. key, "swingTimers.main." .. key, nil,
-            function() ui.SelectHand("main") return true end), label, "textinput")
+        local row = HandRow("main", key, "textinput", label, ui)
+        row.commitOnBlur = true
+        row.textAdapter = true
+        row.translatedLabel = true
+        Schema.Render(ctx, cue, row, { x = 28, y = -82 - (i - 1) * 58, width = math.min(400, width - 80) })
+
     end
     if M.AddTooltip then
         M.AddTooltip(cueText, "Name the queued attack on the main-hand bar",
@@ -237,6 +225,7 @@ local function BuildCopy(ctx, ui, width)
     local target = "off"
     local popup = M.UnitSectionsShared.MakeScopeCopyPopup(button, {
         controlDomain = "swing", controlPageKey = "swingtimers", controlPath = "copy",
+        declareControl = function(widget) Schema.Owned(widget, "swing", "copyNavigation") end,
         width = 420, height = 260, categories = COPY_CATEGORIES, scopes = scopes,
         categoryRowsPerColumn = 2, targets = { "main", "off", "ranged", "all" },
         targetWidths = { main = 90, off = 90, ranged = 80, all = 48 },
@@ -256,7 +245,12 @@ local function BuildCopy(ctx, ui, width)
             return false
         end,
     })
-    button:SetScript("OnClick", function() popup.Show(button) end)
+    local function ShowCopy() popup.Show(button) end
+    button:SetScript("OnClick", ShowCopy)
+    Schema.Custom(button, {
+        id = "menu2.swingtimers.swing.copy.button", kind = "button", labelKey = "Copy To",
+        scope = "swing", applyDomain = "copyNavigation", action = Schema.ButtonAction(button), owner = button,
+    })
     ui.section:HookScript("OnHide", popup.Hide)
     ui.HideCopy = popup.Hide
     if M.AddTooltip then
@@ -274,13 +268,18 @@ local function Build(ctx)
     ui.handEntries = { main = {}, off = {}, ranged = {} }
     ui.selected = LABELS[M.swingTimerHand] and M.swingTimerHand or "main"
     local module = b:CollapsibleSection("swing_module", "Swing Timers (Forever)", 90, false)
-    local enabled = W.SectionSwitch(module, "Enable Swing Timer module")
-    M.BindBoolWidget(ctx, enabled, Swing.GetEnabled, function(value)
-        Swing.SetEnabled(value)
-        M.Refresh(ctx)
-    end, Meta("enabled", "swingTimers.enabled"))
-    local preview = W.Toggle(module, "Preview and drag Swing Timers")
-    M.BindBoolWidget(ctx, preview, Swing.GetPreview, Swing.SetPreview, Meta("preview", nil, "ephemeral"))
+    Schema.Section(module, "swing")
+    local enabledMeta = Meta("enabled", "swingTimers.enabled")
+    local enabled = Schema.Render(ctx, module, {
+        id = enabledMeta.controlId, kind = "toggle", labelKey = "Enable Swing Timer module", view = "header",
+        scope = "swing", applyDomain = "swingModule", settingPath = "swingTimers.enabled", meta = enabledMeta,
+        get = Swing.GetEnabled, set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
+    })
+    local previewMeta = Meta("preview", nil, "ephemeral")
+    local preview = Schema.Render(ctx, module, {
+        id = previewMeta.controlId, kind = "toggle", labelKey = "Preview and drag Swing Timers",
+        scope = "swing", applyDomain = "preview", meta = previewMeta, get = Swing.GetPreview, set = Swing.SetPreview,
+    })
     AP.MoveWidget(preview, module, 28, -42)
     if M.AddTooltip then
         M.AddTooltip(enabled, "Swing Timers (Forever)",
@@ -312,11 +311,15 @@ local function Build(ctx)
     ui.SelectHand = SelectHand
     for i = 1, #HANDS do BuildHand(ctx, b, HANDS[i], ui, layout) end
     BuildCue(ctx, b, ui, width)
-    ui.selector = W.Segment(ui.section, "Swing Timers (Forever)",
-        M.ValueTextList("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged"), math.min(420, width - 150))
-    AP.MoveWidget(ui.selector, ui.section, 16, -14, math.min(420, width - 150), "LEFT")
+    local selectorMeta = Meta("previewHand", nil, "ephemeral")
+    ui.selector = Schema.Render(ctx, ui.section, {
+        id = selectorMeta.controlId, kind = "segment", labelKey = "Swing Timers (Forever)",
+        scope = "swing", applyDomain = "navigation", meta = selectorMeta,
+        values = M.ValueTextList("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged"),
+        get = function() return ui.selected end, set = SelectHand,
+    }, { width = math.min(420, width - 150), x = 16, y = -14,
+        moveWidth = math.min(420, width - 150), align = "LEFT" })
     ui.selector._msuf2Title:Hide()
-    M.BindSegment(ctx, ui.selector, function() return ui.selected end, SelectHand, Meta("previewHand", nil, "ephemeral"))
     BuildCopy(ctx, ui, width)
     ui.builder = b
     SelectHand(ui.selected)

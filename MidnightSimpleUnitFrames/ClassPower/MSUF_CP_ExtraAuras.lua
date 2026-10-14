@@ -12,6 +12,15 @@ local IGNORE_PAIN, ARCANE_SURGE, ARCANE_SOUL = 190456, 365362, 451038
 local ARCANE_COLOR, ARCANE_WARN_COLOR, PAIN_COLOR = { .66, .42, 1 }, { 1, .78, .25 }, { .45, .7, 1 }
 local SOUL_COLOR = { .92, .4, .86 }
 local ARCANE_TEXT = { seconds = true, gcds = true, both = true }
+local DEFAULTS = {
+    ignorePainTimeMarker = true, arcaneWindowText = "seconds", arcaneWindowWarnSeconds = 3,
+    resourceExtraWidth = 220, resourceExtraHeight = 8, resourceExtraOffsetY = -18,
+}
+MSUF.CPBuilders.ExtraAuraDefaults = DEFAULTS
+-- Scalar upvalues retain the old callback instruction count on missing/bad keys.
+local DEFAULT_WARN_SECONDS, DEFAULT_TEXT = DEFAULTS.arcaneWindowWarnSeconds, DEFAULTS.arcaneWindowText
+local DEFAULT_WIDTH, DEFAULT_HEIGHT = DEFAULTS.resourceExtraWidth, DEFAULTS.resourceExtraHeight
+local DEFAULT_OFFSET_Y = DEFAULTS.resourceExtraOffsetY
 
 -- Bound by MSUF.CPBuilders.ExtraAuras: its options table and the state of
 -- the one helper the resource-extras lifecycle builds per session.
@@ -48,12 +57,12 @@ local function RGB(key, fallback)
 end
 local function WarnSeconds()
     local seconds = tonumber(E.db.bars.arcaneWindowWarnSeconds)
-    if not seconds or seconds ~= seconds then seconds = 3 end
+    if not seconds or seconds ~= seconds then seconds = DEFAULT_WARN_SECONDS end
     return math.max(0, math.min(10, seconds))
 end
 local function ArcaneText()
     local mode = E.db.bars.arcaneWindowText
-    return ARCANE_TEXT[mode] and mode or "seconds"
+    return ARCANE_TEXT[mode] and mode or DEFAULT_TEXT
 end
 local function TextFrom()
     local seconds = tonumber(E.db.bars.arcaneWindowTextFrom)
@@ -195,8 +204,8 @@ local function Ensure(key, row)
             state.host:SetFrameLevel(states.ARCANE.host:GetFrameLevel() + 2)
         end
     end
-    local x, y = tonumber(b.resourceExtraOffsetX) or 0, tonumber(b.resourceExtraOffsetY) or -18
-    local width, height = tonumber(b.resourceExtraWidth) or 220, tonumber(b.resourceExtraHeight) or 8
+    local x, y = tonumber(b.resourceExtraOffsetX) or 0, tonumber(b.resourceExtraOffsetY) or DEFAULT_OFFSET_Y
+    local width, height = tonumber(b.resourceExtraWidth) or DEFAULT_WIDTH, tonumber(b.resourceExtraHeight) or DEFAULT_HEIGHT
     local placement = table.concat({ x, y, width, height, row }, ":")
     if state.placement ~= placement then
         state.host:ClearAllPoints()

@@ -48,7 +48,26 @@ function methods:SetScript(k,v)
     assert(k ~= "OnUpdate", "no Lua animation/polling driver")
     self.scripts[k] = v
 end
-function methods:HookScript(k,v) self.hooks[k] = v end
+function methods:GetScript(k) return self.scripts[k] end
+function methods:HookScript(k,v)
+    local prior = self.hooks[k]
+    self.hooks[k] = prior and function(...) prior(...) v(...) end or v
+end
+local function Pack(...) return { n = select("#", ...), ... } end
+local function FireButton(self, name, ...)
+    local handler = self.scripts[name]
+    local result = handler and Pack(handler(self, ...))
+    if self.hooks[name] then self.hooks[name](self, ...) end
+    if result then return unpack(result, 1, result.n) end
+end
+function methods:Click(button, down)
+    if self.enabled == false then return end
+    button, down = button or "LeftButton", down == true
+    FireButton(self, "PreClick", button, down)
+    local result = Pack(FireButton(self, "OnClick", button, down))
+    FireButton(self, "PostClick", button, down)
+    return unpack(result, 1, result.n)
+end
 function methods:Show()
     local was = self.shown
     self.shown = true
@@ -334,9 +353,13 @@ local function bind(_,widget,get,set,meta)
 end
 local W={}
 function W.PageBuilder()
-    return { width=800,y=-100, RequestRelayoutCollapsibles=noop, CollapsibleSection=function(_,id)
+    return { width=800,y=-100, RequestRelayoutCollapsibles=noop, CollapsibleSection=function(_,id,title)
         local section=object(); sections[id]=section
-        section._msuf2CollapsibleEntry={outer=object(),body=section}
+        local entry={outer=object(),body=section,header=object()}
+        entry.header._msuf2RuntimeControlRecord={controlId="menu2.swingtimers.section."..id..".expanded",
+            kind="toggle",label=(title or id).." section",command={get=function() return entry.open==true end,
+                set=function(value) entry.open=value end}}
+        section._msuf2CollapsibleEntry=entry
         return section
     end }
 end
@@ -346,18 +369,42 @@ function W.Segment() local widget=object();widget._msuf2Title=object();return wi
 function W.FixedPreviewSection() return object() end
 function W.Slider() return object() end
 function W.Dropdown(_,_,values) local widget=object(); widget.values=values; return widget end
+function W.TextInput(parent,label,width)
+    local widget=object(nil,parent)
+    widget.label=label
+    widget:SetWidth(width)
+    return widget
+end
+function W.MoveWidget(widget,parent,x,y,width)
+    widget:SetPoint("TOPLEFT",parent,"TOPLEFT",x,y)
+    if width then widget:SetWidth(width) end
+    return widget
+end
 function W.Color() error("inline swing color widgets must not be allocated") end
 function W.AttachContextColorShortcut(section,options) shortcuts[section]=options end
 local page
-ns.Require=function(name) assert(name=="MSUF_PixelLayoutRegion");return function(region) return region end end
+ns.Require=function(name)
+    if name=="MSUF_NormalizeProfileDefaults" then
+        return function() error("Swing defaults must remain owned by SwingTimer") end
+    end
+    assert(name=="MSUF_PixelLayoutRegion")
+    return function(region) return region end
+end
 ns.MSUF2={
     Widgets=W, Theme={Button=function() return object() end},
     UnitSectionsShared={MakeScopeCopyPopup=function() return {Show=noop,Hide=noop} end},
-    AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path) return {path=path} end},
+    AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path)
+        return {path=path,controlId="menu2.swingtimers.swing."..path}
+    end},
+    RegisterControlMetadata=noop,
     StatusBarTextureItems=ns.UI.StatusBarTextureItems,
     GlobalPage={FontValues=function() return {} end},
     ValueTextList=function(...) local list={}; local args={...}; for i=1,#args,2 do list[#list+1]={value=args[i],text=args[i+1]} end; return list end,
     BindBoolWidget=bind,BindDropdownWidget=bind,BindSegment=bind,
+    BindTextInput=function(ctx,widget,get,set,commitOnBlur,meta)
+        widget.commitOnBlur=commitOnBlur
+        bind(ctx,widget,get,set,meta)
+    end,
     BindDropdownAt=function(ctx,parent,label,x,y,values,width,get,set,meta)
         local widget=W.Dropdown(parent,label,values,width)
         bind(ctx,widget,get,set,meta)
@@ -374,9 +421,30 @@ ns.MSUF2={
     RegisterPage=function(key,spec) assert(key=="swingtimers"); page=spec end,
     Refresh=noop,
 }
+-- Partial standalone fixtures load the production owners rather than inventing defaults/adapters.
+assert(loadfile(root.."/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua"))("MSUF",ns)
+local Slice=assert(loadfile(root.."/.github/scripts/msuf_source_slice.lua"))()
+local supportPath=root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"
+local supportFile=assert(io.open(supportPath,"rb"))
+local supportSource=supportFile:read("*a") supportFile:close()
+assert(loadstring("local M=...\n"..Slice.Function(supportSource,"function M.BindTextInputWidget",supportPath)))(ns.MSUF2)
+assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua"))("MSUF",ns)
 page.build({SetContentHeight=noop})
+local copyButton
+for _, widget in ipairs(objects) do
+    local spec = widget._msuf2ControlSchema
+    if spec and spec.id == "menu2.swingtimers.swing.copy.button" then copyButton = widget break end
+end
+assert(copyButton, "minimal fixture lost actual Copy To owner")
+assert(loadfile(root .. "/tools/tests/menu_button_owner_assert.lua"))().Button(copyButton, copyButton._msuf2ControlSchema)
+local copyHooks = 0
+copyButton:HookScript("OnClick", function(self) assert(self == copyButton); copyHooks = copyHooks + 1 end)
+copyButton:SetScript("OnClick", function(self, button, down) return self, button, down end)
+local copySelf, copyMouse, copyDown = copyButton._msuf2ControlSchema.action({}, "RightButton", true)
+assert(copySelf == copyButton and copyMouse == "RightButton" and copyDown == true and copyHooks == 1,
+    "minimal current native action lost owner, inputs, returns or separate hook")
 for _,hand in ipairs({"main","off","ranged"}) do
     local targets=shortcuts[sections["swing_"..hand.."_appearance"]].getTargets()
     assert(#targets==3, "appearance context owns bar, background and border colors")

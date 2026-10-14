@@ -1,6 +1,7 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
 local W,AP=M.Widgets,M.AdvancedPage
+local Schema=M.ControlSchema
 local ResourceExtras={}
 M.ResourceExtrasPage=ResourceExtras
 local function Meta(path,key,kind)
@@ -41,25 +42,25 @@ end
 -- StaticRowsWithoutClientSupport), so no other file repeats this client split.
 local CLIENT_EXTRAS={
     {wanted=ExtraAuras,specs=function() return {
-        {"showIgnorePain","toggle","Ignore Pain duration","showIgnorePain",false},
-        {"ignorePainTimeMarker","toggle","Ignore Pain time marker","ignorePainTimeMarker",true},
-        {"showArcaneWindow","toggle","Arcane Surge window timer","showArcaneWindow",false},
-        {"arcaneWindowText","dropdown","Arcane window text",{{value="seconds",text="Seconds left"},
+        {key="showIgnorePain",kind="toggle",labelKey="Ignore Pain duration"},
+        {key="ignorePainTimeMarker",kind="toggle",labelKey="Ignore Pain time marker"},
+        {key="showArcaneWindow",kind="toggle",labelKey="Arcane Surge window timer"},
+        {key="arcaneWindowText",kind="dropdown",labelKey="Arcane window text",values={{value="seconds",text="Seconds left"},
             {value="gcds",text="Global cooldowns you can still start"},{value="both",text="Seconds and global cooldowns"}},
-            280,"arcaneWindowText","seconds"},
-        {"arcaneWindowTextFrom","slider","Show the time from (seconds left, 0 = always)",0,15,1,280,"arcaneWindowTextFrom",0},
-        {"arcaneWindowWarnSeconds","slider","Arcane window warning (seconds)",0,10,1,280,"arcaneWindowWarnSeconds",3},
-        {"arcaneWindowWarnLastGCD","toggle","Warn during the last global cooldown","arcaneWindowWarnLastGCD",false},
+            },
+        {key="arcaneWindowTextFrom",kind="slider",labelKey="Show the time from (seconds left, 0 = always)",range={0,15,1}},
+        {key="arcaneWindowWarnSeconds",kind="slider",labelKey="Arcane window warning (seconds)",range={0,10,1}},
+        {key="arcaneWindowWarnLastGCD",kind="toggle",labelKey="Warn during the last global cooldown"},
     } end,colors={"ignorePainColor","arcaneWindowColor","arcaneWindowSoulColor","arcaneWindowWarnColor"}},
     {wanted=RegenTimers,specs=function() return {
-        {"manaRegenPause","toggle","Regeneration pause after spending","manaRegenPause",false},
-        {"manaGainPulse","toggle","Mana return pulse","manaGainPulse",false},
+        {key="manaRegenPause",kind="toggle",labelKey="Regeneration pause after spending"},
+        {key="manaGainPulse",kind="toggle",labelKey="Mana return pulse"},
     } end,colors={"manaRegenPauseColor","manaGainPulseColor"}},
     {wanted=ExtraAuras,specs=function() return {
-        {"resourceExtraWidth","slider","Resource bar width",40,1000,1,280,"resourceExtraWidth",220},
-        {"resourceExtraHeight","slider","Resource bar height",2,30,1,280,"resourceExtraHeight",8},
-        {"resourceExtraOffsetX","slider","Resource bar X offset",-1000,1000,1,280,"resourceExtraOffsetX",0},
-        {"resourceExtraOffsetY","slider","Resource bar Y offset",-1000,1000,1,280,"resourceExtraOffsetY",-18},
+        {key="resourceExtraWidth",kind="slider",labelKey="Resource bar width",range={40,1000,1}},
+        {key="resourceExtraHeight",kind="slider",labelKey="Resource bar height",range={2,30,1}},
+        {key="resourceExtraOffsetX",kind="slider",labelKey="Resource bar X offset",range={-1000,1000,1}},
+        {key="resourceExtraOffsetY",kind="slider",labelKey="Resource bar Y offset",range={-1000,1000,1}},
     } end,colors={}},
 }
 -- Setting keys of every client-only extra and of its color (Colors page,
@@ -69,8 +70,8 @@ function ResourceExtras.ClientOnlySettings()
     for _,group in ipairs(CLIENT_EXTRAS) do
         local wanted=group.wanted()
         for _,spec in ipairs(group.specs()) do
-            all["bars."..spec[1]]=true
-            if wanted then built["bars."..spec[1]]=true end
+            all["bars."..spec.key]=true
+            if wanted then built["bars."..spec.key]=true end
         end
         for _,key in ipairs(group.colors) do
             all["bars."..key]=true
@@ -81,7 +82,7 @@ function ResourceExtras.ClientOnlySettings()
 end
 function ResourceExtras.Specs()
     local specs={
-        {"manaUpcomingCost","toggle","Mana spend preview","manaUpcomingCost",false},
+        {key="manaUpcomingCost",kind="toggle",labelKey="Mana spend preview"},
     }
     local own={}
     for _,group in ipairs(CLIENT_EXTRAS) do
@@ -128,7 +129,7 @@ function ResourceExtras.ColorKeys()
 end
 function ResourceExtras.SettingKeys()
     local keys={ ["bars.resourceMarks"]=true }
-    for _,spec in ipairs(ResourceExtras.Specs()) do keys["bars."..spec[1]]=true end
+    for _,spec in ipairs(ResourceExtras.Specs()) do keys["bars."..spec.key]=true end
     for key in pairs(ResourceExtras.ColorKeys()) do keys["bars."..key]=true end
     return keys
 end
@@ -157,7 +158,7 @@ function ResourceExtras.ColorTargets(Bars,Apply,group)
 end
 local function GroupSpecs(group)
     local byKey,specs={},{}
-    for _,spec in ipairs(ResourceExtras.Specs()) do byKey[spec[1]]=spec end
+    for _,spec in ipairs(ResourceExtras.Specs()) do byKey[spec.key]=spec end
     for _,key in ipairs(group.keys) do if byKey[key] and key~=group.master then specs[#specs+1]=byKey[key] end end
     return specs,byKey[group.master]
 end
@@ -186,18 +187,29 @@ local function ReserveColorAction(entry,shortcut)
         entry.featureSwitch:SetPoint("RIGHT",entry.header,"RIGHT",-14-(entry._msuf2ColorSwatchReserve or 0),0)
     end
 end
+local function SettingRow(spec,Bars,Apply)
+    local meta=Meta(spec.key,spec.key)
+    return {id=meta.controlId,kind=spec.kind,labelKey=spec.labelKey,key=spec.key,
+        settingPath="bars."..spec.key,scope="bars",applyDomain="resourceExtras",meta=meta,
+        range=spec.range,values=spec.values,source=Bars,apply=Apply,workspace="classpower",
+        defaultSource=function() return Schema.Default("bars",spec.key) end}
+end
 local function Header(page,section,group,Bars,Apply)
     if section._msuf2ResourceExtraHeader then return end
     section._msuf2ResourceExtraHeader=true
+    Schema.Section(section,"bars")
     local _,master=GroupSpecs(group)
     if master then
-        local toggle=W.SectionSwitch(section,master[3])
-        M.ClassPowerWorkspace.BindBoolWidget(page.ctx,toggle,function() return Bars()[group.master]==true end,
-            function(value)
-                Bars()[group.master]=value and true or false
-                FocusExample(page,group)
-                Apply()
-            end,Meta(group.master,group.master))
+        local row=SettingRow(master,Bars,Apply)
+        row.get=function() return Bars()[group.master]==true end
+        row.set=function(value)
+            Bars()[group.master]=value and true or false
+            FocusExample(page,group)
+            Apply()
+        end
+        row.view="header"
+        Schema.Render(page.ctx,section,row)
+
     end
     local entry=section._msuf2CollapsibleEntry
     if entry and group.key~="layout" then
@@ -212,27 +224,52 @@ local function BuildGroup(page,group,Bars,Apply)
     local specs=GroupSpecs(group)
     local cardW,controlW,columns,height=Geometry(page,#specs)
     local section=page.b:CollapsibleSection(group.id,group.title,height,false)
+    Schema.Section(section,"bars")
     Header(page,section,group,Bars,Apply)
     W.ControlCard(section,group.key=="layout" and "Size and position" or "Settings",nil,14,-38,cardW,height-58)
-    local applyIndex = { toggle = 6, slider = 10, dropdown = 8 }
+    local rows={}
     for _,spec in ipairs(specs) do
-        local key = spec[1]
-        spec.meta=Meta(key,key)
-        spec[applyIndex[spec[2]]] = function()
+        local key=spec.key
+        local row=SettingRow(spec,Bars,function()
             M.ResourceExtrasPreview.FocusKey(key)
-            M.ResourceExtrasPreview.UpdateHeader(page.ctx, page.workspace.selected)
+            M.ResourceExtrasPreview.UpdateHeader(page.ctx,page.workspace.selected)
             Apply()
-            M.RequestRefresh(page.ctx, "resource-extra-setting")
-        end
+            M.RequestRefresh(page.ctx,"resource-extra-setting")
+        end)
+        if row.kind=="slider" then row.meta.step,row.meta.roundStep=row.range[3],true end
+        rows[#rows+1]=row
     end
-    local controls=page:Controls(section,Bars,Apply,"resource_extras",specs)
-    for i,spec in ipairs(specs) do
-        local column=(i-1)%columns
-        local width=spec[2]=="toggle" and controlW-36 or controlW
-        W.MoveWidget(controls[spec[1]],section,32+column*(controlW+20),-92-math.floor((i-1)/columns)*58,width,"LEFT")
-    end
+    Schema.Flow(page.ctx,section,rows,{columns=columns,width=controlW,x=32,y=-92,gap=20,rowHeight=58,align="LEFT"})
+
 end
 function ResourceExtras.BuildSections(page,Bars,Apply)
+    Schema.Section(page.ctx.entry.sections.classpower_resource_visibility,"bars")
+    local lazySection=page.LazySection
+    function page:LazySection(id,title,height,method,prepareShell)
+        if id~="classpower_resource_marks" then return lazySection(self,id,title,height,method,prepareShell) end
+        return lazySection(self,id,title,height,method,function(ctx,section,unit,spec)
+            Schema.Section(section,"resourceMarks")
+            if prepareShell then return prepareShell(ctx,section,unit,spec) end
+        end)
+    end
+    local header=page.ctx._resourceExtraHeader
+    Schema.Owned(header.effect,"resourceExtras","previewNavigation")
+    Schema.Owned(header.state,"resourceExtras","previewNavigation")
+    -- The existing ClassPower owner builds this borrowed lazy section later.
+    -- Declare its two exact controls after that build without replacing any binding.
+    local buildVisibility=page.BuildResourceVisibility
+    function page:BuildResourceVisibility(id,...)
+        buildVisibility(self,id,...)
+        if id=="classpower_resource_visibility" then
+            local prefix="menu2.classpower.advanced.resource.extras.visibility."
+            local independent=M.RuntimeControlCatalog.Get(prefix.."independent").widget
+            local ooc=M.RuntimeControlCatalog.Get(prefix.."out.of.combat").widget
+            Schema.Owned(independent,"bars","resourceVisibility")
+            Schema.Owned(ooc,"bars","resourceVisibility")
+            independent._msuf2ControlSchema.settingPath="bars.resourceExtraIndependentVisibility"
+            ooc._msuf2ControlSchema.settingPath="bars.resourceExtraHideOOC"
+        end
+    end
     for _,group in ipairs(GROUPS) do
         if not group.wanted or group.wanted() then
             local count=#GroupSpecs(group)
@@ -242,6 +279,7 @@ function ResourceExtras.BuildSections(page,Bars,Apply)
         end
     end
 end
+local MARK_DEFAULTS=Schema.MarkDefaults
 local selectedMark=1
 local EMPTY_MARKS={}
 function ResourceExtras.MarkRules(Bars) return Bars().resourceMarks or EMPTY_MARKS end
@@ -260,7 +298,7 @@ local function MarkColorTarget(Bars,Apply)
     local rule=ResourceExtras.MarkRule(Bars)
     if not rule then return {} end
     return {{label="Mark and threshold color",getRGB=function()
-            local color=rule.color or {1,1,1}
+            local color=rule.color or MARK_DEFAULTS.color
             return unpack(color)
         end,
         setRGB=function(r,g,b)
@@ -329,6 +367,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     end
     local height=ResourceExtras.MarksHeight(page)
     local section=page.b:CollapsibleSection("classpower_resource_marks","Resource marks and thresholds",height,false)
+    Schema.Section(section,"resourceMarks")
     local cardW,controlW,columns=Geometry(page,8)
     W.ControlCard(section,"Resource mark",nil,14,-38,cardW,154)
     W.ControlCard(section,"Settings",nil,14,-212,cardW,height-232)
@@ -361,16 +400,21 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     end
     local selector=W.Dropdown(section,"Resource mark",function() return MarkValues(Bars) end,280)
     W.MoveWidget(selector,section,32,-92,controlW,"LEFT")
-    M.ClassPowerWorkspace.BindDropdownWidget(ctx,selector,function() return MarkIndex(Bars) end,function(value)
-        selectedMark=value
-        Refresh()
-    end,
-            Meta("marks.select",nil,"ephemeral"))
+    local selectorMeta=Meta("marks.select",nil,"ephemeral")
+    Schema.Bind(ctx,selector,{id=selectorMeta.controlId,kind="dropdown",labelKey="Resource mark",
+        values=function() return MarkValues(Bars) end,scope="resourceMarks",applyDomain="navigation",
+        workspace="classpower",meta=selectorMeta,get=function() return MarkIndex(Bars) end,
+        set=function(value) selectedMark=value Refresh() end})
+
     local function Button(label,x,path,callback)
         local button=M.Theme.Button(section,label,130,26,{history=true})
         button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-146)
         button:SetScript("OnClick",callback)
-        AP.RegisterControl(button,Meta(path,"resourceMarks","action"),label,"button")
+        local meta=Meta(path,"resourceMarks","action")
+        AP.RegisterControl(button,meta,label,"button")
+        local action=Schema.ButtonAction(button)
+        Schema.Custom(button,{id=meta.controlId,kind="button",labelKey=label,scope="resourceMarks",
+            applyDomain="resourceExtras",settingPath=meta.settingKey,meta=meta,owner=button,set=action,action=action})
     end
     Button("Add resource mark",32,"marks.add",function()
         local b=Bars()
@@ -378,7 +422,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             b.resourceMarks={}
         end
         local rules=b.resourceMarks
-        rules[#rules+1]={target="PLAYER",resource="ALL",mode="PERCENT",value=50,width=2,color={1,1,1},mark=true}
+        rules[#rules+1]=AP.DeepCopyTable(MARK_DEFAULTS)
         selectedMark=#rules
         Apply()
         Refresh()
@@ -399,44 +443,49 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local width=widget._msuf2ControlKind=="toggle" and controlW-36 or controlW
         W.MoveWidget(widget,section,32+column*(controlW+20),-268-row*58,width,"LEFT")
     end
-    local function Drop(key,label,values,default)
-        local widget=W.Dropdown(section,label,values,280)
-        Position(widget)
-        M.ClassPowerWorkspace.BindDropdownWidget(ctx,widget,function() local rule=Rule()
-            return rule and rule[key] or default end,
-            function(value) Write(key,value) end,Meta("marks."..key))
-    end
-    Drop("target","Resource bar",{{value="PLAYER",text="Player power"},{value="CLASS",text="Class resource"},
-        {value="ALTMANA",text="Alternative mana"}},"PLAYER")
-    Drop("resource","Power type",PowerTypeValues(),"ALL")
-    Drop("mode","Value mode",{{value="PERCENT",text="Percent"},{value="ABSOLUTE",text="Absolute value"}},"PERCENT")
-    for _,spec in ipairs({{"value","Resource value",0,10000000,1,50},{"width","Mark width",1,20,1,2}}) do
-        local key=spec[1]
-        local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280)
-        Position(widget)
-        if key=="value" then
-            -- Registered before the value binding, so the range is set before the value.
-            M.TrackRefresh(ctx,function()
-                widget._msuf2Refreshing=true
-                widget:SetMinMaxValues(0,SliderMax(Rule()))
-                widget._msuf2Refreshing=nil
-            end)
+    local rows={
+        {key="target",kind="dropdown",labelKey="Resource bar",values={{value="PLAYER",text="Player power"},
+            {value="CLASS",text="Class resource"},{value="ALTMANA",text="Alternative mana"}}},
+        {key="resource",kind="dropdown",labelKey="Power type",values=PowerTypeValues()},
+        {key="mode",kind="dropdown",labelKey="Value mode",values={{value="PERCENT",text="Percent"},
+            {value="ABSOLUTE",text="Absolute value"}}},
+        {key="value",kind="slider",labelKey="Resource value",range={0,10000000,1}},
+        {key="width",kind="slider",labelKey="Mark width",range={1,20,1}},
+        {key="mark",kind="toggle",labelKey="Show resource mark"},
+        {key="threshold",kind="toggle",labelKey="Change color at threshold"},
+        {key="direction",kind="dropdown",labelKey="Threshold direction",values={{value="ABOVE",text="At or above"},
+            {value="BELOW",text="Below"}}},
+    }
+    for _,row in ipairs(rows) do
+        local key=row.key
+        local meta=Meta("marks."..key)
+        row.id,row.meta=meta.controlId,meta
+        row.scope,row.applyDomain,row.workspace="resourceMarks","resourceExtras","classpower"
+        row.defaultSource=function()
+            if row.values then return row.values[1].value end
+            return MARK_DEFAULTS[key]
         end
-        M.ClassPowerWorkspace.BindNumberWidget(ctx,widget,function() local rule=Rule()
-            return rule and rule[key] or spec[6] end,
-            function(value) Write(key,value) end,spec[6],Meta("marks."..key))
-    end
-    for _,spec in ipairs({{"mark","Show resource mark",true},{"threshold","Change color at threshold",false}}) do
-        local key=spec[1]
-        local widget=W.Toggle(section,spec[2])
-        Position(widget)
-        M.ClassPowerWorkspace.BindBoolWidget(ctx,widget,function()
+        row.get=function()
             local rule=Rule()
-            return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false
-        end,
-            function(value) Write(key,value) end,Meta("marks."..key))
+            if row.kind=="toggle" then
+                return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false
+            end
+            return rule and rule[key] or row.defaultSource()
+        end
+        row.set=function(value) Write(key,value) end
+        if key=="value" then
+            row.beforeBind=function(widget)
+                M.TrackRefresh(ctx,function()
+                    widget._msuf2Refreshing=true
+                    widget:SetMinMaxValues(0,SliderMax(Rule()))
+                    widget._msuf2Refreshing=nil
+                end)
+            end
+        end
+        local widget=Schema.Render(ctx,section,row,{width=280})
+        Position(widget)
     end
-    Drop("direction","Threshold direction",{{value="ABOVE",text="At or above"},{value="BELOW",text="Below"}},"ABOVE")
+
 end
 function ResourceExtras.MarksHeight(page) return page.width>=680 and 612 or 786 end
 local function BuildMarkColors(ctx,b,Bars,ColorValueAt,Apply)
@@ -446,14 +495,18 @@ local function BuildMarkColors(ctx,b,Bars,ColorValueAt,Apply)
     local function ColorMeta(path,kind)
         return M.ControlMeta("colors","advanced","resource_extras.marks."..path,kind or "setting",{searchSettingKeys={"bars.resourceMarks"}})
     end
-    M.ClassPowerWorkspace.BindDropdownWidget(ctx,selector,function() return MarkIndex(Bars) end,function(value)
-        selectedMark=value
-        M.RequestRefresh(ctx,"resource-mark-color-selection")
-    end,ColorMeta("select","ephemeral"))
+    local selectorMeta=ColorMeta("select","ephemeral")
+    Schema.Bind(ctx,selector,{id=selectorMeta.controlId,kind="dropdown",labelKey="Resource mark",
+        values=function() return MarkValues(Bars) end,scope="resourceMarks",applyDomain="navigation",
+        workspace="classpower",meta=selectorMeta,get=function() return MarkIndex(Bars) end,
+        set=function(value)
+            selectedMark=value
+            M.RequestRefresh(ctx,"resource-mark-color-selection")
+        end})
     local color=ColorValueAt(ctx,section,"Mark and threshold color",24,-100,
         function()
             local rule=ResourceExtras.MarkRule(Bars)
-            local c=rule and rule.color or {1,1,1}
+            local c=rule and rule.color or MARK_DEFAULTS.color
             return unpack(c)
         end,
         function(r,g,blue)

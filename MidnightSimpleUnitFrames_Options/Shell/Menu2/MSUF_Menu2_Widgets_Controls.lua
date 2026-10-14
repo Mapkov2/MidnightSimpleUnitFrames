@@ -1199,10 +1199,11 @@ local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn e
 
 --- Text inputs commit on Enter or focus loss; callers attach the actual profile
 --- write through SetOnValueCommitted.
-function W.TextInput(section, label, width)
+function W.TextInput(section, label, width, translatedLabel)
     local x, y = NextRow(section, 48)
     width = width or 260
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
+    local title = T.Font(section, "GameFontHighlightSmall", translatedLabel and "" or (label or ""), T.colors.text, "control")
+    if translatedLabel then T.SetTranslatedText(title, label or "") end
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, section, "InputBoxTemplate"))

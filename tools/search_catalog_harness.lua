@@ -66,6 +66,9 @@ local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
 if not MSUF.Require then
     assert(loadfile(Join(CORE, "Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
 end
+-- Resource declarations read the same cold default owner as the full client graph.
+-- Loading its definitions creates no sensor, event registration or native frame.
+assert(loadfile(Join(CORE, "ClassPower/MSUF_CP_ExtraAuras.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- Load the shared specialization provider before pages query it.
 assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- Menu pages resolve castbar providers through the same namespace as the core.

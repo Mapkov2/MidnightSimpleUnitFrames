@@ -971,6 +971,11 @@ The preflight forwards its resolved Lua interpreter to child tools, including
 an explicit `-LuaPath` override. Each generator child must also report a zero
 process exit status; complete rows alone do not prove a successful build.
 
+The five-page Options schema pilot keeps the existing binding, history, lazy
+section and apply owners. See [control schema](docs/MENU_CONTROL_SCHEMA.md) for
+default sources, explicit compatibility adapters and immutable built-control
+inventories. Its search generation must preserve all rows and identities.
+
 Both `MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data*.lua`
 files are generated, never hand-edited. The generator and everything it loads
 are tracked, so a clean clone can reproduce both files byte for byte:
@@ -1298,3 +1303,10 @@ media registration retains its asset/readiness work and schedules no separate
 profile-migration timer. The texture migration phase smoke pins all nine legacy,
 current and third-party selections on each supported client, including later
 activation and every import boundary before late media registration.
+
+The five Menu2 pilot pages preserve legacy UI fallbacks through the compatibility
+owner documented in docs/MENU_CONTROL_SCHEMA.md. It does not seed saved keys or
+normalize a profile. Extra-aura callbacks bind shared defaults to scalars at load;
+their exact pre-schema VM/native/allocation budgets remain unchanged. Real
+control declarations, sparse/imported reads and profile switches have focused
+guards; live layout and combat/taint checks remain client-side validation.

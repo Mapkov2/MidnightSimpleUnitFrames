@@ -463,6 +463,11 @@ local function CopyPopupCategoryLayout(opts, count)
     local height = math.max(tonumber(opts.height) or 276, math.abs(topY) + (rows - 1) * rowHeight + COPY_POPUP_CATEGORY_FOOTER)
     return rows, topY, rowHeight, height
 end
+-- Migrated popup callers declare actual owners after scripts and metadata exist.
+local function RegisterCopyPopupControl(widget, opts, suffix, label, kind, classification)
+    RegisterSharedControl(widget, opts, suffix, label, kind, classification)
+    if opts.declareControl then opts.declareControl(widget) end
+end
 function Shared.MakeScopeCopyPopup(anchorButton, opts)
     -- Unit and group pages both expose a "copy this scope to another scope" popup.
     -- Keep the chrome and checkbox bookkeeping here; callers keep the actual copy action
@@ -541,7 +546,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             close:SetSize(20, 20)
             close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -8)
             close:SetScript("OnClick", function() popup:Hide() end)
-            RegisterSharedControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
+            RegisterCopyPopupControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
             local destLabel = T.Font(popup, "GameFontDisableSmall", opts.targetLabel or "Destination", T.colors.dim)
             destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
             popup._targetBtns = {}
@@ -557,7 +562,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
                     RefreshTargets()
                 end)
-                RegisterSharedControl(btn, opts, "target." .. tostring(key), M.Format("Copy target %s", M.Tr(label)), "button", opts.runLabel and "ephemeral" or "action")
+                RegisterCopyPopupControl(btn, opts, "target." .. tostring(key), M.Format("Copy target %s", M.Tr(label)), "button", opts.runLabel and "ephemeral" or "action")
                 popup._targetBtns[key] = btn
             end
             local catLabel = T.Font(popup, "GameFontDisableSmall", opts.categoryLabel or "Copy categories", T.colors.dim)
@@ -573,7 +578,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     NotifyGuidedInteraction(self)
                     scopes[cat.key] = self:GetChecked() and true or false
                 end)
-                RegisterSharedControl(cb, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
+                RegisterCopyPopupControl(cb, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
                 if cat.description and M.AddTooltip then
                     M.AddTooltip(cb, cat.label, cat.description, { hook = true, titleAsLine = true })
                 end
@@ -585,14 +590,14 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 NotifyGuidedInteraction(allBtn)
                 SetAll(true, opts.allFeedback or "All copy categories selected")
             end)
-            RegisterSharedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
+            RegisterCopyPopupControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
             local noneBtn = CopyPopupButton(popup, "None", 58, "normal")
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
             noneBtn:SetScript("OnClick", function()
                 NotifyGuidedInteraction(noneBtn)
                 SetAll(false, opts.noneFeedback or "Copy categories cleared")
             end)
-            RegisterSharedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
+            RegisterCopyPopupControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
             if opts.runLabel then
                 local runBtn = CopyPopupButton(popup, opts.runLabel, opts.runWidth or 128, "action")
                 runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
@@ -600,7 +605,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     NotifyGuidedInteraction(runBtn)
                     if opts.onRun then opts.onRun(api, popup) end
                 end)
-                RegisterSharedControl(runBtn, opts, "run", opts.runLabel, "button", "action")
+                RegisterCopyPopupControl(runBtn, opts, "run", opts.runLabel, "button", "action")
                 popup._runBtn = runBtn
             end
             if type(opts.onPopupCreated) == "function" then opts.onPopupCreated(popup, api) end

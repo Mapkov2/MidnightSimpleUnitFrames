@@ -700,3 +700,14 @@ clients+Forever	lua	tools/tests/locale_companion_boot_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/toc_condition_semantics_smoke.lua	{root}	TOC first-condition semantics failed
 -	lua	tools/tests/suite_host_surface_contract_smoke.lua	{root} Mainline	Suite host surface contract: Mainline
 -	lua	tools/tests/suite_host_surface_contract_smoke.lua	{root} Forever	Suite host surface contract: Forever
+clients+Forever	lua	tools/tests/menu_pilot_inventory_smoke.lua	{root} {flavor}	Built pilot control inventory drifted from pre-migration fixture: {flavor}
+clients+Forever	lua	tools/tests/menu_control_schema_smoke.lua	{root} {flavor}	Pilot control DB/apply/refresh/combat/history/exact navigation drifted: {flavor}
+clients+Forever	lua	tools/tests/menu_legacy_fallback_smoke.lua	{root} {flavor}	Legacy page fallback/getter/profile switch contract failed: {flavor}
+-	lua	tools/tests/resource_extra_aura_defaults_smoke.lua	{root}	Extra aura old-owner callback/native/allocation budget changed
+-	python	tools/tests/menu_ui_default_owner_smoke.py	{root}	UI default owner or text adapter contract changed
+clients+Forever	lua	tools/tests/menu_alpha_selector_owner_smoke.lua	{root} {flavor}	Alpha selector original owner normalization/refresh drifted: {flavor}
+clients+Forever	lua	tools/tests/menu_swing_copy_owner_smoke.lua	{root} {flavor}	Swing lazy copy original control/action inventory drifted: {flavor}
+clients+Forever	lua	tools/tests/menu_pilot_action_owner_smoke.lua	{root} {flavor}	Real pilot action and target owner inventory drifted: {flavor}
+clients+Forever	lua	tools/tests/menu_context_shortcut_optin_smoke.lua	{root} {flavor}	Opt-in shortcut changed automatic or unconverted owners: {flavor}
+clients+Forever	lua	tools/tests/menu_pilot_section_delegate_smoke.lua	{root} {flavor}	Pilot section stopped delegating shared popup actions: {flavor}
+clients+Forever	lua	tools/tests/menu_pilot_button_lifecycle_smoke.lua	{root} {flavor}	Pilot complete native button lifecycle/owner drifted: {flavor}

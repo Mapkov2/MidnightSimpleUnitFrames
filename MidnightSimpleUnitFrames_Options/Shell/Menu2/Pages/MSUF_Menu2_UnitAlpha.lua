@@ -6,6 +6,33 @@ local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 local max = math.max
 local SettingMeta = UP.SettingMeta
+local Schema = M.ControlSchema
+local ALPHA_ROWS = {
+    { key = "hpBarAlpha", path = "transparency.hpBarAlpha", kind = "slider", labelKey = "Foreground",
+        card = "health", y = -54,
+        domain = "alpha", reason = "MSUF2_ALPHA_HP" },
+    { key = "hpBgAlpha", path = "transparency.hpBgAlpha", kind = "slider", labelKey = "Background",
+        card = "health", y = -112,
+        domain = "background", reason = "MSUF2_ALPHA_BG" },
+    { key = "powerBarAlpha", path = "transparency.powerBarAlpha", kind = "slider", labelKey = "Foreground",
+        card = "resource", y = -54,
+        domain = "powerAlpha", reason = "MSUF2_ALPHA_POWER" },
+    { key = "powerBarBgAlpha", path = "transparency.powerBarBgAlpha", kind = "slider", labelKey = "Background",
+        card = "resource", y = -112,
+        domain = "powerAlpha", reason = "MSUF2_ALPHA_POWER_BG" },
+    { key = "alphaExcludeTextPortrait", path = "transparency.alpha_exclude_text_portrait", kind = "toggle", labelKey = "Keep text + portrait visible",
+        card = "options", y = -62,
+        domain = "alpha", reason = "MSUF2_ALPHA_EXCLUDE" },
+    { key = "alphaExcludePredictionBars", path = "transparency.alpha_exclude_prediction_bars", kind = "toggle", labelKey = "Keep Absorbs + Prediction Visible",
+        card = "options", y = -112,
+        domain = "alpha", reason = "MSUF2_ALPHA_EXCLUDE_PREDICTION" },
+    { key = "oocFadeEnabled", path = "transparency.ooc_fade_enabled", kind = "toggle", labelKey = "Fade frame out of combat",
+        card = "ooc", y = -54,
+        domain = "oocAlpha", reason = "MSUF2_ALPHA_OOC_FADE" },
+    { key = "oocFadeAlpha", path = "transparency.ooc_fade_alpha", kind = "slider", labelKey = "Out of Combat Opacity",
+        card = "ooc", y = -112,
+        domain = "oocAlpha", reason = "MSUF2_ALPHA_OOC_ALPHA" },
+}
 
 -- Unified, simple transparency: separate health/resource opacity cards with
 -- foreground and background sliders, plus one toggle that keeps frame texts +
@@ -22,17 +49,19 @@ local function AlphaMeta(ctx, path, unit, key, state)
     end
     return meta
 end
+local function AlphaColorCard(ctx, section, unit, key, ...)
+    local id = "menu2." .. ctx.key .. ".section.transparency.colors." .. key
+    return Schema.ContextColors(W.ControlCard(section, ...), id, unit)
+end
 local function BuildAlpha(ctx, builder, unit)
     local tabState = { value = "combat" }
     local ReadBool = UP.ReadBool
-    local SetBool = UP.SetBool
     local ReadNumber = UP.ReadNumber
-    local SetNumber = UP.SetNumber
     local GetConf = UP.GetConf
     local GetGeneral = UP.GetGeneral
     local GetBars = UP.GetBars
-    if not (ReadBool and SetBool and ReadNumber and SetNumber) then return end
-    local sec = builder:CollapsibleSection("transparency", "Transparency", nil, false)
+    if not (ReadBool and ReadNumber) then return end
+    local sec = Schema.Section(builder:CollapsibleSection("transparency", "Transparency", nil, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
@@ -48,8 +77,8 @@ local function BuildAlpha(ctx, builder, unit)
     -- state only, never persisted.
     local _, barY = W.NextRow(sec, 34)
     local _, cardY = W.NextRow(sec, cardH)
-    local healthCard = W.ControlCard(sec, "Health Bar", nil, healthX, cardY, cardW, cardH)
-    local resourceCard = W.ControlCard(sec, "Resource Bar", nil, resourceX, cardY, cardW, cardH)
+    local healthCard = AlphaColorCard(ctx, sec, unit, "health", "Health Bar", nil, healthX, cardY, cardW, cardH)
+    local resourceCard = AlphaColorCard(ctx, sec, unit, "resource", "Resource Bar", nil, resourceX, cardY, cardW, cardH)
     local optionsCard = W.ControlCard(sec, "Options", nil, optionsX, cardY, optionsW, cardH)
     local oocCard = W.ControlCard(sec, "Out of Combat", nil, healthX, cardY, innerW, cardH)
     if W.AttachContextColorReferences and GetGeneral then
@@ -112,59 +141,31 @@ local function BuildAlpha(ctx, builder, unit)
             context = function() return { unit = unit } end,
         })
     end
-    local function AddAlphaSlider(parent, width, spec)
-        local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
-        M.UsePercentInput(slider)
-        M.BindNumberWidget(ctx, slider,
-            function() return ReadNumber(unit, spec.key, spec.default) end,
-            function(v) SetNumber(unit, spec.key, v, spec.reason, spec.flags) end,
-            spec.default,
-            AlphaMeta(ctx, "transparency." .. tostring(spec.key), unit, spec.key, tabState))
-        W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
+    local cards = { health = healthCard, resource = resourceCard, options = optionsCard, ooc = oocCard }
+    local widths = { health = cardW, resource = cardW, options = optionsW, ooc = cardW }
+    local controls = {}
+    for _, row in ipairs(ALPHA_ROWS) do
+        local meta = AlphaMeta(ctx, row.path, unit, row.key, tabState)
+        local function Default() return Schema.Default(unit, row.key) end
+        local read = row.kind == "slider" and ReadNumber or ReadBool
+        local width = widths[row.card]
+        controls[row.key] = Schema.Render(ctx, cards[row.card], {
+            id = meta.controlId, kind = row.kind, labelKey = row.labelKey, key = row.key,
+            settingPath = unit .. "." .. row.key, scope = unit, applyDomain = row.domain,
+            range = row.kind == "slider" and { 0, 1, 0.05 } or nil, percent = row.kind == "slider",
+            defaultSource = Default, meta = meta,
+            get = function() return read(unit, row.key, Default()) end,
+            set = function(value)
+                Schema.SetUnit(row.domain, unit, row.key, value, row.reason, row.kind)
+                if row.key == "oocFadeEnabled" then
+                    UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, row.key, Default()))
+                end
+            end,
+        }, { width = width, x = 16, y = row.y,
+            moveWidth = row.kind == "slider" and width - 58 or (row.key == "oocFadeEnabled" and width + 40 or width - 32),
+            align = "LEFT" })
     end
-    AddAlphaSlider(healthCard, cardW, { label = "Foreground", key = "hpBarAlpha", default = 1, reason = "MSUF2_ALPHA_HP", flags = { alpha = true, preview = true }, y = -54 })
-    AddAlphaSlider(healthCard, cardW, { label = "Background", key = "hpBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_BG", flags = { preview = true }, y = -112 })
-    AddAlphaSlider(resourceCard, cardW, { label = "Foreground", key = "powerBarAlpha", default = 1, reason = "MSUF2_ALPHA_POWER", flags = { power = true, preview = true }, y = -54 })
-    AddAlphaSlider(resourceCard, cardW, { label = "Background", key = "powerBarBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_POWER_BG", flags = { power = true, preview = true }, y = -112 })
-    local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -62, optionsW - 32)
-    M.BindBoolWidget(ctx, exclude,
-        function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
-        function(v)
-            SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
-        end,
-        AlphaMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait", tabState))
-    local excludePrediction = W.ToggleAt(optionsCard, "Keep Absorbs + Prediction Visible", 16, -112, optionsW - 32)
-    M.BindBoolWidget(ctx, excludePrediction,
-        function() return ReadBool(unit, "alphaExcludePredictionBars", false) end,
-        function(v)
-            SetBool(unit, "alphaExcludePredictionBars", v, "MSUF2_ALPHA_EXCLUDE_PREDICTION", { alpha = true, preview = true })
-        end,
-        AlphaMeta(ctx, "transparency.alpha_exclude_prediction_bars", unit, "alphaExcludePredictionBars", tabState))
-
-    -- Out of Combat tab: whole-frame fade while out of combat. The slider is
-    -- greyed while the toggle is off; runtime min-composes with range fade.
-    local oocToggle = W.ToggleAt(oocCard, "Fade frame out of combat", 16, -54, cardW + 40)
-    local oocSlider = W.Slider(oocCard, "Out of Combat Opacity", 0, 1, 0.05, cardW)
-    M.UsePercentInput(oocSlider)
-    local function UpdateOocEnabledState()
-        if UP.SetControlEnabled then
-            UP.SetControlEnabled(oocSlider, ReadBool(unit, "oocFadeEnabled", false))
-        end
-    end
-    M.BindBoolWidget(ctx, oocToggle,
-        function() return ReadBool(unit, "oocFadeEnabled", false) end,
-        function(v)
-            SetBool(unit, "oocFadeEnabled", v, "MSUF2_ALPHA_OOC_FADE", { alpha = true })
-            UpdateOocEnabledState()
-        end,
-        AlphaMeta(ctx, "transparency.ooc_fade_enabled", unit, "oocFadeEnabled", tabState))
-    M.BindNumberWidget(ctx, oocSlider,
-        function() return ReadNumber(unit, "oocFadeAlpha", 0.5) end,
-        function(v) SetNumber(unit, "oocFadeAlpha", v, "MSUF2_ALPHA_OOC_ALPHA", { alpha = true }) end,
-        0.5,
-        AlphaMeta(ctx, "transparency.ooc_fade_alpha", unit, "oocFadeAlpha", tabState))
-    W.MoveWidget(oocSlider, oocCard, 16, -112, cardW - 58, "LEFT")
-    UpdateOocEnabledState()
+    UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, "oocFadeEnabled", Schema.Default(unit, "oocFadeEnabled")))
 
     -- Tab switch: show either the base opacity cards or the OOC fade card.
     local combatCards = { healthCard, resourceCard, optionsCard }
@@ -194,6 +195,11 @@ local function BuildAlpha(ctx, builder, unit)
     if UP.RegisterControl then
         UP.RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
     end
+    Schema.Custom(stateBar,{
+        id="menu2."..ctx.key..".unit.transparency.state_selector",kind="segment",labelKey="Editing",
+        scope=unit,applyDomain="navigation",values=stateBar.values,get=function() return stateBar:GetValue() end,
+        set=function(value) return stateBar:SetValue(value) end,
+    })
     tabState.apply()
     if builder.FinishSection then builder:FinishSection(sec, 48) end
 end
@@ -204,6 +210,7 @@ if type(UP.RegisterSection) == "function" then
         autoHeight = true,
         placement = "after_load_conditions",
         order = 20,
+        prepareShell = function(_, section, unit) Schema.Section(section, unit) end,
         build = BuildAlpha,
     })
 end

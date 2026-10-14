@@ -340,7 +340,7 @@ MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua
 MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Mainline MidnightSimpleUnitFrames_Options (141 files)
+@ Mainline MidnightSimpleUnitFrames_Options (142 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -370,6 +370,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua
@@ -837,7 +838,7 @@ MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua
 MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Forever MidnightSimpleUnitFrames_Options (141 files)
+@ Forever MidnightSimpleUnitFrames_Options (142 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -867,6 +868,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua
@@ -1276,7 +1278,7 @@ MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
 MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Vanilla MidnightSimpleUnitFrames_Options (140 files)
+@ Vanilla MidnightSimpleUnitFrames_Options (141 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -1305,6 +1307,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua
@@ -1712,7 +1715,7 @@ MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
 MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Mists MidnightSimpleUnitFrames_Options (140 files)
+@ Mists MidnightSimpleUnitFrames_Options (141 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -1741,6 +1744,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua
@@ -2150,7 +2154,7 @@ MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
 MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ TBC MidnightSimpleUnitFrames_Options (140 files)
+@ TBC MidnightSimpleUnitFrames_Options (141 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -2179,6 +2183,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua

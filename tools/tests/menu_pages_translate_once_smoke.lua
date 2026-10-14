@@ -68,7 +68,6 @@ local WIDGET_GAPS = {
     { file = "Pages/MSUF_Menu2_GroupPreview.lua", source = 'body.title:SetText(Tr("Preview - ")' },
     { file = "Pages/MSUF_Menu2_UnitSections.lua", source = "W.FixedPreviewSection(ctx, builder, {" },
     { file = "Preview/MSUF_Menu2_ClassPowerPreview.lua", source = "W.FixedPreviewSection(ctx, builder, {" },
-    { file = "Pages/MSUF_Menu2_SwingTimers.lua", source = 'M.Format("Text for %s (empty: spell name)"', clients = { Forever = true } },
     -- Not a page site: the castbar preview frame (Castbars/MSUF_CastbarFrames.lua, castText:SetText(Translate(label)))
     -- translates its label twice. The Castbars files belong to another package, so this row is optional
     -- (it is not reported stale once that file is fixed).

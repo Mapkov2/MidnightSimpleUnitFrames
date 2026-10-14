@@ -768,15 +768,18 @@ function M.BindDropdownAt(ctx, parent, label, x, y, values, width, getValue, set
     M.Widgets.MoveWidget(widget, parent, x, y, width)
     return M.BindDropdownWidget(ctx, widget, getValue, setValue, metadata)
 end
-function M.BindTextInputAt(ctx, parent, label, x, y, width, getValue, setValue, commitOnBlur, metadata)
-    local widget = M.Widgets.TextInput(parent, label, width)
-    M.Widgets.MoveWidget(widget, parent, x, y, width)
+function M.BindTextInputWidget(ctx, widget, getValue, setValue, commitOnBlur, metadata)
     M.BindTextInput(ctx, widget,
         function() return getValue() or "" end,
         function(v) setValue(v or "") end,
         commitOnBlur,
         metadata)
     return widget
+end
+function M.BindTextInputAt(ctx, parent, label, x, y, width, getValue, setValue, commitOnBlur, metadata)
+    local widget = M.Widgets.TextInput(parent, label, width)
+    M.Widgets.MoveWidget(widget, parent, x, y, width)
+    return M.BindTextInputWidget(ctx, widget, getValue, setValue, commitOnBlur, metadata)
 end
 
 

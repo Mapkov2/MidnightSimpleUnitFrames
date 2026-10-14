@@ -193,6 +193,7 @@ function W.AttachContextColorShortcut(card, opts)
         existing._msuf2ContextColorOptions = opts
         if opts.isRelevant ~= nil then TrackContextColorShortcutVisibility(card, existing) end
         if existing._msuf2RefreshContextColorVisibility then existing:_msuf2RefreshContextColorVisibility() end
+        if card._msuf2DeclareContextColorShortcut then card._msuf2DeclareContextColorShortcut(existing) end
         return existing
     end
 
@@ -235,6 +236,7 @@ function W.AttachContextColorShortcut(card, opts)
     end
     card._msuf2ContextColorShortcut = shortcut
     if opts.isRelevant ~= nil then TrackContextColorShortcutVisibility(card, shortcut) end
+    if card._msuf2DeclareContextColorShortcut then card._msuf2DeclareContextColorShortcut(shortcut) end
     return shortcut
 end
 
