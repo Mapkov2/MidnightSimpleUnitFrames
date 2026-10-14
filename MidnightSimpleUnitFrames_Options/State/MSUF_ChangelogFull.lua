@@ -8,12 +8,80 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E73F0A9FB2C96776FE14B283D52590D321FBE99EA01E3D7788393647A342B5FA",
-    currentVersion = "6.50",
+    sourceSha256 = "9C9726E9371436179C3DB678B78131D2D371FBDDE1DAC77996E1A18F649DEA42",
+    currentVersion = "7.0-alpha1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.50",
+    previousVersion = "6.50",
+    rangeLabel = "6.50 -> 7.0-alpha1",
     entries = {
+        {
+            version = "7.0-alpha1",
+            date = "2026-10-14",
+            sections = {
+                {
+                    title = "Features & changes",
+                    bullets = {
+                        {
+                            text = "Many-step undo and redo: move back and forward through a history of menu edits, including nested settings and scoped changes, instead of keeping only the last change.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Forever blessing priorities: choose which Paladin blessings matter most for each class and role in group Buff coverage, with matching configuration and previews.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Bug fixes",
+                    bullets = {
+                        {
+                            text = "Group roles: role overlays repaint after roster changes during combat, and role information is handled safely on clients that restrict it.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group names and boss power: delayed member names now appear when they become available, and boss power bars update correctly when an encounter changes the unit behind a frame.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Auras: buff and debuff displays refresh reliably as their contents change, with previews following the same display rules as live frames.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Castbars: interrupted or cancelled empower casts now show feedback on the player castbar. Disabled boss and arena castbars hide correctly, and focus castbar settings remain independent of target settings.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Edit Mode: typed positions are checked before applying, and dragging, cancelling and reopening Edit Mode keep the frame layout and session state consistent.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Menu and Suite: controls and previews refresh the settings they display, and Suite navigation retains the correct tab preparation when opening an MSUF page.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Performance improvements",
+                    bullets = {
+                        {
+                            text = "Less to load at startup: only the client's language pack loads at login, greatly reducing startup bytes. Other menu languages remain available through the optional MidnightSimpleUnitFrames_Locales folder.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu language",
+                                label = "Menu language",
+                                sectionId = "misc_language",
+                                controlId = "menu2.opt.misc.global.language.selection",
+                                settingKey = "general.menuLocale",
+                            },
+                        },
+                        {
+                            text = "More compact profiles: profiles are stored with less duplicated data while retaining old profiles and import strings. Downgrading to the 6.50 line preserves your settings losslessly.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.50",
             date = "2026-10-13",

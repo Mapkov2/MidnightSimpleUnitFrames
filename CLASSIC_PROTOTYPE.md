@@ -5,9 +5,9 @@ client: Retail Midnight, WoW Forever and the Classic clients (Classic Era,
 TBC Classic, Mists Classic). `main` is its only branch. It is an independent
 codebase: no file mirrors, or is compared with, another repository, and the
 load graph of every client is pinned by `tools/load-graph.lock` (see "Load
-graph lock"). `VERSION` stays 6.50 until a 7.0 version change is requested;
-the release tooling still describes that baseline and is retargeted only on
-request, and release tags keep the `classic-v<version>` format. How the
+graph lock"). `VERSION` identifies this prerelease as `7.0-alpha1`; the shared release
+channel resolver selects alpha, and release tags keep the
+`classic-v<version>` format. How the
 codebase got here (the Retail mirror era, the 2026-10-13 cutover and the 7.0
 split) is recorded in `docs/HISTORY.md`; nothing there is an instruction.
 

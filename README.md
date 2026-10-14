@@ -1,8 +1,7 @@
 > [!IMPORTANT]
 > **MSUF 7.0 development repository.** This separate codebase starts from the
-> validated MSUF 6.50 baseline. `main` is the starting branch for the next
-> development step; the addon version remains 6.50 until 7.0 development is
-> versioned. Production 6.x remains in
+> validated MSUF 6.50 baseline. `main` now identifies the next development
+> step as **7.0-alpha1**. Production 6.x remains in
 > [MidnightSimpleUnitFrames](https://github.com/Mapkov2/MidnightSimpleUnitFrames).
 > Changes run both the self-contained and full multi-client gates. Existing
 > addon publishing workflows remain restricted to the production repository.
@@ -23,7 +22,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-6.5-38C7F0?style=flat-square" alt="MSUF version 6.5">
+    <img src="https://img.shields.io/badge/Version-7.0--alpha1-38C7F0?style=flat-square" alt="MSUF version 7.0-alpha1">
     <img src="https://img.shields.io/badge/WoW-Midnight%20%7C%20Forever%20%7C%20Classic-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Midnight, WoW Forever and Classic">
     <img src="https://img.shields.io/github/last-commit/Mapkov2/MidnightSimpleUnitFrames?style=flat-square&logo=github" alt="Latest GitHub commit">
   </p>

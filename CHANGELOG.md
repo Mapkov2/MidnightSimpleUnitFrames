@@ -1,5 +1,38 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha1 - 2026-10-14
+
+The first alpha of MSUF 7.0 for Midnight, WoW Forever, Classic Era, TBC and Mists.
+
+### Features & changes
+
+- **Many-step undo and redo:** move back and forward through a history of menu edits, including nested settings and scoped changes, instead of keeping only the last change.
+<!-- msuf-menu-link: none -->
+- **Forever blessing priorities:** choose which Paladin blessings matter most for each class and role in group Buff coverage, with matching configuration and previews.
+<!-- msuf-menu-link: none -->
+
+### Bug fixes
+
+- **Group roles:** role overlays repaint after roster changes during combat, and role information is handled safely on clients that restrict it.
+<!-- msuf-menu-link: none -->
+- **Group names and boss power:** delayed member names now appear when they become available, and boss power bars update correctly when an encounter changes the unit behind a frame.
+<!-- msuf-menu-link: none -->
+- **Auras:** buff and debuff displays refresh reliably as their contents change, with previews following the same display rules as live frames.
+<!-- msuf-menu-link: none -->
+- **Castbars:** interrupted or cancelled empower casts now show feedback on the player castbar. Disabled boss and arena castbars hide correctly, and focus castbar settings remain independent of target settings.
+<!-- msuf-menu-link: none -->
+- **Edit Mode:** typed positions are checked before applying, and dragging, cancelling and reopening Edit Mode keep the frame layout and session state consistent.
+<!-- msuf-menu-link: none -->
+- **Menu and Suite:** controls and previews refresh the settings they display, and Suite navigation retains the correct tab preparation when opening an MSUF page.
+<!-- msuf-menu-link: none -->
+
+### Performance improvements
+
+- **Less to load at startup:** only the client's language pack loads at login, greatly reducing startup bytes. Other menu languages remain available through the optional MidnightSimpleUnitFrames_Locales folder.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_language","controlId":"menu2.opt.misc.global.language.selection","settingKey":"general.menuLocale","prepareKind":"","prepareValue":"","query":"menu language","label":"Menu language"} -->
+- **More compact profiles:** profiles are stored with less duplicated data while retaining old profiles and import strings. Downgrading to the 6.50 line preserves your settings losslessly.
+<!-- msuf-menu-link: none -->
+
 ## 6.50 - 2026-10-13
 
 Stable release of MSUF 6.50 for all supported clients, including Retail WoW 12.1.5.

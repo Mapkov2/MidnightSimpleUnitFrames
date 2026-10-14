@@ -6,8 +6,8 @@
 --- Preview builds keep the compatibility part visible on clients older than
 --- 12.1, even when the optional welcome content is disabled.
 ---
---- On WoW 12.1.5 and newer the 6.50 greeting adds one line that sums up the
---- 6.5 line from CHANGELOG_6.5_DRAFT.md (entries under Features & Changes, Bug
+--- On WoW 12.1.5 and newer the 7.0-alpha1 greeting adds one line that sums up the
+--- 7.0-alpha1 release from CHANGELOG.md (entries under Features & Changes, Bug
 --- Fixes and Performance), shown only while this build carries that release.
 ---
 --- Cost profile: one PLAYER_LOGIN handler that drops both its event and its
@@ -39,10 +39,10 @@ local Tr = MSUF.Translate
 --- The release this summary describes and its changelog totals. A later
 --- version shows no summary until it records its own totals here.
 local RELEASE_SUMMARY = {
-    version = "6.50",
-    features = 104,
-    fixes = 103,
-    performance = 20,
+    version = "7.0-alpha1",
+    features = 2,
+    fixes = 6,
+    performance = 2,
     minInterface = 120105,
 }
 
