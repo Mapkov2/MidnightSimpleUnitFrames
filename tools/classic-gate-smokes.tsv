@@ -692,3 +692,4 @@ clients+Forever	lua	tools/tests/color_palette_lifecycle_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/profile_data_boundaries_smoke.lua	{root/} {flavor}	Profile data migration boundaries failed: {flavor}
 -	lua	tools/tests/profile_printsafe_bound_smoke.lua	{root/}	Print-safe profile decode exceeded its early bound
 clients+Forever	lua	tools/tests/profile_external_transport_smoke.lua	{root/} {flavor}	External profile transport fallback, limits and rollback failed: {flavor}
+clients+Forever	lua	tools/tests/profile_texture_migration_phase_smoke.lua	{root/} {flavor}	Legacy texture migration finishes before binding: {flavor}

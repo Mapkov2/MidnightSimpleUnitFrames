@@ -1280,3 +1280,13 @@ provides a public palette: using the configured-font getter for the Colors
 global getter changed effective colors, so the original Colors resolution
 body is retained. The lifecycle smoke exercises actual shipped getters on every
 client; optional immutable-base comparison checks the old owner directly.
+
+## Bundled media and legacy profile selections
+
+State owns legacy bar-texture names at the migrate-to-bind boundary and repairs
+activated, copied and imported profiles before runtime apply. The State700
+normalizer also repairs media names on previously stamped profiles. Bundled
+media registration retains its asset/readiness work and schedules no separate
+profile-migration timer. The texture migration phase smoke pins all nine legacy,
+current and third-party selections on each supported client, including later
+activation and every import boundary before late media registration.

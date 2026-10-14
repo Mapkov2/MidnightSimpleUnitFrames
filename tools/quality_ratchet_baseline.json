@@ -180,7 +180,7 @@
   "MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua": [66, 21, 6, 8, 1, 11, 4, 3, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Kernel/MSUF_EventBus.lua": [269, 39, 21, 18, 6, 24, 1, 3, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua": [314, 34, 33, 15, 6, 33, 36, 15, 2, 0, 0, 0, 0, 0],
-  "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua": [688, 95, 55, 18, 13, 57, 48, 25, 0, 1, 1, 0, 0, 0],
+  "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua": [671, 78, 55, 18, 13, 57, 46, 25, 0, 1, 1, 0, 0, 0],
   "MidnightSimpleUnitFrames/Kernel/MSUF_Lifecycle.lua": [91, 10, 15, 6, 5, 20, 0, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua": [142, 31, 9, 8, 7, 12, 3, 3, 0, 0, 1, 0, 0, 0],
   "MidnightSimpleUnitFrames/Kernel/MSUF_OptionsLoader.lua": [304, 78, 32, 13, 9, 31, 21, 16, 0, 1, 0, 0, 0, 1],

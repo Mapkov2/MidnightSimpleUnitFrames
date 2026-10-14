@@ -568,23 +568,6 @@ RegisterBundledFonts = function()
     Reg("MSUF Mirrored Glass",    "MSUF_MirroredGlass.tga")
     Reg("Better Blizzard", "BetterBlizzard.blp")
 
-    --- DB migration: eliminate broken legacy selections ("MSUF Flat"/"MSUF Smooth")
-    local function MigrateLegacyBarKeys()
-        local changed = MSUF.ProfileMigrations.RepairBarNames(_G.MSUF_DB)
-        if changed then
-            -- Runs one frame after the core loaded (C_Timer below), when the
-            -- texture and castbar owners are present.
-            MSUF.Require("MSUF_UpdateAllBarTextures", "Kernel/MSUF_Libs.lua")()
-            local applyCastbarUnit = MSUF.Require("MSUF_ApplyCastbarVisualsForUnit", "Kernel/MSUF_Libs.lua")
-            applyCastbarUnit("player")
-            applyCastbarUnit("target")
-            applyCastbarUnit("focus")
-            applyCastbarUnit("boss")
-        end
-    end
-
-    _G.C_Timer.After(0, MigrateLegacyBarKeys)
-
     ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", true)
     if wasDeferred then
         RefreshFontMedia(nil, true)
