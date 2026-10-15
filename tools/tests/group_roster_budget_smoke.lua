@@ -37,6 +37,21 @@
 -- instructions, 1120 native calls unchanged. Its x86 memory cap is 596 KB
 -- (ceil(583.6 * 1.02)); every other limit, including x64, is unchanged.
 -- Repeat name notifications allocate no tables/closures (group_name_update).
+-- 2026-10-15: GROUP_ROSTER_UPDATE now repaints live raid state after native
+-- headers settle, including combat, without GUID reads or event rebinding.
+-- Twenty frames add 100 measured native calls; the old path skipped this work.
+-- Mainline build/settle/shift: 1485/64/41k -> 1554/133/122k instructions;
+-- Vanilla: 1464/65/67k -> 1533/135/148k. Affected caps keep ceil(measured*1.02).
+-- Mainline x86 settle allocation: 7.8 -> 10.8KB (12KB cap); other memory caps,
+-- including verified PUC Lua5.1 x64, are unchanged. No health/power tick work.
+-- group_raid_identity pins final-occupant burst coalescing and secret independence.
+-- Cross-review: 40-frame settle baseline -> fixed is Mainline116k ->270k,
+-- Vanilla124k ->279k; each adds200 measured native calls (221->421/301->501).
+-- Twenty roster events before one combat flush: Mainline1137k ->1317k,
+-- Vanilla1792k ->1973k, native2960->3160/4440->4640. Exactly40 paints per burst.
+-- Nil-state guards add no native calls and leave those rounded VM counts equal
+-- to the pre-guard fix. New case caps are ceil(measured maximum*1.02); existing
+-- caps stay unchanged. x86/x64 allocation maxima are measured independently.
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
 
@@ -47,12 +62,14 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1533, 3912 },
-        raid_settle = { 64, 8 }, raid_apply = { 1097, 596 }, raid_shift = { 84, 26 },
+        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1586, 3912 },
+        raid_settle = { 136, 12 }, raid_apply = { 1097, 596 }, raid_shift = { 125, 26 },
+        raid40_settle = { 276, 10 }, raid40_burst = { 1344, 171 },
     },
     Vanilla = {
-        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1485, 4865 },
-        raid_settle = { 66, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 108, 75 },
+        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1564, 4865 },
+        raid_settle = { 138, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 151, 75 },
+        raid40_settle = { 285, 23 }, raid40_burst = { 2013, 1217 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
@@ -91,11 +108,11 @@ if arg[3] == "native" then
         if natives[debug.getinfo(2, "f").func] then h.nativeCalls = h.nativeCalls + 1 end
     end
     h.nativeLimits = flavor == "Mainline" and {
-        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6151,
-        raid_settle = 148, raid_apply = 1120, raid_shift = 107,
+        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6347,
+        raid_settle = 226, raid_apply = 1120, raid_shift = 211, raid40_settle = 430, raid40_burst = 3224,
     } or {
-        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6532,
-        raid_settle = 188, raid_apply = 1380, raid_shift = 161,
+        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6736,
+        raid_settle = 267, raid_apply = 1380, raid_shift = 266, raid40_settle = 512, raid40_burst = 4733,
     }
 end
 
@@ -237,6 +254,34 @@ end)
 h:LeaveCombat()
 Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violations[1]))
 
+-- Forty-member raid and a battleground-sized roster burst in lockdown.
+h:RunTimers()
+h:SetRaid(40)
+h:Event("GROUP_ROSTER_UPDATE"); h:RunTimers()
+Check(GF.FrameForUnit("raid40") ~= nil, "forty-member fixture did not build raid40")
+Measure("raid40_settle", function()
+    h:Event("GROUP_ROSTER_UPDATE"); h:RunTimers()
+end, true)
+h:EnterCombat()
+local refresh, paints = h.UF.RefreshGroupFrameState, 0
+h.UF.RefreshGroupFrameState = function(...)
+    paints = paints + 1
+    return refresh(...)
+end
+Measure("raid40_burst", function()
+    paints = 0
+    for i = 1, 20 do
+        h.units[1], h.units[40] = h.units[40], h.units[1]
+        h:Event("GROUP_ROSTER_UPDATE")
+    end
+    Check(paints == 0, "BG burst painted before settle")
+    h:RunTimers()
+    Check(paints == 40, "BG burst did not coalesce to one paint per frame")
+end, true)
+h.UF.RefreshGroupFrameState = refresh
+Check(env.InCombatLockdown() and #h.violations == 0, "40-member combat settle made protected writes")
+h:LeaveCombat(); h:RunTimers()
+
 -- Probe after every measurement so calibration does not perturb the fixture heap.
 -- 64-bit baseline/current maxima in KB, measured with PUC Lua 5.1 (x64):
 -- Mainline: 284.1, 11.9, 262.6, 5103.2, 13.8, 744.7, 32.6.
@@ -244,9 +289,9 @@ Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violati
 -- Each limit is ceil(maximum * 1.02), exactly the original 2% headroom.
 local MEMORY_BUDGETS_64 = {
     Mainline = { party_join = 290, party_settle = 13, party_apply = 268, raid_build = 5206,
-        raid_settle = 15, raid_apply = 760, raid_shift = 34 },
+        raid_settle = 15, raid_apply = 760, raid_shift = 34, raid40_settle = 16, raid40_burst = 236 },
     Vanilla = { party_join = 360, party_settle = 15, party_apply = 531, raid_build = 6446,
-        raid_settle = 24, raid_apply = 1801, raid_shift = 97 },
+        raid_settle = 24, raid_apply = 1801, raid_shift = 97, raid40_settle = 34, raid40_burst = 1606 },
 }
 collectgarbage("collect")
 collectgarbage("stop")

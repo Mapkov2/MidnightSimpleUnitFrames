@@ -600,5 +600,7 @@ clients+Forever	lua	tools/tests/preview_layer_rail_smoke.lua	{root} {flavor}	Pre
 -	lua	tools/tests/color_menu_lifecycle_smoke.lua		Colors preview surfaces and hidden lifecycle regressions
 -	lua	tools/tests/resource_visibility_smoke.lua	{root}	Resource visibility isolation and secret curves failed
 clients+Forever	lua	tools/tests/power_event_identity_smoke.lua	{root} {flavor}	Power event identity smoke failed
+clients+Forever	lua	tools/tests/group_raid_identity_smoke.lua	{root} {flavor}	Raid roster occupant name and class-color regression: {flavor}
+-	lua	tools/tests/group_raid_identity_smoke.lua	{root} Mainline mythicraid	Mythic raid roster occupant identity regression
 -	lua	tools/tests/player_channel_transition_smoke.lua	{root}	Player cast-to-channel selection and transition regression
 clients+Forever	python	tools/tests/group_page_reset_smoke.py	{root} {flavor}	Group Reset Page restores the complete factory and survives pending edits: {flavor}
