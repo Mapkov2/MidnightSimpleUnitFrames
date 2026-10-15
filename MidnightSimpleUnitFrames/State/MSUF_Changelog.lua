@@ -8,12 +8,52 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "563E3985581B9B427A9A2DD69E28186C0BF6C62F2D2CBD563175D8223001EC72",
-    currentVersion = "6.501",
-    historyFromVersion = "6.20",
-    previousVersion = "6.20",
-    rangeLabel = "6.20 -> 6.501",
+    sourceSha256 = "3182966B702FBE710838A579579B0912FB8CA6CA8F75583F964032CFDA000633",
+    currentVersion = "6.502-beta1",
+    historyFromVersion = "6.21",
+    previousVersion = "6.501",
+    rangeLabel = "6.501 -> 6.502-beta1",
     entries = {
+        {
+            version = "6.502-beta1",
+            date = "2026-10-15",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group Frame Reset Page now restores the complete factory configuration, including raid layout limits, aura settings and profile overrides, so old filters cannot leave groups hidden after a reset.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "raid frame width layout",
+                                label = "Group Frame settings",
+                                sectionId = "scaling",
+                                controlId = "menu2.gf_layout.group.field.width",
+                                settingKey = "gf_raid.width",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
+                            },
+                        },
+                        {
+                            text = "Imports of old profiles preserve their existing group selection and offer one optional repair for ambiguous legacy filters. The repair changes only the affected filters and preserves explicit exclusions and profile variants.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group aura edits made through Copy To, preview icon movement or a partial aura-settings import now activate the custom renderer when required. Reading settings no longer changes the renderer.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Player castbars now select an active channel when a channel starts while the outgoing cast is still reported, preventing the old cast from masking the channel.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.501",
             date = "2026-10-14",
@@ -1361,120 +1401,6 @@ local data = {
                         "The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.",
                         "The Ellesmere Edit Mode setting stays available when EllesmereUI is not installed. The bridge does nothing until that addon is present.",
                         "Login reads one locale of aura names instead of all twelve.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.20",
-            date = "2026-09-11",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Every settings section now carries its on/off switch, a one-line summary and a \"...\" menu on its header. Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy a single section to another frame.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Name, health and power text can each appear only on mouseover, with independent fade-in and fade-out durations.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "only show on mouseover",
-                                label = "Only show on mouseover",
-                                sectionId = "text",
-                                controlId = "menu2.uf_player.unit.text.name.mouseover",
-                                settingKey = "player.nameTextMouseover",
-                            },
-                        },
-                        {
-                            text = "Unit Frames can appear only while their unit is injured. Show only below 100% health keeps a frame transparent at full health while your other hide rules still apply.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "show only below 100 health",
-                                label = "Show only below 100% health",
-                                sectionId = "load_conditions",
-                                controlId = "menu2.uf_player.unit.load_condition.loadcondshowwheninjured",
-                                settingKey = "player.loadCondShowWhenInjured",
-                            },
-                        },
-                        {
-                            text = "Boss target highlights support arrows, paired markers, diamonds, crosses and borders. Position markers directly in the preview and optionally require several boss frames.",
-                            link = {
-                                pageKey = "uf_boss",
-                                query = "boss target highlight",
-                                label = "Highlight style",
-                                sectionId = "boss_target_highlight",
-                                controlId = "menu2.uf_boss.unit.boss_target_highlight.style",
-                                settingKey = "general.bossTargetHighlightStyle",
-                            },
-                        },
-                        {
-                            text = "Portraits can be clickable, enabled separately for each Unit Frame.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "clickable portrait",
-                                label = "Clickable Portrait",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitclickable",
-                                settingKey = "player.portraitClickable",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "general",
-                            },
-                        },
-                        {
-                            text = "Class Resources track Sweeping Strikes natively.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "sweeping strikes",
-                                label = "Sweeping Strikes Tracker",
-                                sectionId = "classpower_behavior",
-                                controlId = "menu2.classpower.advanced.behavior.sweeping",
-                                settingKey = "bars.showSweepingStrikes",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "class",
-                            },
-                        },
-                        {
-                            text = "Roughly 3-5% more FPS from lower addon CPU time. The combat update paths for health, prediction, text and auras were reworked to stop repeating work every tick.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Every menu string is now translated in all twelve locales. German, both Spanish variants, French, Italian, Korean, Brazilian Portuguese, Russian and both Chinese variants no longer fall back to English.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Options menus read brighter: taller section headers with an accent border when open or hovered, the same accent outline on every clickable surface you hover - unit tabs, pills, buttons, dropdowns and the section \"...\" menus - a higher floor for the smallest fonts, and a clearly visible active page in the navigation.",
-                        "Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.",
-                        "Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.",
-                        "Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.",
-                        "Class-colored power bars were added to the contextual color controls.",
-                        "The Auras3 backend was rebuilt into explicit native runtime, Menu, Edit Mode and Spell Indicator modules, with no change to how your auras behave or to Blizzard-owned aura tracking.",
-                        "Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live aura-name resolver, including current localized and hotfixed spell groups.",
-                        "Assistant command coverage, scoped requests, follow-up handling and exact setting navigation were expanded, and the Assistant control catalog and menu search index were rebuilt for the new settings.",
-                        "The interrupt-ready indicator counts every interrupt you have, not just your main kick. Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.",
-                        "Demon Hunter Devourer Soul Fragment bars are divided into their fragments again, and Separator and Pip gap shape that division across their whole range.",
-                        "The Arcane Surge / Arcane Soul countdown row and its Class Resources toggle were removed. Whirlwind and Sweeping Strikes tracking are unchanged.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Health gradients, backgrounds and prediction do less repeated work during combat: fresh health samples are reused, client-specific update paths are chosen once instead of on every health event, and current, maximum and percentage text use specialized writers that still honour live number-format changes.",
-                        "Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while keeping identity, disable and recovery handling.",
-                        "Group text updates reuse health values already sampled for the bars, and zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
-                        "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured, and Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.",
-                        "Target Range Fade forwards protected in-range results through Blizzard's native boolean-alpha path and keeps its spell-range fallback, and missing-health background masking during Range Fade was corrected so the configured background stays visible.",
-                        "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt, and the Class Resources and docked unit previews render the Devourer resource the way it appears in game.",
-                        "Aura icon style controls re-apply their master-toggle gates on every Appearance page, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.",
-                        "Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.",
-                        "Injured-only visibility uses a secret-safe native health curve and stable visual parents, so bars, predictions, borders, textures, portraits, cast indicators and Class Resources hide together without changing the clickable secure frame.",
-                        "Aura identity checks and castbar colour ownership avoid redundant temporary allocations, and scheduler callback errors keep the original callback stack while still isolating failures.",
-                        "Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the menu.",
                     },
                 },
             },

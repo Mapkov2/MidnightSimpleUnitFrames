@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.502-beta1 - 2026-10-15
+
+Beta build for testing the following fixes on all supported clients.
+
+### Bug Fixes
+
+- Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.
+<!-- msuf-menu-link: none -->
+- Group Frame Reset Page now restores the complete factory configuration, including raid layout limits, aura settings and profile overrides, so old filters cannot leave groups hidden after a reset.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"scaling","controlId":"menu2.gf_layout.group.field.width","settingKey":"gf_raid.width","prepareKind":"groupScope","prepareValue":"raid","query":"raid frame width layout","label":"Group Frame settings"} -->
+- Imports of old profiles preserve their existing group selection and offer one optional repair for ambiguous legacy filters. The repair changes only the affected filters and preserves explicit exclusions and profile variants.
+<!-- msuf-menu-link: none -->
+- Group aura edits made through Copy To, preview icon movement or a partial aura-settings import now activate the custom renderer when required. Reading settings no longer changes the renderer.
+<!-- msuf-menu-link: none -->
+- Player castbars now select an active channel when a channel starts while the outgoing cast is still reported, preventing the old cast from masking the channel.
+<!-- msuf-menu-link: none -->
+
 ## 6.501 - 2026-10-14
 
 ### Bug Fixes

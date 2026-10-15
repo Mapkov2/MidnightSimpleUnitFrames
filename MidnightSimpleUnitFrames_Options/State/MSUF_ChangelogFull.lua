@@ -8,12 +8,52 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "563E3985581B9B427A9A2DD69E28186C0BF6C62F2D2CBD563175D8223001EC72",
-    currentVersion = "6.501",
+    sourceSha256 = "3182966B702FBE710838A579579B0912FB8CA6CA8F75583F964032CFDA000633",
+    currentVersion = "6.502-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.501",
+    previousVersion = "6.501",
+    rangeLabel = "6.501 -> 6.502-beta1",
     entries = {
+        {
+            version = "6.502-beta1",
+            date = "2026-10-15",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group Frame Reset Page now restores the complete factory configuration, including raid layout limits, aura settings and profile overrides, so old filters cannot leave groups hidden after a reset.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "raid frame width layout",
+                                label = "Group Frame settings",
+                                sectionId = "scaling",
+                                controlId = "menu2.gf_layout.group.field.width",
+                                settingKey = "gf_raid.width",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
+                            },
+                        },
+                        {
+                            text = "Imports of old profiles preserve their existing group selection and offer one optional repair for ambiguous legacy filters. The repair changes only the affected filters and preserves explicit exclusions and profile variants.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group aura edits made through Copy To, preview icon movement or a partial aura-settings import now activate the custom renderer when required. Reading settings no longer changes the renderer.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Player castbars now select an active channel when a channel starts while the outgoing cast is still reported, preventing the old cast from masking the channel.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.501",
             date = "2026-10-14",
