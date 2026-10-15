@@ -147,9 +147,7 @@ end
     return nil, nil
 end
 
-local function EnsureAnchorPicker()
-    if _G.MSUF_AnchorPicker then return _G.MSUF_AnchorPicker end
-
+local function CreateAnchorPicker()
     local ov = PixelLayoutRegion(CreateFrame("Frame", "MSUF_AnchorPickerOverlay", UIParent, "BackdropTemplate"))
     ExportPublic("MSUF_AnchorPicker", ov)
     ov:SetAllPoints(UIParent)
@@ -218,6 +216,14 @@ local function EnsureAnchorPicker()
     hl:SetBackdropBorderColor(ok[1], ok[2], ok[3], 0.95)
     hl:Hide()
     ov._highlight = hl
+
+    return ov, accent, ok, danger
+end
+
+local function EnsureAnchorPicker()
+    if _G.MSUF_AnchorPicker then return _G.MSUF_AnchorPicker end
+
+    local ov, accent, ok, danger = CreateAnchorPicker()
 
     local function AnchorPickerOnUpdate(self, elapsed)
         -- Mouse focus is cheap, but 30 Hz is ample for responsive hover feedback.

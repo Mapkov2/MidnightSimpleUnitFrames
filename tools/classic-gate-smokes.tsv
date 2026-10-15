@@ -746,3 +746,4 @@ clients+Forever	lua	tools/tests/responsibility_adapter_heap_smoke.lua	{root} {fl
 clients+Forever	lua	tools/tests/power_slot_delivery_parity_smoke.lua	{root} {flavor}	Power slot delivery matches Text.UpdateTextSlotsSecret: {flavor}
 clients+Forever	python	tools/tests/group_page_reset_smoke.py	{root} {flavor}	Group Reset Page restores the complete factory and survives pending edits: {flavor}
 clients+Forever	lua	tools/tests/group_aura_move_activates_renderer_smoke.lua	{root} {flavor}	Group aura lane preview move leaves the CUSTOM renderer active: {flavor}
+clients+Forever	lua	tools/tests/anchor_picker_lifecycle_smoke.lua	{root} {flavor}	Anchor picker construction and session lifecycle: {flavor}
