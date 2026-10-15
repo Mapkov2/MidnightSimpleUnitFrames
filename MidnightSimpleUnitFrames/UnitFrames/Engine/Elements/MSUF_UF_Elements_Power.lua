@@ -862,45 +862,14 @@ function Power.Create(frame, spec)
   frame.powerBg = bg
 end
 
-function Power.Apply(frame, spec)
-  if not frame.targetPowerBar then Power.Create(frame, spec) end
-  local bar = frame.targetPowerBar
-  frame.Power = bar
-  frame.powerBar = bar
-  frame.power = bar
-  local power = spec and spec.power or {}
-  -- Augmentation Evoker renders Ebon Might here instead of a power value. That
-  -- is a value/event/text decision only: geometry, media, border and layer stay
-  -- the ordinary Player Power configuration below.
-  local ebonMight = power.enabled == true and PowerShowsEbonMight(frame)
-  frame._msufPowerEbonMight = ebonMight or nil
-  local h = tonumber(power.height) or 3
-  frame._msufPowerBarDetached = power.detached == true and true or nil
-  if Health and Health.Layout then Health.Layout(frame, spec, power.enabled == true) end
-  if power.detached == true then
-    LayoutDetached(frame, bar, power, h)
-  else
-    bar._msufDetached = nil
-    bar._msufDetachedWidth = nil
-    local inlineLevel = frame.GetFrameLevel and ((frame:GetFrameLevel() or 1) + 1) or nil
-    if inlineLevel then SetPowerFrameLevel(bar, inlineLevel) end
-    bar:ClearAllPoints()
-    if power.embed == false then
-      bar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -1)
-      bar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -1)
-      bar:SetHeight(h)
-    else
-      bar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-      bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-      bar:SetHeight(h)
-    end
-  end
-  if frame.powerBarBG then
-    frame.powerBarBG:ClearAllPoints()
-    frame.powerBarBG:SetAllPoints(bar)
+local function ApplyPowerMedia(frame, bar, power, spec, detached)
+  local bg = frame.powerBarBG
+  if bg then
+    bg:ClearAllPoints()
+    bg:SetAllPoints(bar)
   end
   local texture = power.texture or spec and spec.texture or WHITE
-  if power.detached == true then
+  if detached then
     texture = ApplyShapeMedia(frame, power, texture)
   else
     ApplyShapeMedia(frame, nil, texture)
@@ -938,6 +907,45 @@ function Power.Apply(frame, spec)
     end
     if ApplyBarGradient then ApplyBarGradient(frame, bar, power.barGradient, "powerGradients") end
   end
+  return trail
+end
+
+function Power.Apply(frame, spec)
+  if not frame.targetPowerBar then Power.Create(frame, spec) end
+  local bar = frame.targetPowerBar
+  frame.Power = bar
+  frame.powerBar = bar
+  frame.power = bar
+  local power = spec and spec.power or {}
+  -- Augmentation Evoker renders Ebon Might here instead of a power value. That
+  -- is a value/event/text decision only: geometry, media, border and layer stay
+  -- the ordinary Player Power configuration below.
+  local enabled = power.enabled == true
+  local ebonMight = enabled and PowerShowsEbonMight(frame) or nil
+  frame._msufPowerEbonMight = ebonMight
+  local h = tonumber(power.height) or 3
+  local detached = power.detached == true and true or nil
+  frame._msufPowerBarDetached = detached
+  if Health and Health.Layout then Health.Layout(frame, spec, enabled) end
+  if detached then
+    LayoutDetached(frame, bar, power, h)
+  else
+    bar._msufDetached = nil
+    bar._msufDetachedWidth = nil
+    local inlineLevel = frame.GetFrameLevel and ((frame:GetFrameLevel() or 1) + 1) or nil
+    if inlineLevel then SetPowerFrameLevel(bar, inlineLevel) end
+    bar:ClearAllPoints()
+    if power.embed == false then
+      bar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -1)
+      bar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -1)
+      bar:SetHeight(h)
+    else
+      bar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+      bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+      bar:SetHeight(h)
+    end
+  end
+  local trail = ApplyPowerMedia(frame, bar, power, spec, detached)
   -- Native fill axis for the inline/embedded bar. ApplyShapeMedia owns
   -- _msufPowerOrientation for detached shapes (ORB forces VERTICAL, others
   -- HORIZONTAL); only override the non-shape bar so shapes keep their axis.
@@ -989,7 +997,8 @@ function Power.Apply(frame, spec)
   bar._msufPowerMaxType = nil
   bar._msufPowerPercentValue = nil
   bar._msufPowerType = nil
-  bar._msufPowerToken, bar._msufPowerEventToken = nil, nil
+  bar._msufPowerEventToken = nil
+  bar._msufPowerToken = nil
   bar._msufPowerTypeKnown = nil
   bar._msufPowerTypeUnit = nil
   bar._msufPowerDisplayMana = nil
@@ -1011,7 +1020,6 @@ function Power.Apply(frame, spec)
       not ebonMight and power.chunked == true, trail)
   end
   SetColor(frame, true)
-  local enabled = power.enabled == true
   SetShown(frame, enabled)
   if enabled then
     ApplyPowerBorder(bar, power)
