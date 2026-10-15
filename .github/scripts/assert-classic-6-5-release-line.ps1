@@ -22,11 +22,11 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # reporting "skipped": a mistyped version would otherwise pass every TOC,
 # contract and changelog check below without reading a single file. When the
 # Classic release line moves past 6.5, retarget this script deliberately.
-# 6.502 betas test the following maintenance fixes.
+# 6.502 ships the fixes tested in its beta and the raid combat layout repair.
 # 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
-# collides with 6.05 and ranks above 6.20). 6.501 is its maintenance release.
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501') -and $normalizedVersion -cnotmatch '^6\.502-beta[1-9][0-9]*$') {
-    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501 and 6.502 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
+# collides with 6.05 and ranks above 6.20). 6.501 and 6.502 are its maintenance releases.
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501', '6.502') -and $normalizedVersion -cnotmatch '^6\.502-beta[1-9][0-9]*$') {
+    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501/6.502 and 6.502 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()

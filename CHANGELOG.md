@@ -1,11 +1,13 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.502-beta1 - 2026-10-15
+## 6.502 - 2026-10-15
 
-Beta build for testing the following fixes on all supported clients.
+Stable maintenance release for all supported clients.
 
 ### Bug Fixes
 
+- Raid slots and layouts now stay stable during combat, keeping displayed names and click targets aligned. Pending roster and layout changes are applied after combat.
+<!-- msuf-menu-link: none -->
 - Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.
 <!-- msuf-menu-link: none -->
 - Group Frame Reset Page now restores the complete factory configuration, including raid layout limits, aura settings and profile overrides, so old filters cannot leave groups hidden after a reset.

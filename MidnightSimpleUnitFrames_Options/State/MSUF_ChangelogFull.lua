@@ -8,19 +8,23 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3182966B702FBE710838A579579B0912FB8CA6CA8F75583F964032CFDA000633",
-    currentVersion = "6.502-beta1",
+    sourceSha256 = "4D79617E637CD375BE651CEF3FF5243790ACF2EB26C7029972E70DA7B9E75D59",
+    currentVersion = "6.502",
     historyFromVersion = "6.02",
-    previousVersion = "6.501",
-    rangeLabel = "6.501 -> 6.502-beta1",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.502",
     entries = {
         {
-            version = "6.502-beta1",
+            version = "6.502",
             date = "2026-10-15",
             sections = {
                 {
                     title = "Bug Fixes",
                     bullets = {
+                        {
+                            text = "Raid slots and layouts now stay stable during combat, keeping displayed names and click targets aligned. Pending roster and layout changes are applied after combat.",
+                            linkless = true,
+                        },
                         {
                             text = "Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.",
                             linkless = true,
