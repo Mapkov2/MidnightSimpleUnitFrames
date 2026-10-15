@@ -33,14 +33,8 @@ local SecretWorld = assert(loadfile(root .. "/tools/tests/castbar_secret_world.l
 -- 1082 / 0 / 3, GCD secret 1554 / 0 / 19 (a SpellCooldownInfo table per
 -- 0.1 s poll), cooldown event 1530 / 0 / 2. The GCD paths trade about 130
 -- VM instructions for the cooldown info table and the C_Timer handle.
--- Target readable bytes were raised from 224 to the measured 247 on 2026-10-15.
--- Its steady state is unchanged at 204 bytes. When the live heap at world
--- creation shifts the collector phase (retaining 100 extra tables on the
--- previous 7.0 main reproduces it), the first measured run regrows the cast
--- state table once (512 bytes, 42.7 per run over 12 runs), giving 246.7. No
--- cast-path instruction, native or steady-state byte count changed.
 local BUDGETS = {
-    ["target cast, readable"] = { 7660, 247, 5 },
+    ["target cast, readable"] = { 7660, 224, 5 },
     ["target cast, secret"] = { 7596, 202, 6 },
     ["boss cast, secret"] = { 7709, 180, 6 },
     ["GCD instant, readable"] = { 1238, 8, 1 },
@@ -153,9 +147,20 @@ for _, operation in ipairs(OPERATIONS) do
     local label, setup, run = operation[1], operation[2], operation[3]
     assert(BUDGETS[label], "no budget for " .. label)
     setup()
-    for _ = 1, WARMUP do run() end
+    -- A full collection turns the nil fields of the cast state into dead keys, and
+    -- the cast after it regrows that table once. Whether the regrowth falls in a
+    -- measured run depends on the collector phase, i.e. on the live heap at world
+    -- creation, and on any uncollected runs before it. Every warm-up and counting
+    -- run therefore follows a full collection, exactly like a measured run, so the
+    -- regrowth always lands before the measurement and the measured runs see the
+    -- steady state the budgets describe.
+    local function Settled()
+        collectgarbage("collect")
+        run()
+    end
+    for _ = 1, WARMUP do Settled() end
     local ticks = world:AddonInstructions(function()
-        for _ = 1, REPS do run() end
+        for _ = 1, REPS do Settled() end
     end)
     local before = {}
     for index = 1, #OBJECT_NATIVES do before[index] = world.counts[OBJECT_NATIVES[index]] end
