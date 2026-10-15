@@ -970,15 +970,53 @@ local function BuildScopeSection(ctx, b)
     end
 end
 
-local function BuildTextureSection(ctx, b)
-    local compactTextures = (ctx.width or 720) < 560
-    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 566 or 330, true)
-    local leftX, topY = 14, -42
-    local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
-    local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
-    -- Compact stacks the gradient block under the texture column, which now
-    -- carries two extra power dropdowns.
-    local gradientY = compactTextures and (topY - 234) or topY
+function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradientControls)
+    local padW, padH = 104, 78
+    local padButtonW, padButtonH = 22, 18
+    local directionButtons = { health = {}, power = {} }
+    local pads = {}
+    local function BuildDirectionPad(kind, y)
+        local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
+        pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, y)
+        pad:SetSize(padW, padH)
+        local center = PixelLayoutRegion(pad:CreateTexture(nil, "ARTWORK"))
+        center:SetPoint("CENTER", pad, "CENTER", 0, 0)
+        center:SetSize(10, 10)
+        local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }
+        center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
+        local function PadButton(text, value, x, buttonY)
+            local btn = T.Button(pad, text, padButtonW, padButtonH, { history = true })
+            btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, buttonY)
+            T.CenterButtonLabel(btn)
+            btn:SetScript("OnClick", function()
+                ToggleGradientDirectionForScope(kind, value or "RIGHT")
+                ApplyGradientRuntime(kind == "power" and "MSUF2_POWER_GRADIENT_DIRECTION" or "MSUF2_HP_GRADIENT_DIRECTION", kind)
+                SyncGradientControls()
+            end)
+            -- The arrow glyphs are no searchable names. The pad is found once, by its
+            -- name on the first arrow; the other arrows keep their glyph.
+            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"),
+                value == "UP" and "Gradient direction" or text, "button")
+            if M.AddTooltip then
+                M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
+            end
+            directionButtons[kind][value] = btn
+        end
+        local centerX = (padW - padButtonW) * 0.5
+        local centerY = (padH - padButtonH) * 0.5
+        local sideOffset = 23
+        PadButton("^", "UP", centerX, -(centerY - sideOffset))
+        PadButton("<", "LEFT", centerX - sideOffset, -centerY)
+        PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
+        PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
+        pads[kind] = pad
+    end
+    BuildDirectionPad("health", hpY - 2)
+    BuildDirectionPad("power", powerY - 2)
+    return directionButtons, pads
+end
+
+function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
     local function BindTextureDropdown(label, values, getValue, setValue, y, path)
         local control = W.Dropdown(textures, label, values, leftW)
         M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
@@ -1022,6 +1060,19 @@ local function BuildTextureSection(ctx, b)
         M.AddTooltip(powerTexture, "Power Bar Texture", "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.", { hook = true, owner = "ANCHOR_RIGHT" })
         M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
+    return barTexture, bgTexture
+end
+
+local function BuildTextureSection(ctx, b)
+    local compactTextures = (ctx.width or 720) < 560
+    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 566 or 330, true)
+    local leftX, topY = 14, -42
+    local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
+    local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
+    -- Compact stacks the gradient block under the texture column, which now
+    -- carries two extra power dropdowns.
+    local gradientY = compactTextures and (topY - 234) or topY
+    local barTexture, bgTexture = GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local SyncGradientControls = M.RefreshProxy()
@@ -1070,48 +1121,7 @@ local function BuildTextureSection(ctx, b)
         "gradient.health.strength", "MSUF2_HP_GRADIENT_STRENGTH")
     local powerStrength = BindGradientStrength("power", powerY - 36, "powerGradientStrength", "gradientStrength",
         "gradient.power.strength", "MSUF2_POWER_GRADIENT_STRENGTH")
-    local padW, padH = 104, 78
-    local padButtonW, padButtonH = 22, 18
-    local directionButtons = { health = {}, power = {} }
-    local pads = {}
-    local function BuildDirectionPad(kind, y)
-        local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
-        pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, y)
-        pad:SetSize(padW, padH)
-        local center = PixelLayoutRegion(pad:CreateTexture(nil, "ARTWORK"))
-        center:SetPoint("CENTER", pad, "CENTER", 0, 0)
-        center:SetSize(10, 10)
-        local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }
-        center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
-        local function PadButton(text, value, x, buttonY)
-            local btn = T.Button(pad, text, padButtonW, padButtonH, { history = true })
-            btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, buttonY)
-            T.CenterButtonLabel(btn)
-            btn:SetScript("OnClick", function()
-                ToggleGradientDirectionForScope(kind, value or "RIGHT")
-                ApplyGradientRuntime(kind == "power" and "MSUF2_POWER_GRADIENT_DIRECTION" or "MSUF2_HP_GRADIENT_DIRECTION", kind)
-                SyncGradientControls()
-            end)
-            -- The arrow glyphs are no searchable names. The pad is found once, by its
-            -- name on the first arrow; the other arrows keep their glyph.
-            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"),
-                value == "UP" and "Gradient direction" or text, "button")
-            if M.AddTooltip then
-                M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
-            end
-            directionButtons[kind][value] = btn
-        end
-        local centerX = (padW - padButtonW) * 0.5
-        local centerY = (padH - padButtonH) * 0.5
-        local sideOffset = 23
-        PadButton("^", "UP", centerX, -(centerY - sideOffset))
-        PadButton("<", "LEFT", centerX - sideOffset, -centerY)
-        PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
-        PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
-        pads[kind] = pad
-    end
-    BuildDirectionPad("health", hpY - 2)
-    BuildDirectionPad("power", powerY - 2)
+    local directionButtons, pads = GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradientControls)
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
     if M.AddTooltip then
@@ -1293,7 +1303,7 @@ function GP.AbsorbControlMeta(parent, path, classification, frames, selectTab)
     end
     return meta
 end
-local function BuildAbsorbSection(ctx, b)
+function GP.BuildAbsorbTabs(ctx, b)
     local section = b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true)
     local sectionW = section._msuf2Width or ctx.width or 720
     local leftX = 30
@@ -1336,152 +1346,11 @@ local function BuildAbsorbSection(ctx, b)
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, Meta("absorb.workspace_tab", "ephemeral"), "Absorb area", "segment")
 
-    local SyncControls = M.RefreshProxy()
-    local function Apply(reason)
-        ApplyBars(reason)
-        SyncControls()
-    end
-    local function TextureDefault(key)
-        return function() return ReadG(key, "") end
-    end
-    local function ResolveDefault(value)
-        return type(value) == "function" and value() or value
-    end
-    local function BindDropdown(parent, label, values, key, defaultValue, reason, x, y, width, numeric, path)
-        local control = W.Dropdown(parent, label, values, width)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local fallback = ResolveDefault(defaultValue)
-                local value = BarScopeGet(key, fallback)
-                return numeric and (tonumber(value) or fallback) or value
-            end,
-            function(value)
-                local fallback = ResolveDefault(defaultValue)
-                BarScopeSet(key, numeric and (tonumber(value) or fallback) or (value or fallback), reason, true)
-                Apply(reason)
-            end,
-            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return control
-    end
-    local function BindSlider(parent, label, minValue, maxValue, step, key, defaultValue, reason, x, y, width, path)
-        local control = W.Slider(parent, label, minValue, maxValue, step, width)
-        M.BindNumberWidget(ctx, control,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(value)
-                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
-                Apply(reason)
-            end,
-            defaultValue, GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return control
-    end
-    local function BindToggle(parent, label, key, defaultValue, reason, x, y, width, path, onSet)
-        local control = W.ToggleAt(parent, label, x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return BarScopeGet(key, defaultValue) == true end,
-            function(value)
-                value = value and true or false
-                BarScopeSet(key, value, reason, true)
-                if onSet then onSet(value) end
-                Apply(reason)
-            end,
-            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        return control
-    end
-    local function BindTest(parent, category, x, y, width, path)
-        local control = W.ToggleAt(parent, "Test prediction bars", x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return IsAbsorbTextureTestEnabled(category) == true end,
-            function(value) SetAbsorbTextureTest(value and true or false, category) end,
-            GP.AbsorbControlMeta(parent, path, "ephemeral", tabFrames, SelectAbsorbTab))
-        return control
-    end
-    local function ResolveBarPreviewTexture(key, fallback)
-        key = type(key) == "string" and key ~= "" and key or fallback
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        if type(resolve) == "function" then
-            local texture = resolve(key)
-            if type(texture) == "string" and texture ~= "" then return texture end
-        end
-        return "Interface\\Buttons\\WHITE8X8"
-    end
-    local function AnchorPreview(category)
-        return function(item)
-            local foregroundKey = BarTextureForScope()
-            local backgroundKey = BarBackgroundTextureForScope()
-            local mode = tonumber(item and item.value) or 3
-            local textureKey, opacity, color, showAbsorbEdgeGlow
-            if category == "negative" then
-                textureKey = BarScopeGet("healAbsorbBarTexture", ReadG("healAbsorbBarTexture", ""))
-                opacity = tonumber(BarScopeGet("healAbsorbBarOpacity", ReadG("healAbsorbBarOpacity", 1))) or 1
-                color = {
-                    tonumber(ReadG("healAbsorbBarColorR", 0.70)) or 0.70,
-                    tonumber(ReadG("healAbsorbBarColorG", 0)) or 0,
-                    tonumber(ReadG("healAbsorbBarColorB", 0)) or 0,
-                    max(0, min(1, opacity)),
-                }
-            elseif category == "heal" then
-                textureKey = BarScopeGet("healPredictionBarTexture", ReadG("healPredictionBarTexture", ""))
-                opacity = tonumber(BarScopeGet("healPredictionBarOpacity", ReadG("healPredictionColorA", 0.45))) or 0.45
-                color = {
-                    tonumber(ReadG("healPredictionColorR", 0)) or 0,
-                    tonumber(ReadG("healPredictionColorG", 1)) or 1,
-                    tonumber(ReadG("healPredictionColorB", 0)) or 0,
-                    max(0, min(1, opacity)),
-                }
-            else
-                textureKey = BarScopeGet("absorbBarTexture", ReadG("absorbBarTexture", ""))
-                opacity = tonumber(BarScopeGet("absorbBarOpacity", ReadG("absorbBarOpacity", 0.75))) or 0.75
-                color = {
-                    tonumber(ReadG("absorbBarColorR", 1)) or 1,
-                    tonumber(ReadG("absorbBarColorG", 1)) or 1,
-                    tonumber(ReadG("absorbBarColorB", 1)) or 1,
-                    max(0, min(1, opacity)),
-                }
-                showAbsorbEdgeGlow = BarScopeGet("fullHealthAbsorbStripe", ReadGBool("fullHealthAbsorbStripe", false)) == true
-            end
-            return {
-                mode = mode,
-                category = category,
-                dualDirection = true,
-                followInsideHealth = category == "negative",
-                showAbsorbEdgeGlow = showAbsorbEdgeGlow,
-                healthFraction = mode == 4 and 0.84 or 0.68,
-                overlayFraction = category == "negative" and 0.16 or 0.22,
-                healthTexture = ResolveBarPreviewTexture(foregroundKey, "Blizzard"),
-                backgroundTexture = ResolveBarPreviewTexture(backgroundKey, foregroundKey),
-                overlayTexture = ResolveBarPreviewTexture(textureKey, foregroundKey),
-                healthColor = { 0.12, 0.62, 0.25, 1 },
-                backgroundColor = { 0.025, 0.075, 0.045, 0.92 },
-                overlayColor = color,
-            }
-        end
-    end
-    local positivePreview = AnchorPreview("positive")
-    local negativePreview = AnchorPreview("negative")
-    local healPreview = AnchorPreview("heal")
-    local anchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = positivePreview },
-    }
-    local negativeAnchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = negativePreview },
-    }
-    local healAnchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = healPreview },
-    }
+    return section, leftX, rightX, leftW, rightW, tabFrames, SelectAbsorbTab, positive, negative, heal
+end
 
+function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, leftW, rightW,
+    BindToggle, BindDropdown, BindSlider, BindTest, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
     local positiveEnabled = BindToggle(positive, "Show positive absorbs", "enableAbsorbBar", true,
         "MSUF2_ABSORB_ENABLED", leftX, -10, leftW, "absorb.positive.enabled", function(value)
             BarScopeSet("absorbTextMode", value and 2 or 1, "MSUF2_ABSORB_ENABLED", true)
@@ -1584,6 +1453,164 @@ local function BuildAbsorbSection(ctx, b)
         if negativeAnchor.RefreshPreview then negativeAnchor:RefreshPreview() end
         if healAnchor.RefreshPreview then healAnchor:RefreshPreview() end
     end))
+end
+
+function GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)
+    local function ResolveDefault(value)
+        return type(value) == "function" and value() or value
+    end
+    local function BindDropdown(parent, label, values, key, defaultValue, reason, x, y, width, numeric, path)
+        local control = W.Dropdown(parent, label, values, width)
+        M.BindDropdownWidget(ctx, control,
+            function()
+                local fallback = ResolveDefault(defaultValue)
+                local value = BarScopeGet(key, fallback)
+                return numeric and (tonumber(value) or fallback) or value
+            end,
+            function(value)
+                local fallback = ResolveDefault(defaultValue)
+                BarScopeSet(key, numeric and (tonumber(value) or fallback) or (value or fallback), reason, true)
+                Apply(reason)
+            end,
+            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
+    end
+    local function BindSlider(parent, label, minValue, maxValue, step, key, defaultValue, reason, x, y, width, path)
+        local control = W.Slider(parent, label, minValue, maxValue, step, width)
+        M.BindNumberWidget(ctx, control,
+            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
+            function(value)
+                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
+                Apply(reason)
+            end,
+            defaultValue, GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
+    end
+    local function BindToggle(parent, label, key, defaultValue, reason, x, y, width, path, onSet)
+        local control = W.ToggleAt(parent, label, x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function() return BarScopeGet(key, defaultValue) == true end,
+            function(value)
+                value = value and true or false
+                BarScopeSet(key, value, reason, true)
+                if onSet then onSet(value) end
+                Apply(reason)
+            end,
+            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
+        return control
+    end
+    local function BindTest(parent, category, x, y, width, path)
+        local control = W.ToggleAt(parent, "Test prediction bars", x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function() return IsAbsorbTextureTestEnabled(category) == true end,
+            function(value) SetAbsorbTextureTest(value and true or false, category) end,
+            GP.AbsorbControlMeta(parent, path, "ephemeral", tabFrames, SelectAbsorbTab))
+        return control
+    end
+    return BindDropdown, BindSlider, BindToggle, BindTest
+end
+
+local function BuildAbsorbSection(ctx, b)
+    local section, leftX, rightX, leftW, rightW, tabFrames, SelectAbsorbTab, positive, negative, heal = GP.BuildAbsorbTabs(ctx, b)
+
+    local SyncControls = M.RefreshProxy()
+    local function Apply(reason)
+        ApplyBars(reason)
+        SyncControls()
+    end
+    local function TextureDefault(key)
+        return function() return ReadG(key, "") end
+    end
+    local BindDropdown, BindSlider, BindToggle, BindTest = GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)
+    local function ResolveBarPreviewTexture(key, fallback)
+        key = type(key) == "string" and key ~= "" and key or fallback
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then
+            local texture = resolve(key)
+            if type(texture) == "string" and texture ~= "" then return texture end
+        end
+        return "Interface\\Buttons\\WHITE8X8"
+    end
+    local function AnchorPreview(category)
+        return function(item)
+            local foregroundKey = BarTextureForScope()
+            local backgroundKey = BarBackgroundTextureForScope()
+            local mode = tonumber(item and item.value) or 3
+            local textureKey, opacity, color, showAbsorbEdgeGlow
+            if category == "negative" then
+                textureKey = BarScopeGet("healAbsorbBarTexture", ReadG("healAbsorbBarTexture", ""))
+                opacity = tonumber(BarScopeGet("healAbsorbBarOpacity", ReadG("healAbsorbBarOpacity", 1))) or 1
+                color = {
+                    tonumber(ReadG("healAbsorbBarColorR", 0.70)) or 0.70,
+                    tonumber(ReadG("healAbsorbBarColorG", 0)) or 0,
+                    tonumber(ReadG("healAbsorbBarColorB", 0)) or 0,
+                    max(0, min(1, opacity)),
+                }
+            elseif category == "heal" then
+                textureKey = BarScopeGet("healPredictionBarTexture", ReadG("healPredictionBarTexture", ""))
+                opacity = tonumber(BarScopeGet("healPredictionBarOpacity", ReadG("healPredictionColorA", 0.45))) or 0.45
+                color = {
+                    tonumber(ReadG("healPredictionColorR", 0)) or 0,
+                    tonumber(ReadG("healPredictionColorG", 1)) or 1,
+                    tonumber(ReadG("healPredictionColorB", 0)) or 0,
+                    max(0, min(1, opacity)),
+                }
+            else
+                textureKey = BarScopeGet("absorbBarTexture", ReadG("absorbBarTexture", ""))
+                opacity = tonumber(BarScopeGet("absorbBarOpacity", ReadG("absorbBarOpacity", 0.75))) or 0.75
+                color = {
+                    tonumber(ReadG("absorbBarColorR", 1)) or 1,
+                    tonumber(ReadG("absorbBarColorG", 1)) or 1,
+                    tonumber(ReadG("absorbBarColorB", 1)) or 1,
+                    max(0, min(1, opacity)),
+                }
+                showAbsorbEdgeGlow = BarScopeGet("fullHealthAbsorbStripe", ReadGBool("fullHealthAbsorbStripe", false)) == true
+            end
+            return {
+                mode = mode,
+                category = category,
+                dualDirection = true,
+                followInsideHealth = category == "negative",
+                showAbsorbEdgeGlow = showAbsorbEdgeGlow,
+                healthFraction = mode == 4 and 0.84 or 0.68,
+                overlayFraction = category == "negative" and 0.16 or 0.22,
+                healthTexture = ResolveBarPreviewTexture(foregroundKey, "Blizzard"),
+                backgroundTexture = ResolveBarPreviewTexture(backgroundKey, foregroundKey),
+                overlayTexture = ResolveBarPreviewTexture(textureKey, foregroundKey),
+                healthColor = { 0.12, 0.62, 0.25, 1 },
+                backgroundColor = { 0.025, 0.075, 0.045, 0.92 },
+                overlayColor = color,
+            }
+        end
+    end
+    local positivePreview = AnchorPreview("positive")
+    local negativePreview = AnchorPreview("negative")
+    local healPreview = AnchorPreview("heal")
+    local anchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = positivePreview },
+    }
+    local negativeAnchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = negativePreview },
+    }
+    local healAnchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = healPreview },
+    }
+
+    GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, leftW, rightW,
+        BindToggle, BindDropdown, BindSlider, BindTest, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
 end
 
 local function BuildOutlineSection(ctx, b)
@@ -2144,33 +2171,7 @@ if type(M.RegisterUpgradeTourControls) == "function" then
     })
 end
 
-local function BuildHighlightSection(ctx, b)
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 764, true)
-    local hlW = highlights._msuf2Width or ctx.width or 720
-    local hlGap = 28
-    local hlLeftX = 30
-    local hlInnerW = max(320, hlW - 60)
-    local hlLeftW = max(220, min(380, floor((hlInnerW - hlGap) * 0.46)))
-    local hlPreviewX = hlLeftX
-    local hlPreviewW = max(280, min(440, hlInnerW - 28))
-    local highlightTabFrames = {}
-    local modesFrame, previewFrame, priorityFrame =
-        M.UnitSectionsShared.MakeTabFrames(highlights, -88, hlW, highlightTabFrames, "modes", "preview", "priority")
-    RegisterSegment(W.SegmentTabs(ctx, highlights, {
-        stateKey = "barsHighlightTab", label = "Highlight area",
-        values = VT("modes", "Modes", "preview", "Preview", "priority", "Priority"),
-        width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
-        x = hlLeftX, y = -44,
-    }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
-    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 596)
-    local priorityCardW = min(360, max(260, hlLeftW + 28))
-    local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
-    W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
-    local function HighlightPriorityEnabled()
-        local value = BarScopeGet("hlPrioEnabled", nil)
-        if value == nil then value = BarScopeGet("highlightPrioEnabled", false) end
-        return value == true or value == 1 or value == "1"
-    end
+function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
     local highlight = W.Slider(modesFrame, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindNumberWidget(ctx, highlight,
         function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
@@ -2263,6 +2264,109 @@ local function BuildHighlightSection(ctx, b)
     if bossSharedHint and bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
     if unitAuraDispelHint.SetWordWrap then unitAuraDispelHint:SetWordWrap(true) end
+    return highlight, aggro, aggroMode, dispelBorder, dispelTrigger, dispelShowOn, purge, bossSupported,
+        bossTarget, bossSharedHint, unitAuraDispelHint
+end
+
+function GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPriorityEnabled)
+    local RefreshPriorityRows
+    local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
+    M.BindBoolWidget(ctx, prio,
+        HighlightPriorityEnabled,
+        function(v)
+            local on = v and true or false
+            BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY", true)
+            if CurrentBarsScope() == "shared" then
+                G().hlPrioEnabled = on and 1 or 0
+                G().highlightPrioEnabled = on and 1 or 0
+            end
+            RequestHighlightPriorityRuntime()
+            if RefreshPriorityRows then RefreshPriorityRows() end
+        end,
+        Meta("highlight.priority.enabled"))
+    if M.AddTooltip then
+        M.AddTooltip(prio, "Custom highlight priority", "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
+    end
+    local rowMax = 4
+    local prioContainer, prioRows, prioCount
+    local function SavePriorityRows()
+        local function WritePriorityRows()
+            local sorted = {}
+            for i = 1, prioCount do sorted[i] = prioRows[i] end
+            table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
+            local order = {}
+            for i = 1, prioCount do order[i] = sorted[i].key end
+            BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER", true)
+            if CurrentBarsScope() == "shared" then
+                G().hlPrioOrder = order
+                G().highlightPrioOrder = order
+            end
+            RequestHighlightPriorityRuntime()
+        end
+        M.RunWithHistory("Highlight Priority Order", "global:highlightPriorityOrder", WritePriorityRows)
+    end
+    local function SetPriorityRowsEnabled(enabled)
+        prioContainer:SetRowsEnabled(enabled)
+    end
+    prioContainer = RegisterDragRows(M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
+        x = 16, y = -82, width = min(220, priorityCardW - 32), rowHeight = 22, gap = 4, maxRows = rowMax,
+        bg = { 0.12, 0.12, 0.12, 0.85 },
+        border = { 0.30, 0.30, 0.30, 0.60 },
+        disabledAlpha = 0.4,
+        dragAllowed = function() return HighlightControls() and HighlightPriorityEnabled() end,
+        onReorder = SavePriorityRows,
+    }), "highlight.priority.order")
+    prioRows = prioContainer.rows
+    RefreshPriorityRows = function()
+        SetControlEnabled(prio, HighlightControls())
+        local order = PriorityOrder()
+        prioCount = math.min(#order, rowMax)
+        for i = 1, prioCount do
+            local key = order[i]
+            local r, g, bcol = PriorityColor(key)
+            local row = prioRows[i]
+            row.key = key
+            row.slotIndex = i
+            row.frame._stripe:SetColorTexture(r, g, bcol, 1)
+            row.frame._label:SetText(PRIORITY_LABELS[key] or key)
+            row.frame._numText:SetText(tostring(i))
+        end
+        prioContainer:SetActiveCount(prioCount)
+        SetPriorityRowsEnabled(HighlightControls() and HighlightPriorityEnabled())
+    end
+    if ctx.entry then ctx.entry.refreshHighlightPriorityColors = RefreshPriorityRows end
+    M.TrackRefresh(ctx, RefreshPriorityRows)
+end
+
+local function BuildHighlightSection(ctx, b)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 764, true)
+    local hlW = highlights._msuf2Width or ctx.width or 720
+    local hlGap = 28
+    local hlLeftX = 30
+    local hlInnerW = max(320, hlW - 60)
+    local hlLeftW = max(220, min(380, floor((hlInnerW - hlGap) * 0.46)))
+    local hlPreviewX = hlLeftX
+    local hlPreviewW = max(280, min(440, hlInnerW - 28))
+    local highlightTabFrames = {}
+    local modesFrame, previewFrame, priorityFrame =
+        M.UnitSectionsShared.MakeTabFrames(highlights, -88, hlW, highlightTabFrames, "modes", "preview", "priority")
+    RegisterSegment(W.SegmentTabs(ctx, highlights, {
+        stateKey = "barsHighlightTab", label = "Highlight area",
+        values = VT("modes", "Modes", "preview", "Preview", "priority", "Priority"),
+        width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
+        x = hlLeftX, y = -44,
+    }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
+    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 596)
+    local priorityCardW = min(360, max(260, hlLeftW + 28))
+    local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
+    W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
+    local function HighlightPriorityEnabled()
+        local value = BarScopeGet("hlPrioEnabled", nil)
+        if value == nil then value = BarScopeGet("highlightPrioEnabled", false) end
+        return value == true or value == 1 or value == "1"
+    end
+    local highlight, aggro, aggroMode, dispelBorder, dispelTrigger, dispelShowOn, purge, bossSupported,
+        bossTarget, bossSharedHint, unitAuraDispelHint = GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
@@ -2372,73 +2476,7 @@ local function BuildHighlightSection(ctx, b)
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         if bossSharedHint then bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1) end
     end)
-    local RefreshPriorityRows
-    local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
-    M.BindBoolWidget(ctx, prio,
-        HighlightPriorityEnabled,
-        function(v)
-            local on = v and true or false
-            BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY", true)
-            if CurrentBarsScope() == "shared" then
-                G().hlPrioEnabled = on and 1 or 0
-                G().highlightPrioEnabled = on and 1 or 0
-            end
-            RequestHighlightPriorityRuntime()
-            if RefreshPriorityRows then RefreshPriorityRows() end
-        end,
-        Meta("highlight.priority.enabled"))
-    if M.AddTooltip then
-        M.AddTooltip(prio, "Custom highlight priority", "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
-    end
-    local rowMax = 4
-    local prioContainer, prioRows, prioCount
-    local function SavePriorityRows()
-        local function WritePriorityRows()
-            local sorted = {}
-            for i = 1, prioCount do sorted[i] = prioRows[i] end
-            table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-            local order = {}
-            for i = 1, prioCount do order[i] = sorted[i].key end
-            BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER", true)
-            if CurrentBarsScope() == "shared" then
-                G().hlPrioOrder = order
-                G().highlightPrioOrder = order
-            end
-            RequestHighlightPriorityRuntime()
-        end
-        M.RunWithHistory("Highlight Priority Order", "global:highlightPriorityOrder", WritePriorityRows)
-    end
-    local function SetPriorityRowsEnabled(enabled)
-        prioContainer:SetRowsEnabled(enabled)
-    end
-    prioContainer = RegisterDragRows(M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
-        x = 16, y = -82, width = min(220, priorityCardW - 32), rowHeight = 22, gap = 4, maxRows = rowMax,
-        bg = { 0.12, 0.12, 0.12, 0.85 },
-        border = { 0.30, 0.30, 0.30, 0.60 },
-        disabledAlpha = 0.4,
-        dragAllowed = function() return HighlightControls() and HighlightPriorityEnabled() end,
-        onReorder = SavePriorityRows,
-    }), "highlight.priority.order")
-    prioRows = prioContainer.rows
-    RefreshPriorityRows = function()
-        SetControlEnabled(prio, HighlightControls())
-        local order = PriorityOrder()
-        prioCount = math.min(#order, rowMax)
-        for i = 1, prioCount do
-            local key = order[i]
-            local r, g, bcol = PriorityColor(key)
-            local row = prioRows[i]
-            row.key = key
-            row.slotIndex = i
-            row.frame._stripe:SetColorTexture(r, g, bcol, 1)
-            row.frame._label:SetText(PRIORITY_LABELS[key] or key)
-            row.frame._numText:SetText(tostring(i))
-        end
-        prioContainer:SetActiveCount(prioCount)
-        SetPriorityRowsEnabled(HighlightControls() and HighlightPriorityEnabled())
-    end
-    if ctx.entry then ctx.entry.refreshHighlightPriorityColors = RefreshPriorityRows end
-    M.TrackRefresh(ctx, RefreshPriorityRows)
+    GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPriorityEnabled)
 end
 
 local function BuildPowerSection(ctx, b)

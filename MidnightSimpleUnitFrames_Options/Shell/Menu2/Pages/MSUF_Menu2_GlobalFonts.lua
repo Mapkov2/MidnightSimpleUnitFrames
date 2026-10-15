@@ -419,91 +419,95 @@ end
 --- Name Shortening: the group-frame scope edits its own name fields (or
 --- follows Shared), every other scope edits the unit name keys of its
 --- font scope. Split from BuildFonts, which hands in its row builder.
+local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
+    local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+        288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
+    names._msuf2CursorY = -40
+    local shorten, side, chars, noEllipsis
+    local function RefreshGFNameShorteningUI()
+        if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
+    end
+    local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
+        function()
+            if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
+            return SharedNameShorteningEnabled()
+        end,
+        function(v)
+            if not GFNameUsesLocalScope() then return end
+            GFNameScopeSet("nameShortenEnabled", v and true or false)
+            if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
+            ApplyFonts("MSUF2_GF_NAME_SHORTEN")
+            RefreshGFNameShorteningUI()
+        end,
+        function()
+            if GFNameUsesLocalScope() then return GFNameScopeGet("nameClipSide", "RIGHT") end
+            return SharedNameShorteningSide()
+        end,
+        function(v)
+            if not GFNameUsesLocalScope() then return end
+            GFNameScopeSet("nameClipSide", v or "RIGHT")
+            ApplyFonts("MSUF2_GF_NAME_SHORTEN_SIDE")
+            RefreshGFNameShorteningUI()
+        end,
+        function()
+            if GFNameUsesLocalScope() then return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6 end
+            return SharedNameShorteningMax()
+        end,
+        function(v)
+            if not GFNameUsesLocalScope() then return end
+            v = floor((tonumber(v) or 6) + 0.5)
+            GFNameScopeSet("nameMaxChars", v)
+            ApplyFonts("MSUF2_GF_NAME_MAX")
+            RefreshGFNameShorteningUI()
+        end,
+        function()
+            if GFNameUsesLocalScope() then return GFNameScopeGet("nameNoEllipsis", false) and true or false end
+            return SharedNameShorteningNoEllipsis()
+        end,
+        function(v)
+            if not GFNameUsesLocalScope() then return end
+            GFNameScopeSet("nameNoEllipsis", v and true or false)
+            ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
+            RefreshGFNameShorteningUI()
+        end,
+        function(v) return tostring(floor((tonumber(v) or 6) + 0.5)) end)
+    shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
+    local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
+    if fontScopeReason and W.SetControlsDisabledReason then
+        local shortenReason = W.TurnOnReason("Shorten group names", function()
+            if GFNameUsesLocalScope() then
+                return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+            end
+            return SharedNameShorteningEnabled()
+        end)
+        W.SetControlDisabledReason(shorten, fontScopeReason)
+        W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
+            return fontScopeReason(control) or shortenReason(control)
+        end)
+    end
+    local function RefreshGFNameShorteningControls()
+        local canEdit = CurrentFontScopeCanEdit()
+        local enabled
+        if GFNameUsesLocalScope() then
+            enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+        else
+            enabled = SharedNameShorteningEnabled()
+        end
+        SetControlEnabled(shorten, canEdit)
+        SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
+        if GFNameUsesLocalScope() then
+            scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+        else
+            scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
+        end
+    end
+    M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
+end
+
 local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
-        names._msuf2CursorY = -40
-        local shorten, side, chars, noEllipsis
-        local function RefreshGFNameShorteningUI()
-            if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
-        end
-        local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
-                return SharedNameShorteningEnabled()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameShortenEnabled", v and true or false)
-                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
-                ApplyFonts("MSUF2_GF_NAME_SHORTEN")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameClipSide", "RIGHT") end
-                return SharedNameShorteningSide()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameClipSide", v or "RIGHT")
-                ApplyFonts("MSUF2_GF_NAME_SHORTEN_SIDE")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6 end
-                return SharedNameShorteningMax()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                v = floor((tonumber(v) or 6) + 0.5)
-                GFNameScopeSet("nameMaxChars", v)
-                ApplyFonts("MSUF2_GF_NAME_MAX")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameNoEllipsis", false) and true or false end
-                return SharedNameShorteningNoEllipsis()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameNoEllipsis", v and true or false)
-                ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
-                RefreshGFNameShorteningUI()
-            end,
-            function(v) return tostring(floor((tonumber(v) or 6) + 0.5)) end)
-        shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
-        local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
-        if fontScopeReason and W.SetControlsDisabledReason then
-            local shortenReason = W.TurnOnReason("Shorten group names", function()
-                if GFNameUsesLocalScope() then
-                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
-                end
-                return SharedNameShorteningEnabled()
-            end)
-            W.SetControlDisabledReason(shorten, fontScopeReason)
-            W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
-                return fontScopeReason(control) or shortenReason(control)
-            end)
-        end
-        local function RefreshGFNameShorteningControls()
-            local canEdit = CurrentFontScopeCanEdit()
-            local enabled
-            if GFNameUsesLocalScope() then
-                enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
-            else
-                enabled = SharedNameShorteningEnabled()
-            end
-            SetControlEnabled(shorten, canEdit)
-            SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
-            if GFNameUsesLocalScope() then
-                scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
-            else
-                scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
-            end
-        end
-        M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
+        BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     else
         local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
             294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
@@ -575,9 +579,7 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
         M.TrackRefresh(ctx, RefreshNameShorteningControls)
     end
 end
-local function BuildFonts(ctx)
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
+local function BuildFontsScope(ctx, b)
     local scopeValues = GP.SCOPE_VALUES
     local function ActiveFontOverrideLabels(filter)
         local active = {}
@@ -655,6 +657,10 @@ local function BuildFonts(ctx)
         M.AddTooltip(scopeUI.reset, "Reset",
             "Turns off custom font settings on every unit and group scope at once, so they all follow Shared again.", { hook = true })
     end
+    return ActiveFontOverrideLabels
+end
+
+local function BuildGlobalFont(ctx, b)
     local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
     local RefreshFontPreview
     local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(false) end, 340)
@@ -702,40 +708,10 @@ local function BuildFonts(ctx)
         end,
         Meta("font.family"))
     M.TrackRefresh(ctx, RefreshFontPreview)
-    local RefreshScopedFontControls = M.RefreshProxy()
-    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 430, true)
-    local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
-        local control = W.Segment(text, label, values, width)
-        M.BindSegment(ctx, control, getValue, function(v)
-            setValue(v)
-            RefreshFontPreview()
-            if afterSet then afterSet() end
-        end, Meta(path))
-        return control
-    end
-    local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
-    M.BindSegment(ctx, outline,
-        function() return FontOutlineGetFor(CurrentFontScope()) end,
-        function(v)
-            FontOutlineSetFor(CurrentFontScope(), v)
-            RefreshFontPreview()
-        end,
-        Meta("text_style.outline"))
-    local rendering = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp / Pixel", "SLUG", "Slug"), 420,
-        FontRenderingMode,
-        SetFontRenderingMode,
-        "text_style.rendering",
-        function() RefreshScopedFontControls() end)
-    if M.AddTooltip then
-        M.AddTooltip(rendering, "Font rendering",
-            "Slug uses WoW's crisp vector font renderer. Slug supports None or normal Outline; Thick Outline and text shadow are unavailable while it is active.",
-            { hook = true, owner = "ANCHOR_RIGHT" })
-    end
-    local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
-        function() return FontScopeGet("textBackdrop", true) and "ON" or "OFF" end,
-        function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
-        "text_style.shadow.enabled",
-        function() RefreshScopedFontControls() end)
+    return RefreshFontPreview, RefreshShadowPreview
+end
+
+local function BuildShadowOpacity(ctx, text, RefreshShadowPreview)
     local shadowOpacity = W.Slider(text, "Shadow opacity", 0.20, 1, 0.05, 300)
     local shadowOpacityApplyTimer
     local shadowOpacityApplyPending
@@ -786,17 +762,10 @@ local function BuildFonts(ctx)
         1, Meta("text_style.shadow.opacity", "setting", { step = 0.05 }))
     shadowOpacity:HookScript("OnMouseUp", FlushShadowOpacityApply)
     shadowOpacity:HookScript("OnHide", FlushShadowOpacityApply)
-    local shadowDistance = BindTextSegment("Shadow distance", VT(1, "1 px", 2, "2 px"), 260,
-        function()
-            local _, distance = ShadowMetrics()
-            return distance
-        end,
-        function(v) SetShadowAndApply("fontShadowDistance", NormalizeShadowDistance(v), "MSUF2_FONT_SHADOW_DISTANCE") end,
-        "text_style.shadow.distance")
-    local opacity = BindTextSegment("Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320,
-        function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
-        function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
-        "text_style.opacity")
+    return shadowOpacity
+end
+
+local function BuildFontBaseline(ctx, text)
     W.NextRow(text, 8)
     local baseline = W.Slider(text, "Baseline", -4, 4, 1, 300)
     baseline:SetValueFormatter(function(v)
@@ -808,6 +777,61 @@ local function BuildFonts(ctx)
         function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
         function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
         0, Meta("text_style.baseline", "setting", { step = 1, roundStep = true }))
+    return baseline
+end
+
+local function BuildFonts(ctx)
+    local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
+    local ActiveFontOverrideLabels = BuildFontsScope(ctx, b)
+    local RefreshFontPreview, RefreshShadowPreview = BuildGlobalFont(ctx, b)
+    local RefreshScopedFontControls = M.RefreshProxy()
+    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 430, true)
+    local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
+        local control = W.Segment(text, label, values, width)
+        M.BindSegment(ctx, control, getValue, function(v)
+            setValue(v)
+            RefreshFontPreview()
+            if afterSet then afterSet() end
+        end, Meta(path))
+        return control
+    end
+    local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
+    M.BindSegment(ctx, outline,
+        function() return FontOutlineGetFor(CurrentFontScope()) end,
+        function(v)
+            FontOutlineSetFor(CurrentFontScope(), v)
+            RefreshFontPreview()
+        end,
+        Meta("text_style.outline"))
+    local rendering = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp / Pixel", "SLUG", "Slug"), 420,
+        FontRenderingMode,
+        SetFontRenderingMode,
+        "text_style.rendering",
+        function() RefreshScopedFontControls() end)
+    if M.AddTooltip then
+        M.AddTooltip(rendering, "Font rendering",
+            "Slug uses WoW's crisp vector font renderer. Slug supports None or normal Outline; Thick Outline and text shadow are unavailable while it is active.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
+        function() return FontScopeGet("textBackdrop", true) and "ON" or "OFF" end,
+        function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
+        "text_style.shadow.enabled",
+        function() RefreshScopedFontControls() end)
+    local shadowOpacity = BuildShadowOpacity(ctx, text, RefreshShadowPreview)
+    local shadowDistance = BindTextSegment("Shadow distance", VT(1, "1 px", 2, "2 px"), 260,
+        function()
+            local _, distance = ShadowMetrics()
+            return distance
+        end,
+        function(v) SetShadowAndApply("fontShadowDistance", NormalizeShadowDistance(v), "MSUF2_FONT_SHADOW_DISTANCE") end,
+        "text_style.shadow.distance")
+    local opacity = BindTextSegment("Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320,
+        function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
+        function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
+        "text_style.opacity")
+    local baseline = BuildFontBaseline(ctx, text)
     local function BindFontDropdown(parent, label, values, getValue, setValue, width, path)
         local control = W.Dropdown(parent, label, values, width or 280)
         M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
