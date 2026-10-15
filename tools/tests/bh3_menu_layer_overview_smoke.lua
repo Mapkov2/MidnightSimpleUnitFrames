@@ -57,6 +57,29 @@ print("after Enter on unchanged overview number: runtime item layer", after.laye
 assert(after.layer == 17 and MSUF_DB.gf_party.spellIndicators.specs.test.example.layer == nil, "unchanged Enter destroyed inheritance")
 print("layer overview inheritance: PASS")
 
+-- Group Aura lanes render only in the CUSTOM renderer: an edit made here must
+-- show, and a no-op Enter on an unchanged number must not switch the renderer.
+local laneKey = "gf_party"
+local function GroupLaneRow(id, strata)
+    local rows = strata and NS.MSUF2.CollectFrameStrataRows() or NS.MSUF2.CollectLayerOverviewRows()
+    for _, r in ipairs(rows) do
+        if r.id == id then return r end
+    end
+end
+MSUF_DB[laneKey].auras = { renderer = "NATIVE_12_1", buff = { layer = 5 } }
+local layerRow = assert(GroupLaneRow("group.party.auras.buff.layer"), "group aura lane layer row missing")
+NS.MSUF2.LayerOverview.SetLayerValue(layerRow, tostring(layerRow.layer))
+assert(MSUF_DB[laneKey].auras.renderer == "NATIVE_12_1", "an unchanged Enter switched the aura renderer")
+assert(NS.MSUF2.LayerOverview.SetLayerValue(layerRow, "12"))
+assert(MSUF_DB[laneKey].auras.buff.layer == 12 and MSUF_DB[laneKey].auras.renderer == "CUSTOM",
+    "a group aura layer edit left the renderer inactive")
+MSUF_DB[laneKey].auras.renderer = "NATIVE_12_1"
+local strataRow = assert(GroupLaneRow("group.party.auras.debuff.strata", true), "group aura lane strata row missing")
+assert(NS.MSUF2.LayerOverview.SetStrataValue(strataRow, "HIGH"))
+assert(MSUF_DB[laneKey].auras.debuff.strata == "HIGH" and MSUF_DB[laneKey].auras.renderer == "CUSTOM",
+    "a group aura strata edit left the renderer inactive")
+print("layer overview group aura activation: PASS")
+
 -- Castbar rows follow the same client support gate as unit pages.
 local supported = { player = true, target = true, arena = true }
 NS.MSUF2.FilterSupportedUnitValues = function(rows)

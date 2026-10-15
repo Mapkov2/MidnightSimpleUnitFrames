@@ -58,10 +58,10 @@ local function FrameStrataParse(text)
     end
     return FrameStrataIndex(text)
 end
-local function AurasRoot(kind)
+local function AurasRoot(kind, activate)
     local conf = Conf(kind)
     conf.auras = conf.auras or {}
-    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
+    if activate == true then conf.auras.renderer = "CUSTOM" end
     conf.auras.blizzardTypes = conf.auras.blizzardTypes or {}
     conf.auras.buff = conf.auras.buff or {}
     conf.auras.debuff = conf.auras.debuff or {}

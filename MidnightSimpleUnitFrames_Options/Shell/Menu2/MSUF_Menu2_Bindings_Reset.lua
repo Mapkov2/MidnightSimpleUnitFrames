@@ -310,9 +310,10 @@ end
 local function ResetGroupFrames(db, defaults)
     local gf = MSUF and MSUF.GF
     if gf and type(gf.ResetAllToDefaults) == "function" then
-        local result = gf.ResetAllToDefaults()
+        local result = gf.ResetAllToDefaults(defaults, true)
         return result
     end
+    MSUF.ProfileVariants.ClearModuleOverrides(db, "groupframes")
     ReplaceRootTable(db, defaults, "gf_party")
     ReplaceRootTable(db, defaults, "gf_raid")
     ReplaceRootTable(db, defaults, "gf_mythicraid")
@@ -684,7 +685,7 @@ local function ResetPageImpl(pageKey)
     -- Setter-only settings (minimap icon, Edit Mode integrations, ...) follow
     -- through their setters, ahead of the apply fanout that reads the rest.
     local setterOnly = CaptureSetterOnlySettings()
-    handler(db, defaults, info)
+    if handler(db, defaults, info) == false then return false end
     MSUF.Castbars.Config.Invalidate()
     RetireLegacyUnitAliases(db)
     PurgeRuntimeCachesForReset(info)

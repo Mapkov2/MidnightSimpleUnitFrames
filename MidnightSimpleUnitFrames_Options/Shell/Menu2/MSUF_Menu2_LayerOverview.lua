@@ -901,12 +901,16 @@ local function WriteCustomContainerField(row, edit, field, value, reason, fieldL
         return true
     end, fieldLabel) ~= false
 end
+local AURA_RENDERER_PATH = { "auras", "renderer" }
+
 --- Writes a group frame setting at edit.path in one history step and queues
 --- the group refresh (the Group page's queue when it is loaded).
 local function WriteGroupField(row, edit, value, reason, fieldLabel)
     return RunLayerHistory(row, function()
         local conf = EnsureChild(DB(), edit.dbKey)
         if not WriteNested(conf, edit.path, value) then return false end
+        -- Group Aura lanes only render in the CUSTOM renderer; the edit has to show.
+        if edit.path[1] == "auras" then WriteNested(conf, AURA_RENDERER_PATH, "CUSTOM") end
         local groupPage = M.GroupPage
         if groupPage and type(groupPage.QueueGF) == "function" then
             groupPage.QueueGF(edit.scope, edit.mode or "visual")

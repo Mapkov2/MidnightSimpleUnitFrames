@@ -928,52 +928,42 @@ else
     end
 end
 
-local function ResetConfToDefaults(conf, defaults)
-    if type(conf) ~= "table" or type(defaults) ~= "table" then return end
-    for k in pairs(conf) do
-        conf[k] = nil
+local function ResetConfToDefaults(db, key, defaults, fallback)
+    defaults = type(defaults) == "table" and defaults or fallback
+    local conf = db[key]
+    if type(conf) ~= "table" then
+        conf = {}
+        db[key] = conf
     end
+    for k in pairs(conf) do conf[k] = nil end
     for k, v in pairs(defaults) do
-        conf[k] = (type(v) == "table" and GF._DeepCopyTable) and GF._DeepCopyTable(v) or v
+        conf[k] = type(v) == "table" and GF._DeepCopyTable(v) or v
     end
 end
 
-local function GetFactoryGroupFrameDefaults()
+local function GetFactoryGroupFrameDefaults(profile)
+    if type(profile) == "table" then return profile end
     local createProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
     if type(createProfile) ~= "function" then return nil end
-
-    local profile = createProfile()
-    if type(profile) ~= "table" then return nil end
-
-    local party = type(profile.gf_party) == "table" and profile.gf_party or nil
-    local raid = type(profile.gf_raid) == "table" and profile.gf_raid or nil
-    local mythicraid = type(profile.gf_mythicraid) == "table" and profile.gf_mythicraid or nil
-    if party and raid and mythicraid then
-        return party, raid, mythicraid
-    end
-    return nil
+    profile = createProfile()
+    return type(profile) == "table" and profile or nil
 end
 
-function GF.ResetAllToDefaults()
+function GF.ResetAllToDefaults(factoryDefaults, deferRefresh)
     local db = _G.MSUF_DB
     if type(db) ~= "table" then return false end
 
-    db.gf_party = db.gf_party or {}
-    db.gf_raid  = db.gf_raid or {}
-    db.gf_mythicraid = db.gf_mythicraid or {}
-    db.gf_priority = db.gf_priority or {}
-
-    local partyDefaults, raidDefaults, mythicRaidDefaults = GetFactoryGroupFrameDefaults()
-    ResetConfToDefaults(db.gf_party, partyDefaults or PARTY_DEFAULTS)
-    ResetConfToDefaults(db.gf_raid, raidDefaults or RAID_DEFAULTS)
-    ResetConfToDefaults(db.gf_mythicraid, mythicRaidDefaults or MYTHIC_RAID_DEFAULTS)
-    ResetConfToDefaults(db.gf_priority, PRIORITY_DEFAULTS)
+    -- Menu resets pass their one factory snapshot and apply after cache purge.
+    local defaults = GetFactoryGroupFrameDefaults(factoryDefaults) or {}
+    MSUF.ProfileVariants.ClearModuleOverrides(db, "groupframes")
+    ResetConfToDefaults(db, "gf_party", defaults.gf_party, PARTY_DEFAULTS)
+    ResetConfToDefaults(db, "gf_raid", defaults.gf_raid, RAID_DEFAULTS)
+    ResetConfToDefaults(db, "gf_mythicraid", defaults.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
+    ResetConfToDefaults(db, "gf_priority", defaults.gf_priority, PRIORITY_DEFAULTS)
 
     GF.InvalidateConfCache()
     GF.EnsureDB()
-
-    if GF.RefreshAll then GF.RefreshAll() end
-
+    if deferRefresh ~= true and GF.RefreshAll then GF.RefreshAll() end
     return true
 end
 

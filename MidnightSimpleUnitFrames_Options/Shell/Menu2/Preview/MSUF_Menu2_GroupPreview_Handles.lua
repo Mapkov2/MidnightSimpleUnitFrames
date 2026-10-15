@@ -450,6 +450,13 @@ function Stage.BindPositionWriters(st)
     local CheckpointHandleHistory, ConfigCombatLocked, CurrentStatusSpec, H, HandleOffset, HandleOffsets, OffsetToConfig, PointOffset = st.CheckpointHandleHistory, st.ConfigCombatLocked, st.CurrentStatusSpec, st.H, st.HandleOffset, st.HandleOffsets, st.OffsetToConfig, st.PointOffset
     local RefreshGroupIndicatorDragPreview, RefreshGroupPreviewAfterMove, ResolveAnchor, ResolveGroupAuraAnchor, Round, SpellPlacedForHandle, WriteTextHandleOffsets, box = st.RefreshGroupIndicatorDragPreview, st.RefreshGroupPreviewAfterMove, st.ResolveAnchor, st.ResolveGroupAuraAnchor, st.Round, st.SpellPlacedForHandle, st.WriteTextHandleOffsets, st.box
     local max = st.max
+    -- Group Aura lanes only render in the CUSTOM renderer: moving one has to show.
+    local function AuraLaneConf(conf, group)
+        conf.auras = conf.auras or {}
+        conf.auras.renderer = "CUSTOM"
+        conf.auras[group] = conf.auras[group] or {}
+        return conf.auras[group]
+    end
     local function SaveHandlePosition(handle, action, previewOnly)
         if not (handle and box._mock) or handle._locked or ConfigCombatLocked() then return false end
         if handle._cfgText then return end
@@ -513,16 +520,15 @@ function Stage.BindPositionWriters(st)
         local cfgX, cfgY = OffsetToConfig(offX, scale), OffsetToConfig(offY, scale)
         local conf = H.Conf(H.CurrentScope())
         if handle._cfgGroup then
-            conf.auras = conf.auras or {}
-            conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
+            local lane = AuraLaneConf(conf, handle._cfgGroup)
             if handle._cfgTrackedBuff then
-                conf.auras[handle._cfgGroup].trackedAnchor = anchor
-                conf.auras[handle._cfgGroup].trackedX = cfgX
-                conf.auras[handle._cfgGroup].trackedY = cfgY
+                lane.trackedAnchor = anchor
+                lane.trackedX = cfgX
+                lane.trackedY = cfgY
             else
-                conf.auras[handle._cfgGroup].anchor = anchor
-                conf.auras[handle._cfgGroup].x = cfgX
-                conf.auras[handle._cfgGroup].y = cfgY
+                lane.anchor = anchor
+                lane.x = cfgX
+                lane.y = cfgY
             end
         elseif handle._cfgStatus then
             local spec = handle._statusSpec or CurrentStatusSpec()
@@ -571,14 +577,13 @@ function Stage.BindPositionWriters(st)
         local step = H.NudgeStep()
         local cfgX, cfgY = Round((tonumber(x) or 0) + (dx * step)), Round((tonumber(y) or 0) + (dy * step))
         if handle._cfgGroup then
-            conf.auras = conf.auras or {}
-            conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
+            local lane = AuraLaneConf(conf, handle._cfgGroup)
             if handle._cfgTrackedBuff then
-                conf.auras[handle._cfgGroup].trackedX = cfgX
-                conf.auras[handle._cfgGroup].trackedY = cfgY
+                lane.trackedX = cfgX
+                lane.trackedY = cfgY
             else
-                conf.auras[handle._cfgGroup].x = cfgX
-                conf.auras[handle._cfgGroup].y = cfgY
+                lane.x = cfgX
+                lane.y = cfgY
             end
         elseif handle._cfgStatus then
             local spec = handle._statusSpec or CurrentStatusSpec()

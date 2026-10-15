@@ -137,20 +137,10 @@ local function GroupConf(kind)
     db[key] = db[key] or {}
     return db[key]
 end
-local function QueueGroupScope(scope, mode)
-    local a, b = GroupScopeKinds(scope)
-    if type(GP.QueueGF) == "function" then
-        GP.QueueGF(a, mode or "visual")
-        if b then GP.QueueGF(b, mode or "visual") end
-    end
-    -- Paint the menu preview from the just-written raw Aura style immediately.
-    -- The coalesced group apply below still owns runtime recompilation.
-    RefreshGFPreview()
-end
-local function GFAurasRoot(kind)
+local function GFAurasRoot(kind, activate)
     local conf = GroupConf(kind)
     conf.auras = conf.auras or {}
-    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
+    if activate == true then conf.auras.renderer = "CUSTOM" end
     conf.auras.blizzardTypes = conf.auras.blizzardTypes or {}
     conf.auras.buff = conf.auras.buff or {}
     conf.auras.debuff = conf.auras.debuff or {}
@@ -160,6 +150,18 @@ local function GFAuraGroup(kind, groupKey)
     local root = GFAurasRoot(kind)
     root[groupKey] = root[groupKey] or {}
     return root[groupKey]
+end
+local function QueueGroupScope(scope, mode)
+    local a, b = GroupScopeKinds(scope)
+    GFAurasRoot(a, true)
+    if b then GFAurasRoot(b, true) end
+    if type(GP.QueueGF) == "function" then
+        GP.QueueGF(a, mode or "visual")
+        if b then GP.QueueGF(b, mode or "visual") end
+    end
+    -- Paint the menu preview from the just-written raw Aura style immediately.
+    -- The coalesced group apply below still owns runtime recompilation.
+    RefreshGFPreview()
 end
 local function GFReadRoot(scope)
     local kind = GroupScopeKinds(scope)
