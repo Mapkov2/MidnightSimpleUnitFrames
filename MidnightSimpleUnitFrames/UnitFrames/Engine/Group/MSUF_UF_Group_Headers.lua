@@ -112,6 +112,38 @@ function GF.ForEachHeader(key, fn)
   return false
 end
 
+-- Stop the native roster rebuild too: deferring only Runtime leaves Blizzard's
+-- header free to create, compact and resize slots during combat. Unit consumers
+-- stay live because raidN can acquire another occupant without changing its token.
+local function FreezeRaidRoster(header)
+  if header._msufRaidRosterFrozen then return false end
+  header:UnregisterEvent("GROUP_ROSTER_UPDATE")
+  header:UnregisterEvent("UNIT_NAME_UPDATE")
+  header._msufRaidRosterOnShow = header:GetScript("OnShow")
+  header:SetScript("OnShow", nil)
+  header:SetAttribute("_ignore", true)
+  header._msufRaidRosterFrozen = true
+  return true
+end
+
+local function ResumeRaidRoster(header)
+  if not header._msufRaidRosterFrozen then return false end
+  header._msufRaidRosterFrozen = nil
+  header:RegisterEvent("GROUP_ROSTER_UPDATE")
+  header:RegisterEvent("UNIT_NAME_UPDATE")
+  header:SetScript("OnShow", header._msufRaidRosterOnShow)
+  header._msufRaidRosterOnShow = nil
+  header:SetAttribute("_ignore", nil)
+  -- An unchanged configuration need not write any attributes on the regen
+  -- layout pass. Force the missed native roster update even in that case.
+  header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  return true
+end
+
+function GF.SetRaidRosterFrozen(frozen)
+  return GF.ForEachHeader("raid", frozen and FreezeRaidRoster or ResumeRaidRoster)
+end
+
 function GF.ShowHeaders(key)
   local shown = false
   GF.ForEachHeader(key, function(header)

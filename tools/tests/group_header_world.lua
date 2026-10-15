@@ -351,6 +351,7 @@ function Harness.New(root, flavor, options)
         header.scripts.OnEvent = function(self, event)
             if (event == "GROUP_ROSTER_UPDATE" or event == "UNIT_NAME_UPDATE") then UpdateHeader(self) end
         end
+        header.scripts.OnShow = UpdateHeader
         Protect(header)
         local setAttribute = header.SetAttribute
         header.SetAttribute = function(self, key, value)
@@ -364,7 +365,7 @@ function Harness.New(root, flavor, options)
         header.Show = function(self)
             local was = self.shown
             show(self)
-            if not was then UpdateHeader(self) end
+            if not was and self.scripts.OnShow then self.scripts.OnShow(self) end
         end
         return header
     end

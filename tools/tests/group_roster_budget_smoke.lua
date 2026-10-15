@@ -55,6 +55,12 @@
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
 
+-- 2026-10-15: freeze native raid roster/layout in combat, retain one identity
+-- repaint per burst. Same 40-frame/20-event scenario: Mainline 1317k -> 661k,
+-- 3160 -> 200 native calls, 167.5 -> 27.9KB (x86); Vanilla 1973k -> 888k,
+-- 4640 -> 1000 calls, 1192.8 -> 290.5KB. Tighten the affected VM/native/x86
+-- allocation caps to the new measurements +2%; unchanged routes keep theirs.
+-- PUC Lua 5.1 x64: shift 4.1/13.3KB and burst 41.0/403.6KB (Mainline/Vanilla).
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required")
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -63,13 +69,13 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local BUDGETS = {
     Mainline = {
         party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1586, 3912 },
-        raid_settle = { 136, 12 }, raid_apply = { 1097, 596 }, raid_shift = { 125, 26 },
-        raid40_settle = { 276, 10 }, raid40_burst = { 1344, 171 },
+        raid_settle = { 136, 12 }, raid_apply = { 1097, 596 }, raid_shift = { 96, 4 },
+        raid40_settle = { 276, 10 }, raid40_burst = { 675, 29 },
     },
     Vanilla = {
         party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1564, 4865 },
-        raid_settle = { 138, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 151, 75 },
-        raid40_settle = { 285, 23 }, raid40_burst = { 2013, 1217 },
+        raid_settle = { 138, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 100, 10 },
+        raid40_settle = { 285, 23 }, raid40_burst = { 906, 297 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
@@ -109,10 +115,10 @@ if arg[3] == "native" then
     end
     h.nativeLimits = flavor == "Mainline" and {
         party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6347,
-        raid_settle = 226, raid_apply = 1120, raid_shift = 211, raid40_settle = 430, raid40_burst = 3224,
+        raid_settle = 226, raid_apply = 1120, raid_shift = 102, raid40_settle = 430, raid40_burst = 204,
     } or {
         party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6736,
-        raid_settle = 267, raid_apply = 1380, raid_shift = 266, raid40_settle = 512, raid40_burst = 4733,
+        raid_settle = 267, raid_apply = 1380, raid_shift = 123, raid40_settle = 512, raid40_burst = 1020,
     }
 end
 
@@ -289,9 +295,9 @@ h:LeaveCombat(); h:RunTimers()
 -- Each limit is ceil(maximum * 1.02), exactly the original 2% headroom.
 local MEMORY_BUDGETS_64 = {
     Mainline = { party_join = 290, party_settle = 13, party_apply = 268, raid_build = 5206,
-        raid_settle = 15, raid_apply = 760, raid_shift = 34, raid40_settle = 16, raid40_burst = 236 },
+        raid_settle = 15, raid_apply = 760, raid_shift = 5, raid40_settle = 16, raid40_burst = 42 },
     Vanilla = { party_join = 360, party_settle = 15, party_apply = 531, raid_build = 6446,
-        raid_settle = 24, raid_apply = 1801, raid_shift = 97, raid40_settle = 34, raid40_burst = 1606 },
+        raid_settle = 24, raid_apply = 1801, raid_shift = 14, raid40_settle = 34, raid40_burst = 412 },
 }
 collectgarbage("collect")
 collectgarbage("stop")

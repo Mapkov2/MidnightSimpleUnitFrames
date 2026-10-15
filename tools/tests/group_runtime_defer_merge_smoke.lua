@@ -60,6 +60,7 @@ function GF.GetLiveGroupKind() return "party" end
 function GF.GetLiveRaidKind() return "raid" end
 GF.EnsureDB = function() end
 GF.SetupHeader = function() return nil, true end
+GF.SetRaidRosterFrozen = function() return false end -- No native headers in this scope-merge fixture.
 GF.RetireHeader = function() return true end
 GF.CompileSpec = function(kind) return { kind = kind } end
 GF.ApplyStructureSpec = function(frame) applied[#applied + 1] = frame._msufGFKind; return true end

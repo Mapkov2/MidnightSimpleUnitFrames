@@ -675,8 +675,8 @@ local function FlushHeaderLayoutSettle()
   if not AnyGroupFrameEnabled() then return false end
   local did
   if InCombat() then
-    -- Native headers already assigned their units. Only protected layout waits;
-    -- the coalesced roster repaint must also complete during combat.
+    -- Raid slots/layout are frozen, but raidN occupants can still change. Keep
+    -- the coalesced identity repaint aligned with the secure click unit.
     did = GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
   else
     did = GF.RefreshHeaderLayout()
@@ -983,11 +983,12 @@ local function RuntimeOnEvent(self, event, unit)
     return
   end
   if not AnyGroupFrameEnabled() and event ~= "PLAYER_REGEN_ENABLED" then
-    SetRuntimeEventsEnabled(false)
+    SetRuntimeEventsEnabled(false, InCombat())
     return
   end
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
+    GF.SetRaidRosterFrozen(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
     RefreshStartupVisuals()
     -- Priority selection is orthogonal to the broader pending reason. Catch up
@@ -1007,18 +1008,15 @@ local function RuntimeOnEvent(self, event, unit)
     if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
       SetupWantedHeaders()
     end
+    GF.SetRaidRosterFrozen(true)
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
-    if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then
-      -- The border textures are unprotected and can follow Party/Raid state
-      -- immediately even when secure header retirement must wait for combat.
-      GF.ApplyGroupBorder()
-    end
     if InCombat() then
       GF.DeferGroupRuntime("roster")
       if event == "GROUP_ROSTER_UPDATE" then ScheduleHeaderLayoutSettle(SETTLE.ROSTER) end
     else
+      if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder() end
       -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;
       -- repeated roster churn and a role poll's burst of PLAYER_ROLES_ASSIGNED /
       -- ROLE_CHANGED_INFORM (one per member) collapse into this one pass.
