@@ -10,6 +10,7 @@
 -- SupportsThreatText decide everything. WoW Forever returns secret values for a
 -- boss: they are formatted by C_StringUtil and never compared.
 local root = assert(arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 local core = root .. "/MidnightSimpleUnitFrames/"
 local options = root .. "/MidnightSimpleUnitFrames_Options/"
 

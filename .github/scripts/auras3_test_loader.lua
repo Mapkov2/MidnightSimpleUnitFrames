@@ -214,6 +214,11 @@ local function PrepareDirectContracts(source, namespace)
             assert(compileSource("local UF = ...\nlocal issecretvalue = _G.issecretvalue or function() return false end\n" .. body))(namespace.UF)
         end
     end
+    -- Partial UF/Edit Mode/Menu consumers need the same early request owner as the core TOCs.
+    if Uses("UF.Preview") then
+        local fixture = assert(originalLoadfile("tools/tests/preview_namespace_fixture.lua"))()
+        fixture.Install(".", namespace, _G, originalLoadfile)
+    end
     if Uses("MSUF.Secrets") then
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")))("MSUF", namespace)
     end

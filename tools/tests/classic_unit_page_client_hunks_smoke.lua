@@ -5,6 +5,7 @@
 -- and pins each hunk where it applies and its absence on Midnight and WoW
 -- Forever, so an edit that drops or widens one fails here.
 local root = assert(arg[1], "repo root missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 local MENU = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 
 local function Check(ok, message)

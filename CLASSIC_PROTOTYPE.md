@@ -1363,3 +1363,6 @@ over-absorb painter, the Boss number updater and every optional-callable probe w
 captured local `type`. Ownership, binding model and the cost pins are in
 `docs/uf-responsibility-split.md`; relocated rationale comments are in
 `docs/uf-responsibility-notes.md`.
+
+Unit-frame preview request ownership, early dependency order, family handoff and
+the retained core animation boundary are documented in [docs/PREVIEW_REQUESTS.md](docs/PREVIEW_REQUESTS.md).

@@ -303,8 +303,9 @@ else
                 context .. ": the preview has no sample swipe")
         end
     end
-    local conditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")
-    for _, header in ipairs({ "local function ApplyArenaPreviewFrames(active)", "local function ClearArenaPreviewFramesForCombat()" }) do
+    -- Source pin follows the moved shared lifecycle; all trinket behavior assertions remain.
+    local conditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_PreviewFamilies.lua")
+    for _, header in ipairs({ "local function ApplyFrames(active)", "local function ClearCombat()" }) do
         Check(Body(conditions, header):find('MSUF.Require("MSUF_ArenaTrinkets_SyncPreview"', 1, true),
             "the arena preview owner does not sync the trinkets in " .. header)
     end

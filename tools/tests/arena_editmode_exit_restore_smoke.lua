@@ -12,7 +12,7 @@
 -- ownership, visibility owner, castbar preview, trinket holder, preview gates).
 --
 -- The arena roster is read from the engine's arena config-key fan-out and the
--- LoadConditions preview roster, so a later raise from 3 to 5 opponents is
+-- canonical Preview force-cache roster, so a later raise from 3 to 5 opponents is
 -- iterated automatically instead of being hard-coded here.
 --
 -- Run from the repository root:
@@ -20,6 +20,7 @@
 
 local root = tostring((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/+$", "")
 local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 if root == "" then root = "." end
 local ONLY_FLAVOR = arg and arg[2]
 local ONLY_SCENARIO = arg and arg[3]
@@ -44,6 +45,7 @@ end
 
 local FILES = {
     loadConditions = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua",
+    previewRequests = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Preview.lua",
     editCore = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua",
     editRegistry = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Registry.lua",
     editState = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua",
@@ -74,10 +76,10 @@ local function ArenaRoster()
             end
         end
     end
-    local loadConditions = Read(FILES.loadConditions)
-    local previewUnits = loadConditions:match("local ARENA_PREVIEW_UNITS%s*=%s*(%b{})")
-    Check(previewUnits ~= nil, "could not read the LoadConditions arena preview roster")
-    for index in previewUnits:gmatch("arena(%d+)%s*=%s*true") do
+    local previewRequests = Read(FILES.previewRequests)
+    local previewUnits = previewRequests:match("local forcedUnits%s*=%s*(%b{})")
+    Check(previewUnits ~= nil, "could not read the canonical preview force-cache roster")
+    for index in previewUnits:gmatch("arena(%d+)%s*=") do
         count = math.max(count, tonumber(index))
     end
     Check(count >= 1, "could not read the engine arena roster")
@@ -984,7 +986,7 @@ local function Menu2PreviewScenario(flavor, roster)
     local W, fresh = Boot(flavor, roster)
     local context = flavor .. "/menu2-arena-preview"
     EnterEditMode(W, context)
-    _G.MSUF2_ArenaUnitframePreviewActive = true
+    W.UF.Preview.SetArenaPage(true)
     ExitEditMode(W, context)
     Check(rawget(_G, "MSUF2_ArenaUnitframePreviewActive") ~= true,
         context .. ": Menu2 arena page preview flag survived Edit Mode exit")

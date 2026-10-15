@@ -354,13 +354,14 @@ local loadConditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements
 Check(loadConditions:find("local function ArenaPrepForcesUnit", 1, true)
         and loadConditions:find("_G.MSUF_ArenaPrepVisibilityCount", 1, true),
     "arena prep is not slot-bounded in the secure visibility owner")
-local structuralPreviewElements = loadConditions:match(
-    "local BOSS_PREVIEW_REFRESH_ELEMENTS = (%b{})")
+-- The source pin follows the shared family lifecycle; secure visibility assertions stay above.
+local previewFamilies = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_PreviewFamilies.lua")
+local structuralPreviewElements = previewFamilies:match("local REFRESH_ELEMENTS = (%b{})")
 Check(structuralPreviewElements and not structuralPreviewElements:find('"Alpha"', 1, true),
     "arena preview structural refresh still owns alpha")
-Check(loadConditions:find("local function ReapplyArenaPreviewAlpha", 1, true)
-        and loadConditions:find("if active then ReapplyArenaPreviewAlpha(refreshReason) end", 1, true)
-        and loadConditions:find("ReapplyArenaPreviewAlpha(refreshReason)\n  RefreshArenaAuras()", 1, true),
+Check(previewFamilies:find("local function ReapplyAlpha", 1, true)
+        and previewFamilies:find("if active then reapplyAlpha(refreshReason) end", 1, true)
+        and previewFamilies:find("reapplyAlpha(refreshReason)\n    MSUF.MSUF_Auras3.RequestScope", 1, true),
     "arena preview no longer reapplies configured alpha after full and light seeds")
 Check(match:find('uf.RefreshVisibilityDrivers("arena")', 1, true),
     "arena prep no longer swaps away from RegisterUnitWatch visibility")

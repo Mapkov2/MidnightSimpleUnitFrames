@@ -5,6 +5,17 @@
 --- runtime previews without owning the preview renderers themselves.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local Preview = MSUF.Require("MSUF", "Shell/Menu2/MSUF_Menu2_PagePreviews.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
+Preview.Validate("Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
+local SetArenaPage = Preview.SetArenaPage
+local SetBossPage = Preview.SetBossPage
+local previewState = Preview.State
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -19,10 +30,10 @@ end
 local function ApplyBossPagePreviewFallback(active, reason)
     if BossPagePreviewInCombat() then
         ClearBossPagePreviewForCombat()
-        _G.MSUF2_BossUnitframePreviewActive = nil
+        SetBossPage(nil)
         return
     end
-    _G.MSUF2_BossUnitframePreviewActive = active and true or nil
+    SetBossPage(active and true or nil)
     if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
         _G.MSUF_ApplyBossUnitframePreviewState(active and true or false, reason or "MSUF2_BOSS_PAGE")
         return
@@ -89,10 +100,10 @@ end
 local function ApplyArenaPagePreviewFallback(active, reason)
     if BossPagePreviewInCombat() then
         ClearArenaPagePreviewForCombat()
-        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        SetArenaPage(nil)
         return
     end
-    _G.MSUF2_ArenaUnitframePreviewActive = active and true or nil
+    SetArenaPage(active and true or nil)
     if type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" then
         _G.MSUF_ApplyArenaUnitframePreviewState(active and true or false, reason or "MSUF2_ARENA_PAGE")
         return
@@ -126,7 +137,7 @@ local function SyncArenaPagePreviewForKey(key, force)
     local active = (key == "uf_arena") and frameShown
     if BossPagePreviewInCombat() then
         ClearArenaPagePreviewForCombat()
-        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        SetArenaPage(nil)
         SyncArenaPageAuraPreviewFlag(false)
         lastArenaPreviewActive = nil
         return
@@ -137,7 +148,7 @@ local function SyncArenaPagePreviewForKey(key, force)
     local castbarUnit = CastbarPagePreviewUnitForKey(key)
     local arenaActive = (active or castbarUnit == "arena") and true or false
     local fn = M.UnitPage and M.UnitPage.SetArenaPagePreviewActive
-    local globalActive = (_G.MSUF2_ArenaUnitframePreviewActive == true)
+    local globalActive = (previewState.arenaPage == true)
     local visible = (not arenaActive) or ArenaPreviewFramesVisible()
     if not force and lastArenaPreviewActive == arenaActive and lastArenaPreviewFn == fn
         and globalActive == arenaActive and visible
@@ -160,7 +171,7 @@ local function SyncBossPagePreviewForKey(key, force)
     SyncArenaPagePreviewForKey(key, force)
     if BossPagePreviewInCombat() then
         ClearBossPagePreviewForCombat()
-        _G.MSUF2_BossUnitframePreviewActive = nil
+        SetBossPage(nil)
         SyncBossPageAuraPreviewFlag(false)
         lastBossPreviewActive = nil
         SyncCastbarPagePreviewForKey(key, false)
@@ -172,7 +183,7 @@ local function SyncBossPagePreviewForKey(key, force)
     local castbarUnit = CastbarPagePreviewUnitForKey(key)
     local bossActive = (active or castbarUnit == "boss") and true or false
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
-    local globalActive = (_G.MSUF2_BossUnitframePreviewActive == true)
+    local globalActive = (previewState.bossPage == true)
     local visible = (not bossActive) or BossPreviewFramesVisible()
     if not force and lastBossPreviewActive == bossActive and lastBossPreviewFn == fn
         and globalActive == bossActive and visible

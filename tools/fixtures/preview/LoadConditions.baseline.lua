@@ -1,0 +1,1246 @@
+-- UF load-condition element: applies profile visibility rules to unit frames.
+-- Protected visibility or secure state changes must stay behind combat-safe helpers.
+local _, MSUF = ...
+
+MSUF = MSUF or _G.MSUF_NS or {}
+local ExportPublic = MSUF.ExportPublic
+
+local UF = MSUF.UF
+if not UF then return end
+
+-- Unitframe load-condition element.
+-- Owns secure state-driver visibility rules for mounted/combat/group/instance/resting style
+-- conditions. Protected state changes are deferred or expressed through secure snippets.
+local RegisterStateDriver = _G.RegisterStateDriver
+local UnregisterStateDriver = _G.UnregisterStateDriver
+local SecureCmdOptionParse = _G.SecureCmdOptionParse
+local InCombatLockdown = _G.InCombatLockdown
+local UnitAffectingCombat = _G.UnitAffectingCombat
+local IsInInstance = _G.IsInInstance
+local C_Housing = _G.C_Housing
+local Secrets = MSUF.Secrets or {}
+local UnitExistsPlain = Secrets.UnitExistsPlain
+local type = type
+local tonumber = tonumber
+local next = next
+
+local EMPTY_EVENTS = {}
+local HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local UnitHealthPercent = _G.UnitHealthPercent
+local CurveAPI = _G.C_CurveUtil
+local LuaCurveType = _G.Enum and _G.Enum.LuaCurveType
+local FALLBACK_EVENTS = {
+  "PLAYER_ENTERING_WORLD",
+  "PLAYER_REGEN_DISABLED",
+  "PLAYER_REGEN_ENABLED",
+  "PLAYER_MOUNT_DISPLAY_CHANGED",
+  "UNIT_ENTERED_VEHICLE",
+  "UNIT_EXITED_VEHICLE",
+  "PLAYER_UPDATE_RESTING",
+  "GROUP_ROSTER_UPDATE",
+  "UPDATE_STEALTH",
+  "ZONE_CHANGED_NEW_AREA",
+}
+local PREVIEW_UNITS = {
+  target = true,
+  focus = true,
+  targettarget = true,
+  focustarget = true,
+  pet = true,
+  pettarget = true,
+}
+local BOSS_PREVIEW_UNITS = {
+  boss1 = true,
+  boss2 = true,
+  boss3 = true,
+  boss4 = true,
+  boss5 = true,
+}
+local ARENA_PREVIEW_UNITS = {
+  arena1 = true,
+  arena2 = true,
+  arena3 = true,
+  arena4 = true,
+  arena5 = true,
+}
+local BOSS_PREVIEW_REFRESH_ELEMENTS = {
+  "Health",
+  "Power",
+  "Prediction",
+  "Text",
+  "NameText",
+  "HealthText",
+  "PowerText",
+  "Portrait",
+  "Borders",
+}
+local BOSS_PREVIEW_ALPHA_ELEMENTS = { "Alpha" }
+local BOSS_PREVIEW_ABSORB = 125000
+
+local LoadConditions = {}
+local healthVisibilityCurve
+
+local function HealthVisibilityEnabled(frame, spec)
+  return frame and frame._msufHealthVisualRoot and type(frame.MSUFUnitKey) == "string"
+    and spec and spec.load and spec.load.showWhenInjured == true
+    and UnitHealthPercent ~= nil and CurveAPI and CurveAPI.CreateCurve ~= nil
+    and LuaCurveType and LuaCurveType.Step ~= nil
+end
+
+local function ApplyHealthAlpha(frame)
+  -- Only Edit Mode bypasses the HP gate so the frame remains editable.
+  -- Combat and target state must never reveal a full-health unit.
+  -- Secret health is evaluated inside Blizzard's native curve and passed
+  -- straight to SetAlpha (upstream/live 12.1).
+  if _G.MSUF_UnitEditModeActive == true
+    or (BOSS_PREVIEW_UNITS[frame.MSUFUnitKey] and (_G.MSUF_BossTestMode == true
+      or _G.MSUF2_BossUnitframePreviewActive == true))
+    or frame._msufArenaPreviewForced == true then
+    frame._msufHealthVisualRoot:SetAlpha(1)
+    if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(1) end
+    return
+  end
+  local alpha = UnitHealthPercent(frame.MSUFUnitKey, false, healthVisibilityCurve)
+  frame._msufHealthVisualRoot:SetAlpha(alpha)
+  if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(alpha) end
+end
+
+local function RefreshHealthAlpha(frame)
+  if frame and frame._msufLoadHealthAlphaApply then
+    ApplyHealthAlpha(frame)
+  end
+end
+
+local function ClearHealthAlpha(frame)
+  if not (frame and frame._msufLoadHealthAlphaApply) then return end
+  frame._msufLoadHealthAlphaApply = nil
+  frame._msufHealthVisualRoot:SetAlpha(1)
+  if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(1) end
+end
+
+local function ConfigureHealthAlpha(frame, spec)
+  if not HealthVisibilityEnabled(frame, spec) then
+    ClearHealthAlpha(frame)
+    return
+  end
+  if not healthVisibilityCurve then
+    local curve = CurveAPI.CreateCurve()
+    curve:SetType(LuaCurveType.Step)
+    curve:AddPoint(0, 1)
+    curve:AddPoint(1, 0)
+    healthVisibilityCurve = curve
+  end
+  frame._msufLoadHealthAlphaApply = ApplyHealthAlpha
+  RefreshHealthAlpha(frame)
+end
+
+local bossPreviewAppliedActive
+local bossPreviewCombatCleanupPending
+local BOSS_PREVIEW_LIGHT_REASONS = {
+  MSUF_BOSS_PREVIEW = true,
+  MSUF_BOSS_PREVIEW_SYNC = true,
+  MSUF_BOSS_PREVIEW_OFF = true,
+  MSUF2_BOSS_PAGE_CORE = true,
+  MSUF2_BOSS_PAGE_FALLBACK = true,
+}
+
+local function BossPreviewCombatLocked()
+  return (InCombatLockdown and InCombatLockdown())
+    or (UnitAffectingCombat and UnitAffectingCombat("player"))
+    or _G.MSUF_InCombat == true
+end
+
+local function InInstance()
+  if not IsInInstance then
+    return false
+  end
+  local inside = IsInInstance()
+  return inside == true or inside == 1
+end
+
+local function InHousing()
+  local fn = C_Housing and C_Housing.IsInsideHouseOrPlot
+  if type(fn) ~= "function" then
+    return false
+  end
+  return fn() == true
+end
+
+local function ArenaPrepForcesUnit(unit)
+  if _G.MSUF_ArenaPrepVisibilityActive ~= true then return false end
+  local index = type(unit) == "string" and tonumber(unit:match("^arena(%d+)$")) or nil
+  local count = tonumber(_G.MSUF_ArenaPrepVisibilityCount) or 0
+  return index ~= nil and index >= 1 and index <= count
+end
+
+local function ShouldForcePreview(frame)
+  if not frame then
+    return false
+  end
+  local unit = frame.MSUFUnitKey
+  if PREVIEW_UNITS[unit] == true then
+    return _G.MSUF_PreviewTestMode == true
+  end
+  if BOSS_PREVIEW_UNITS[unit] == true then
+    return _G.MSUF_BossTestMode == true
+      or _G.MSUF2_BossUnitframePreviewActive == true
+      or _G.MSUF_PreviewTestMode == true
+  end
+  if ARENA_PREVIEW_UNITS[unit] == true then
+    return ArenaPrepForcesUnit(unit)
+      or _G.MSUF_ArenaTestMode == true
+      or _G.MSUF2_ArenaUnitframePreviewActive == true
+      or _G.MSUF_PreviewTestMode == true
+  end
+  return false
+end
+
+local function BuildRuntimeVisibility(frame, spec)
+  local load = spec.load
+  if load and load.hideInInstance == true and InInstance() then
+    return "hide"
+  end
+  if load and load.hideInHousing == true and InHousing() then
+    return "hide"
+  end
+
+  local unit = spec.unit or frame.MSUFUnitKey
+  if type(unit) ~= "string" or unit == "" then
+    unit = "player"
+  end
+
+  local rules = frame._msufLoadRules
+  if not rules then
+    rules = {}
+    frame._msufLoadRules = rules
+  end
+  local n = 0
+  if load then
+    if load.hideMounted == true then n = n + 1; rules[n] = "[mounted] hide" end
+    if load.hideInVehicle == true then
+      n = n + 1; rules[n] = "[@player,unithasvehicleui] hide"
+      n = n + 1; rules[n] = "[vehicleui] hide"
+    end
+    if load.hideResting == true then n = n + 1; rules[n] = "[resting] hide" end
+    if load.hideInCombat == true then n = n + 1; rules[n] = "[combat] hide" end
+    if not HealthVisibilityEnabled(frame, spec) then
+      if load.hideOutOfCombat == true then n = n + 1; rules[n] = "[nocombat] hide" end
+      if load.hideNoTarget == true then n = n + 1; rules[n] = "[@target,noexists] hide" end
+      if load.hideOutOfCombatNoTarget == true then n = n + 1; rules[n] = "[nocombat,@target,noexists] hide" end
+    end
+    if load.hideStealthed == true then n = n + 1; rules[n] = "[stealth] hide" end
+    if load.hideSolo == true then n = n + 1; rules[n] = "[nogroup] hide" end
+    if load.hideInGroup == true then n = n + 1; rules[n] = "[group] hide" end
+  end
+  n = n + 1
+  rules[n] = "[@" .. unit .. ",exists] show"
+  n = n + 1
+  rules[n] = "hide"
+  for i = n + 1, #rules do
+    rules[i] = nil
+  end
+  return table.concat(rules, "; ")
+end
+
+local function BuildVisibility(frame, spec)
+  if not (frame and spec) or spec.enabled == false then
+    return "hide"
+  end
+
+  local visibility = BuildRuntimeVisibility(frame, spec)
+  if ShouldForcePreview(frame) then
+    -- Preview must not stay force-shown when combat starts. The secure driver
+    -- falls back to normal runtime visibility in combat without Lua work.
+    return "[nocombat] show; " .. visibility
+  end
+  return visibility
+end
+
+local RegisterUnitWatch = _G.RegisterUnitWatch
+local UnregisterUnitWatch = _G.UnregisterUnitWatch
+local UnitWatchRegistered = _G.UnitWatchRegistered
+
+-- A frame with no load conditions resolves to "[@unit,exists] show; hide",
+-- which is exactly what RegisterUnitWatch does natively -- and far cheaper.
+-- Stacking a RegisterStateDriver("visibility") on top makes the secure
+-- macro-conditional engine re-evaluate that expression on state changes
+-- (including target changes for @target-relative frames). That secure
+-- evaluation is billed to MSUF and was the per-click profiler spike that no
+-- Lua probe could see.
+-- So: only install the state driver when there is REAL conditional work;
+-- otherwise hand visibility to RegisterUnitWatch.
+local function VisibilityNeedsDriver(spec)
+  local load = spec and spec.load
+  if load and load.active == true then
+    return true
+  end
+  if load and load.hideInInstance == true then
+    return true
+  end
+  if load and load.hideInHousing == true then
+    return true
+  end
+  return false
+end
+
+-- Existence-only visibility is structural frame ownership, not an active
+-- LoadConditions feature. Factory/SecureGroupHeader keep the native unit watch
+-- alive, while this element enters Core routing only for real conditional
+-- visibility or a forced unit-frame preview.
+function LoadConditions.IsEnabled(frame, spec)
+  return VisibilityNeedsDriver(spec) or ShouldForcePreview(frame)
+end
+
+local function RegisterVisibility(frame, spec)
+  if UnitWatchRegistered then
+    frame._msufUnitWatched = UnitWatchRegistered(frame) == true and true or nil
+  end
+  -- Existence-only visibility: use the lightweight unit watch, never a secure
+  -- state driver. Tear down any driver left from a previous conditional config.
+  if not VisibilityNeedsDriver(spec) and not ShouldForcePreview(frame) and RegisterUnitWatch then
+    if InCombatLockdown and InCombatLockdown() then
+      -- Combat: don't touch secure registration. If a driver is currently
+      -- installed we must defer the swap-out; otherwise the unit watch from
+      -- spawn already covers us and there is nothing to do.
+      if frame._msufVisibilityExpr ~= nil then
+        UF.MarkDirty(frame.MSUFUnitKey)
+        if UF.Factory and UF.Factory.EnsureDeferredDriver then
+          UF.Factory.EnsureDeferredDriver()
+        end
+        return false
+      end
+    elseif frame._msufVisibilityExpr ~= nil then
+      if UnregisterStateDriver then
+        UnregisterStateDriver(frame, "visibility")
+      end
+      frame._msufVisibilityExpr = nil
+    end
+    if frame._msufUnitWatched ~= true then
+      RegisterUnitWatch(frame)
+      frame._msufUnitWatched = true
+    end
+    frame._msufVisibilityManaged = nil
+    return true
+  end
+
+  local visibility = BuildVisibility(frame, spec)
+  frame._msufVisibilityManaged = true
+  if RegisterStateDriver then
+    if frame._msufVisibilityExpr ~= visibility then
+      if InCombatLockdown and InCombatLockdown() then
+        UF.MarkDirty(frame.MSUFUnitKey)
+        if UF.Factory and UF.Factory.EnsureDeferredDriver then
+          UF.Factory.EnsureDeferredDriver()
+        end
+        return false
+      end
+      -- Swapping from unit-watch to driver: the watch and the driver both
+      -- manage visibility, so drop the watch first to avoid double control.
+      if frame._msufUnitWatched == true then
+        UnregisterUnitWatch(frame)
+        frame._msufUnitWatched = nil
+      end
+      RegisterStateDriver(frame, "visibility", visibility)
+      frame._msufVisibilityExpr = visibility
+    end
+    return true
+  end
+
+  local show = visibility == "show"
+  if visibility ~= "hide" and SecureCmdOptionParse then
+    show = SecureCmdOptionParse(visibility) == "show"
+  elseif visibility ~= "hide" then
+    show = UnitExistsPlain(frame.MSUFUnitKey)
+  end
+  if frame._msufLoadShown ~= show then
+    frame:SetShown(show)
+    frame._msufLoadShown = show
+  end
+  return true
+end
+
+-- "Hide in instance" and "Hide in housing" resolve into a constant "hide"
+-- while inside, so the frame is hidden, and its events are suspended by the
+-- core, exactly when leaving has to bring it back. One shared EventBus
+-- subscription, which no frame's visibility can silence, rebuilds those
+-- drivers on every zone and housing-plot boundary instead of frame routes.
+local ZONE_EVENT_KEY = "MSUF_UF_LOAD_CONDITIONS_ZONE"
+local ZONE_EVENTS = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }
+-- Walking onto or off a plot changes C_Housing.IsInsideHouseOrPlot without a
+-- zone change; Blizzard_HousingControls follows these two events for it.
+local HOUSING_PLOT_EVENTS = { "HOUSE_PLOT_ENTERED", "HOUSE_PLOT_EXITED" }
+local zoneFrames = {}
+local zoneEventsRegistered = false
+
+local function OnZoneBoundary()
+  for frame in next, zoneFrames do
+    RegisterVisibility(frame, frame.MSUFSpec)
+  end
+end
+
+local function SetZoneEvents(list, wanted, register, unregister)
+  local client = MSUF.Client
+  local supports = client and client.SupportsEvent
+  for i = 1, #list do
+    local event = list[i]
+    if not wanted then
+      unregister(event, ZONE_EVENT_KEY)
+    elseif type(supports) ~= "function" or supports(event) == true then
+      register(event, ZONE_EVENT_KEY, OnZoneBoundary)
+    end
+  end
+end
+
+local function SyncZoneFrame(frame, spec)
+  local load = spec and spec.enabled ~= false and spec.load
+  if frame then
+    zoneFrames[frame] = load and (load.hideInInstance == true or load.hideInHousing == true) or nil
+  end
+  local wanted = next(zoneFrames) ~= nil
+  if wanted == zoneEventsRegistered then return end
+  local register, unregister = _G.MSUF_EventBus_Register, _G.MSUF_EventBus_Unregister
+  SetZoneEvents(ZONE_EVENTS, wanted, register, unregister)
+  if type(C_Housing and C_Housing.IsInsideHouseOrPlot) == "function" then
+    SetZoneEvents(HOUSING_PLOT_EVENTS, wanted, register, unregister)
+  end
+  zoneEventsRegistered = wanted
+end
+
+function LoadConditions.GetEvents(frame, spec)
+  return HealthVisibilityEnabled(frame, spec) and HEALTH_EVENTS or EMPTY_EVENTS
+end
+
+LoadConditions.UpdateHealthVisibility = RefreshHealthAlpha
+function LoadConditions.SelectEventUpdate(frame, spec, event, update)
+  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then return RefreshHealthAlpha end
+  return update
+end
+
+function LoadConditions.GetUnitlessEvents(frame, spec)
+  local load = spec and spec.load
+  if not load or load.active ~= true then
+    return EMPTY_EVENTS
+  end
+  if not RegisterStateDriver then
+    return FALLBACK_EVENTS
+  end
+  return load.unitlessEvents or EMPTY_EVENTS
+end
+
+function LoadConditions.Apply(frame, spec)
+  ConfigureHealthAlpha(frame, spec)
+  RegisterVisibility(frame, spec)
+  SyncZoneFrame(frame, spec)
+end
+
+function LoadConditions.Update(frame, event)
+  RefreshHealthAlpha(frame)
+  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then return end
+  if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+    -- Instance/housing checks are resolved into the visibility expression, so
+    -- these zone boundaries must rebuild it. RegisterVisibility already defers
+    -- protected changes when combat lockdown makes that necessary.
+    return RegisterVisibility(frame, frame and frame.MSUFSpec)
+  end
+  -- Identity refreshes (target/focus swap) call this on every unit change, but a
+  -- unit swap NEVER changes the visibility expression: BuildRuntimeVisibility
+  -- depends only on the spec (load rules + the frame's fixed unit token like
+  -- "target"), not on which GUID is currently targeted. The secure state driver
+  -- was already registered at Apply and re-evaluates itself natively in the
+  -- engine on the conditions that matter (combat/resting/instance/exists). So
+  -- re-running RegisterVisibility here just rebuilds an identical string and
+  -- throws it away -- pure per-swap waste (this was a large chunk of the
+  -- target-swap cost). Skip once the driver/watch is installed; a real config
+  -- change goes through LoadConditions.Apply / UF.RefreshVisibilityDrivers,
+  -- which call RegisterVisibility directly and are not gated by this.
+  if frame and (frame._msufVisibilityExpr ~= nil or frame._msufUnitWatched == true) then
+    return
+  end
+  RegisterVisibility(frame, frame and frame.MSUFSpec)
+end
+
+function LoadConditions.Disable(frame)
+  if not frame then
+    return
+  end
+  SyncZoneFrame(frame, nil)
+  ClearHealthAlpha(frame)
+  if UnregisterStateDriver and InCombatLockdown and InCombatLockdown() then
+    UF.MarkDirty(frame.MSUFUnitKey)
+    if UF.Factory and UF.Factory.EnsureDeferredDriver then
+      UF.Factory.EnsureDeferredDriver()
+    end
+    return false
+  end
+  frame._msufVisibilityManaged = nil
+  frame._msufVisibilityExpr = nil
+  if UnregisterStateDriver then
+    UnregisterStateDriver(frame, "visibility")
+  end
+  -- A conditional driver replaces RegisterUnitWatch while active. Restore the
+  -- native existence owner immediately when the last condition is removed;
+  -- targeted RefreshElements calls do not pass through Factory's post-apply
+  -- fallback that normally performs this hand-off for fresh single frames.
+  if RegisterUnitWatch and not (frame.MSUFSpec and frame.MSUFSpec.enabled == false) then
+    local watched = UnitWatchRegistered and UnitWatchRegistered(frame) == true
+    if not watched then
+      RegisterUnitWatch(frame)
+    end
+    frame._msufUnitWatched = true
+  end
+  return true
+end
+
+-- Reuse Core's existing identity/OnShow plan so a target, focus, pet, or boss
+-- replacement refreshes its HP gate even without a UNIT_HEALTH notification.
+LoadConditions.Routes = { basic = true, identity = true }
+UF.RegisterElement("LoadConditions", LoadConditions, { identity = true })
+
+function UF.RefreshVisibilityDrivers(unit)
+  return UF.RefreshElements(unit, { "LoadConditions" }, "MSUF_LOAD_CONDITIONS")
+end
+
+local function MSUF_RefreshAllUnitVisibilityDrivers()
+  return UF.RefreshVisibilityDrivers(nil)
+end
+ExportPublic("MSUF_RefreshAllUnitVisibilityDrivers", MSUF_RefreshAllUnitVisibilityDrivers)
+
+local function SetShown(frame, shown)
+  if not frame then
+    return
+  end
+  if frame.SetShown then
+    frame:SetShown(shown == true)
+  elseif shown then
+    frame:Show()
+  else
+    frame:Hide()
+  end
+end
+
+local function ResolveBossPreviewHealthColor(frame, pct)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or {}
+  local mode = health.mode
+  local alpha = tonumber(health.alpha or health.a) or 1
+  if mode == "dark" or mode == "unified" then
+    return health.r or 1, health.g or 1, health.b or 1, alpha
+  elseif mode == "gradient" then
+    local common = MSUF and MSUF.UFBarTextCommon
+    local resolveGradient = common and common.PreviewHealthGradientColor
+    if type(resolveGradient) == "function" then
+      local r, g, b = resolveGradient(health, pct)
+      if r ~= nil then return r, g, b, 1 end
+    end
+  end
+
+  -- A synthetic boss has no live UnitReaction/UnitClassification result. Use
+  -- the same deterministic hostile identity that runtime resolves for a live
+  -- boss, while honoring the optional NPC-type coloring mode.
+  local kind = "enemy"
+  if health.npcColorMode == "type"
+    and health.npcTypeColorBar ~= false
+    and health.npcTypeBoss ~= false then
+    kind = "npcBoss"
+  end
+  local common = MSUF and MSUF.UFBarTextCommon
+  local resolveNPC = common and common.NPCColor
+  if type(resolveNPC) == "function" then
+    local r, g, b = resolveNPC(kind)
+    if r ~= nil then return r, g, b, 1 end
+  end
+  if kind == "npcBoss" then return 0.74, 0.11, 0, 1 end
+  return 0.85, 0.10, 0.10, 1
+end
+UF.ResolveBossPreviewHealthColor = ResolveBossPreviewHealthColor
+
+local function SetBarPreview(bar, value, maxValue, r, g, b, a)
+  if not bar then
+    return
+  end
+  if bar.SetMinMaxValues then
+    bar:SetMinMaxValues(0, maxValue)
+  end
+  if bar.SetValue then
+    bar:SetValue(value)
+  end
+  if bar.SetStatusBarColor then
+    bar:SetStatusBarColor(r, g, b, a or 1)
+    -- Runtime color writers cache both the configured and resolved colors.
+    -- Preview writes are temporary, so invalidate both caches to guarantee the
+    -- live unit color is restored when the preview is switched off.
+    bar._msufR, bar._msufG, bar._msufB, bar._msufA = nil, nil, nil, nil
+    bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+  end
+  if bar.SetAlpha then
+    bar:SetAlpha(1)
+  end
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if fill and fill.SetAlpha then
+    -- A missing boss can leave the health-only range/alpha lane at zero. The
+    -- synthetic preview must explicitly make that fill visible, otherwise its
+    -- correct red RGB is present but the frame still appears black.
+    fill:SetAlpha(1)
+    fill._msufAlphaHealth = nil
+    fill._msufAlphaStatusTexture = nil
+  end
+  SetShown(bar, true)
+end
+
+local function BossPreviewPercent(unit)
+  return unit == "boss1" and 55 or 72
+end
+
+local function BossPreviewPowerPercent()
+  return 100
+end
+
+local function BossLiveUnitExists(unit)
+  return UnitExistsPlain(unit) == true
+end
+
+local function BossPreviewConfigDirty()
+  return UF.Config and UF.Config.dirty == true
+end
+
+local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
+  if not frame then
+    return
+  end
+  if frame.nameText then
+    frame.nameText:SetText(MSUF.Translate("Boss Preview"))
+    SetShown(frame.nameText, true)
+  end
+  if frame.levelText then
+    frame.levelText:SetText("??")
+    SetShown(frame.levelText, true)
+    -- The preview boss is a "??" unit, so it takes the top difficulty band.
+    local status = frame.MSUFSpec and frame.MSUFSpec.status
+    local levelCfg = status and status.level
+    local statusRuntime = MSUF and MSUF.UFStatusRuntime
+    if levelCfg and levelCfg.difficultyColor == true
+      and statusRuntime and statusRuntime.ApplyLevelDifficultyColor then
+      statusRuntime.ApplyLevelDifficultyColor(frame.levelText, frame, nil, nil, levelCfg, 1)
+    end
+  end
+
+  local text = MSUF and MSUF.UFText
+  local rt = frame._msufTextRuntime
+  if not (text and text.UpdateTextSlots and rt) then
+    return
+  end
+  rt.healthMissing = nil
+  rt.healthAbsorb = BOSS_PREVIEW_ABSORB
+  rt._lastAbsorbTextValue = nil
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, BossPreviewPercent, rt.healthNeedsPercent, rt)
+  if (rt.healthAbsorbSlotCount or 0) > 0 then
+    text.UpdateTextSlots(rt.healthAbsorbSlots, rt.healthAbsorbSlotCount, nil, nil, frame.MSUFUnitKey, nil, false, rt)
+  end
+
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, BossPreviewPowerPercent, rt.powerNeedsPercent, rt)
+end
+
+local function ApplyBossPreviewFrameData(frame, index)
+  if not frame then
+    return
+  end
+  index = tonumber(index) or 1
+  local hpMax = 1000000
+  local hp = index == 1 and 550000 or 720000
+  local powerMax = 240000
+  local power = powerMax
+
+  frame._msufBossPreviewForced = true
+  if UF.RefreshBossTargetPreview then UF.RefreshBossTargetPreview(frame) end
+  local state = frame._msufUnitState
+  if type(state) == "table" then
+    state.exists = true
+    state.existsKnown = true
+    state.dead = false
+    state.connected = true
+    state.npcKind = "npcBoss"
+    state.npcKindKnown = true
+  end
+
+  local r, g, b, a = ResolveBossPreviewHealthColor(frame, hp / hpMax)
+  SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  frame._msufAlphaLastHP = nil
+  SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
+  if UF.ApplyPredictionPreview then UF.ApplyPredictionPreview(frame, BossPreviewPercent(frame.MSUFUnitKey)) end
+  ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
+end
+
+local function InvalidateBossPreviewBar(bar, restoreFill)
+  if not bar then return end
+  bar._msufR, bar._msufG, bar._msufB, bar._msufA = nil, nil, nil, nil
+  bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if fill then
+    fill._msufAlphaHealth = nil
+    fill._msufAlphaStatusTexture = nil
+    if restoreFill and fill.SetAlpha then fill:SetAlpha(1) end
+  end
+  if restoreFill and bar.SetAlpha then bar:SetAlpha(1) end
+end
+
+-- Preview data is written into the real boss unit buttons. Combat lockdown
+-- prevents the normal full visibility/runtime rebuild, so strip only the
+-- synthetic Lua state and restore visual lanes here; protected Show/Hide and
+-- state-driver work remains deferred until combat ends.
+local function ClearBossPreviewFrameForRuntime(frame, restoreVisuals)
+  if not frame or frame._msufBossPreviewForced ~= true then return false end
+  frame._msufBossPreviewForced = nil
+  if UF.RefreshBossTargetPreview then UF.RefreshBossTargetPreview(frame) end
+  frame._msufUnitState = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastFG = nil
+  if UF.ClearPredictionPreview then UF.ClearPredictionPreview(frame) end
+  local rt = frame._msufTextRuntime
+  if rt then rt.healthAbsorb, rt._lastAbsorbTextValue = nil, nil end
+
+  local healthBar = frame.hpBar or frame.Health
+  InvalidateBossPreviewBar(healthBar, restoreVisuals)
+  InvalidateBossPreviewBar(frame.targetPowerBar or frame.powerBar or frame.Power, restoreVisuals)
+
+  if restoreVisuals then
+    -- The range driver has its own last-result cache. Invalidate it before the
+    -- temporary in-range handoff so its next real boss result is never skipped.
+    frame._msufRangeInRange = nil
+    frame._msufRangeMulApplied = nil
+    local applyRange = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
+    if type(applyRange) == "function" then
+      applyRange(frame, 1, true)
+    end
+    local unit = frame.MSUFUnitKey
+    local refreshColor = _G.MSUF_UFCore_RefreshHealthBarColor
+    if BossLiveUnitExists(unit) and type(refreshColor) == "function" then
+      refreshColor(frame, "MSUF_BOSS_PREVIEW_HANDOFF")
+    end
+  end
+  return true
+end
+
+-- The handoff above forces every boss frame back to full opacity. That is the
+-- correct starting point, not the answer: without a real re-evaluation the
+-- frames keep mul = 1 until something else moves the range runtime, which for
+-- boss units can be the rest of the encounter.
+local function RequestBossRangeRefresh()
+  local refresh = (UF.Range and UF.Range.Refresh) or _G.MSUF_UF_RangeFade_Refresh
+  if type(refresh) == "function" then
+    refresh()
+  end
+end
+
+local function ClearBossPreviewFramesForCombat()
+  _G.MSUF2_BossUnitframePreviewActive = nil
+  local cleared = false
+  for i = 1, 5 do
+    local frame = UF.frames and UF.frames["boss" .. i]
+    if ClearBossPreviewFrameForRuntime(frame, true) then cleared = true end
+  end
+  if cleared then
+    bossPreviewCombatCleanupPending = true
+    RequestBossRangeRefresh()
+  end
+  return cleared
+end
+UF.ClearBossPreviewFramesForCombat = ClearBossPreviewFramesForCombat
+ExportPublic("MSUF_ClearBossUnitframePreviewForCombat", ClearBossPreviewFramesForCombat)
+
+local function ApplyBossPreviewFrames(active)
+  local cleared = false
+  for i = 1, 5 do
+    local frame = UF.frames and UF.frames["boss" .. i]
+    local unit = "boss" .. i
+    if frame and active and not BossLiveUnitExists(unit) then
+      frame:Show()
+      if frame.SetAlpha then frame:SetAlpha(1) end
+      if frame.EnableMouse then frame:EnableMouse(true) end
+      ApplyBossPreviewFrameData(frame, i)
+    elseif frame then
+      if ClearBossPreviewFrameForRuntime(frame, true) then cleared = true end
+    end
+  end
+  if cleared then
+    RequestBossRangeRefresh()
+  end
+end
+
+local function ReapplyBossPreviewAlpha(reason)
+  for i = 1, 5 do
+    RefreshHealthAlpha(UF.frames and UF.frames["boss" .. i])
+  end
+  -- ApplyBossPreviewFrames deliberately seeds missing/range-hidden bars at 1
+  -- so the synthetic data can be painted. Alpha is the final owner: restoring
+  -- it here keeps both full and light preview applies at the configured value.
+  return UF.RefreshElements("boss", BOSS_PREVIEW_ALPHA_ELEMENTS,
+    reason or "MSUF_BOSS_PREVIEW_ALPHA")
+end
+
+local function BossPreviewFramesReady(active)
+  local frames = UF.frames
+  if type(frames) ~= "table" then
+    return false
+  end
+  local sawFrame = false
+  for i = 1, 5 do
+    local frame = frames["boss" .. i]
+    if frame then
+      sawFrame = true
+      if active then
+        if frame._msufBossPreviewForced ~= true then return false end
+        if frame.IsShown and not frame:IsShown() then return false end
+      elseif frame._msufBossPreviewForced == true then
+        return false
+      end
+    end
+  end
+  return sawFrame
+end
+
+local function CanUseLightBossPreviewApply(active, reason)
+  if bossPreviewCombatCleanupPending == true then
+    return false
+  end
+  if bossPreviewAppliedActive ~= active then
+    return false
+  end
+  if BossPreviewConfigDirty() then
+    return false
+  end
+  if BOSS_PREVIEW_LIGHT_REASONS[reason or ""] ~= true then
+    return false
+  end
+  return BossPreviewFramesReady(active)
+end
+
+-- Auras3/MSUF_Auras3_Core.lua defines A3.RequestScope on every client (the
+-- Retail runtime facade and the Classic request queue replace it), so the
+-- preview refresh asks it directly.
+local function RefreshBossAuras()
+  MSUF.MSUF_Auras3.RequestScope("boss", "MSUF_BOSS_PREVIEW")
+end
+
+function UF.ApplyBossPreviewState(active, reason)
+  active = active == true
+  if BossPreviewCombatLocked() then
+    ClearBossPreviewFramesForCombat()
+    return false
+  end
+
+  local refreshReason = reason or "MSUF_BOSS_PREVIEW"
+  if CanUseLightBossPreviewApply(active, refreshReason) then
+    ApplyBossPreviewFrames(active)
+    if active then ReapplyBossPreviewAlpha(refreshReason) end
+    return true
+  end
+
+  -- Seed the synthetic identity and make missing boss frames visible before
+  -- structural elements are refreshed. Portrait.Apply otherwise sees a hidden,
+  -- unitless frame and defers the image to an OnShow transition which a secure
+  -- preview visibility handoff does not always produce.
+  ApplyBossPreviewFrames(active)
+  UF.RefreshVisibilityDrivers("boss")
+  UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
+  UF.UpdateRuntime("boss", refreshReason)
+
+  if active then
+    ApplyBossPreviewFrames(true)
+  end
+  ReapplyBossPreviewAlpha(refreshReason)
+  RefreshBossAuras()
+  -- The castbar previews load after the unit-frame elements.
+  MSUF.Require("MSUF_UpdateBossCastbarPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
+  local em2 = _G.MSUF_EM2
+  if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
+    em2.Movers.SyncAll()
+  end
+  bossPreviewAppliedActive = active
+  bossPreviewCombatCleanupPending = nil
+  return true
+end
+
+local function MSUF_ApplyBossUnitframePreviewState(active, reason)
+  if BossPreviewCombatLocked() then
+    ClearBossPreviewFramesForCombat()
+    return false
+  end
+  _G.MSUF2_BossUnitframePreviewActive = active == true and true or nil
+  return UF.ApplyBossPreviewState(active, reason or "MSUF_BOSS_PREVIEW")
+end
+ExportPublic("MSUF_ApplyBossUnitframePreviewState", MSUF_ApplyBossUnitframePreviewState)
+
+local function MSUF_SyncBossUnitframePreviewWithUnitEdit()
+  if BossPreviewCombatLocked() then
+    ClearBossPreviewFramesForCombat()
+    return false
+  end
+  local editActive = _G.MSUF_UnitEditModeActive == true
+  local active = _G.MSUF2_BossUnitframePreviewActive == true
+    or (_G.MSUF_BossTestMode == true and editActive)
+    or (_G.MSUF_PreviewTestMode == true and editActive)
+  return UF.ApplyBossPreviewState(active, active and "MSUF_BOSS_PREVIEW_SYNC" or "MSUF_BOSS_PREVIEW_OFF")
+end
+ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)
+
+--------------------------------------------------------------------------------
+-- Arena unit-frame preview. Mirrors the boss preview pipeline above, with one
+-- deliberate difference: synthetic opponents are class-colored PLAYERS, so the
+-- seeded unit state carries a class identity instead of an NPC kind and the
+-- health color resolves through the class palette when the profile uses it.
+--------------------------------------------------------------------------------
+
+local arenaPreviewAppliedActive
+local arenaPreviewCombatCleanupPending
+local ARENA_PREVIEW_LIGHT_REASONS = {
+  MSUF_ARENA_PREVIEW = true,
+  MSUF_ARENA_PREVIEW_SYNC = true,
+  MSUF_ARENA_PREVIEW_OFF = true,
+  MSUF2_ARENA_PAGE_CORE = true,
+  MSUF2_ARENA_PAGE_FALLBACK = true,
+}
+-- Fixed per-slot identities keep the preview deterministic across sessions.
+local ARENA_PREVIEW_CLASSES = { "MAGE", "ROGUE", "PRIEST", "WARRIOR", "DRUID" }
+local ARENA_PREVIEW_CLASS_FALLBACK_COLORS = {
+  MAGE = { 0.25, 0.78, 0.92 },
+  ROGUE = { 1, 0.96, 0.41 },
+  PRIEST = { 1, 1, 1 },
+  WARRIOR = { 0.78, 0.61, 0.43 },
+  DRUID = { 1, 0.49, 0.04 },
+}
+local ARENA_PREVIEW_HP_PERCENT = { 65, 45, 80, 55, 90 }
+
+local function ArenaPreviewClassColor(classToken)
+  local getColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+  if type(getColor) == "function" and classToken then
+    local color = getColor(classToken)
+    if color and color.r then
+      return color.r, color.g, color.b
+    end
+  end
+  local fallback = ARENA_PREVIEW_CLASS_FALLBACK_COLORS[classToken]
+  if fallback then
+    return fallback[1], fallback[2], fallback[3]
+  end
+  return 0.85, 0.10, 0.10
+end
+
+local function ResolveArenaPreviewHealthColor(frame, pct, classToken)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or {}
+  local mode = health.mode
+  local alpha = tonumber(health.alpha or health.a) or 1
+  if mode == "dark" or mode == "unified" then
+    return health.r or 1, health.g or 1, health.b or 1, alpha
+  elseif mode == "gradient" then
+    local common = MSUF and MSUF.UFBarTextCommon
+    local resolveGradient = common and common.PreviewHealthGradientColor
+    if type(resolveGradient) == "function" then
+      local r, g, b = resolveGradient(health, pct)
+      if r ~= nil then return r, g, b, 1 end
+    end
+  end
+  -- Class mode (and any unresolved mode): a synthetic opponent is a hostile
+  -- player of a fixed class, exactly what runtime would class-color live.
+  local r, g, b = ArenaPreviewClassColor(classToken)
+  return r, g, b, 1
+end
+UF.ResolveArenaPreviewHealthColor = ResolveArenaPreviewHealthColor
+
+local function ArenaPreviewPercent(unit)
+  local index = tonumber(type(unit) == "string" and unit:match("^arena(%d+)$") or nil) or 1
+  return ARENA_PREVIEW_HP_PERCENT[index] or 65
+end
+
+local function ArenaPreviewPowerPercent()
+  return 100
+end
+
+local function ArenaLiveUnitExists(unit)
+  return UnitExistsPlain(unit) == true
+end
+
+local function ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classToken)
+  if not frame then
+    return
+  end
+  if frame.nameText then
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    local label = (type(names) == "table" and names[classToken]) or MSUF.Translate("Arena Preview")
+    frame.nameText:SetText(label)
+    SetShown(frame.nameText, true)
+  end
+  if frame.levelText then
+    -- Opponents are max level on every arena client: 70 on TBC, 90 on Mists
+    -- and Midnight. Ask the client instead of carrying one expansion's cap,
+    -- the way GameRulesUtil.GetEffectiveMaxLevelForPlayer does (a capped
+    -- player level, such as a Classic pre-patch, wins).
+    local cap = type(GetMaxLevelForPlayerExpansion) == "function" and tonumber(GetMaxLevelForPlayerExpansion()) or nil
+    local playerCap = type(GetMaxPlayerLevel) == "function" and tonumber(GetMaxPlayerLevel()) or nil
+    local maxLevel = cap and playerCap and math.min(cap, playerCap) or cap or playerCap
+    frame.levelText:SetText(maxLevel and tostring(maxLevel) or "??")
+    SetShown(frame.levelText, true)
+  end
+
+  local text = MSUF and MSUF.UFText
+  local rt = frame._msufTextRuntime
+  if not (text and text.UpdateTextSlots and rt) then
+    return
+  end
+  rt.healthMissing = nil
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, ArenaPreviewPercent, rt.healthNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, ArenaPreviewPowerPercent, rt.powerNeedsPercent, rt)
+end
+
+local function ApplyArenaPreviewFrameData(frame, index)
+  if not frame then
+    return
+  end
+  index = tonumber(index) or 1
+  local classToken = ARENA_PREVIEW_CLASSES[index] or "MAGE"
+  local pct = ARENA_PREVIEW_HP_PERCENT[index] or 65
+  local hpMax = 1000000
+  local hp = math.floor(hpMax * pct / 100)
+  local powerMax = 240000
+  local power = powerMax
+
+  frame._msufArenaPreviewForced = true
+  local state = frame._msufUnitState
+  if type(state) == "table" then
+    state.exists = true
+    state.existsKnown = true
+    state.dead = false
+    state.connected = true
+    state.connectedKnown = true
+    state.identityIsPlayerRead = true
+    state.isPlayer = true
+    state.isPlayerKnown = true
+    state.identityClassRead = true
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    state.className = (type(names) == "table" and names[classToken]) or classToken
+    state.classToken = classToken
+  end
+
+  local r, g, b, a = ResolveArenaPreviewHealthColor(frame, pct / 100, classToken)
+  SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  frame._msufAlphaLastHP = nil
+  SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
+  ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classToken)
+end
+
+local function ClearArenaPreviewFrameForRuntime(frame, restoreVisuals)
+  if not frame or frame._msufArenaPreviewForced ~= true then return false end
+  frame._msufArenaPreviewForced = nil
+  frame._msufUnitState = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastFG = nil
+
+  local healthBar = frame.hpBar or frame.Health
+  InvalidateBossPreviewBar(healthBar, restoreVisuals)
+  InvalidateBossPreviewBar(frame.targetPowerBar or frame.powerBar or frame.Power, restoreVisuals)
+
+  if restoreVisuals then
+    frame._msufRangeInRange = nil
+    frame._msufRangeMulApplied = nil
+    local applyRange = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
+    if type(applyRange) == "function" then
+      applyRange(frame, 1, true)
+    end
+    local unit = frame.MSUFUnitKey
+    local refreshColor = _G.MSUF_UFCore_RefreshHealthBarColor
+    if ArenaLiveUnitExists(unit) and type(refreshColor) == "function" then
+      refreshColor(frame, "MSUF_ARENA_PREVIEW_HANDOFF")
+    end
+  end
+  return true
+end
+
+local function ClearArenaPreviewFramesForCombat()
+  _G.MSUF2_ArenaUnitframePreviewActive = nil
+  local cleared = false
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    local frame = UF.frames and UF.frames["arena" .. i]
+    if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
+  end
+  if cleared then
+    arenaPreviewCombatCleanupPending = true
+    -- Same as the boss preview: the handoff leaves mul = 1 until the range
+    -- runtime evaluates the real opponents again.
+    RequestBossRangeRefresh()
+    -- The trinket holders are insecure, so their preview hides in combat too.
+    MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
+  end
+  return cleared
+end
+UF.ClearArenaPreviewFramesForCombat = ClearArenaPreviewFramesForCombat
+ExportPublic("MSUF_ClearArenaUnitframePreviewForCombat", ClearArenaPreviewFramesForCombat)
+
+local function ApplyArenaPreviewFrames(active)
+  local cleared = false
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    local frame = UF.frames and UF.frames["arena" .. i]
+    local unit = "arena" .. i
+    if frame and active and not ArenaLiveUnitExists(unit) then
+      frame:Show()
+      if frame.SetAlpha then frame:SetAlpha(1) end
+      if frame.EnableMouse then frame:EnableMouse(true) end
+      ApplyArenaPreviewFrameData(frame, i)
+    elseif frame then
+      if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
+    end
+  end
+  if cleared then
+    RequestBossRangeRefresh()
+  end
+  -- Every preview path (Arena page, Edit Mode, light reapply) runs through
+  -- here, so the PvP trinket holders follow the forced frames from one place.
+  MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
+end
+
+local function ReapplyArenaPreviewAlpha(reason)
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    RefreshHealthAlpha(UF.frames and UF.frames["arena" .. i])
+  end
+  return UF.RefreshElements("arena", BOSS_PREVIEW_ALPHA_ELEMENTS,
+    reason or "MSUF_ARENA_PREVIEW_ALPHA")
+end
+
+local function ArenaPreviewFramesReady(active)
+  local frames = UF.frames
+  if type(frames) ~= "table" then
+    return false
+  end
+  local sawFrame = false
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    local frame = frames["arena" .. i]
+    if frame then
+      sawFrame = true
+      if active then
+        if frame._msufArenaPreviewForced ~= true then return false end
+        if frame.IsShown and not frame:IsShown() then return false end
+      elseif frame._msufArenaPreviewForced == true then
+        return false
+      end
+    end
+  end
+  return sawFrame
+end
+
+local function CanUseLightArenaPreviewApply(active, reason)
+  if arenaPreviewCombatCleanupPending == true then
+    return false
+  end
+  if arenaPreviewAppliedActive ~= active then
+    return false
+  end
+  if BossPreviewConfigDirty() then
+    return false
+  end
+  if ARENA_PREVIEW_LIGHT_REASONS[reason or ""] ~= true then
+    return false
+  end
+  return ArenaPreviewFramesReady(active)
+end
+
+local function RefreshArenaAuras()
+  MSUF.MSUF_Auras3.RequestScope("arena", "MSUF_ARENA_PREVIEW")
+end
+
+function UF.ApplyArenaPreviewState(active, reason)
+  active = active == true
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+
+  local refreshReason = reason or "MSUF_ARENA_PREVIEW"
+  if CanUseLightArenaPreviewApply(active, refreshReason) then
+    ApplyArenaPreviewFrames(active)
+    if active then ReapplyArenaPreviewAlpha(refreshReason) end
+    return true
+  end
+
+  ApplyArenaPreviewFrames(active)
+  UF.RefreshVisibilityDrivers("arena")
+  UF.RefreshElements("arena", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
+  UF.UpdateRuntime("arena", refreshReason)
+
+  if active then
+    ApplyArenaPreviewFrames(true)
+  end
+  ReapplyArenaPreviewAlpha(refreshReason)
+  RefreshArenaAuras()
+  MSUF.Require("MSUF_UpdateArenaCastbarPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
+  local em2 = _G.MSUF_EM2
+  if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
+    em2.Movers.SyncAll()
+  end
+  arenaPreviewAppliedActive = active
+  arenaPreviewCombatCleanupPending = nil
+  return true
+end
+
+local function MSUF_ApplyArenaUnitframePreviewState(active, reason)
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+  _G.MSUF2_ArenaUnitframePreviewActive = active == true and true or nil
+  return UF.ApplyArenaPreviewState(active, reason or "MSUF_ARENA_PREVIEW")
+end
+ExportPublic("MSUF_ApplyArenaUnitframePreviewState", MSUF_ApplyArenaUnitframePreviewState)
+
+local function MSUF_SyncArenaUnitframePreviewWithUnitEdit()
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+  local editActive = _G.MSUF_UnitEditModeActive == true
+  local active = _G.MSUF2_ArenaUnitframePreviewActive == true
+    or (_G.MSUF_ArenaTestMode == true and editActive)
+    or (_G.MSUF_PreviewTestMode == true and editActive)
+  return UF.ApplyArenaPreviewState(active, active and "MSUF_ARENA_PREVIEW_SYNC" or "MSUF_ARENA_PREVIEW_OFF")
+end
+ExportPublic("MSUF_SyncArenaUnitframePreviewWithUnitEdit", MSUF_SyncArenaUnitframePreviewWithUnitEdit)
+
+if UF.RouteCompiler then
+  local Compiler = UF.RouteCompiler
+  local RouteCache = setmetatable({ healthVisibility = {} }, { __index = Compiler.Cache })
+  local SharedSingleRoute = Compiler.SharedSingleRoute
+  local HEALTH_EVENTS = { UNIT_HEALTH = true, UNIT_MAXHEALTH = true, UNIT_CONNECTION = true,
+    PARTY_MEMBER_ENABLE = true, PARTY_MEMBER_DISABLE = true }
+  local function Compile(frame, event, list)
+    -- Strip the optional rendering gate before compiling the existing optimized
+    -- health route. No extra dispatch context or option check when disabled.
+    local loadConditions = UF.elements.LoadConditions
+    local gate = HEALTH_EVENTS[event] and loadConditions and loadConditions.UpdateHealthVisibility
+    if gate then
+      for i = 1, #list, 2 do
+        if list[i] == gate then
+          local remaining = {}
+          for j = 1, #list, 2 do
+            if j ~= i then
+              remaining[#remaining + 1] = list[j]
+              remaining[#remaining + 1] = list[j + 1]
+            end
+          end
+          if #remaining == 0 then return SharedSingleRoute(gate, false, nil) end
+          local base = Compiler.CompileEventPath(frame, event, remaining)
+          local route = RouteCache.healthVisibility[base]
+          if not route then
+            route = function(self, ev, unit, ...)
+              base(self, ev, unit, ...)
+              gate(self)
+            end
+            if RouteCache.sharedRoutes[base] then RouteCache.healthVisibility[base] = route end
+          end
+          if RouteCache.sharedRoutes[base] then RouteCache.sharedRoutes[route] = true end
+          return route
+        end
+      end
+    end
+  end
+  UF.RegisterRoute("visibility", Compile, 10, HEALTH_EVENTS)
+end

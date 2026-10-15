@@ -27,6 +27,7 @@
 -- Kernel/MSUF_Util.lua.
 -- Usage: lua tools/tests/editmode_nudge_routing_smoke.lua <repoRoot>
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 local EM_DIR = "MidnightSimpleUnitFrames/Shell/EditMode/"
 
 local function Read(rel)

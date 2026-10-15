@@ -4,6 +4,19 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Preview = MSUF.Require("MSUF", "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+Preview.Validate("UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+local SetAll = Preview.SetAll
+local SetBoss = Preview.SetBoss
+local SetBossPage = Preview.SetBossPage
+local SetUnitPage = Preview.SetUnitPage
+local previewState = Preview.State
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -239,24 +252,24 @@ local function GroupPreviewActive()
 end
 
 local function EditModePreviewActive()
-  if _G.MSUF_UnitEditModeActive == true then return true end
+  if previewState.editMode == true then return true end
   local em2 = _G.MSUF_EM2
   return em2 and em2.State and type(em2.State.IsActive) == "function" and em2.State.IsActive() == true
 end
 
 local function BossPreviewActive()
-  return _G.MSUF_BossTestMode == true or _G.MSUF2_BossUnitframePreviewActive == true
+  return previewState.boss == true or previewState.bossPage == true
 end
 
 local function ArenaPreviewActive()
-  return _G.MSUF_ArenaTestMode == true or _G.MSUF2_ArenaUnitframePreviewActive == true
+  return previewState.arena == true or previewState.arenaPage == true
 end
 
 local function EditModeAnimationTargetActive()
   if not EditModePreviewActive() then return false end
   return PA.source == "edit_mode"
-    or _G.MSUF_UnitPreviewActive == true
-    or _G.MSUF_PreviewTestMode == true
+    or previewState.unitPage == true
+    or previewState.all == true
 end
 
 local function HasVisibleTarget()
@@ -270,9 +283,7 @@ end
 local function PrepareEditModePreviewForAnimation()
   if not EditModePreviewActive() then return end
   if RegisterEditModeStopListener then RegisterEditModeStopListener() end
-  if _G.MSUF_UnitPreviewActive ~= true then
-    ExportPublic("MSUF_UnitPreviewActive", true)
-  end
+  SetUnitPage(true)
 
   Dep("MSUF_SyncAllUnitPreviewsAsync")()
 
@@ -444,10 +455,10 @@ local function RestoreTextRuntimeState(restore)
 end
 
 local function ClearEditModePreviewFlags()
-  ExportPublic("MSUF_UnitPreviewActive", false)
-  ExportPublic("MSUF_PreviewTestMode", false)
-  ExportPublic("MSUF_BossTestMode", false)
-  ExportPublic("MSUF2_BossUnitframePreviewActive", nil)
+  SetUnitPage(false)
+  SetAll(false)
+  SetBoss(false)
+  SetBossPage(nil)
 end
 
 local function RuntimeStopReason(frame)
@@ -840,7 +851,7 @@ local function PreviewFrame(unit)
 end
 
 local function RefreshUnitPreviewFrames()
-  if not (_G.MSUF_PreviewTestMode == true and EditModePreviewActive()) then return false end
+  if not (previewState.all == true and EditModePreviewActive()) then return false end
   local any = false
   for i = 1, #PREVIEW_UNITS do
     local unit = PREVIEW_UNITS[i]

@@ -254,6 +254,7 @@ function World.New(root, backend, options)
     local extra = {}
     for index = 1, #(options.extra or {}) do extra[options.extra[index]] = true end
     local Fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
+    local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
     local loaded = {}
     for _, path in ipairs(manifest.Paths(root, options.flavor or World.FLAVOR)) do
         local name = path:match("([^/]+)$")

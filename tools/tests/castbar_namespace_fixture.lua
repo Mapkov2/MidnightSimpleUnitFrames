@@ -317,6 +317,8 @@ function Fixture.Loader(original)
             Fixture.Attach(root, ns, original, getfenv(chunk))
             if normalized:match("/MSUF_Castbars_Core%.lua$") then
                 local env = getfenv(chunk)
+                local previewFixture = assert(original(root .. "/tools/tests/preview_namespace_fixture.lua"))()
+                previewFixture.Install(root, ns, env, original)
                 local mediaFixture = assert(original(root .. "/tools/tests/runtime_media_fixture.lua"))()
                 mediaFixture.LoadFonts(root, ns, original, env)
                 if not ns.Media then

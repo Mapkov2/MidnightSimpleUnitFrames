@@ -1,5 +1,16 @@
 local MSUF = select(2, ...)
 MSUF = MSUF or {}
+local Preview = MSUF.Require("MSUF", "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+Preview.Validate("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+local SetArenaPage = Preview.SetArenaPage
+local SetBossPage = Preview.SetBossPage
+local previewState = Preview.State
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
@@ -942,11 +953,11 @@ local function ToggleEditMode(unit)
         M.ShowConfigCombatLockMessage()
         return
     end
-    local active = _G.MSUF_UnitEditModeActive == true
+    local active = previewState.editMode == true
     _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit))
 end
 local function IsEditModeActive()
-    return _G.MSUF_UnitEditModeActive == true
+    return previewState.editMode == true
 end
 local bossPagePreviewEvents
 local bossPagePreviewPendingCleanup
@@ -961,10 +972,10 @@ end
 
 local BossPreviewFramesVisible = M.BossPreviewFramesVisible
 local function SyncBossPagePreview()
-    local active = (_G.MSUF2_BossUnitframePreviewActive == true)
+    local active = (previewState.bossPage == true)
     if BossPagePreviewInCombat() then
         local cleared = ClearBossPagePreviewForCombat()
-        _G.MSUF2_BossUnitframePreviewActive = nil
+        SetBossPage(nil)
         if active or cleared then bossPagePreviewPendingCleanup = true end
         return
     end
@@ -978,17 +989,17 @@ local function EnsureBossPagePreviewEvents()
             -- Another Menu2 coordinator may already have cleared the global
             -- flag. Always run the frame handoff and remember the OOC rebuild.
             ClearBossPagePreviewForCombat()
-            _G.MSUF2_BossUnitframePreviewActive = nil
+            SetBossPage(nil)
             bossPagePreviewPendingCleanup = true
             return
         end
         if event == "PLAYER_REGEN_ENABLED" and bossPagePreviewPendingCleanup then
             bossPagePreviewPendingCleanup = nil
             SyncBossPagePreview()
-            if _G.MSUF2_BossUnitframePreviewActive ~= true then self:UnregisterAllEvents() end
+            if previewState.bossPage ~= true then self:UnregisterAllEvents() end
             return
         end
-        if _G.MSUF2_BossUnitframePreviewActive == true then SyncBossPagePreview() end
+        if previewState.bossPage == true then SyncBossPagePreview() end
     end)
     return bossPagePreviewEvents
 end
@@ -996,18 +1007,18 @@ local function SetBossPagePreviewActive(active)
     active = active and true or false
     if active and BossPagePreviewInCombat() then
         ClearBossPagePreviewForCombat()
-        _G.MSUF2_BossUnitframePreviewActive = nil
+        SetBossPage(nil)
         bossPagePreviewPendingCleanup = nil
         if bossPagePreviewEvents then bossPagePreviewEvents:UnregisterAllEvents() end
         return
     end
-    local current = _G.MSUF2_BossUnitframePreviewActive == true
+    local current = previewState.bossPage == true
     if current == active then
         if active and not BossPagePreviewInCombat() and not BossPreviewFramesVisible() then SyncBossPagePreview() end
-        if not active and _G.MSUF_BossTestMode == true and not BossPagePreviewInCombat() then SyncBossPagePreview() end
+        if not active and previewState.boss == true and not BossPagePreviewInCombat() then SyncBossPagePreview() end
         return
     end
-    _G.MSUF2_BossUnitframePreviewActive = active or nil
+    SetBossPage(active or nil)
     local events = EnsureBossPagePreviewEvents()
     if active then
         bossPagePreviewPendingCleanup = nil
@@ -1053,10 +1064,10 @@ local function ArenaPreviewFramesVisible()
     return sawFrame
 end
 local function SyncArenaPagePreview()
-    local active = (_G.MSUF2_ArenaUnitframePreviewActive == true)
+    local active = (previewState.arenaPage == true)
     if BossPagePreviewInCombat() then
         local cleared = ClearArenaPagePreviewForCombat()
-        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        SetArenaPage(nil)
         if active or cleared then arenaPagePreviewPendingCleanup = true end
         return
     end
@@ -1068,17 +1079,17 @@ local function EnsureArenaPagePreviewEvents()
     arenaPagePreviewEvents:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
             ClearArenaPagePreviewForCombat()
-            _G.MSUF2_ArenaUnitframePreviewActive = nil
+            SetArenaPage(nil)
             arenaPagePreviewPendingCleanup = true
             return
         end
         if event == "PLAYER_REGEN_ENABLED" and arenaPagePreviewPendingCleanup then
             arenaPagePreviewPendingCleanup = nil
             SyncArenaPagePreview()
-            if _G.MSUF2_ArenaUnitframePreviewActive ~= true then self:UnregisterAllEvents() end
+            if previewState.arenaPage ~= true then self:UnregisterAllEvents() end
             return
         end
-        if _G.MSUF2_ArenaUnitframePreviewActive == true then SyncArenaPagePreview() end
+        if previewState.arenaPage == true then SyncArenaPagePreview() end
     end)
     return arenaPagePreviewEvents
 end
@@ -1086,18 +1097,18 @@ local function SetArenaPagePreviewActive(active)
     active = active and true or false
     if active and BossPagePreviewInCombat() then
         ClearArenaPagePreviewForCombat()
-        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        SetArenaPage(nil)
         arenaPagePreviewPendingCleanup = nil
         if arenaPagePreviewEvents then arenaPagePreviewEvents:UnregisterAllEvents() end
         return
     end
-    local current = _G.MSUF2_ArenaUnitframePreviewActive == true
+    local current = previewState.arenaPage == true
     if current == active then
         if active and not BossPagePreviewInCombat() and not ArenaPreviewFramesVisible() then SyncArenaPagePreview() end
-        if not active and _G.MSUF_ArenaTestMode == true and not BossPagePreviewInCombat() then SyncArenaPagePreview() end
+        if not active and previewState.arena == true and not BossPagePreviewInCombat() then SyncArenaPagePreview() end
         return
     end
-    _G.MSUF2_ArenaUnitframePreviewActive = active or nil
+    SetArenaPage(active or nil)
     local events = EnsureArenaPagePreviewEvents()
     if active then
         arenaPagePreviewPendingCleanup = nil
@@ -1229,7 +1240,7 @@ local function RefreshStatusRuntime(unit, spec)
         _G.MSUF_RefreshStatusIndicators(unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.value == "level" then
-        if unit == "boss" and _G.MSUF_BossTestMode then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
+        if unit == "boss" and previewState.boss == true then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
     end
     M.RequestUnitDomains(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end

@@ -79,6 +79,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     -- The page requires its core collaborators at load (M.RequireGlobals).
     local RequireFixture = assert(loadfile("tools/tests/require_fixture.lua"))()
     RequireFixture.Install(".", ns, menu)
+    assert(loadfile("tools/tests/preview_namespace_fixture.lua"))().Install(".", ns)
     RequireFixture.StubRequirements(".", { options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     local pages = assert(loadstring(source .. "\nreturn UNIT_PAGES"))("Options", ns)
     assert((pages.uf_boss ~= nil) == boss, flavor .. " boss page registered")

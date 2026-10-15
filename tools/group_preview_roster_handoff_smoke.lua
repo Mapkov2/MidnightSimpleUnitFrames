@@ -1,3 +1,4 @@
+local loadfile = assert(loadfile("." .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, ".")
 -- Regression: joining a party while Menu2 owns the Party preview must invalidate
 -- the preview cache, hide the dummy owner, and restore/apply the live header.
 _G = _G or _ENV

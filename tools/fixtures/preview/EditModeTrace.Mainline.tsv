@@ -1,0 +1,33 @@
+start	nil	false	false	nil	nil	nil	false	false/nil	1911884774
+boss open	true	true	true	true	nil	nil	true	true/boss	2004394416
+boss reopen target	true	true	true	true	nil	nil	true	true/target	2004394416
+boss sync	true	true	true	true	nil	nil	true	true/target	2004394416
+boss close	false	false	false	false	nil	nil	false	false/nil	873178353
+boss ellesmere open	true	true	true	true	nil	nil	true	true/boss	2004394416
+boss suspend	false	false	false	false	nil	nil	false	true/boss	2004394416
+boss resume	true	true	true	true	nil	nil	true	true/boss	2004394416
+boss combat	false	false	false	false	nil	nil	false	true/boss	2004394416
+boss combat end	true	true	true	true	nil	nil	true	true/boss	2004394416
+boss ellesmere close	false	false	false	false	nil	nil	false	false/nil	873178353
+boss open for cancel	true	true	true	true	nil	nil	true	true/boss	2004394416
+boss cancel all	false	false	false	false	nil	nil	false	false/nil	873178353
+boss page on	false	false	false	false	true	nil	false	false/nil	1625036564
+boss page edit open	true	true	true	true	true	nil	true	true/boss	1484913347
+boss page off	true	true	true	true	nil	nil	true	true/boss	621110806
+boss page edit close	false	false	false	false	nil	nil	false	false/nil	1253236447
+arena open	true	true	true	true	nil	nil	true	true/arena	2004394416
+arena reopen target	true	true	true	true	nil	nil	true	true/target	2004394416
+arena sync	true	true	true	true	nil	nil	true	true/target	2004394416
+arena close	false	false	false	false	nil	nil	false	false/nil	873178353
+arena ellesmere open	true	true	true	true	nil	nil	true	true/arena	2004394416
+arena suspend	false	false	false	false	nil	nil	false	true/arena	2004394416
+arena resume	true	true	true	true	nil	nil	true	true/arena	2004394416
+arena combat	false	false	false	false	nil	nil	false	true/arena	2004394416
+arena combat end	true	true	true	true	nil	nil	true	true/arena	2004394416
+arena ellesmere close	false	false	false	false	nil	nil	false	false/nil	873178353
+arena open for cancel	true	true	true	true	nil	nil	true	true/arena	2004394416
+arena cancel all	false	false	false	false	nil	nil	false	false/nil	873178353
+arena page on	false	false	false	false	nil	true	false	false/nil	1210888646
+arena page edit open	true	true	true	true	nil	true	true	true/arena	1375948416
+arena page off	true	true	true	true	nil	nil	true	true/arena	1792333343
+arena page edit close	false	false	false	false	nil	nil	false	false/nil	873178353

@@ -4,10 +4,26 @@
 --- by Core, which loads first.)
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Preview = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_Compat.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by Shell/EditMode/MSUF_EditMode_Compat.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/EditMode/MSUF_EditMode_Compat.lua")
+Preview.Validate("Shell/EditMode/MSUF_EditMode_Compat.lua")
+local previewState = Preview.State
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Compat.lua"
+local SetAllOff = Preview.Bind("all", false)
+local SetBossOff = Preview.Bind("boss", false)
+local SetArenaOff = Preview.Bind("arena", false)
+local SetUnitPageOff = Preview.Bind("unitPage", false)
+local SetAllOn = Preview.Bind("all", true)
+local SetBossOn = Preview.Bind("boss", true)
+local SetArenaOn = Preview.Bind("arena", true)
 local ExportPublic = MSUF.ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -22,7 +38,7 @@ local RefreshUFPreview = EM2.Movers.RefreshUFPreview
 --- --- MSUF_IsInEditMode ---
 local function MSUF_IsInEditMode()
     if EM2.State then return EM2.State.IsActive() end
-    return _G.MSUF_UnitEditModeActive == true
+    return previewState.editMode == true
 end
 ExportPublic("MSUF_IsInEditMode", MSUF_IsInEditMode)
 
@@ -116,8 +132,8 @@ ExportPublic("MSUF_SetMSUFEditModeDirect", MSUF_SetMSUFEditModeDirect)
 --- The unit-frame engine (load conditions, visibility drivers, portrait)
 --- reads this flag to force-show the frames and paints their preview data.
 --- Zero hooks, zero timers, zero pipeline fighting.
-ExportPublic("MSUF_UnitPreviewActive", false)
-ExportPublic("MSUF_PreviewTestMode", false)
+SetUnitPageOff()
+SetAllOff()
 
 local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet", "pettarget" }
 local CASTBAR_TEST_FUNCS = {
@@ -170,13 +186,13 @@ local function ForPreviewFrames(fn, value)
 end
 
 local function SyncMoversAfterReforce()
-    if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
+    if previewState.all and EM2.Movers and EM2.Movers.SyncAll then
         EM2.Movers.SyncAll()
     end
 end
 
 local function MSUF_EM2_ReforcePreviewFrames()
-    if not _G.MSUF_PreviewTestMode then return end
+    if not previewState.all then return end
     if IsConfigCombatLocked() then return end
     ForPreviewFrames(ReforcePreviewFrame, true)
     if EM2.Movers and EM2.Movers.SyncAll then
@@ -200,9 +216,9 @@ end
 --- Combat lockdown stops every unit preview: the test flags go off and the
 --- castbar previews hide.
 local function StopPreviewTestModes()
-    ExportPublic("MSUF_PreviewTestMode", false)
-    ExportPublic("MSUF_BossTestMode", false)
-    ExportPublic("MSUF_ArenaTestMode", false)
+    SetAllOff()
+    SetBossOff()
+    SetArenaOff()
     MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
 end
 --- Castbar previews follow the unit edit: the boss castbars in one batch,
@@ -224,7 +240,7 @@ local function SyncCastbarPreviewTests()
 end
 
 local function MSUF_SyncAllUnitPreviews()
-    local active = _G.MSUF_UnitPreviewActive and true or false
+    local active = previewState.unitPage == true
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
@@ -234,16 +250,16 @@ local function MSUF_SyncAllUnitPreviews()
     end
 
     --- Set preview flag (core visibility driver reads this)
-    ExportPublic("MSUF_PreviewTestMode", want)
+    if want then SetAllOn() else SetAllOff() end
 
     --- 1) Boss: existing system
-    ExportPublic("MSUF_BossTestMode", want)
+    if want then SetBossOn() else SetBossOff() end
     if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
         _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
     end
 
     --- 1b) Arena: mirrors the boss preview system
-    ExportPublic("MSUF_ArenaTestMode", want)
+    if want then SetArenaOn() else SetArenaOff() end
     if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
         _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
     end
@@ -302,8 +318,9 @@ do
     local unpackResults = table.unpack or unpack
 
     local function ScheduleReforce(delay)
-        if not _G.MSUF_PreviewTestMode then return end
+        if not previewState.all then return end
         if IsConfigCombatLocked() then return end
+        -- Closures made per sync read the output mirror: a captured state table would add an upvalue to each.
         C_Timer.After(delay or 0, function()
             if not _G.MSUF_PreviewTestMode then return end
             if IsConfigCombatLocked() then return end
@@ -322,7 +339,7 @@ do
     end
 
     local function InstallPipelineWrappers()
-        if not _G.MSUF_PreviewTestMode then return end
+        if not previewState.all then return end
         for _, name in ipairs(PIPELINE_REFORCE_NAMES) do
             if not wrapped[name] and type(_G[name]) == "function" then
                 local original = _G[name]
@@ -346,7 +363,7 @@ do
 
     local originalSyncAllUnitPreviews = MSUF_SyncAllUnitPreviews
     local function SyncAllUnitPreviewsWithPipelineWrappers(...)
-        if _G.MSUF_PreviewTestMode then
+        if previewState.all then
             InstallPipelineWrappers()
         else
             UninstallPipelineWrappers()
@@ -354,7 +371,7 @@ do
 
         local results = { originalSyncAllUnitPreviews(...) }
 
-        if _G.MSUF_PreviewTestMode then
+        if previewState.all then
             InstallPipelineWrappers()
             ScheduleReforce(0.05)
             ScheduleReforce(0.20)
@@ -372,7 +389,7 @@ do
     local function SyncAllUnitPreviewsAsync()
         asyncPreviewSerial = asyncPreviewSerial + 1
         local serial = asyncPreviewSerial
-        local active = _G.MSUF_UnitPreviewActive and true or false
+        local active = previewState.unitPage == true
         local editOn = EM2.State and EM2.State.IsActive()
         local want = active and editOn
 
@@ -382,9 +399,9 @@ do
             return
         end
 
-        ExportPublic("MSUF_PreviewTestMode", want)
-        ExportPublic("MSUF_BossTestMode", want)
-        ExportPublic("MSUF_ArenaTestMode", want)
+        if want then SetAllOn() else SetAllOff() end
+        if want then SetBossOn() else SetBossOff() end
+        if want then SetArenaOn() else SetArenaOff() end
         if want then
             InstallPipelineWrappers()
         else

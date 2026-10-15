@@ -235,6 +235,7 @@ for _, client in ipairs(CLIENTS) do
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua"))("MidnightSimpleUnitFrames_Options", {})
     local menu = ns.MSUF2
     RequireFixture.Install(root, ns, menu)
+    assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Install(root, ns)
     local pageSource = Read(OPTIONS .. client.pages)
     pageSource = pageSource:sub(1, assert(pageSource:find("local POWER_UNITS", 1, true), client.pages) - 1) .. "\nreturn UNIT_PAGES"
     local pages = assert(loadstring(pageSource, "@" .. client.pages))("MidnightSimpleUnitFrames_Options", ns)

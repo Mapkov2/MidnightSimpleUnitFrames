@@ -12,6 +12,7 @@
 --     expansion's cap (TBC 70, Mists and Midnight 90).
 -- Plain Lua 5.1, the repository root as the only argument.
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 local FILE = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua"
 
 local function Check(condition, message)
@@ -53,6 +54,8 @@ end
 
 local function Load(client)
     -- Globals the file reads at load time.
+    _G.UnitExists = function() return false end
+    _G.issecretvalue = function() return false end
     _G.InCombatLockdown = function() return client.combat end
     _G.UnitAffectingCombat = function() return false end
     _G.IsInInstance = function() return false end
@@ -132,7 +135,7 @@ for _, client in ipairs(CLIENTS) do
     end
 
     -- Preview on: synthetic opponents at the client's level, visible through the HP gate.
-    _G.MSUF2_ArenaUnitframePreviewActive = true
+    UF.Preview.SetArenaPage(true)
     Check(UF.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW") == true, client.name .. ": the preview did not apply")
     for i = 1, client.slots do
         local frame = frames["arena" .. i]
@@ -143,7 +146,7 @@ for _, client in ipairs(CLIENTS) do
     end
 
     -- Preview off from the menu: real HP gate again, and a range re-evaluation.
-    _G.MSUF2_ArenaUnitframePreviewActive = nil
+    UF.Preview.SetArenaPage(nil)
     local before = refreshes.range
     UF.ApplyArenaPreviewState(false, "MSUF_ARENA_PREVIEW_OFF")
     Check(refreshes.range > before, client.name .. ": leaving the arena preview did not refresh the range fade")
@@ -159,7 +162,7 @@ for _, client in ipairs(CLIENTS) do
     Check(refreshes.range == before, client.name .. ": an inactive preview refreshed the range fade")
 
     -- Combat while previewed: the combat cleanup hands back and re-evaluates too.
-    _G.MSUF2_ArenaUnitframePreviewActive = true
+    UF.Preview.SetArenaPage(true)
     UF.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW")
     client.combat = true
     before = refreshes.range
@@ -171,8 +174,8 @@ end
 
 -- No level API at all: never a hard-coded expansion cap.
 local UF = Load({ name = "none", slots = 3 })
-_G.MSUF2_ArenaUnitframePreviewActive = true
+UF.Preview.SetArenaPage(true)
 UF.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW")
 Check(UF.frames.arena1.levelText.text == "??", "without a level API the preview must not invent a level")
-_G.MSUF2_ArenaUnitframePreviewActive = nil
+UF.Preview.SetArenaPage(nil)
 print("arena_preview_parity_smoke: OK (TBC, Mists, Midnight, TBC pre-patch)")

@@ -3,6 +3,23 @@
 --- boss preview, Blizzard EM sync, and keeps all legacy globals in sync.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local Preview = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_State.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by Shell/EditMode/MSUF_EditMode_State.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/EditMode/MSUF_EditMode_State.lua")
+Preview.Validate("Shell/EditMode/MSUF_EditMode_State.lua")
+local SetEditModeOn = Preview.Bind("editMode", true)
+local SetEditModeOff = Preview.Bind("editMode", false)
+local SetAllOff = Preview.Bind("all", false)
+local SetBossOff = Preview.Bind("boss", false)
+local SetArenaOff = Preview.Bind("arena", false)
+local SetBossPageClear = Preview.Bind("bossPage", nil)
+local SetArenaPageClear = Preview.Bind("arenaPage", nil)
+local SetUnitPageOn = Preview.Bind("unitPage", true)
+local SetUnitPageOff = Preview.Bind("unitPage", false)
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
@@ -37,7 +54,7 @@ local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
 --- Legacy global sync (contract with 30+ external files)
 local function SyncLegacy()
     local previewActive = active and not externalPreviewSuspended
-    PublishCompat("MSUF_UnitEditModeActive", previewActive)
+    if previewActive then SetEditModeOn() else SetEditModeOff() end
     PublishCompat("MSUF_CurrentEditUnitKey", unitKey)
     local st = _G.MSUF_EditState
     if st then
@@ -177,14 +194,14 @@ local function RestoreSnapshotTable(dst, src, seen)
 end
 
 local function HardHideEditModePreviews()
-    PublishCompat("MSUF_UnitPreviewActive", false)
-    PublishCompat("MSUF_PreviewTestMode", false)
-    PublishCompat("MSUF_BossTestMode", false)
-    PublishCompat("MSUF2_BossUnitframePreviewActive", nil)
+    SetUnitPageOff()
+    SetAllOff()
+    SetBossOff()
+    SetBossPageClear()
     --- Arena mirrors the boss preview flags. Leaving them raised keeps the
     --- secure "[nocombat] show" driver on arena1-N after exit.
-    PublishCompat("MSUF_ArenaTestMode", false)
-    PublishCompat("MSUF2_ArenaUnitframePreviewActive", nil)
+    SetArenaOff()
+    SetArenaPageClear()
 
     local hideCastbars = _G.MSUF_HideAllCastbarPreviews
     if type(hideCastbars) == "function" then
@@ -339,7 +356,7 @@ function State.Enter(key, opts)
     end
 
     --- Preview must be active before the apply pipeline queues its boss sync.
-    PublishCompat("MSUF_UnitPreviewActive", true)
+    SetUnitPageOn()
 
     --- Start ticker (zero overhead when stopped)
     if ownsNativeShell and EM2.Ticker and EM2.Ticker.Start then EM2.Ticker.Start() end
@@ -467,9 +484,9 @@ function State.Exit(source)
     --- Only Cancel All of an active session reads the profile copy taken at
     --- Enter; a saved session would otherwise hold it until the next Enter.
     _snapshot, _snapshotProfile = nil, nil
-    PublishCompat("MSUF_BossTestMode", false)
-    PublishCompat("MSUF_ArenaTestMode", false)
-    PublishCompat("MSUF_PreviewTestMode", false)
+    SetBossOff()
+    SetArenaOff()
+    SetAllOff()
     SyncLegacy()
     StopLogoIntro()
 
@@ -565,10 +582,10 @@ function State.CancelAll()
     unitKey = nil
     provider = nil
     externalPreviewSuspended = false
-    PublishCompat("MSUF_BossTestMode", false)
-    PublishCompat("MSUF_ArenaTestMode", false)
-    PublishCompat("MSUF_PreviewTestMode", false)
-    PublishCompat("MSUF_UnitPreviewActive", false)
+    SetBossOff()
+    SetArenaOff()
+    SetAllOff()
+    SetUnitPageOff()
     SyncLegacy()
     StopLogoIntro()
 
@@ -638,7 +655,7 @@ function State.ResumeExternalPreview()
     RestoreGameplayAnchors()
     externalPreviewSuspended = false
     SyncLegacy()
-    PublishCompat("MSUF_UnitPreviewActive", true)
+    SetUnitPageOn()
     if _G.MSUF_RefreshAllUnitVisibilityDrivers then
         _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
     else

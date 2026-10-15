@@ -4,6 +4,16 @@
 --- Builds EditMode HUD widgets only; secure frame mutation stays behind EditMode helpers.
 --- Loads last of the toolbar files in MSUF_EditMode.xml.
 local addonName, MSUF = ...
+local Preview = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_HUD.lua").UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table",
+  "MSUF: missing required dependency 'UF.Preview' required by Shell/EditMode/MSUF_EditMode_HUD.lua")
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function",
+  "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/EditMode/MSUF_EditMode_HUD.lua")
+Preview.Validate("Shell/EditMode/MSUF_EditMode_HUD.lua")
+local SetUnitPage = Preview.SetUnitPage
+local previewState = Preview.State
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
@@ -449,13 +459,18 @@ local function BuildExitControls()
     SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 end
 
+--- The unit-page preview request, read from the canonical state.
+function HUD.UnitPageActive()
+    return previewState.unitPage == true
+end
+
 local function BuildPreviewCluster()
     local previewCluster, previewItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Preview", CLUSTER_H, true)
     previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 72, CLUSTER_BTN_H, "caption", function()
-        ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
+        SetUnitPage(previewState.unitPage ~= true)
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
-        SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
-        HUD.SetStatus(HelpText(_G.MSUF_UnitPreviewActive and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
+        SetActive(previewBtn, previewState.unitPage)
+        HUD.SetStatus(HelpText(previewState.unitPage and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
     end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
 
     previewAddonSlot = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", previewCluster))
@@ -471,7 +486,7 @@ local function BuildPreviewCluster()
         local ok, reason = toggle("edit_mode")
         local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
-        if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
+        if previewBtn then SetActive(previewBtn, previewState.unitPage == true) end
         if ok == false and reason == "combat" then
             HUD.SetStatus(HelpText("Preview animation pauses during combat."), "warn")
         else
@@ -497,7 +512,7 @@ local function BuildPreviewCluster()
         local tracked = undo and undo.BeginChange and undo.BeginChange("aura", "shared", "Toggle") == true
         sh.showInEditMode = not (sh.showInEditMode and true or false)
         if tracked then undo.CommitChange() end
-        SetActive(auraBtn, sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
+        SetActive(auraBtn, sh.showInEditMode and previewState.unitPage == true)
         local a3 = MSUF and MSUF.MSUF_Auras3
         if a3 and type(a3.RefreshEditPreview) == "function" then
             a3.RefreshEditPreview()
@@ -885,7 +900,7 @@ function HUD.RefreshControls(force)
             or "Choose which frame's settings page to open."
     end
     RegisterPreviewAnimationRefreshOwner()
-    if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
+    if previewBtn then SetActive(previewBtn, HUD.UnitPageActive()) end
     if previewAnimBtn then
         local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
@@ -916,7 +931,7 @@ function HUD.RefreshControls(force)
         local db = _G.MSUF_DB
         local a2 = db and db.auras3
         local sh = a2 and a2.shared
-        SetActive(auraBtn, sh and sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
+        SetActive(auraBtn, sh and sh.showInEditMode and HUD.UnitPageActive())
     end
     SetHistoryEnabled(undoBtn, EM2.Undo and EM2.Undo.CanUndo())
     SetHistoryEnabled(redoBtn, EM2.Undo and EM2.Undo.CanRedo())

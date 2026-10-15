@@ -1,3 +1,4 @@
+local loadfile = assert(loadfile("." .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, ".")
 -- Runtime smoke for unitless arena preparation frames.
 -- Verifies that prep temporarily replaces RegisterUnitWatch with the existing
 -- secure nocombat visibility driver before synthetic opponent data is shown,

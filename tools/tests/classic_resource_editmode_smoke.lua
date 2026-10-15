@@ -1,6 +1,7 @@
 -- Exercise the live Edit Mode registry and offset drag path for Class Resources
 -- and a detached Player Power Bar without a WoW client.
 local root = assert(arg[1], "repo root missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 -- The Edit Mode layout family (Grid, Snap, Nudge, then the drag ticker) in
 -- its MSUF_EditMode.xml order.
 local function LoadLayoutFamily(addon, namespace)

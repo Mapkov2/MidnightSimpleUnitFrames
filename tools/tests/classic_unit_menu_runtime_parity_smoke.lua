@@ -3,6 +3,7 @@
 -- with Mainline. This smoke drives both against the Classic runtime and the
 -- shared menu files those flavors load.
 local root = assert(arg[1], "repo root missing")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 
 local MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 

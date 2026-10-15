@@ -29,6 +29,7 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Name.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Text_Runtime.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
+  <Script file="..\..\Engine\MSUF_UF_PreviewFamilies.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_IconShape.lua"/>

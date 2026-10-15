@@ -129,7 +129,7 @@ MSUF_DB	savedvar	MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc:
 MSUF_DeleteProfile	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2833	MSUF_Suite:Core/HostBridge.lua:540|MapkoSkin:Core/SuiteProfiles.lua:9	2	2	suite,external	all	
 MSUF_EM2	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua:15	MSUF_Suite:Core/HostBridge.lua:485|MapkoSkin_Suite:Movers.lua:118|MSUF_Suite_Modules:EditMode.lua:275	3	3	suite,external	all	
 MSUF_EM2.ExternalElements	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:13	MSUF_Suite:Core/HostBridge.lua:486	1	1	suite	all	Suite nested fields (contract smoke): GetRecord
-MSUF_EM2.State	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:18	MSUF_Suite_Modules:EditMode.lua:276|MapkoSkin_Suite:Movers.lua:119	2	2	suite,external	all	Suite nested fields (contract smoke): Enter
+MSUF_EM2.State	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:35	MSUF_Suite_Modules:EditMode.lua:276|MapkoSkin_Suite:Movers.lua:119	2	2	suite,external	all	Suite nested fields (contract smoke): Enter
 MSUF_EM2.Undo	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua:20	MapkoSkin_Suite:Movers.lua:205	1	1	external	all	
 MSUF_EditModeAPI	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:24|MapkoSkin_Suite:EditMode.lua:106|MSUF_Suite_Skin:Adapters/OwnedMicroBarEditMode.lua:41	4	3	suite,external	all	
 MSUF_EditModeAPI.EnterEditMode	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:269|MapkoSkin_Suite:Movers.lua:168|MSUF_Suite_Skin:Adapters/OwnedMicroBarEditMode.lua:231	3	3	suite,external	all	dynamic
@@ -139,9 +139,9 @@ MSUF_EditModeAPI.RegisterElement	nsfield	MidnightSimpleUnitFrames/Shell/EditMode
 MSUF_EditModeAPI.RegisterSessionListener	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:49|MapkoSkin_Suite:EditMode.lua:132	2	2	suite,external	all	dynamic
 MSUF_EditModeAPI.UnregisterOwner	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:257|MapkoSkin_Suite:EditMode.lua:141	2	2	suite,external	all	dynamic
 MSUF_EditModeAPI.UnregisterSessionListener	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_PublicAPI.lua:719	MSUF_Suite_Modules:EditMode.lua:260	1	1	suite	all	dynamic
-MSUF_EditState	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:58	Auras2:MSUF_A2_Events.lua:68|Auras2:MSUF_A2_Preview.lua:25|Auras2:MSUF_A2_Render.lua:625	3	1	external	all	
-MSUF_EditState.active	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:42	Auras2:MSUF_A2_Events.lua:69|Auras2:MSUF_A2_Preview.lua:26|Auras2:MSUF_A2_Render.lua:626	3	1	external	all	
-MSUF_EditState.popupOpen	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:121	Auras2:MSUF_A2_Render.lua:1563	1	1	external	all	
+MSUF_EditState	table	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:84	Auras2:MSUF_A2_Events.lua:68|Auras2:MSUF_A2_Preview.lua:25|Auras2:MSUF_A2_Render.lua:625	3	1	external	all	
+MSUF_EditState.active	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:61	Auras2:MSUF_A2_Events.lua:69|Auras2:MSUF_A2_Preview.lua:26|Auras2:MSUF_A2_Render.lua:626	3	1	external	all	
+MSUF_EditState.popupOpen	nsfield	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:148	Auras2:MSUF_A2_Render.lua:1563	1	1	external	all	
 MSUF_EllesmereEditMode_ClearMoveState	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua:163	integration:MSUF_Integration_EllesmereUnlock.lua:163	0	0	integration	Mainline,Forever	
 MSUF_EllesmereEditMode_IsAvailable	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua:145	integration:MSUF_Integration_EllesmereUnlock.lua:145	0	0	integration	Mainline,Forever	
 MSUF_EllesmereEditMode_ResumePreview	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua:160	integration:MSUF_Integration_EllesmereUnlock.lua:160	0	0	integration	Mainline,Forever	
@@ -179,7 +179,7 @@ MSUF_HostAPI.SetResourceStack	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_Host
 MSUF_HostAPI.version	nsfield	MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua:248	MSUF_Suite:Core/HostBridge.lua:35	1	1	suite	all	dynamic
 MSUF_IsCooldownAnchorEnabled	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:449	integration:MSUF_Integration_ThirdPartyAnchors.lua:449	0	0	integration	all	
 MSUF_IsCooldownAnchorSupported	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua:453	integration:MSUF_Integration_ThirdPartyAnchors.lua:453	0	0	integration	all	
-MSUF_IsInEditMode	function	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua:27	Auras2:MSUF_A2_Events.lua:79|Auras2:MSUF_A2_Preview.lua:36|Auras2:MSUF_A2_Render.lua:637	3	1	external	all	
+MSUF_IsInEditMode	function	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua:43	Auras2:MSUF_A2_Events.lua:79|Auras2:MSUF_A2_Preview.lua:36|Auras2:MSUF_A2_Render.lua:637	3	1	external	all	
 MSUF_Keybind_ToggleEditMode	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:212	blizzard:Bindings.xml:10	0	0	blizzard-contract	all	
 MSUF_Keybind_ToggleOptions	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:197	blizzard:Bindings.xml:4	0	0	blizzard-contract	all	
 MSUF_Keybind_TogglePriorityFrame	function	MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua:292	blizzard:Bindings.xml:16	0	0	blizzard-contract	all	
@@ -210,7 +210,7 @@ MSUF_Profiles_ExportSelectionToString	function	MidnightSimpleUnitFrames/State/MS
 MSUF_Profiles_ImportExternal	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2811	MSUF_Suite:Core/HostBridge.lua:538	1	1	suite	all	
 MSUF_Profiles_ImportFromString	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2818	ImportCondenser:addons/midnightSimpleUnitFrames.lua:12	1	1	external	all	
 MSUF_Profiles_ImportIntoNewProfile	function	MidnightSimpleUnitFrames/State/MSUF_Profiles.lua:2820	MSUF_Suite:Core/HostBridge.lua:535|MapkoSkin:Core/SuiteProfiles.lua:7	2	2	suite,external	all	
-MSUF_RegisterAnyEditModeListener	function	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:70	MSUF_Suite_Modules:EditMode.lua:46|Auras2:MSUF_A2_Events.lua:460	2	2	suite,external	all	
+MSUF_RegisterAnyEditModeListener	function	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:96	MSUF_Suite_Modules:EditMode.lua:46|Auras2:MSUF_A2_Events.lua:460	2	2	suite,external	all	
 MSUF_ResetGlobalUiScale	function	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua:506	MSUF_Suite:Core/HostBridge.lua:124	1	1	suite	all	
 MSUF_ResolveFontKeyPath	function	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua:322	MSUF_Suite:Core/Platform.lua:328	1	1	suite	all	shared Runtime owner; compatibility aliases retained
 MSUF_ResolveStatusbarTextureKey	function	MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua:94	MSUF_Suite:Core/Platform.lua:340	1	1	suite	all	shared Runtime owner; compatibility aliases retained
@@ -229,7 +229,7 @@ MSUF_TryDecodeCompactString	function	MidnightSimpleUnitFrames/State/MSUF_Profile
 MSUF_TryOpenExternalEditMode	function	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua:151	integration:MSUF_Integration_EllesmereUnlock.lua:151	0	0	integration	Mainline,Forever	
 MSUF_UFCore_NotifyConfigChanged	function	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:539	MSUF_Suite:Core/HostBridge.lua:307|MidnightArcaneSalvo:MidnightArcaneSalvo.lua:757	2	2	suite,external	all	
 MSUF_UI	table	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua:16	MSUF_Suite:Core/HostBridgeMenu.lua:167	1	1	suite	all	Suite nested fields (contract smoke): Button Color ApplyFontRole ApplyMaterial colors
-MSUF_UnitEditModeActive	value	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua:38	MSUF_Suite_Modules:Runtime.lua:5|Auras2:MSUF_A2_Events.lua:74|MapkoSkin_Suite:Runtime.lua:5	5	3	suite,external	static	
+MSUF_UnitEditModeActive	value	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Preview.lua:37	MSUF_Suite_Modules:Runtime.lua:5|Auras2:MSUF_A2_Events.lua:74|MapkoSkin_Suite:Runtime.lua:5	5	3	suite,external	static	
 MSUF_UnitFrames	table	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:535	Auras2:MSUF_A2_Events.lua:200|CooldownCompanion:Core/FrameAnchoring.lua:466|EnhanceQoL:Modules/Aura/CooldownPanels_AnchorHelper.lua:224	8	6	external	all	
 MSUF_UnitFrames.boss1	nsfield	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:535	EnhanceQoL:Modules/Aura/CooldownPanels_AnchorHelper.lua:225|EnhanceQoLCooldownPanels:CooldownPanels_AnchorHelper.lua:314	2	2	external	Mainline,Mists,Forever	dynamic
 MSUF_UnitFrames.focus	nsfield	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua:535	EnhanceQoL:Modules/Aura/CooldownPanels_AnchorHelper.lua:225|EnhanceQoLCooldownPanels:CooldownPanels_AnchorHelper.lua:314	2	2	external	Mainline,TBC,Mists,Forever	dynamic

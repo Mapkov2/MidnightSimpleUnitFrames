@@ -241,6 +241,10 @@ do
     assert(MSUF.UI and type(MSUF.UI.ShowPrompt) == "function", "the core prompt layer did not load")
 end
 
+-- Menu page request writers use the actual early core owners, even in this partial catalog world.
+assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "UnitFrames/Engine/MSUF_UF_Preview.lua")))("MidnightSimpleUnitFrames", MSUF)
+
 -- The Options TOC loads this namespace/capability bridge before its XML files.
 -- History and apply execution now precede the companion in the core graph.
 for _, file in ipairs({ "MSUF_ApplyService.lua", "MSUF_History.lua" }) do

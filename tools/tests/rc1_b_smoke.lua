@@ -33,6 +33,7 @@
 -- Plain Lua 5.1, repo root as arg 1, client flavor as arg 2.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
 local flavor = arg[2] or "Mainline"
 
 local failures = {}

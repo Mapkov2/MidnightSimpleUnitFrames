@@ -33,7 +33,13 @@ local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
 
 local IsInCombat = _G.MSUF_IsPlayerInCombat
 
-PublicAPI.Publish("MSUF_BossTestMode", _G.MSUF_BossTestMode or false)
+local Preview = MSUF.Require("MSUF", FILE).UF.Preview
+local previewKind = type(Preview)
+assert(previewKind == "table", "MSUF: missing required dependency 'UF.Preview' required by " .. FILE)
+local validateKind = type(Preview.Validate)
+assert(validateKind == "function", "MSUF: missing required dependency 'UF.Preview.Validate' required by " .. FILE)
+Preview.Validate(FILE)
+Preview.InitializeBoss()
 
 Core.CastbarUnitInfo = Core.CastbarUnitInfo or {
     player = {

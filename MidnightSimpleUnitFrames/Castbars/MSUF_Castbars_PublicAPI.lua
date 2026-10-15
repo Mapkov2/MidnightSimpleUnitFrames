@@ -52,7 +52,6 @@ end
 
 local ExportPublic = MSUF.ExportPublic
 local publishers = {
-    MSUF_BossTestMode = function(v) ExportPublic("MSUF_BossTestMode", v) end,
     MSUF_ApplyAllCastbarsAndSync = function(v) ExportPublic("MSUF_ApplyAllCastbarsAndSync", v) end,
     MSUF_ApplyArenaCastbarPositionSetting = function(v) ExportPublic("MSUF_ApplyArenaCastbarPositionSetting", v) end,
     MSUF_ApplyBossCastbarPositionSetting = function(v) ExportPublic("MSUF_ApplyBossCastbarPositionSetting", v) end,
