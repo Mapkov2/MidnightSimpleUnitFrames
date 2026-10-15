@@ -259,7 +259,7 @@
   "MidnightSimpleUnitFrames/Shell/MSUF_MinimapButton.lua": [322, 110, 28, 9, 16, 32, 33, 14, 1, 0, 0, 1, 0, 0],
   "MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua": [5, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_Layout.lua": [5, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0],
-  "MidnightSimpleUnitFrames/Shell/UI/MSUF_AnchorPicker.lua": [336, 186, 23, 17, 8, 26, 15, 7, 1, 0, 8, 1, 1, 0],
+  "MidnightSimpleUnitFrames/Shell/UI/MSUF_AnchorPicker.lua": [342, 119, 24, 16, 6, 27, 15, 7, 1, 0, 8, 1, 0, 0],
   "MidnightSimpleUnitFrames/Shell/UI/MSUF_EditPopupUI.lua": [1002, 106, 32, 27, 12, 34, 30, 13, 1, 0, 1, 1, 0, 0],
   "MidnightSimpleUnitFrames/Shell/UI/MSUF_MapkoSkin.lua": [289, 32, 27, 28, 15, 41, 1, 1, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua": [222, 15, 24, 7, 5, 20, 10, 0, 1, 0, 0, 1, 0, 0],
