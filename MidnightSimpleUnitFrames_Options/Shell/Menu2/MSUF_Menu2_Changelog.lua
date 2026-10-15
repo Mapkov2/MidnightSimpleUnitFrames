@@ -75,6 +75,25 @@ local function RebuildKeepingScroll()
     M.RebuildPageKeepingScroll("changelog")
 end
 
+local function AddSourceTabs(root, contentWidth, y, source)
+    local tabWidth = math.min(164, math.floor((contentWidth - 8) / 2))
+    for index, tab in ipairs({ { key = "msuf", label = "MSUF" }, { key = "suite", label = "MSUF Suite" } }) do
+        local tabKey = tab.key
+        local button = T.Button(root, tab.label, tabWidth, 30)
+        button:SetPoint("TOPLEFT", root, "TOPLEFT", 18 + (index - 1) * (tabWidth + 8), y)
+        if T.CenterButtonLabel then T.CenterButtonLabel(button) end
+        if source == tabKey and T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
+        button:SetScript("OnClick", function()
+            if M.BlockCombatAction() then return end
+            if M.changelogSource == tabKey then return end
+            M.changelogSource = tabKey
+            RebuildKeepingScroll()
+            if type(M.MarkChangelogSeen) == "function" then M.MarkChangelogSeen(tabKey) end
+        end)
+    end
+    return y - 42
+end
+
 local function BuildFullChangelog(ctx)
     local suiteData = SuiteChangelogData()
     local source = M.changelogSource == "suite" and suiteData and "suite" or "msuf"
@@ -132,22 +151,7 @@ local function BuildFullChangelog(ctx)
 
     AddText("See New Features", "GameFontNormalHuge", T.colors.title or T.colors.text, 18, contentWidth, 8, "title")
     if suiteData then
-        local tabWidth = math.min(164, math.floor((contentWidth - 8) / 2))
-        for index, tab in ipairs({ { key = "msuf", label = "MSUF" }, { key = "suite", label = "MSUF Suite" } }) do
-            local tabKey = tab.key
-            local button = T.Button(root, tab.label, tabWidth, 30)
-            button:SetPoint("TOPLEFT", root, "TOPLEFT", 18 + (index - 1) * (tabWidth + 8), y)
-            if T.CenterButtonLabel then T.CenterButtonLabel(button) end
-            if source == tabKey and T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
-            button:SetScript("OnClick", function()
-                if M.BlockCombatAction() then return end
-                if M.changelogSource == tabKey then return end
-                M.changelogSource = tabKey
-                RebuildKeepingScroll()
-                if type(M.MarkChangelogSeen) == "function" then M.MarkChangelogSeen(tabKey) end
-            end)
-        end
-        y = y - 42
+        y = AddSourceTabs(root, contentWidth, y, source)
     end
     if source == "msuf" then
         AddText("Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu.",
