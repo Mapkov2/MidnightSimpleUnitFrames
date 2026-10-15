@@ -2047,7 +2047,9 @@ function Config.RefreshSettingsCache()
     Config.dirty = true
     return Config.settingsCache
   end
-  return Config.GetSettingsCache()
+  local cache = Config.GetSettingsCache()
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UFCore_RefreshSettingsCache")
+  return cache
 end
 
 ExportPublic("MSUF_UFCore_RefreshSettingsCache", Config.RefreshSettingsCache)

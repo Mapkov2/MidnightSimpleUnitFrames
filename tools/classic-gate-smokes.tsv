@@ -775,3 +775,6 @@ clients+Forever	lua	tools/tests/menu_boss_target_highlight_inventory_smoke.lua	{
 clients+Forever	lua	tools/tests/defaults_schema_parity_smoke.lua	{root/} {flavor}	Factory/repair defaults match the canonical typed schema: {flavor}
 clients+Forever	lua	tools/tests/profile_sparse_persistence_smoke.lua	{root/} {flavor}	Terminal sparse persistence preserves identities and typed overrides: {flavor}
 clients+Forever	lua	tools/tests/profile_sparse_client_transfer_smoke.lua	{root/} {flavor}	Portable sparse SavedVariables preserve all destination clients and return paths: {flavor}
+clients+Forever	lua	tools/tests/preview_config_signal_smoke.lua	{root} {flavor}	Settings signal direct-provider or preview ownership lifecycle failed: {flavor}
+clients+Forever	lua	tools/tests/settings_surface_commit_cost_smoke.lua	{root} {flavor}	Settings publication entered the internal surface commit original cost route: {flavor}
+clients+Forever	lua	tools/tests/preview_config_apply_bridge_smoke.lua	{root} {flavor}	Settings public bridge real-painter lifecycle failed: {flavor}

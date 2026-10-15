@@ -1334,7 +1334,14 @@ RefreshUnitTextureLayers = function(unit)
 end
 TextureLayer.Refresh = RefreshUnitTextureLayers
 
-ExportPublic("MSUF_RefreshUnitTextureLayers", RefreshUnitTextureLayers)
+-- Surface commits and visual callbacks retain the internal painter's original
+-- path. Only the owned public settings entry point publishes a config change.
+function TextureLayer.RefreshPublic(unit)
+  local result = RefreshUnitTextureLayers(unit)
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshUnitTextureLayers")
+  return result
+end
+ExportPublic("MSUF_RefreshUnitTextureLayers", TextureLayer.RefreshPublic)
 
 -- Preserve the factory and explicit visual-refresh triggers. Element-only
 -- transactions and OnShow do not restamp these decorative surfaces.

@@ -179,6 +179,7 @@ local function ApplyCastbarUnitAndSync(unit, current)
         end
         UpdateCastbarEditInfo(poolKind)
         SyncCastbarPositionPopup(poolKind)
+        MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ApplyCastbarUnitAndSync")
         return
     end
 
@@ -197,6 +198,7 @@ local function ApplyCastbarUnitAndSync(unit, current)
     end
     UpdateCastbarEditInfo(unit)
     SyncCastbarPositionPopup(unit)
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ApplyCastbarUnitAndSync")
 end
 Core.ApplyCastbarUnitAndSync = ApplyCastbarUnitAndSync
 Publish("MSUF_ApplyCastbarUnitAndSync", Core.ApplyCastbarUnitAndSync)
@@ -687,6 +689,7 @@ ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general, current)
             did = RefreshPoolPreviews(pool, general) or did
         end
     end
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ApplyCastbarVisualsForUnit")
     return did
 end
 Core.ApplyCastbarVisualsForUnit = ApplyCastbarVisualsForUnit
@@ -719,12 +722,15 @@ local function UpdateCastbarVisuals(unit, current)
         if unit == "player" then
             Anchors.ReanchorPlayerCastBarBase()
         end
-        return ApplyCastbarVisualsForUnit(unit, true, general)
+        local result = ApplyCastbarVisualsForUnit(unit, true, general)
+        MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UpdateCastbarVisuals")
+        return result
     end
 
     Anchors.ReanchorPlayerCastBarBase()
 
     ApplyAllCastbarVisuals(general)
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UpdateCastbarVisuals")
 end
 Core.UpdateCastbarVisuals = UpdateCastbarVisuals
 Publish("MSUF_UpdateCastbarVisuals", Core.UpdateCastbarVisuals)

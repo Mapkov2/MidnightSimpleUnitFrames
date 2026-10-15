@@ -721,6 +721,8 @@ do
 end
 
 local function RequestAlphaRefresh(unit)
-  return Alpha.RequestRefresh(unit)
+  local result = Alpha.RequestRefresh(unit)
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RequestAlphaRefresh")
+  return result
 end
 ExportPublic("MSUF_RequestAlphaRefresh", RequestAlphaRefresh)

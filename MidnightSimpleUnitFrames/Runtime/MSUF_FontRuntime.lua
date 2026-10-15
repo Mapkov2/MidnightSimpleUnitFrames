@@ -264,7 +264,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
             end
         end
     end
-
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UpdateAllFonts")
 end
 
 _MSUF_RunFontProbe = function(expectedGeneration)

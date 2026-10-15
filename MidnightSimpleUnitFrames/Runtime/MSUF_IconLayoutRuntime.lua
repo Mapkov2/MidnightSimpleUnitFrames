@@ -177,10 +177,12 @@ end
 
 local function RefreshLeaderIconFrames()
     RefreshFrames(MSUF_ApplyLeaderIconLayout, "leaderIcon")
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshLeaderIconFrames")
 end
 
 local function RefreshRaidMarkerFrames()
     RefreshFrames(MSUF_ApplyRaidMarkerLayout, "raidMarkerIcon")
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshRaidMarkerFrames")
 end
 
 ExportPublic("MSUF_RefreshLeaderIconFrames", RefreshLeaderIconFrames)

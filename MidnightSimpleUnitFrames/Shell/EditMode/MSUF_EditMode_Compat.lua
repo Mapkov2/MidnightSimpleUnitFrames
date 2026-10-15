@@ -84,6 +84,7 @@ ExportPublic("MSUF_OpenAuras3PositionPopup", MSUF_OpenAuras3PositionPopup)
 local function MSUF_SyncUnitPositionPopup(unit)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     RefreshUFPreview("EM2_SYNC_UNIT_POPUP", unit)
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_SyncUnitPositionPopup")
 end
 ExportPublic("MSUF_SyncUnitPositionPopup", MSUF_SyncUnitPositionPopup)
 
@@ -91,6 +92,7 @@ ExportPublic("MSUF_SyncUnitPositionPopup", MSUF_SyncUnitPositionPopup)
 local function MSUF_SyncCastbarPositionPopup(unit)
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     RefreshUFPreview("EM2_SYNC_CASTBAR_POPUP", unit)
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_SyncCastbarPositionPopup")
 end
 ExportPublic("MSUF_SyncCastbarPositionPopup", MSUF_SyncCastbarPositionPopup)
 
@@ -101,6 +103,7 @@ local function MSUF_SyncAuras3PositionPopup(unit)
     if menu and type(menu.SyncAuras3PositionSettings) == "function" then
         menu.SyncAuras3PositionSettings(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
     end
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_SyncAuras3PositionPopup")
 end
 ExportPublic("MSUF_SyncAuras3PositionPopup", MSUF_SyncAuras3PositionPopup)
 

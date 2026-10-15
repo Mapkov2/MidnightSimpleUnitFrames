@@ -174,6 +174,7 @@ local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
     if skipCastbars ~= true and not NormalizeScope(scope) and updateCastbars then
         updateCastbars()
     end
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UpdateAllBarTextures_Immediate")
 end
 
 local function UpdateAbsorbBarTextures(scope)
@@ -231,6 +232,7 @@ if not _G.MSUF_UpdateAllBarTextures_Immediate then
     end
     local ScheduleOnce = MSUF.Scheduler.ScheduleOnce
     ExportPublic("MSUF_UpdateAllBarTextures", function(scope)
+        MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_UpdateAllBarTextures")
         local normalized = NormalizeScope(scope)
         if normalized and not GroupKindsForScope(normalized) then
             MSUF.UF.MarkDirty(normalized)

@@ -1718,6 +1718,7 @@ if MSUF.CPBuilders then MSUF.CPBuilders.ClassPowerType = CPConfig.GetClassPowerT
 CP.RefreshPublic = function()
     CPColors.InvalidateCaches()
     FullRefresh()
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ClassPower_Refresh")
 end
 ExportPublic("MSUF_ClassPower_Refresh", CP.RefreshPublic)
 
@@ -1925,6 +1926,7 @@ CP.ApplyPublic = function(opts)
     if not did then
         CPConfig.RefreshConfig()
     end
+    MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ClassPower_Apply")
     return true
 end
 ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)

@@ -7,8 +7,8 @@
 --      ResolveNameShortening in UnitFrames/Engine/MSUF_UF_Config.lua, aliases
 --      included) and counts characters, never bytes, so a Cyrillic or CJK
 --      name is never cut inside a character.
---   2. The unit preview refresh hooks never stack on a global another wrapper
---      took over, and come back at once when the preview is shown again.
+--   2. Settings notifications preserve public functions and external wrappers,
+--      and resume at once when the preview is shown again.
 --   3. A group preview repaint never walks the live group frames.
 --   4. Sweeping Strikes draws all 18 segments (Class Resources and Player).
 --   5. The dark bar colour without a settings cache is the engine's.
@@ -150,12 +150,10 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 2. Unit preview refresh hooks (Preview/MSUF_Menu2_UnitPreview_API.lua):
---    a. hiding and showing the preview never stacks a second wrapper on a
---       runtime global that another wrapper (Edit Mode's preview reforce,
---       MSUF_EditMode_Compat.lua) sits on top of;
---    b. a preview shown again right after it was hidden gets its hooks at
---       once, not after the one-second rescan throttle.
+-- 2. Unit preview settings notifications (the real shipped providers):
+--    a. hiding/showing preserves the public functions and another addon's
+--       wrapper while still delivering exactly one notification;
+--    b. an immediate reshow subscribes without a scan throttle.
 ---------------------------------------------------------------------------
 do
     local Preview = MSUF.UFPreview
@@ -184,18 +182,21 @@ do
         env[name]()
         return requested[name] or 0
     end
-    env.MSUF_UpdateAllFonts = function() end
-    env.MSUF_UpdateAllBarTextures = function() end
+    local realFonts, realTextures = env.MSUF_UpdateAllFonts, env.MSUF_UpdateAllBarTextures
     ShowPreview()
+    Check(env.MSUF_UpdateAllFonts == realFonts and env.MSUF_UpdateAllBarTextures == realTextures,
+        "showing a preview replaced a public refresh function")
     Check(Calls("MSUF_UpdateAllFonts") == 1, "the shown preview does not refresh on MSUF_UpdateAllFonts")
     -- Another wrapper takes the global over while the preview's is installed.
     local under = env.MSUF_UpdateAllFonts
-    env.MSUF_UpdateAllFonts = function(...) return under(...) end
+    local externalWrapper = function(...) return under(...) end
+    env.MSUF_UpdateAllFonts = externalWrapper
     for _ = 1, 3 do
         HidePreview()
         widgets:AdvanceTime(2)
         ShowPreview()
     end
+    Check(env.MSUF_UpdateAllFonts == externalWrapper, "preview lifecycle replaced the external wrapper")
     local calls = Calls("MSUF_UpdateAllFonts")
     Check(calls == 1, "after three hide/show cycles one MSUF_UpdateAllFonts call refreshes the preview "
         .. calls .. " times (the wrapper chain grew)")

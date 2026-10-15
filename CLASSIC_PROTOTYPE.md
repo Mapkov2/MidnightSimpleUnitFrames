@@ -1370,3 +1370,11 @@ the retained core animation boundary are documented in [docs/PREVIEW_REQUESTS.md
 Profile defaults remain materialised on every client. The typed factory/repair catalog in
 `tools/fixtures/defaults/schema.lua` verifies the existing providers; certified scalar
 defaults are omitted only at terminal persistence. See `docs/PROFILE_STORAGE.md`.
+
+Cold settings providers publish the internal EventBus `CONFIG_APPLIED` signal.
+The Options unit preview subscribes while its visible page or floating owner is
+active, and releases that subscription on hide or owner cancellation. Public
+refresh functions retain their identities across preview lifecycle changes;
+the Options addon no longer scans or replaces them. The existing refresh
+delays and combat predicate remain in the preview API. Explicit requests still
+defer to combat exit, while settings notifications remain suppressed in combat.

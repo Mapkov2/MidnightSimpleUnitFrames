@@ -34,6 +34,7 @@ end
 -- boss/arena pool file the TOC lists (live pools only, no previews).
 local BASE_FILES = {
     ["MSUF_Require.lua"] = true,
+    ["MSUF_EventBus.lua"] = true,
     ["MSUF_Scheduler.lua"] = true,
     ["MSUF_Castbars_PublicAPI.lua"] = true,
     ["MSUF_Castbars_Backend.lua"] = true,
@@ -242,13 +243,8 @@ function World.New(root, backend, options)
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.
     _G.MSUF_BuildCastbarFrameElements = function() end
-    -- The shared EventBus is outside this world: it accepts the subscriptions
-    -- the castbar files make and delivers nothing. A smoke sets world.busRefuses
-    -- to make the pools take their private lifecycle frame (the bus declined).
-    _G.MSUF_EventBus_Register = function()
-        return not world.busRefuses
-    end
-    _G.MSUF_EventBus_Unregister = function() end
+    -- The real EventBus loads in TOC order; busRefuses still exercises the
+    -- existing native-event subscription refusal path in pool budget smokes.
     if options.setup then options.setup(ns, world) end
     _G.MSUF_MAX_ARENA_FRAMES = options.arenaSlots or 3
     local extra = {}
@@ -266,6 +262,13 @@ function World.New(root, backend, options)
                 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua"))("MidnightSimpleUnitFrames", ns)
             end
             assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+            if name == "MSUF_EventBus.lua" then
+                local register = _G.MSUF_EventBus_Register
+                _G.MSUF_EventBus_Register = function(...)
+                    if world.busRefuses then return false end
+                    return register(...)
+                end
+            end
             if name == "MSUF_Castbars_PublicAPI.lua" then Fixture.Seed(ns) end
             if ns.Castbars then Fixture.Bind(ns) end
             loaded[name] = true

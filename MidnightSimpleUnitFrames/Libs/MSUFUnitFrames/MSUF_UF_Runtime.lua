@@ -417,15 +417,20 @@ local ALPHA_ELEMENTS = refreshGroups.alpha or EMPTY_LIST
 function UF.RefreshVisuals(unit)
   local ok = UF.RefreshElements(unit, VISUAL_ELEMENTS, "MSUF_VISUALS")
   RunVisualRefreshCallbacks(unit)
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshAllFrames")
   return ok
 end
 
 function UF.RefreshIdentityColors(unit)
-  return UF.RefreshElements(unit, HEALTH_TEXT_BORDER_ELEMENTS, "MSUF_IDENTITY_COLORS")
+  local result = UF.RefreshElements(unit, HEALTH_TEXT_BORDER_ELEMENTS, "MSUF_IDENTITY_COLORS")
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshAllIdentityColors")
+  return result
 end
 
 function UF.RefreshPowerTextColors(unit)
-  return UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_TEXT_COLORS")
+  local result = UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_TEXT_COLORS")
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshAllPowerTextColors")
+  return result
 end
 
 function UF.RefreshColors(unit)
@@ -433,7 +438,9 @@ function UF.RefreshColors(unit)
 end
 
 function UF.RefreshAlphas(unit)
-  return UF.RefreshElements(unit, ALPHA_ELEMENTS, "MSUF_ALPHA")
+  local result = UF.RefreshElements(unit, ALPHA_ELEMENTS, "MSUF_ALPHA")
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_RefreshAllUnitAlphas")
+  return result
 end
 
 function UF.RefreshBorders(unit)
@@ -518,7 +525,9 @@ function UF.RefreshTempMaxHealth(scope, reason)
 end
 
 function UF.RefreshPowerLayout(unit)
-  return UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_LAYOUT")
+  local result = UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_LAYOUT")
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ApplyPowerBarEmbedLayout_ForUnitKey")
+  return result
 end
 
 function UF.RefreshPowerLayoutForFrame(frame)
@@ -526,10 +535,16 @@ function UF.RefreshPowerLayoutForFrame(frame)
 end
 
 function UF.RefreshTextLayout(unit)
-  return UF.RefreshElements(unit, TEXT_ELEMENTS, "MSUF_TEXT_LAYOUT")
+  local result = UF.RefreshElements(unit, TEXT_ELEMENTS, "MSUF_TEXT_LAYOUT")
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ForceTextLayoutForUnitKey")
+  return result
 end
 
-UF.ApplyUnitFrameKey = UF.Apply
+function UF.ApplyUnitFrameKey(unit, applyMask)
+  local result = UF.Apply(unit, applyMask)
+  MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_ApplyUnitFrameKey_Immediate")
+  return result
+end
 
 MSUF.UnitFrames = UF
 ExportPublic("MSUF_UnitFrames", UF.frames)

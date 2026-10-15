@@ -1094,7 +1094,9 @@ local STATUS_REFRESH_ALIASES = {
 }
 for i = 1, #STATUS_REFRESH_ALIASES do
   _G[STATUS_REFRESH_ALIASES[i]] = function(unit, reason)
-    return RefreshStatus(unit, reason or "MSUF_STATUS")
+    local result = RefreshStatus(unit, reason or "MSUF_STATUS")
+    MSUF.EventBus:Publish("CONFIG_APPLIED", STATUS_REFRESH_ALIASES[i])
+    return result
   end
 end
 

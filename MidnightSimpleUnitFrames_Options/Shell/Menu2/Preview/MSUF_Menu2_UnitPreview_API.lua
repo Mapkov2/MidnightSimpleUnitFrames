@@ -1,4 +1,4 @@
---- Unit preview public API, refresh hooks, and legacy globals.
+--- Unit preview public API, settings subscription, and legacy globals.
 -- Bridges preview refresh calls for Menu2 without owning live unit-frame runtime state.
 
 local _, MSUF = ...
@@ -8,7 +8,6 @@ local Preview = MSUF.UFPreview or MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
 local C_Timer = M.MenuTimer or _G.C_Timer
-local WordList = M.WordList
 local InstallPreviewHooks
 local UninstallPreviewHooks
 local UNIT_PREVIEW_REFRESH_DELAY = 0.05
@@ -115,9 +114,17 @@ local function RequestRefreshForBox(box, reason)
             RequestRefreshForBox(box, refreshReason or "PLAYER_REGEN_ENABLED")
             return
         end
-        if BoxOwnerInactive(box) then return end
+        if BoxOwnerInactive(box) then
+            if Preview.active == box then Preview.active = nil end
+            if UninstallPreviewHooks then UninstallPreviewHooks() end
+            return
+        end
         local currentHostShown = box._msuf2UnitPageHostShown
-        if not box._msuf2PinnedFloating and type(currentHostShown) == "function" and not currentHostShown() then return end
+        if not box._msuf2PinnedFloating and type(currentHostShown) == "function" and not currentHostShown() then
+            if Preview.active == box then Preview.active = nil end
+            if UninstallPreviewHooks then UninstallPreviewHooks() end
+            return
+        end
         local queuedRefresh = Preview.Refresh
         -- IsVisible trails Show/parent visibility changes by a frame. Ownership
         -- above is based on stable shown/page state, so compose the preview as
@@ -152,68 +159,39 @@ end)
 ExportPublic("MSUF_UFPreview_SelectStatusIcon", function(id)
     Preview.SelectStatusIcon(id)
 end)
-local PREVIEW_HOOK_NAMES = WordList [[
-MSUF_ForceTextLayoutForUnitKey MSUF_UpdateAllFonts MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures MSUF_UpdateAllBarTextures_Immediate
-MSUF_UpdateCastbarVisuals MSUF_ApplyCastbarUnitAndSync MSUF_ApplyCastbarVisualsForUnit MSUF_SyncCastbarPositionPopup MSUF_SyncUnitPositionPopup MSUF_ApplyUnitFrameKey_Immediate
-MSUF_UFCore_RefreshSettingsCache MSUF_RefreshAllIdentityColors MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_RefreshAllUnitAlphas MSUF_RequestAlphaRefresh
-MSUF_ClassPower_Apply MSUF_ClassPower_Refresh MSUF_ApplyPowerBarEmbedLayout MSUF_ApplyPowerBarEmbedLayout_All MSUF_ApplyPowerBarEmbedLayout_ForUnitKey MSUF_RefreshRaidMarkerFrames
-MSUF_RefreshLeaderIconFrames MSUF_RefreshLevelIndicatorFrames MSUF_RefreshIdentityTextFrames MSUF_RefreshEliteIconFrames MSUF_RequestStatusTextRefresh MSUF_RequestStatusCombatIndicatorRefresh
-MSUF_RequestStatusRestingIndicatorRefresh MSUF_RequestStatusIncomingResIndicatorRefresh MSUF_SyncAuras3PositionPopup
-MSUF_RefreshUnitTextureLayers
-]]
-local wrappedNames = {}
-local wrappers = {}
-local lastPreviewHookScanAt = -100
-local function FinishPreviewHook(name, ...)
-    if not PreviewInCombat() then Preview.RequestRefresh(name) end
-    return ...
-end
+local bus = MSUF.EventBus
+local CONFIG_SUBSCRIBER = "Menu2.UnitPreview.ConfigApplied"
+local subscribed = false
 UninstallPreviewHooks = function()
-    for name, original in pairs(wrappedNames) do
-        -- Restore only while this wrapper is the outermost one. When another
-        -- wrapper sits on top (Edit Mode's preview reforce wraps some of the
-        -- same globals), this one stays in that chain and passes straight
-        -- through while no preview is shown; forgetting it would wrap the
-        -- chain again on every show.
-        if _G[name] == wrappers[name] then
-            _G[name] = original
-            wrappedNames[name] = nil
-            wrappers[name] = nil
-        end
-    end
-    -- A preview shown again scans at once instead of waiting out the throttle.
-    lastPreviewHookScanAt = -100
+    -- A hidden old box must not unsubscribe the newly active owner.
+    local active = Preview.active
+    if active and active.IsShown and active:IsShown() and not BoxOwnerInactive(active) then return end
+    if not subscribed then return end
+    bus:Unregister("CONFIG_APPLIED", CONFIG_SUBSCRIBER)
+    subscribed = false
 end
 Preview.UninstallRefreshHooks = UninstallPreviewHooks
-InstallPreviewHooks = function()
-    if not (Preview.active and Preview.active.IsShown and Preview.active:IsShown()) then
+local function ConfigApplied(_, reason)
+    local active = Preview.active
+    if not active or not active:IsShown() or BoxOwnerInactive(active) then
+        if active then CancelQueuedRefresh(active) end
+        if Preview.active == active then Preview.active = nil end
         UninstallPreviewHooks()
         return
     end
-    local now = (_G.GetTime and _G.GetTime()) or 0
-    if now - lastPreviewHookScanAt < 1.0 then return end
-    lastPreviewHookScanAt = now
-    for i = 1, #PREVIEW_HOOK_NAMES do
-        local name = PREVIEW_HOOK_NAMES[i]
-        local fn = _G[name]
-        if type(fn) == "function" and not wrappedNames[name] then
-            local original = fn
-            local function wrapper(...)
-                if not (Preview.active and Preview.active.IsShown and Preview.active:IsShown()) then
-                    UninstallPreviewHooks()
-                    return original(...)
-                end
-                return FinishPreviewHook(name, original(...))
-            end
-            wrappedNames[name] = original
-            wrappers[name] = wrapper
-            _G[name] = wrapper
-        end
-    end
+    -- The previous direct-call hooks suppressed settings notifications in
+    -- combat. Explicit refresh requests retain the existing deferred retry.
+    if not PreviewInCombat() then Preview.RequestRefresh(reason) end
+    if not Preview.active then UninstallPreviewHooks() end
 end
-
---- Wrapping the full runtime refresh surface is only useful while a preview exists.
---- Wrappers are removed as soon as the active preview is hidden or inactive.
+InstallPreviewHooks = function()
+    if not Preview.active or not Preview.active:IsShown() or BoxOwnerInactive(Preview.active) then
+        UninstallPreviewHooks()
+        return
+    end
+    if subscribed then return end
+    subscribed = bus:Register("CONFIG_APPLIED", CONFIG_SUBSCRIBER, ConfigApplied)
+end
 
 function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     local build = Preview._BuildPreview

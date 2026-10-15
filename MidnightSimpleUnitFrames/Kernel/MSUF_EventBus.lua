@@ -245,6 +245,9 @@ function bus:DefineEvent(event)
     self.internalEvents[event] = true
 end
 
+-- Settings owners publish after applying, independently of the Options addon.
+bus:DefineEvent("CONFIG_APPLIED")
+
 -- Native dispatch retains its instruction budget; internal publication is a cold path.
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
