@@ -1,0 +1,2 @@
+COMMAND: python tools/quality_ratchet.py --check --root C:\tmp\m7\w5-preview-oracle
+quality ratchet (classic): 488 files, 0 problems, 0 improved, 0 new, allowlist 0 entries (0 stale)

@@ -1,0 +1,4 @@
+Existing frozen corpus overwrite attempt: correctly rejected with exit 2.
+usage: preview_oracle_capture.py [-h] --root ROOT --lua LUA --base BASE
+                                 --output OUTPUT
+preview_oracle_capture.py: error: output must not exist; capture never overwrites a frozen or candidate corpus

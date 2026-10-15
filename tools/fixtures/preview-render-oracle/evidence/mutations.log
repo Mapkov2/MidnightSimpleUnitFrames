@@ -1,0 +1,89 @@
+COMMAND: python tools/tests/preview_oracle_mutation_smoke.py C:\tmp\m7\w5-preview-oracle
+BASELINE MATCH unit-player-default
+REJECTED unit-player-default/color exit=1
+  MUTATION color unit-player-default unit/Health
+  PREVIEW MISMATCH Mainline/unit-player-default (4 differences)
+  /unit/Health/color/1: expected 1, actual 0.031
+REJECTED unit-player-default/position exit=1
+  MUTATION position unit-player-default unit
+  PREVIEW MISMATCH Mainline/unit-player-default (2 differences)
+  /unit/points/CENTER/x: expected 0, actual 7
+REJECTED unit-player-default/size exit=1
+  MUTATION size unit-player-default unit
+  PREVIEW MISMATCH Mainline/unit-player-default (2 differences)
+  /unit/height: expected 40, actual 43
+BASELINE MATCH unit-target-styled
+REJECTED unit-target-styled/texcoord exit=1
+  MUTATION texcoord unit-target-styled unit/portrait/tex
+  PREVIEW MISMATCH Mainline/unit-target-styled (4 differences)
+  /unit/portrait/tex/texCoord/1: expected 0, actual 0.21
+REJECTED unit-player-default/visibility exit=1
+  MUTATION visibility unit-player-default unit
+  PREVIEW MISMATCH Mainline/unit-player-default (23 differences)
+  /unit/effectiveShown: expected true, actual false
+REJECTED unit-player-default/font exit=1
+  MUTATION font unit-player-default unit/cast/text
+  PREVIEW MISMATCH Mainline/unit-player-default (1 differences)
+  /unit/cast/text/fontSize: expected 14, actual 18
+REJECTED unit-player-default/layer exit=1
+  MUTATION layer unit-player-default unit/_msufPreviewFrameBorder/_edges/bottom
+  PREVIEW MISMATCH Mainline/unit-player-default (1 differences)
+  /unit/_msufPreviewFrameBorder/_edges/bottom/drawSublevel: expected nil, actual 6
+REJECTED unit-player-default/texture exit=1
+  MUTATION texture unit-player-default unit/_msufPreviewFrameBorder/_edges/bottom
+  PREVIEW MISMATCH Mainline/unit-player-default (1 differences)
+  /unit/_msufPreviewFrameBorder/_edges/bottom/texture: expected "Interface\092Buttons\092WHITE8X8", actual "Interface/Icons/INV_Misc_QuestionMark"
+REJECTED unit-target-styled/mask exit=1
+  MUTATION mask unit-target-styled unit/portrait/tex
+  PREVIEW MISMATCH Mainline/unit-target-styled (1 differences)
+  /unit/portrait/tex/masks/1: expected "unit/portrait/_msufPreviewShapeMask", actual nil
+REJECTED unit-player-default/value exit=1
+  MUTATION value unit-player-default unit/Health
+  PREVIEW MISMATCH Mainline/unit-player-default (1 differences)
+  /unit/Health/value: expected 0.72, actual 0.845
+BASELINE MATCH unit-player-native-portrait
+REJECTED unit-player-native-portrait/portrait exit=1
+  MUTATION portrait unit-player-native-portrait unit/portrait/tex
+  PREVIEW MISMATCH Mainline/unit-player-native-portrait (1 differences)
+  /unit/portrait/tex/oraclePortrait/unit: expected "player", actual "pet"
+REJECTED unit-player-default/text exit=1
+  MUTATION text unit-player-default unit/cast/text
+  PREVIEW MISMATCH Mainline/unit-player-default (1 differences)
+  /unit/cast/text/text: expected "Arcane Surge", actual "Arcane Surge changed"
+BASELINE MATCH classpower-combo-circle
+REJECTED classpower-combo-circle/alpha exit=1
+  MUTATION alpha classpower-combo-circle resources/class
+  PREVIEW MISMATCH Mainline/classpower-combo-circle (54 differences)
+  /resources/class/alpha: expected 1, actual 0.271
+REJECTED classpower-combo-circle/size exit=1
+  MUTATION size classpower-combo-circle resources/class
+  PREVIEW MISMATCH Mainline/classpower-combo-circle (2 differences)
+  /resources/class/height: expected 11, actual 14
+REJECTED classpower-combo-circle/visibility exit=1
+  MUTATION visibility classpower-combo-circle resources/class
+  PREVIEW MISMATCH Mainline/classpower-combo-circle (16 differences)
+  /resources/class/effectiveShown: expected true, actual false
+BASELINE MATCH group-party-default
+REJECTED group-party-default/extra exit=1
+  MUTATION extra group-party-default group
+  PREVIEW MISMATCH Mainline/group-party-default (1 differences)
+  /group/@Texture[1]: expected nil, actual {["alpha"]=1,["colorTexture"]={[1]=1,[2]=0,[3]=1,[4]=1},["effectiveAlpha"]=1,["effectiveScale"]=0.864,["effectiveShown"]=true,["frameLevel"]=1,["frameStrata"]="MEDIUM",["height"]=20,["kind"]="Texture",["masks"]={},["parent"]="group",["points"]={},["scale"]=1,["shown"]=true,["vertexColor"]={[1]=1,[2]=0,[3]=1,[4]=1},["width"]=100}
+REJECTED group-party-default/position exit=1
+  MUTATION position group-party-default group
+  PREVIEW MISMATCH Mainline/group-party-default (2 differences)
+  /group/points/TOPLEFT/x: expected -40, actual -33
+REJECTED group-party-default/color exit=1
+  MUTATION color group-party-default group/_absorb
+  PREVIEW MISMATCH Mainline/group-party-default (4 differences)
+  /group/_absorb/color/1: expected 1, actual 0.031
+BASELINE MATCH castbar-target-channel
+REJECTED castbar-target-channel/texcoord exit=1
+  MUTATION texcoord castbar-target-channel castbar/iconTexture
+  PREVIEW MISMATCH Mainline/castbar-target-channel (4 differences)
+  /castbar/iconTexture/texCoord/1: expected 0.08, actual 0.21
+BASELINE MATCH castbar-player-normal
+REJECTED castbar-player-normal/font exit=1
+  MUTATION font castbar-player-normal castbar/castText
+  PREVIEW MISMATCH Mainline/castbar-player-normal (1 differences)
+  /castbar/castText/fontSize: expected 14, actual 18
+preview_oracle_mutation_smoke: ok (20 actual output mutations rejected)

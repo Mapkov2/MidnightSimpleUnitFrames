@@ -1,0 +1,3 @@
+Final audit: 114 owned paths, 88 per-preview fixtures, 33338 region observations, 20 typed native mutations rejected, 6 Lua syntax checks passed.
+All fixture checksums and capture harness hashes match. Addon/locales/profile corpus/old goldens unchanged. No staged content. Detached HEAD 3feb8c771f6d2f32d3fd8a475a0134faf40beb4f.
+Focused/full gate and independent review are pending with integration owner. No gate wrapper was run.

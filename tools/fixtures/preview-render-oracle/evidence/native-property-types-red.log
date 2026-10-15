@@ -1,0 +1,6 @@
+RED contract before native property type normalization
+C:/Users/Marco/AppData/Local/Temp/msuf-lua51/portable/lua.exe: tools/tests/preview_oracle_contract_smoke.lua:55: Frame ownership/cache fields were mistaken for native text/texture/statusbar properties
+stack traceback:
+	[C]: in function 'assert'
+	tools/tests/preview_oracle_contract_smoke.lua:55: in main chunk
+	[C]: ?

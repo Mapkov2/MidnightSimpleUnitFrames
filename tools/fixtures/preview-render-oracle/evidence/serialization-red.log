@@ -1,0 +1,6 @@
+RED contract before serialization correction
+C:/Users/Marco/AppData/Local/Temp/msuf-lua51/portable/lua.exe: tools/tests/preview_oracle_contract_smoke.lua:46: fixture text serialization changed native text
+stack traceback:
+	[C]: in function 'assert'
+	tools/tests/preview_oracle_contract_smoke.lua:46: in main chunk
+	[C]: ?

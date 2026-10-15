@@ -1,0 +1,109 @@
+COMMAND: lua.exe tools/tests/preview_render_oracle_smoke.lua C:\tmp\m7\w5-preview-oracle Mainline
+MATCH Mainline/unit-player-default: 343 regions
+MATCH Mainline/unit-target-styled: 255 regions
+MATCH Mainline/unit-player-native-portrait: 354 regions
+MATCH Mainline/unit-pet-status: 260 regions
+MATCH Mainline/unit-player-resources: 343 regions
+MATCH Mainline/unit-player-layers-hidden: 341 regions
+MATCH Mainline/unit-player-animation: 343 regions
+MATCH Mainline/group-party-default: 924 regions
+MATCH Mainline/group-party-portrait-auras: 905 regions
+MATCH Mainline/group-raid-default: 924 regions
+MATCH Mainline/group-party-layers-hidden: 924 regions
+MATCH Mainline/castbar-player-normal: 38 regions
+MATCH Mainline/castbar-target-channel: 38 regions
+MATCH Mainline/castbar-player-interrupt: 38 regions
+MATCH Mainline/classpower-combo-circle: 167 regions
+MATCH Mainline/classpower-combo-bar-hidden: 172 regions
+MATCH Mainline/unit-boss-default: 262 regions
+MATCH Mainline/unit-arena-detached: 265 regions
+MATCH Mainline/castbar-player-empower: 38 regions
+MATCH Mainline/classpower-shadow-continuous: 172 regions
+preview_render_oracle_smoke: ok (Mainline, 20 previews, 7106 regions)
+EXIT: 0
+COMMAND: lua.exe tools/tests/preview_render_oracle_smoke.lua C:\tmp\m7\w5-preview-oracle Forever
+MATCH Forever/unit-player-default: 301 regions
+MATCH Forever/unit-target-styled: 263 regions
+MATCH Forever/unit-player-native-portrait: 307 regions
+MATCH Forever/unit-pet-status: 268 regions
+MATCH Forever/unit-player-resources: 301 regions
+MATCH Forever/unit-player-layers-hidden: 299 regions
+MATCH Forever/unit-player-animation: 301 regions
+MATCH Forever/group-party-default: 943 regions
+MATCH Forever/group-party-portrait-auras: 924 regions
+MATCH Forever/group-raid-default: 943 regions
+MATCH Forever/group-party-layers-hidden: 943 regions
+MATCH Forever/castbar-player-normal: 38 regions
+MATCH Forever/castbar-target-channel: 38 regions
+MATCH Forever/castbar-player-interrupt: 38 regions
+MATCH Forever/classpower-combo-circle: 167 regions
+MATCH Forever/classpower-combo-bar-hidden: 172 regions
+MATCH Forever/unit-boss-default: 270 regions
+preview_render_oracle_smoke: ok (Forever, 17 previews, 6516 regions)
+EXIT: 0
+COMMAND: lua.exe tools/tests/preview_render_oracle_smoke.lua C:\tmp\m7\w5-preview-oracle Vanilla
+MATCH Vanilla/unit-player-default: 305 regions
+MATCH Vanilla/unit-target-styled: 267 regions
+MATCH Vanilla/unit-player-native-portrait: 308 regions
+MATCH Vanilla/unit-pet-status: 272 regions
+MATCH Vanilla/unit-player-resources: 305 regions
+MATCH Vanilla/unit-player-layers-hidden: 303 regions
+MATCH Vanilla/unit-player-animation: 305 regions
+MATCH Vanilla/group-party-default: 932 regions
+MATCH Vanilla/group-party-portrait-auras: 918 regions
+MATCH Vanilla/group-raid-default: 932 regions
+MATCH Vanilla/group-party-layers-hidden: 932 regions
+MATCH Vanilla/castbar-player-normal: 38 regions
+MATCH Vanilla/castbar-target-channel: 38 regions
+MATCH Vanilla/castbar-player-interrupt: 38 regions
+MATCH Vanilla/classpower-combo-circle: 167 regions
+MATCH Vanilla/classpower-combo-bar-hidden: 172 regions
+preview_render_oracle_smoke: ok (Vanilla, 16 previews, 6232 regions)
+EXIT: 0
+COMMAND: lua.exe tools/tests/preview_render_oracle_smoke.lua C:\tmp\m7\w5-preview-oracle TBC
+MATCH TBC/unit-player-default: 315 regions
+MATCH TBC/unit-target-styled: 267 regions
+MATCH TBC/unit-player-native-portrait: 318 regions
+MATCH TBC/unit-pet-status: 272 regions
+MATCH TBC/unit-player-resources: 315 regions
+MATCH TBC/unit-player-layers-hidden: 313 regions
+MATCH TBC/unit-player-animation: 315 regions
+MATCH TBC/group-party-default: 937 regions
+MATCH TBC/group-party-portrait-auras: 923 regions
+MATCH TBC/group-raid-default: 937 regions
+MATCH TBC/group-party-layers-hidden: 937 regions
+MATCH TBC/castbar-player-normal: 38 regions
+MATCH TBC/castbar-target-channel: 38 regions
+MATCH TBC/castbar-player-interrupt: 38 regions
+MATCH TBC/classpower-combo-circle: 167 regions
+MATCH TBC/classpower-combo-bar-hidden: 172 regions
+MATCH TBC/unit-arena-detached: 277 regions
+preview_render_oracle_smoke: ok (TBC, 17 previews, 6579 regions)
+EXIT: 0
+COMMAND: lua.exe tools/tests/preview_render_oracle_smoke.lua C:\tmp\m7\w5-preview-oracle Mists
+MATCH Mists/unit-player-default: 347 regions
+MATCH Mists/unit-target-styled: 259 regions
+MATCH Mists/unit-player-native-portrait: 350 regions
+MATCH Mists/unit-pet-status: 264 regions
+MATCH Mists/unit-player-resources: 347 regions
+MATCH Mists/unit-player-layers-hidden: 345 regions
+MATCH Mists/unit-player-animation: 347 regions
+MATCH Mists/group-party-default: 918 regions
+MATCH Mists/group-party-portrait-auras: 904 regions
+MATCH Mists/group-raid-default: 918 regions
+MATCH Mists/group-party-layers-hidden: 918 regions
+MATCH Mists/castbar-player-normal: 38 regions
+MATCH Mists/castbar-target-channel: 38 regions
+MATCH Mists/castbar-player-interrupt: 38 regions
+MATCH Mists/classpower-combo-circle: 167 regions
+MATCH Mists/classpower-combo-bar-hidden: 172 regions
+MATCH Mists/unit-boss-default: 266 regions
+MATCH Mists/unit-arena-detached: 269 regions
+preview_render_oracle_smoke: ok (Mists, 18 previews, 6905 regions)
+EXIT: 0
+COMMAND: lua.exe tools/tests/preview_oracle_contract_smoke.lua C:\tmp\m7\w5-preview-oracle
+preview_oracle_contract_smoke: ok (semantic roles, anchors, inheritance, removal, numeric precision)
+EXIT: 0
+COMMAND: python.exe tools/tests/preview_oracle_corpus_smoke.py C:\tmp\m7\w5-preview-oracle
+preview_oracle_corpus_smoke: ok (88 frozen per-preview fixtures, base 3feb8c77)
+EXIT: 0

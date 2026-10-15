@@ -1,0 +1,24 @@
+luac -l -p tools/tests/preview_oracle_cases.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_oracle_cases.lua:0,0> (7 instructions, 28 bytes at 00839488)
+0+ params, 2 slots, 0 upvalues, 1 local, 2 constants, 2 functions
+luac -l -p tools/tests/preview_oracle_contract_smoke.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_oracle_contract_smoke.lua:0,0> (252 instructions, 1008 bytes at 008194A8)
+0+ params, 22 slots, 0 upvalues, 16 locals, 58 constants, 1 function
+luac -l -p tools/tests/preview_oracle_mutations.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_oracle_mutations.lua:0,0> (49 instructions, 196 bytes at 00909498)
+0+ params, 6 slots, 0 upvalues, 5 locals, 15 constants, 18 functions
+luac -l -p tools/tests/preview_oracle_regions.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_oracle_regions.lua:0,0> (176 instructions, 704 bytes at 00839488)
+0+ params, 58 slots, 0 upvalues, 15 locals, 107 constants, 15 functions
+luac -l -p tools/tests/preview_oracle_world.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_oracle_world.lua:0,0> (109 instructions, 436 bytes at 00859488)
+0+ params, 12 slots, 0 upvalues, 11 locals, 61 constants, 9 functions
+luac -l -p tools/tests/preview_render_oracle_smoke.lua: exit 0
+
+main <C:\tmp\m7\w5-preview-oracle\tools\tests\preview_render_oracle_smoke.lua:0,0> (320 instructions, 1280 bytes at 009394A0)
+0+ params, 40 slots, 0 upvalues, 55 locals, 67 constants, 0 functions

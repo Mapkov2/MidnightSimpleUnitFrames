@@ -1,0 +1,6 @@
+RED contract before external-mask observation closure
+C:/Users/Marco/AppData/Local/Temp/msuf-lua51/portable/lua.exe: tools/tests/preview_oracle_contract_smoke.lua:52: external mask texture change escaped
+stack traceback:
+	[C]: in function 'assert'
+	tools/tests/preview_oracle_contract_smoke.lua:52: in main chunk
+	[C]: ?

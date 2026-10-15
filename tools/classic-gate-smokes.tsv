@@ -781,3 +781,7 @@ clients+Forever	lua	tools/tests/preview_config_apply_bridge_smoke.lua	{root} {fl
 clients+Forever	lua	tools/tests/preview_spec_lifecycle_smoke.lua	{root} {flavor}	Preview reads preserve live specs and deferred applies: {flavor}
 clients+Forever	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} {flavor}	Runtime and menu call the same portrait, resource, health and castbar rules: {flavor}
 clients+Forever	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} {flavor}	Full-overlay portrait preview matches live dressing: {flavor}
+clients+Forever	lua	tools/tests/preview_render_oracle_smoke.lua	{root} {flavor}	Frozen actual preview render output: {flavor}
+-	lua	tools/tests/preview_oracle_contract_smoke.lua	{root}	Preview observation semantic roles and native-state contract
+-	python	tools/tests/preview_oracle_mutation_smoke.py	{root}	Known actual preview output mutations must fail comparison
+-	python	tools/tests/preview_oracle_corpus_smoke.py	{root}	Frozen legacy preview fixture inventory and byte integrity

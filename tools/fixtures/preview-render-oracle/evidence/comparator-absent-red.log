@@ -1,0 +1,5 @@
+Negative control: load the actual renderer with the comparator absent in a disposable wrapper.
+MUTATION size unit-player-default unit
+MATCH Mainline/unit-player-default: 343 regions
+preview_render_oracle_smoke: ok (Mainline, 1 previews, 343 regions)
+RED guard assertion: expected a nonzero comparison failure; got exit 0. The visible size mutation escaped without the comparator.
