@@ -289,7 +289,8 @@ assert(has(groupConfig, "out.buffIncludeHash, out.buffIncludeSignature, allowDur
 -- The normalization pipeline lives in the normalizer split out of Profiles.
 local profiles = readFile("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
     .. readFile("MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua")
-assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
+local normalizationRevision = tonumber(assert(profiles:match("MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = (%d+)")))
+assert(normalizationRevision >= 21
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false)")
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true)"),
     "stored/imported profiles do not repair retired Group filter tokens")

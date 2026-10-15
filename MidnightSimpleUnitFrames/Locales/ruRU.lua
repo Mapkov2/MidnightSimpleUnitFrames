@@ -6980,6 +6980,13 @@ L["New-character default"] = "По умолчанию для новых перс
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Удалить выбранные профили (%d)?\n\n%s\n\nПерсонажи, которые их используют, перейдут на Default. Без экспорта это нельзя отменить."
 L["Profiles deleted: %d"] = "Удалено профилей: %d"
 
+
+-- Group filter import compatibility.
+L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "Импортированный профиль '%s' содержит выбор групп без отметки формата.\nОн может происходить из старых флажков или быть намеренным.\n\nСохранить выбор или исправить затронутые фильтры, чтобы показать все группы?\nЯвные исключения и варианты профиля сохранятся."
+L["Repair legacy filters"] = "Исправить старые фильтры"
+L["Keep group selection"] = "Сохранить выбор групп"
+L["Group selection changed; no legacy filter repair was applied."] = "Выбор групп изменился; старые фильтры не исправлены."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

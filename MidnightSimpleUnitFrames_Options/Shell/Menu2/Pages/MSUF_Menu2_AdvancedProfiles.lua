@@ -280,6 +280,7 @@ function ProfilePrompts.ConfirmDelete(name, after)
     })
 end
 local function ShowImportReloadPrompt()
+    if MSUF.ProfileIOAfterGroupFilterRepair(ShowImportReloadPrompt) then return end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
         return
@@ -313,6 +314,7 @@ local function ShowProfileSwitchReloadPrompt(profileName)
     })
 end
 local function ReloadAfterNewProfileImport(profileName)
+    if MSUF.ProfileIOAfterGroupFilterRepair(function() ReloadAfterNewProfileImport(profileName) end) then return end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload after combat with /reload.", tostring(profileName))
         return

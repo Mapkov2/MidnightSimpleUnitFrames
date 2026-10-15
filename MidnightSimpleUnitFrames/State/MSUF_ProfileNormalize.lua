@@ -296,7 +296,7 @@ local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
 --- using the narrower StateHelpers.DefaultsSpec. The two revisions are bumped
 --- independently and are deliberately not merged; keep both in mind when a
 --- key alias changes.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 22
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
 --- RC17's destructive hard cut established revision 1 as the canonical Unit
 --- Aura baseline. Later revisions may migrate ownership or storage in place;
@@ -530,9 +530,81 @@ local function MSUF_ProfileIO_CarryFormerResourceExtrasPatch(patch)
 end
 if MSUF.ProfileFields then MSUF.ProfileFields.RegisterPatchTranslator(MSUF_ProfileIO_CarryFormerResourceExtrasPatch) end
 
+local MSUF_PROFILEIO_GROUP_FILTER_KEYS = { "1", "2", "3", "4", "5", "6", "7", "8" }
+local function MSUF_ProfileIO_IsAmbiguousGroupFilter(filter)
+    if type(filter) ~= "table" then return false end
+    local count = 0
+    for key, value in pairs(filter) do
+        local index = type(key) == "number" and key or type(key) == "string" and tonumber(key)
+        if value ~= true or not index or index < 1 or index > 8 or index % 1 ~= 0 then return false end
+        local text = MSUF_PROFILEIO_GROUP_FILTER_KEYS[index]
+        if key ~= index and key ~= text then return false end
+        if filter[index] ~= nil and filter[text] ~= nil then return false end
+        count = count + 1
+    end
+    return count > 0 and count < 8
+end
+
+-- Old checkboxes and intentional imported allow-lists can share this shape.
+-- Preserve every selection; an import may offer an explicit filter-only repair.
+-- The stamp is a portable data-format version, not an import validation marker.
+local function MSUF_ProfileIO_LegacyGroupFilterSnapshot(profile)
+    local choices
+    for _, key in ipairs(MSUF_PROFILEIO_GROUP_AURA_SCOPES) do
+        local scope = profile[key]
+        if type(scope) == "table" and scope._msufGroupFilterVersion == nil
+            and MSUF_ProfileIO_IsAmbiguousGroupFilter(scope.groupFilter) then
+            choices = choices or {}
+            choices[key] = MSUF.ProfileFields.CopySnapshot(scope.groupFilter)
+        end
+    end
+    return choices
+end
+local function MSUF_ProfileIO_PrepareGroupFrameImport(profile, kind)
+    if kind ~= "all" and kind ~= "groupframe" then return nil end
+    if kind == "groupframe" then
+        for _, key in ipairs(MSUF_PROFILEIO_GROUP_AURA_SCOPES) do
+            local scope = profile[key]
+            local auras = type(scope) == "table" and scope.auras
+            if type(auras) == "table" and tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) == MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION
+                and auras.renderer == nil then
+                for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+                    if type(auras[lane]) == "table" and next(auras[lane]) ~= nil then
+                        auras.renderer = "CUSTOM"
+                        break
+                    end
+                end
+            end
+        end
+    end
+    return MSUF_ProfileIO_LegacyGroupFilterSnapshot(profile)
+end
+local function MSUF_ProfileIO_NormalizeLegacyGroupFilters(profile, apply)
+    local changed = false
+    for _, key in ipairs(MSUF_PROFILEIO_GROUP_AURA_SCOPES) do
+        local scope = profile[key]
+        if type(scope) == "table" then
+            local version = scope._msufGroupFilterVersion
+            if version == nil then
+                local variants = MSUF.ProfileVariants
+                local overlaid = variants and variants.IsMaterialized(profile) and variants.HasExternalOverlay(key)
+                -- Variant overlays are modern explicit selections. Normalize
+                -- their base, never their materialized values.
+                if not overlaid then
+                    if apply ~= true then return true end
+                    scope._msufGroupFilterVersion = 1
+                    changed = true
+                end
+            end
+        end
+    end
+    return changed
+end
+
 local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if type(profile) ~= "table" then return false end
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
+    if MSUF_ProfileIO_NormalizeLegacyGroupFilters(profile, false) then return true end
     if profile.auras ~= nil or type(profile.auras2) == "table" then return true end
     local auras = type(profile.auras3) == "table" and profile.auras3 or nil
     if auras and not MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(auras) then
@@ -1279,6 +1351,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     changed = StateHelpers.MigrateSplitStatusText(profile, MSUF_PROFILEIO_TEXT_SCOPE_KEYS) or changed
     changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
+    changed = MSUF_ProfileIO_NormalizeLegacyGroupFilters(profile, true) or changed
     changed = MSUF_ProfileIO_CarryFormerResourceExtras(profile.bars) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
@@ -1324,6 +1397,8 @@ MSUF.ProfileNormalize = {
     EnsureProfileMenuDefaults = MSUF_ProfileIO_EnsureProfileMenuDefaults,
     NormalizeImportedFontSizes = MSUF_ProfileIO_NormalizeImportedFontSizes,
     NormalizeGFAuraFilterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken,
+    LegacyGroupFilterSnapshot = MSUF_ProfileIO_LegacyGroupFilterSnapshot,
+    PrepareGroupFrameImport = MSUF_ProfileIO_PrepareGroupFrameImport,
     CarryFormerResourceExtras = MSUF_ProfileIO_CarryFormerResourceExtras,
     CarryFormerResourceExtrasPatch = MSUF_ProfileIO_CarryFormerResourceExtrasPatch,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,

@@ -513,6 +513,7 @@ function Stage.BindPositionWriters(st)
         local conf = H.Conf(H.CurrentScope())
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
+            conf.auras.renderer = "CUSTOM"
             conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
             if handle._cfgTrackedBuff then
                 conf.auras[handle._cfgGroup].trackedAnchor = anchor
@@ -571,6 +572,7 @@ function Stage.BindPositionWriters(st)
         local cfgX, cfgY = Round((tonumber(x) or 0) + (dx * step)), Round((tonumber(y) or 0) + (dy * step))
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
+            conf.auras.renderer = "CUSTOM"
             conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
             if handle._cfgTrackedBuff then
                 conf.auras[handle._cfgGroup].trackedX = cfgX
@@ -656,6 +658,7 @@ function Stage.BindExactNudge(st)
         if not conf then return false end
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
+            conf.auras.renderer = "CUSTOM"
             conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
             local cfg = conf.auras[handle._cfgGroup]
             if handle._cfgTrackedBuff then cfg.trackedX, cfg.trackedY = x, y else cfg.x, cfg.y = x, y end

@@ -86,7 +86,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- add 1,430 LF bytes (TBC 14,784,140 -> 14,785,570). Increase only this
         -- source-size tripwire by that exact delta, retaining 860 bytes headroom;
         -- no startup catalog, Options code or runtime-cost budget changed.
-        assert(bytes < (suffix == "Mainline" and 16905000 or 14786430),
+        -- 2026-10-15 (group import compatibility): all clients +17,910 exact LF bytes
+        -- for cold import confirmation/format handling, reset safety and four
+        -- translated keys in twelve packs. No Options code or catalog is added.
+        assert(bytes < (suffix == "Mainline" and 16922910 or 14804340),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

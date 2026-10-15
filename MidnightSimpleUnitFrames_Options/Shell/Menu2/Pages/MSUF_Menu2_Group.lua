@@ -536,11 +536,12 @@ local function CaptureGroupAuraStyle(kind)
     return snapshot
 end
 
-local function ApplyGroupAuraStyleSnapshot(dstKind, snapshot)
+local function ApplyGroupAuraStyleSnapshot(dstKind, snapshot, activate)
     if type(snapshot) ~= "table" then return false end
     local dstConf = Conf(dstKind)
     dstConf.auras = type(dstConf.auras) == "table" and dstConf.auras or {}
     local dstAuras = dstConf.auras
+    if activate == true then dstAuras.renderer = "CUSTOM" end
     for i = 1, #GROUP_AURA_STYLE_ROOT_KEYS do
         local key = GROUP_AURA_STYLE_ROOT_KEYS[i]
         dstAuras[key] = DeepCopy(snapshot.root and snapshot.root[key])
@@ -558,7 +559,7 @@ local function ApplyGroupAuraStyleSnapshot(dstKind, snapshot)
 end
 
 local function CopyGroupAuraStyle(srcKind, dstKind)
-    return ApplyGroupAuraStyleSnapshot(dstKind, CaptureGroupAuraStyle(srcKind))
+    return ApplyGroupAuraStyleSnapshot(dstKind, CaptureGroupAuraStyle(srcKind), true)
 end
 local function CopyGroupSpellIndicatorStyle(srcKind, dstKind)
     local srcConf = Conf(srcKind)

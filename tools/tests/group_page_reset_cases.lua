@@ -9,7 +9,15 @@ local function Copy(value)
     for key, child in pairs(value) do out[key] = Copy(child) end
     return out
 end
-local mw = MenuWorld.Open(root, flavor, { page = "home", beforeOptions = function(world)
+local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(world)
+    -- The fixture has no spell catalog. Expose one actual cross-client preset
+    -- spell through the native API, keeping unknown client spell IDs absent.
+    local spellInfo = world.env.GetSpellInfo
+    world.env.GetSpellInfo = function(id)
+        if id == 1459 then return "Arcane Intellect", nil, 135932, nil, nil, nil, id end
+        return spellInfo(id)
+    end
+end, beforeOptions = function(world)
     local original = world.env.MSUF_TryDecodeCompactString
     world.env.MSUF_TryDecodeCompactString = function(text)
         if text == compact then return Copy(decoded) end
@@ -53,6 +61,11 @@ local expected = Copy(db)
 local expectedApply = expected
 Check(db.gf_raid.maxColumns == 8, "factory cannot display all raid groups")
 local create = mw.core.MSUF_CreateFactoryDefaultProfile
+local factory = create()
+mw.core.ProfileNormalize.TranslateProfileToCurrent(factory, { trustNormalizationMarker = true, trustProfileMetadata = true })
+local once = Copy(factory)
+mw.core.ProfileNormalize.TranslateProfileToCurrent(factory, { trustNormalizationMarker = true, trustProfileMetadata = true })
+Equal(factory, once, "factory normalization idempotence")
 M.UnitSectionsShared.FactoryProfile() -- Prime the independent, session-cached menu defaults.
 local factoryCalls, earlyRefreshes, requests, notices = 0, 0, 0, 0
 mw.core.MSUF_CreateFactoryDefaultProfile = function()
@@ -97,6 +110,7 @@ for index, page in ipairs(PAGES) do
     M.SetMenuStateValue("gfScope", index % 2 == 0 and "party" or "raid")
     -- Compare with a fresh factory in this same view, including lazy defaults.
     local baseline = create()
+    mw.core.ProfileNormalize.TranslateProfileToCurrent(baseline, { trustNormalizationMarker = true, trustProfileMetadata = true })
     for _, key in ipairs(ROOTS) do db[key] = Copy(baseline[key]) end
     GF.InvalidateConfCache()
     GF.EnsureDB()
@@ -126,6 +140,17 @@ for index, page in ipairs(PAGES) do
 end
 -- Real input callbacks must opt in before preview and discard pre-reset drags.
 expectedApply = nil
+-- The current Mythic 1-4 selection is its own flag, not a legacy true-prefix.
+if mw.core.Client.SupportsGroupKind("mythicraid") then
+    Check(M.GroupPage.Set("mythicraid", "hideMythicGroupsFiveToEight", true, "rebuild"), "current group-selection writer refused")
+    local selected = Copy(db.gf_mythicraid)
+    mw.core.ProfileNormalize.TranslateProfileToCurrent(db)
+    mw.core.ProfileNormalize.TranslateProfileToCurrent(db)
+    Equal(db.gf_mythicraid, selected, "current four-group selection after repeated normalization")
+    Check(db.gf_mythicraid.hideMythicGroupsFiveToEight and db.gf_mythicraid.groupFilter == nil,
+        "current four-group selection was converted to a legacy mask")
+    Check(M.ResetPageToDefaults("gf_layout") == true, "reset after current selection refused")
+end
 M.SetMenuStateValue("gfScope", "raid")
 M.SetMenuStateValue("gfAuraLaneSelection", { raid = "buff" })
 M.SetMenuStateValue("gfAuraToolSelection", { raid = { buff = "layout" } })
@@ -138,6 +163,11 @@ local function Widget(suffix)
     error("missing Aura control " .. suffix)
 end
 local slider = Widget("layout.size")
+local enabledCommand = assert(Widget("group-workspace.root.enabled")._msuf2CommandAction)
+db.gf_raid.auras.renderer = "NATIVE_12_1"
+enabledCommand.set(not enabledCommand.get())
+Check(db.gf_raid.auras.renderer == "CUSTOM", "checkbox edit did not activate renderer")
+Check(M.ResetPageToDefaults("gf_auras") == true, "reset after checkbox refused")
 local command = assert(slider._msuf2CommandAction)
 db.gf_raid.auras.renderer = "NATIVE_12_1"
 slider._msuf2SliderActive = true
@@ -172,6 +202,52 @@ Check(model.WriteGroupBlacklistHidePermanent("raid", "buff", true), "blacklist e
 Check(db.gf_raid.auras.renderer == "CUSTOM" and db.gf_mythicraid.auras.renderer == "CUSTOM",
     "blacklist edit did not activate both scoped owners")
 Check(M.ResetPageToDefaults("gf_auras") == true, "reset after blacklist refused")
+local preset
+for _, entry in ipairs(model.GroupBlacklistPresetValues("buff")) do
+    if #model.GroupBlacklistSpellValues("buff", entry.value) > 0 then preset = entry.value; break end
+end
+Check(preset ~= nil, "real blacklist preset missing")
+db.gf_raid.auras.renderer, db.gf_mythicraid.auras.renderer = "NATIVE_12_1", "NATIVE_12_1"
+Check(model.AddGroupBlacklistPresetGroup("raid", "buff", preset) > 0, "blacklist preset wrote nothing")
+Check(db.gf_raid.auras.renderer == "CUSTOM" and db.gf_mythicraid.auras.renderer == "CUSTOM",
+    "blacklist preset did not activate its affected scopes")
+Check(M.ResetPageToDefaults("gf_auras") == true, "reset after blacklist preset refused")
+db.gf_party.auras.buff.cooldownSize = 23
+db.gf_raid.auras.renderer = "NATIVE_12_1"
+Check(M.GroupPage.CopyGroupSettings("party", "raid", { aurastyle = true }), "aura style Copy To refused")
+Check(db.gf_raid.auras.renderer == "CUSTOM" and db.gf_raid.auras.buff.cooldownSize == 23,
+    "aura style Copy To did not activate the written settings")
+Check(M.ResetPageToDefaults("gf_auras") == true, "reset after style copy refused")
+local installHandles, handleBundle = M.GroupPreviewHandles.Install
+M.GroupPreviewHandles.Install = function(...)
+    handleBundle = installHandles(...)
+    return handleBundle
+end
+local previewBox = M.GroupPreview.CreateNative(env.UIParent, { width = 720, key = "gf_auras" })
+M.GroupPreviewHandles.Install = installHandles
+local auraHandle
+for key, handle in pairs(previewBox._handles) do
+    if handle._cfgGroup == "buff" and not handle._cfgTrackedBuff then auraHandle = key; break end
+end
+Check(auraHandle ~= nil, "real aura preview handle missing")
+db.gf_raid.auras.renderer = "NATIVE_12_1"
+Check(previewBox:NudgeHandleExact(auraHandle, 1, 0) == true, "exact aura preview nudge refused")
+Check(db.gf_raid.auras.renderer == "CUSTOM", "exact aura preview nudge did not activate renderer")
+Check(M.ResetPageToDefaults("gf_auras") == true, "reset after preview nudge refused")
+db.gf_raid.auras.renderer = "NATIVE_12_1"
+Check(handleBundle.NudgeHandlePosition(previewBox._handles[auraHandle], 1, 0), "keyboard aura nudge refused")
+Check(db.gf_raid.auras.renderer == "CUSTOM", "keyboard aura nudge did not activate renderer")
+local savePosition
+for index = 1, 60 do
+    local name, value = debug.getupvalue(handleBundle.StopHandleDrag, index)
+    if not name then break end
+    if name == "SaveHandlePosition" then savePosition = value; break end
+end
+Check(type(savePosition) == "function", "actual pointer storage writer missing")
+db.gf_raid.auras.renderer = "NATIVE_12_1"
+Check(savePosition(previewBox._handles[auraHandle], "Move", false), "pointer aura move refused")
+Check(db.gf_raid.auras.renderer == "CUSTOM", "pointer aura move did not activate renderer")
+Check(M.ResetPageToDefaults("gf_auras") == true, "reset after pointer move refused")
 -- Reset must remain undoable and redo must restore factory settings again.
 Check(M.CaptureHistory("Legacy raid layout", "smoke:raid-layout", function()
     db.gf_raid.groupFilter = { true, true, true }
@@ -187,6 +263,13 @@ Check(M.Redo() == true, "reset cannot be redone")
 db = env.MSUF_DB
 Check(db.gf_raid.groupFilter == nil and db.gf_raid.maxColumns == 8, "redo did not restore factory layout")
 -- A provider refusal must not turn into success, apply or an undo entry.
+local deepCopy = GF._DeepCopyTable
+local beforeCopyRefusal = Copy(env.MSUF_GlobalDB)
+GF._DeepCopyTable = nil
+local okCopyRefusal, copyRefusal = pcall(M.ResetPageToDefaults, "gf_layout")
+GF._DeepCopyTable = deepCopy
+Check(okCopyRefusal and copyRefusal == true, "reset still depends on the late spell-indicator copy helper: " .. tostring(copyRefusal))
+Equal(env.MSUF_GlobalDB, beforeCopyRefusal, "canonical copy reset changed unrelated profile values")
 local reset = GF.ResetAllToDefaults
 GF.ResetAllToDefaults = function() return false end
 local before, applies, feedback, undo = Copy(db), requests, notices, M.GetHistoryState().undoCount
@@ -242,6 +325,15 @@ return V.Replace(db, { version = 1, entries = {
 } })
 end) == true, "variant fixture refused")
 Check(db.gf_raid.groupFilter ~= nil and db.player.width == 444, "solo variant not active")
+local failedDefaults = create()
+mw.core.ProfileNormalize.TranslateProfileToCurrent(failedDefaults, { trustNormalizationMarker = true, trustProfileMetadata = true })
+local copySnapshot, beforeCopyFailure = mw.core.ProfileFields.CopySnapshot, Copy(env.MSUF_GlobalDB)
+mw.core.ProfileFields.CopySnapshot = function() return nil, false end
+local refusedCopy = GF.ResetAllToDefaults(failedDefaults, true)
+mw.core.ProfileFields.CopySnapshot = copySnapshot
+Check(refusedCopy == false, "failed bounded snapshot did not refuse reset")
+Equal(env.MSUF_GlobalDB, beforeCopyFailure, "failed bounded snapshot changed saved profiles")
+Check(V.IsMaterialized(db) and db.gf_raid.groupFilter ~= nil, "failed copy discarded active variant state")
 Check(M.ResetPageToDefaults("gf_layout") == true, "variant reset refused")
 Check(db.gf_raid.groupFilter == nil and db.player.width == 444, "reset retained filter or changed unrelated variant")
 local baseAfterReset = assert(V.BaseSnapshot(db, true))

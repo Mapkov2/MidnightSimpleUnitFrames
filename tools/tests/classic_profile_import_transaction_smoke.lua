@@ -347,7 +347,7 @@ local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .
 -- The page requires its core collaborators at load (M.RequireGlobals).
 local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
 local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client,
-    SuiteLink = namespace.SuiteLink }, M)
+    SuiteLink = namespace.SuiteLink, ProfileIOAfterGroupFilterRepair = namespace.ProfileIOAfterGroupFilterRepair }, M)
 -- The menu's reload prompt (MSUF_Menu2_Support.lua) only asks; it never reloads.
 MSUF_ShowReloadRecommendedPopup = function() end
 RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })

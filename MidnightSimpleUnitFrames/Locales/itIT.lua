@@ -7055,6 +7055,13 @@ L["New-character default"] = "Predefinito per nuovi personaggi"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Eliminare %d profili selezionati?\n\n%s\n\nI personaggi che li usano passano a Default. Senza un'esportazione non si può annullare."
 L["Profiles deleted: %d"] = "Profili eliminati: %d"
 
+
+-- Group filter import compatibility.
+L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "Il profilo importato '%s' contiene una selezione di gruppi senza indicazione del formato.\nPuò provenire dalle vecchie caselle di controllo oppure essere intenzionale.\n\nMantenere la selezione o correggere i filtri interessati per mostrare tutti i gruppi?\nLe esclusioni esplicite e le varianti del profilo vengono mantenute."
+L["Repair legacy filters"] = "Correggi i vecchi filtri"
+L["Keep group selection"] = "Mantieni i gruppi selezionati"
+L["Group selection changed; no legacy filter repair was applied."] = "La selezione dei gruppi è cambiata; nessun vecchio filtro è stato corretto."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

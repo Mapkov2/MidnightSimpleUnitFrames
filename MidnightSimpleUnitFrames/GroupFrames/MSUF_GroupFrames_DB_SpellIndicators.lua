@@ -16,14 +16,15 @@ end
 ---
 --- Shared table helpers
 ---
-function GF._DeepCopyTable(src)
+local function DeepCopyTable(src)
     if type(src) ~= "table" then return src end
     local dst = {}
     for k, v in pairs(src) do
-        dst[k] = GF._DeepCopyTable(v)
+        dst[k] = DeepCopyTable(v)
     end
     return dst
 end
+GF._DeepCopyTable = DeepCopyTable
 
 ---
 --- Spell Indicator first-load defaults
@@ -115,17 +116,17 @@ local function FillMissingSpecDefaults(siCfg, specKey)
     for auraName, def in pairs(defaults) do
         local entry = specCfg[auraName]
         if entry == nil then
-            entry = GF._DeepCopyTable(def)
+            entry = DeepCopyTable(def)
             if entry.onlyOwn == nil then entry.onlyOwn = true end
             specCfg[auraName] = entry
             changed = true
         elseif type(entry) == "table" then
             if entry.placed == nil and def.placed ~= nil then
-                entry.placed = GF._DeepCopyTable(def.placed)
+                entry.placed = DeepCopyTable(def.placed)
                 changed = true
             end
             if entry.frame == nil and def.frame ~= nil then
-                entry.frame = GF._DeepCopyTable(def.frame)
+                entry.frame = DeepCopyTable(def.frame)
                 changed = true
             end
             if entry.onlyOwn == nil then
