@@ -10,6 +10,129 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+-- Build fresh dropdown domains for each menu schema instance.
+local function BuildDropdownDomains()
+    return {
+        PUBLIC_UNITS = {
+            { value = "player", text = "Player" },
+            { value = "pet", text = "Pet" },
+            { value = "target", text = "Target" },
+            { value = "focus", text = "Focus" },
+            { value = "boss", text = "Boss" },
+            { value = "arena", text = "Arena" },
+        },
+
+        STYLE_SCOPES = {
+            { value = "shared", text = "Shared" },
+            { value = "player", text = "Player" },
+            { value = "pet", text = "Pet" },
+            { value = "target", text = "Target" },
+            { value = "focus", text = "Focus" },
+            { value = "boss", text = "Boss" },
+            { value = "arena", text = "Arena" },
+        },
+
+        GROWTH_VALUES = {
+            { value = "RIGHT", text = "Right" },
+            { value = "LEFT", text = "Left" },
+            { value = "UP", text = "Up" },
+            { value = "DOWN", text = "Down" },
+        },
+        GROWTH_OK = { RIGHT=true, LEFT=true, UP=true, DOWN=true },
+
+        ROW_WRAP_OK = { DOWN=true, UP=true },
+
+        STACK_ANCHORS = {
+            { value = "TOPRIGHT", text = "Top Right" },
+            { value = "TOPLEFT", text = "Top Left" },
+            { value = "BOTTOMRIGHT", text = "Bottom Right" },
+            { value = "BOTTOMLEFT", text = "Bottom Left" },
+        },
+        STACK_ANCHOR_OK = { TOPRIGHT=true, TOPLEFT=true, BOTTOMRIGHT=true, BOTTOMLEFT=true },
+
+        DEBUFF_TYPE_BORDER_MODE_VALUES = {
+            { value = "OFF", text = "Off" },
+            { value = "BORDER", text = "Border" },
+            { value = "SYMBOL", text = "Border + Symbol" },
+        },
+
+        DURATION_BAR_DISPLAY_VALUES = {
+            { value = "BAR_ONLY", text = "Bar Only" },
+            { value = "OVERLAY", text = "Icon + Bar" },
+        },
+        DURATION_BAR_DISPLAY_OK = { BAR_ONLY=true, OVERLAY=true },
+
+        DURATION_BAR_POSITION_VALUES = {
+            { value = "BOTTOM", text = "Bottom" },
+            { value = "TOP", text = "Top" },
+        },
+        DURATION_BAR_POSITION_OK = { BOTTOM=true, TOP=true },
+
+        DURATION_BAR_DIRECTION_VALUES = {
+            { value = "REMAINING", text = "Remaining" },
+            { value = "ELAPSED", text = "Elapsed" },
+        },
+        DURATION_BAR_DIRECTION_OK = { REMAINING=true, ELAPSED=true },
+
+        AURA_ANCHORS = {
+            { value = "TOPLEFT", text = "Top Left" },
+            { value = "TOP", text = "Top" },
+            { value = "TOPRIGHT", text = "Top Right" },
+            { value = "LEFT", text = "Left" },
+            { value = "CENTER", text = "Center" },
+            { value = "RIGHT", text = "Right" },
+            { value = "BOTTOMLEFT", text = "Bottom Left" },
+            { value = "BOTTOM", text = "Bottom" },
+            { value = "BOTTOMRIGHT", text = "Bottom Right" },
+        },
+        AURA_ANCHOR_OK = {
+            TOPLEFT=true, TOP=true, TOPRIGHT=true,
+            LEFT=true, CENTER=true, RIGHT=true,
+            BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
+        },
+        FRAME_STRATA_OK = {
+            AUTO=true, BACKGROUND=true, LOW=true, MEDIUM=true, HIGH=true,
+            DIALOG=true, FULLSCREEN=true, FULLSCREEN_DIALOG=true, TOOLTIP=true,
+        },
+
+        LANE_GROWTH_VALUES = {
+            { value = "RIGHTDOWN", text = "Right then Down" },
+            { value = "LEFTDOWN", text = "Left then Down" },
+            { value = "RIGHTUP", text = "Right then Up" },
+            { value = "LEFTUP", text = "Left then Up" },
+            { value = "UP", text = "Up (Single Column)" },
+            { value = "DOWN", text = "Down (Single Column)" },
+        },
+        LANE_GROWTH_PARTS = {
+            RIGHTDOWN = { "RIGHT", "DOWN" },
+            LEFTDOWN = { "LEFT", "DOWN" },
+            RIGHTUP = { "RIGHT", "UP" },
+            LEFTUP = { "LEFT", "UP" },
+            UP = { "UP", "UP" },
+            DOWN = { "DOWN", "DOWN" },
+        },
+
+        -- Reserve the remaining result keys so later assignments do not resize the hash.
+        BOSS_LOOKUP = nil,
+        BOSS_UNITS = nil,
+        ARENA_UNITS = nil,
+        ARENA_LOOKUP = nil,
+        CUSTOM_CONTAINER_MAX = nil,
+        DEFAULT_GENERAL = nil,
+        DEFAULT_SHARED = nil,
+        GROUPS = nil,
+        LANE_STYLE_KEYS = nil,
+        LAYOUT_KEYS = nil,
+        PLAYER_DEFENSIVE_CONTAINER_INDEX = nil,
+        SCOPE_MATERIALIZED_LAYOUT_KEYS = nil,
+        SHARED_LAYOUT_KEYS = nil,
+        STYLE_LAYOUT_KEYS = nil,
+        STYLE_SHARED_LAYOUT_KEYS = nil,
+        TARGET_DOT_CONTAINER_INDEX = nil,
+        UNIT_FLAG = nil,
+    }
+end
+
 function Factories.Schema(A3)
     -- Unit lane keys, their owners, the lane specs, the show flags and the legacy
     -- Shared defaults come from the one lane-key schema in Auras3/MSUF_Auras3_Core.lua.
@@ -26,112 +149,15 @@ function Factories.Schema(A3)
     local UNIT_FLAG = { boss = LaneKeySchema.UNIT_FLAG.boss1, arena = LaneKeySchema.UNIT_FLAG.arena1 }
     for unit, flag in pairs(LaneKeySchema.UNIT_FLAG) do UNIT_FLAG[unit] = flag end
 
-    local PUBLIC_UNITS = {
-        { value = "player", text = "Player" },
-        { value = "pet", text = "Pet" },
-        { value = "target", text = "Target" },
-        { value = "focus", text = "Focus" },
-        { value = "boss", text = "Boss" },
-        { value = "arena", text = "Arena" },
-    }
+    local Schema = BuildDropdownDomains()
 
-    local STYLE_SCOPES = {
-        { value = "shared", text = "Shared" },
-        { value = "player", text = "Player" },
-        { value = "pet", text = "Pet" },
-        { value = "target", text = "Target" },
-        { value = "focus", text = "Focus" },
-        { value = "boss", text = "Boss" },
-        { value = "arena", text = "Arena" },
-    }
-
-    local GROWTH_VALUES = {
-        { value = "RIGHT", text = "Right" },
-        { value = "LEFT", text = "Left" },
-        { value = "UP", text = "Up" },
-        { value = "DOWN", text = "Down" },
-    }
-    local GROWTH_OK = { RIGHT=true, LEFT=true, UP=true, DOWN=true }
-
-    local ROW_WRAP_OK = { DOWN=true, UP=true }
-
-    local STACK_ANCHORS = {
-        { value = "TOPRIGHT", text = "Top Right" },
-        { value = "TOPLEFT", text = "Top Left" },
-        { value = "BOTTOMRIGHT", text = "Bottom Right" },
-        { value = "BOTTOMLEFT", text = "Bottom Left" },
-    }
-    local STACK_ANCHOR_OK = { TOPRIGHT=true, TOPLEFT=true, BOTTOMRIGHT=true, BOTTOMLEFT=true }
-
-    local DEBUFF_TYPE_BORDER_MODE_VALUES = {
-        { value = "OFF", text = "Off" },
-        { value = "BORDER", text = "Border" },
-        { value = "SYMBOL", text = "Border + Symbol" },
-    }
-
-    local DURATION_BAR_DISPLAY_VALUES = {
-        { value = "BAR_ONLY", text = "Bar Only" },
-        { value = "OVERLAY", text = "Icon + Bar" },
-    }
-    local DURATION_BAR_DISPLAY_OK = { BAR_ONLY=true, OVERLAY=true }
-
-    local DURATION_BAR_POSITION_VALUES = {
-        { value = "BOTTOM", text = "Bottom" },
-        { value = "TOP", text = "Top" },
-    }
-    local DURATION_BAR_POSITION_OK = { BOTTOM=true, TOP=true }
-
-    local DURATION_BAR_DIRECTION_VALUES = {
-        { value = "REMAINING", text = "Remaining" },
-        { value = "ELAPSED", text = "Elapsed" },
-    }
-    local DURATION_BAR_DIRECTION_OK = { REMAINING=true, ELAPSED=true }
-
-    local AURA_ANCHORS = {
-        { value = "TOPLEFT", text = "Top Left" },
-        { value = "TOP", text = "Top" },
-        { value = "TOPRIGHT", text = "Top Right" },
-        { value = "LEFT", text = "Left" },
-        { value = "CENTER", text = "Center" },
-        { value = "RIGHT", text = "Right" },
-        { value = "BOTTOMLEFT", text = "Bottom Left" },
-        { value = "BOTTOM", text = "Bottom" },
-        { value = "BOTTOMRIGHT", text = "Bottom Right" },
-    }
-    local AURA_ANCHOR_OK = {
-        TOPLEFT=true, TOP=true, TOPRIGHT=true,
-        LEFT=true, CENTER=true, RIGHT=true,
-        BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
-    }
-    local FRAME_STRATA_OK = {
-        AUTO=true, BACKGROUND=true, LOW=true, MEDIUM=true, HIGH=true,
-        DIALOG=true, FULLSCREEN=true, FULLSCREEN_DIALOG=true, TOOLTIP=true,
-    }
-
-    local LANE_GROWTH_VALUES = {
-        { value = "RIGHTDOWN", text = "Right then Down" },
-        { value = "LEFTDOWN", text = "Left then Down" },
-        { value = "RIGHTUP", text = "Right then Up" },
-        { value = "LEFTUP", text = "Left then Up" },
-        { value = "UP", text = "Up (Single Column)" },
-        { value = "DOWN", text = "Down (Single Column)" },
-    }
-    local LANE_GROWTH_PARTS = {
-        RIGHTDOWN = { "RIGHT", "DOWN" },
-        LEFTDOWN = { "LEFT", "DOWN" },
-        RIGHTUP = { "RIGHT", "UP" },
-        LEFTUP = { "LEFT", "UP" },
-        UP = { "UP", "UP" },
-        DOWN = { "DOWN", "DOWN" },
-    }
-
-    local LAYOUT_KEYS = LaneKeySchema.LAYOUT_KEYS
-    local SHARED_LAYOUT_KEYS = LaneKeySchema.SHARED_LAYOUT_KEYS
-    local STYLE_LAYOUT_KEYS = LaneKeySchema.STYLE_LAYOUT_KEYS
-    local STYLE_SHARED_LAYOUT_KEYS = LaneKeySchema.STYLE_SHARED_LAYOUT_KEYS
-    local SCOPE_MATERIALIZED_LAYOUT_KEYS = LaneKeySchema.SCOPE_MATERIALIZED_LAYOUT_KEYS
-    local GROUPS = LaneKeySchema.LANE_SPECS
-    local LANE_STYLE_KEYS = LaneKeySchema.LANE_STYLE_KEYS
+    Schema.LAYOUT_KEYS = LaneKeySchema.LAYOUT_KEYS
+    Schema.SHARED_LAYOUT_KEYS = LaneKeySchema.SHARED_LAYOUT_KEYS
+    Schema.STYLE_LAYOUT_KEYS = LaneKeySchema.STYLE_LAYOUT_KEYS
+    Schema.STYLE_SHARED_LAYOUT_KEYS = LaneKeySchema.STYLE_SHARED_LAYOUT_KEYS
+    Schema.SCOPE_MATERIALIZED_LAYOUT_KEYS = LaneKeySchema.SCOPE_MATERIALIZED_LAYOUT_KEYS
+    Schema.GROUPS = LaneKeySchema.LANE_SPECS
+    Schema.LANE_STYLE_KEYS = LaneKeySchema.LANE_STYLE_KEYS
 
     local DEFAULT_SHARED = LaneKeySchema.SeedDefaults()
     DEFAULT_SHARED.filters = {
@@ -179,47 +205,17 @@ function Factories.Schema(A3)
     -- were removed from NeverSecret, but remain eligible for exact SpellID filters
     -- as helpful auras on assistable units. SATED below is the explicitly documented
     -- NeverSecret harmful-aura family unlocked for friendly-unit filtering in PTR 6.
-    local CUSTOM_CONTAINER_MAX = A3.CUSTOM_CONTAINER_COUNT
-    local TARGET_DOT_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
-    local PLAYER_DEFENSIVE_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
+    Schema.CUSTOM_CONTAINER_MAX = A3.CUSTOM_CONTAINER_COUNT
+    Schema.TARGET_DOT_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
+    Schema.PLAYER_DEFENSIVE_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
 
     -- Private dependency API; public menu methods remain on A3.MenuModel.
-    return {
-        AURA_ANCHORS = AURA_ANCHORS,
-        AURA_ANCHOR_OK = AURA_ANCHOR_OK,
-        BOSS_LOOKUP = BOSS_LOOKUP,
-        BOSS_UNITS = BOSS_UNITS,
-        ARENA_UNITS = ARENA_UNITS,
-        ARENA_LOOKUP = ARENA_LOOKUP,
-        CUSTOM_CONTAINER_MAX = CUSTOM_CONTAINER_MAX,
-        DEBUFF_TYPE_BORDER_MODE_VALUES = DEBUFF_TYPE_BORDER_MODE_VALUES,
-        DEFAULT_GENERAL = DEFAULT_GENERAL,
-        DEFAULT_SHARED = DEFAULT_SHARED,
-        DURATION_BAR_DIRECTION_OK = DURATION_BAR_DIRECTION_OK,
-        DURATION_BAR_DIRECTION_VALUES = DURATION_BAR_DIRECTION_VALUES,
-        DURATION_BAR_DISPLAY_OK = DURATION_BAR_DISPLAY_OK,
-        DURATION_BAR_DISPLAY_VALUES = DURATION_BAR_DISPLAY_VALUES,
-        DURATION_BAR_POSITION_OK = DURATION_BAR_POSITION_OK,
-        DURATION_BAR_POSITION_VALUES = DURATION_BAR_POSITION_VALUES,
-        FRAME_STRATA_OK = FRAME_STRATA_OK,
-        GROUPS = GROUPS,
-        GROWTH_OK = GROWTH_OK,
-        GROWTH_VALUES = GROWTH_VALUES,
-        LANE_GROWTH_PARTS = LANE_GROWTH_PARTS,
-        LANE_GROWTH_VALUES = LANE_GROWTH_VALUES,
-        LANE_STYLE_KEYS = LANE_STYLE_KEYS,
-        LAYOUT_KEYS = LAYOUT_KEYS,
-        PLAYER_DEFENSIVE_CONTAINER_INDEX = PLAYER_DEFENSIVE_CONTAINER_INDEX,
-        PUBLIC_UNITS = PUBLIC_UNITS,
-        ROW_WRAP_OK = ROW_WRAP_OK,
-        SCOPE_MATERIALIZED_LAYOUT_KEYS = SCOPE_MATERIALIZED_LAYOUT_KEYS,
-        SHARED_LAYOUT_KEYS = SHARED_LAYOUT_KEYS,
-        STACK_ANCHORS = STACK_ANCHORS,
-        STACK_ANCHOR_OK = STACK_ANCHOR_OK,
-        STYLE_LAYOUT_KEYS = STYLE_LAYOUT_KEYS,
-        STYLE_SCOPES = STYLE_SCOPES,
-        STYLE_SHARED_LAYOUT_KEYS = STYLE_SHARED_LAYOUT_KEYS,
-        TARGET_DOT_CONTAINER_INDEX = TARGET_DOT_CONTAINER_INDEX,
-        UNIT_FLAG = UNIT_FLAG,
-    }
+    Schema.BOSS_LOOKUP = BOSS_LOOKUP
+    Schema.BOSS_UNITS = BOSS_UNITS
+    Schema.ARENA_UNITS = ARENA_UNITS
+    Schema.ARENA_LOOKUP = ARENA_LOOKUP
+    Schema.DEFAULT_GENERAL = DEFAULT_GENERAL
+    Schema.DEFAULT_SHARED = DEFAULT_SHARED
+    Schema.UNIT_FLAG = UNIT_FLAG
+    return Schema
 end

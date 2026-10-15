@@ -21,93 +21,98 @@ function Factories.Presets(Model, Common)
     local SpellIDText = Common.SpellIDText
     local SpellInfo = Common.SpellInfo
 
-    local FALLBACK_PUBLIC_AURA_SPELLS = {
-        PRESERVATION_EVOKER = {
-            [355941] = true, [363502] = true, [364343] = true, [366155] = true,
-            [367364] = true, [373267] = true, [376788] = true, [409895] = true,
-        },
-        AUGMENTATION_EVOKER = {
-            [360827] = true, [395152] = true, [395296] = true, [410089] = true, [410263] = true,
-            [410686] = true, [413984] = true,
-        },
-        RESTO_DRUID = {
-            [774] = true, [8936] = true, [33763] = true, [48438] = true, [155777] = true,
-            [439530] = true,
-        },
-        DISC_PRIEST = {
-            [17] = true, [194384] = true, [1253593] = true,
-            [1300008] = true, [1300009] = true,
-        },
-        HOLY_PRIEST = {
-            [139] = true, [41635] = true, [77489] = true,
-        },
-        MISTWEAVER_MONK = {
-            [115175] = true, [119611] = true, [124682] = true, [450769] = true,
-            [1292922] = true,
-        },
-        RESTO_SHAMAN = {
-            [974] = true, [383648] = true, [61295] = true, [382024] = true,
-            [207400] = true, [444490] = true,
-        },
-        HOLY_PALADIN = {
-            [53563] = true, [156322] = true, [156910] = true, [1244893] = true,
-            [200025] = true, [431381] = true,
-        },
-        RAID_BUFFS = {
-            [1459]   = true,   --- Arcane Intellect
-            [6673]   = true,   --- Battle Shout
-            [21562]  = true,   --- Power Word: Fortitude
-            [369459] = true,   --- Source of Magic
-            [462854] = true,   --- Skyfury
-            [474754] = true,   --- Symbiotic Relationship
-        },
-        BLESSING_BRONZE = {
-            [381732] = true, [381741] = true, [381746] = true, [381748] = true,
-            [381749] = true, [381750] = true, [381751] = true, [381752] = true,
-            [381753] = true, [381754] = true, [381756] = true, [381757] = true,
-            [381758] = true,
-        },
-        SELF_BUFFS = {
-            [433568] = true, [433583] = true,
-        },
-        ROGUE_POISONS = {
-            [2823] = true, [8679] = true, [3408] = true, [5761] = true,
-            [315584] = true, [381637] = true, [381664] = true,
-        },
-        SHAMAN_IMBUE = {
-            [319773] = true, [319778] = true, [382021] = true, [382022] = true,
-            [457496] = true, [457481] = true, [462757] = true, [462742] = true,
-        },
-        RESOURCE_AURAS = {
-            [205473] = true, [260286] = true,
-        },
-        COOLDOWNS = {
-            [8690] = true, [20608] = true,
-        },
-        SATED = {
-            [57723] = true, [57724] = true, [80354] = true,
-            [95809] = true, [160455] = true, [264689] = true,
-            [390435] = true,
-        },
-        DESERTER = {
-            [26013] = true, [71041] = true,
-        },
-        --- Never-secret debuff sets shared by EnhanceQoL's Global Aura Ignore list
-        --- (copied with permission; EQoL re-verifies them daily against the Wago
-        --- SpellMisc "Aura never secret" attribute).
-        CHALLENGE_DEBUFFS = {
-            [206151] = true, [308312] = true, [1254550] = true,
-        },
-        CLASS_UTILITY = {
-            [124255] = true, [405189] = true, [462742] = true,
-            [462757] = true, [1217607] = true,
-        },
-        SKYRIDING = {
-            [369968] = true, [377234] = true, [388367] = true,
-            [404464] = true, [404468] = true, [418590] = true,
-            [427490] = true, [447959] = true, [447960] = true,
-        },
-    }
+    -- Historical spell membership is built once per factory instance.
+    local function BuildHistoricalAuraSpells()
+        return {
+            PRESERVATION_EVOKER = {
+                [355941] = true, [363502] = true, [364343] = true, [366155] = true,
+                [367364] = true, [373267] = true, [376788] = true, [409895] = true,
+            },
+            AUGMENTATION_EVOKER = {
+                [360827] = true, [395152] = true, [395296] = true, [410089] = true, [410263] = true,
+                [410686] = true, [413984] = true,
+            },
+            RESTO_DRUID = {
+                [774] = true, [8936] = true, [33763] = true, [48438] = true, [155777] = true,
+                [439530] = true,
+            },
+            DISC_PRIEST = {
+                [17] = true, [194384] = true, [1253593] = true,
+                [1300008] = true, [1300009] = true,
+            },
+            HOLY_PRIEST = {
+                [139] = true, [41635] = true, [77489] = true,
+            },
+            MISTWEAVER_MONK = {
+                [115175] = true, [119611] = true, [124682] = true, [450769] = true,
+                [1292922] = true,
+            },
+            RESTO_SHAMAN = {
+                [974] = true, [383648] = true, [61295] = true, [382024] = true,
+                [207400] = true, [444490] = true,
+            },
+            HOLY_PALADIN = {
+                [53563] = true, [156322] = true, [156910] = true, [1244893] = true,
+                [200025] = true, [431381] = true,
+            },
+            RAID_BUFFS = {
+                [1459]   = true,   --- Arcane Intellect
+                [6673]   = true,   --- Battle Shout
+                [21562]  = true,   --- Power Word: Fortitude
+                [369459] = true,   --- Source of Magic
+                [462854] = true,   --- Skyfury
+                [474754] = true,   --- Symbiotic Relationship
+            },
+            BLESSING_BRONZE = {
+                [381732] = true, [381741] = true, [381746] = true, [381748] = true,
+                [381749] = true, [381750] = true, [381751] = true, [381752] = true,
+                [381753] = true, [381754] = true, [381756] = true, [381757] = true,
+                [381758] = true,
+            },
+            SELF_BUFFS = {
+                [433568] = true, [433583] = true,
+            },
+            ROGUE_POISONS = {
+                [2823] = true, [8679] = true, [3408] = true, [5761] = true,
+                [315584] = true, [381637] = true, [381664] = true,
+            },
+            SHAMAN_IMBUE = {
+                [319773] = true, [319778] = true, [382021] = true, [382022] = true,
+                [457496] = true, [457481] = true, [462757] = true, [462742] = true,
+            },
+            RESOURCE_AURAS = {
+                [205473] = true, [260286] = true,
+            },
+            COOLDOWNS = {
+                [8690] = true, [20608] = true,
+            },
+            SATED = {
+                [57723] = true, [57724] = true, [80354] = true,
+                [95809] = true, [160455] = true, [264689] = true,
+                [390435] = true,
+            },
+            DESERTER = {
+                [26013] = true, [71041] = true,
+            },
+            --- Never-secret debuff sets shared by EnhanceQoL's Global Aura Ignore list
+            --- (copied with permission; EQoL re-verifies them daily against the Wago
+            --- SpellMisc "Aura never secret" attribute).
+            CHALLENGE_DEBUFFS = {
+                [206151] = true, [308312] = true, [1254550] = true,
+            },
+            CLASS_UTILITY = {
+                [124255] = true, [405189] = true, [462742] = true,
+                [462757] = true, [1217607] = true,
+            },
+            SKYRIDING = {
+                [369968] = true, [377234] = true, [388367] = true,
+                [404464] = true, [404468] = true, [418590] = true,
+                [427490] = true, [447959] = true, [447960] = true,
+            },
+        }
+    end
+
+    local FALLBACK_PUBLIC_AURA_SPELLS = BuildHistoricalAuraSpells()
 
     local FALLBACK_PUBLIC_AURA_META = {
         { key = "RAID_BUFFS", label = "Long-term Raid Buffs", category = "Raid", tooltip = "Long duration raid buffs Blizzard exposes as non-secret." },
