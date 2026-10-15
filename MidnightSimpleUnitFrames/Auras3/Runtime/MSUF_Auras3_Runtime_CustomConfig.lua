@@ -586,6 +586,66 @@ A3.REMINDER_ENCHANT_SLOTS = A3.REMINDER_ENCHANT_SLOTS or {
       inventorySlot = _G.INVSLOT_OFFHAND or 17 },
 }
 
+local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset, placedCount,
+    alpha, desaturate, tint, clickCast)
+    local position = placedCount
+    local maxSlots = Round(lane.max or 0)
+    for i = 1, #A3.REMINDER_ENCHANT_SLOTS do
+        local spec = A3.REMINDER_ENCHANT_SLOTS[i]
+        if entry[spec.enabledKey] == true and position < maxSlots then
+            position = position + 1
+            -- One consumable covers both weapons in practice, so the
+            -- item is shared rather than duplicated per hand.
+            local itemID = tonumber(entry.reminderEnchantItem)
+            local durationSeconds = ClampNumber(
+                entry.reminderEnchantDurationMinutes, 60, 5, 240) * 60
+            local slotX, slotY = GridOffset(position)
+            items[#items + 1] = {
+                key = "reminderench_" .. tostring(index) .. "_" .. spec.key,
+                display = spec.label,
+                enabled = true,
+                unit = lane.unit,
+                enchantSlot = spec.token,
+                enchantInventorySlot = spec.inventorySlot,
+                enchantDurationSeconds = durationSeconds,
+                icon = CustomConfig.ReminderItemIcon(itemID),
+                showWhenMissing = true,
+                reminderAlpha = alpha,
+                reminderDesaturate = desaturate,
+                reminderColor = tint,
+                iconZoom = lane.iconZoom,
+                iconShape = lane.iconShape,
+                requestedIconShape = lane.requestedIconShape,
+                layer = lane.layer,
+                strata = lane.strata,
+                castItem = clickCast and itemID and ("item:" .. tostring(itemID)) or nil,
+                castItemID = clickCast and itemID or nil,
+                castUnit = clickCast and itemID and lane.unit or nil,
+                placed = {
+                    type = "icon",
+                    anchor = lane.anchor,
+                    x = slotX,
+                    y = slotY,
+                    size = lane.size,
+                    showTooltip = lane.showTooltip,
+                    -- Enchant slots have no AuraButton, but their plain
+                    -- remainingTimeMs feeds an MSUF-owned native Duration
+                    -- object on the persistent reminder placeholder.
+                    showCooldown = lane.showCooldownText,
+                    showCooldownSwipe = lane.showCooldownSwipe,
+                    cooldownSwipeReverse = lane.cooldownSwipeReverse,
+                    cooldownSize = lane.cooldownSize,
+                    cooldownAnchor = lane.cooldownAnchor,
+                    cooldownX = lane.cooldownX,
+                    cooldownY = lane.cooldownY,
+                    cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
+                    showStacks = false,
+                },
+            }
+        end
+    end
+end
+
 --- Buff Reminder. Every whitelisted spell becomes one fixed AuraSlot laid out
 --- on the container's own grid, each with an MSUF-owned placeholder beneath
 --- it. Fixed slots are mandatory here: Blizzard's flowing AuraGroup compacts
@@ -698,72 +758,56 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
     -- Enchant reminders continue the same grid after the visible spells
     -- and obey the same icon cap, so the row never grows unexpectedly.
     if lane.unit == "player" then
-        local position = placedCount
-        local maxSlots = Round(lane.max or 0)
-        for i = 1, #A3.REMINDER_ENCHANT_SLOTS do
-            local spec = A3.REMINDER_ENCHANT_SLOTS[i]
-            if entry[spec.enabledKey] == true and position < maxSlots then
-                position = position + 1
-                -- One consumable covers both weapons in practice, so the
-                -- item is shared rather than duplicated per hand.
-                local itemID = tonumber(entry.reminderEnchantItem)
-                local durationSeconds = ClampNumber(
-                    entry.reminderEnchantDurationMinutes, 60, 5, 240) * 60
-                local slotX, slotY = GridOffset(position)
-                items[#items + 1] = {
-                    key = "reminderench_" .. tostring(index) .. "_" .. spec.key,
-                    display = spec.label,
-                    enabled = true,
-                    unit = lane.unit,
-                    enchantSlot = spec.token,
-                    enchantInventorySlot = spec.inventorySlot,
-                    enchantDurationSeconds = durationSeconds,
-                    icon = CustomConfig.ReminderItemIcon(itemID),
-                    showWhenMissing = true,
-                    reminderAlpha = alpha,
-                    reminderDesaturate = desaturate,
-                    reminderColor = tint,
-                    iconZoom = lane.iconZoom,
-                    iconShape = lane.iconShape,
-                    requestedIconShape = lane.requestedIconShape,
-                    layer = lane.layer,
-                    strata = lane.strata,
-                    castItem = clickCast and itemID and ("item:" .. tostring(itemID)) or nil,
-                    castItemID = clickCast and itemID or nil,
-                    castUnit = clickCast and itemID and lane.unit or nil,
-                    placed = {
-                        type = "icon",
-                        anchor = lane.anchor,
-                        x = slotX,
-                        y = slotY,
-                        size = lane.size,
-                        showTooltip = lane.showTooltip,
-                        -- Enchant slots have no AuraButton, but their plain
-                        -- remainingTimeMs feeds an MSUF-owned native Duration
-                        -- object on the persistent reminder placeholder.
-                        showCooldown = lane.showCooldownText,
-                        showCooldownSwipe = lane.showCooldownSwipe,
-                        cooldownSwipeReverse = lane.cooldownSwipeReverse,
-                        cooldownSize = lane.cooldownSize,
-                        cooldownAnchor = lane.cooldownAnchor,
-                        cooldownX = lane.cooldownX,
-                        cooldownY = lane.cooldownY,
-                        cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
-                        showStacks = false,
-                    },
-                }
-            end
-        end
+        AppendReminderEnchantItems(lane, entry, index, items, GridOffset, placedCount,
+            alpha, desaturate, tint, clickCast)
     end
     return #items > 0 and items or nil
 end
 
-local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared, auras)
-    if type(entry) ~= "table" then return nil, nil end
-    local playerDefensives = unit == "player" and (index == A3.PRESET_CUSTOM_CONTAINER_INDEX or entry.playerDefensives == true)
-    -- `enabled` is the Core feature's master switch. Portrait mode is only a
-    -- presentation choice and cannot keep a disabled feature alive.
-    if entry.enabled ~= true then return nil, nil end
+local function CompileCustomLanePresentations(lane, entry, index, frameSpec, placed, filters,
+    playerDefensives, targetDots, portraitRequested, pandemicFrameEffect, styleFrame,
+    includeSpellIDs, layoutPlaced, sourceUnit)
+    -- Reminder mode owns the container's whole presentation: the flowing lane
+    -- is dropped so one aura can never be rendered twice. Reserved index 4
+    -- (Player Defensives / Dots on target) keeps its fixed preset product.
+    local reminderItems
+    if not playerDefensives and not targetDots then
+        reminderItems = CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, filters)
+    end
+    local portraitLane
+    if portraitRequested then
+        if playerDefensives then
+            portraitLane = CustomConfig.CompilePlayerDefensivePortraitLane(lane, frameSpec, entry)
+        elseif targetDots then
+            portraitLane = CustomConfig.CompileTargetDotPortraitLane(lane, frameSpec, entry, sourceUnit)
+        end
+    end
+    -- If the visible portrait is disabled and its position-only option is also
+    -- off, fall back to the normal bar instead of silently losing tracked auras.
+    local barEnabled = portraitLane == nil
+    local effect
+    -- Unconditional Full-Frame effects remain independent aura sensors in portrait mode.
+    -- Pandemic-only effects live on every visible DoT AuraButton and need no duplicate sensor.
+    if pandemicFrameEffect == nil and type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
+        effect = {
+            key = "ufcustom_effect:" .. tostring(index),
+            display = entry.name or ("Custom " .. tostring(index)),
+            enabled = true,
+            includeSpellIDs = includeSpellIDs,
+            hidePermanent = filters.hidePermanent == true,
+            nativeFilter = lane.nativeFilter,
+            placed = { type = "none", anchor = layoutPlaced.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
+            frame = styleFrame,
+            layer = entry.layer or 9,
+            strata = entry.strata or "AUTO",
+            color = styleFrame.color,
+            unit = sourceUnit,
+        }
+    end
+    return barEnabled and not reminderItems and lane or nil, effect, portraitLane, reminderItems
+end
+
+local function CustomLaneTracking(unit, entry, index, playerDefensives)
     local sourceSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local includeSpellIDs = sourceSpellIDs
     local targetDots = not playerDefensives and (index == A3.PRESET_CUSTOM_CONTAINER_INDEX or entry.targetDots == true)
@@ -786,6 +830,17 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         end
         if count == 0 then includeSpellIDs = nil end
     end
+    return sourceSpellIDs, includeSpellIDs, targetDots, portraitRequested
+end
+
+local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared, auras)
+    if type(entry) ~= "table" then return nil, nil end
+    local playerDefensives = unit == "player" and (index == A3.PRESET_CUSTOM_CONTAINER_INDEX or entry.playerDefensives == true)
+    -- `enabled` is the Core feature's master switch. Portrait mode is only a
+    -- presentation choice and cannot keep a disabled feature alive.
+    if entry.enabled ~= true then return nil, nil end
+    local sourceSpellIDs, includeSpellIDs, targetDots, portraitRequested =
+        CustomLaneTracking(unit, entry, index, playerDefensives)
     -- A Buff Reminder that only watches temporary weapon enchants has no aura
     -- to whitelist at all: enchants never reach aura parsing, so an empty
     -- whitelist is the normal state for an oil reminder. Keep compiling so
@@ -919,44 +974,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         pandemicTintAlpha = Clamp01(placed.pandemicTintAlpha, 0.22),
         pandemicBlend = tostring(placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD",
     })
-    -- Reminder mode owns the container's whole presentation: the flowing lane
-    -- is dropped so one aura can never be rendered twice. Reserved index 4
-    -- (Player Defensives / Dots on target) keeps its fixed preset product.
-    local reminderItems
-    if not playerDefensives and not targetDots then
-        reminderItems = CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, filters)
-    end
-    local portraitLane
-    if portraitRequested then
-        if playerDefensives then
-            portraitLane = CustomConfig.CompilePlayerDefensivePortraitLane(lane, frameSpec, entry)
-        elseif targetDots then
-            portraitLane = CustomConfig.CompileTargetDotPortraitLane(lane, frameSpec, entry, unit)
-        end
-    end
-    -- If the visible portrait is disabled and its position-only option is also
-    -- off, fall back to the normal bar instead of silently losing tracked auras.
-    local barEnabled = portraitLane == nil
-    local effect
-    -- Unconditional Full-Frame effects remain independent aura sensors in portrait mode.
-    -- Pandemic-only effects live on every visible DoT AuraButton and need no duplicate sensor.
-    if pandemicFrameEffect == nil and type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
-        effect = {
-            key = "ufcustom_effect:" .. tostring(index),
-            display = entry.name or ("Custom " .. tostring(index)),
-            enabled = true,
-            includeSpellIDs = includeSpellIDs,
-            hidePermanent = filters.hidePermanent == true,
-            nativeFilter = lane.nativeFilter,
-            placed = { type = "none", anchor = layoutPlaced.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
-            frame = styleFrame,
-            layer = entry.layer or 9,
-            strata = entry.strata or "AUTO",
-            color = styleFrame.color,
-            unit = sourceUnit,
-        }
-    end
-    return barEnabled and not reminderItems and lane or nil, effect, portraitLane, reminderItems
+    return CompileCustomLanePresentations(lane, entry, index, frameSpec, placed, filters,
+        playerDefensives, targetDots, portraitRequested, pandemicFrameEffect, styleFrame,
+        includeSpellIDs, layoutPlaced, sourceUnit)
 end
 
 local function CompileUnitCustomContainers(auras, unit, frameSpec)

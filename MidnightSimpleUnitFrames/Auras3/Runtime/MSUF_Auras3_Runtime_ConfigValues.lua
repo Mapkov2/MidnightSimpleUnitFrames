@@ -405,27 +405,31 @@ local function ButtonAnchor(xSign, ySign)
     return ySign > 0 and "BOTTOMLEFT" or "TOPLEFT"
 end
 
-local VALID_NATIVE_FILTER_TOKENS = {
-    HELPFUL = true,
-    HARMFUL = true,
-    PLAYER = true,
-    RAID = true,
-    CANCELABLE = true,
-    MAW = true,
-    INCLUDE_NAME_PLATE_ONLY = true,
-    EXTERNAL_DEFENSIVE = true,
-    CROWD_CONTROL = true,
-    RAID_IN_COMBAT = true,
-    RAID_PLAYER_DISPELLABLE = true,
-    BIG_DEFENSIVE = true,
-    IMPORTANT = true,
-    DISPELLABLE = true,
-}
+local function NativeFilterTokenSets()
+    local VALID_NATIVE_FILTER_TOKENS = {
+        HELPFUL = true,
+        HARMFUL = true,
+        PLAYER = true,
+        RAID = true,
+        CANCELABLE = true,
+        MAW = true,
+        INCLUDE_NAME_PLATE_ONLY = true,
+        EXTERNAL_DEFENSIVE = true,
+        CROWD_CONTROL = true,
+        RAID_IN_COMBAT = true,
+        RAID_PLAYER_DISPELLABLE = true,
+        BIG_DEFENSIVE = true,
+        IMPORTANT = true,
+        DISPELLABLE = true,
+    }
 
-local LEGACY_NATIVE_FILTER_TOKENS = {
-    ALL = false,
-    NOT_CANCELABLE = "!CANCELABLE",
-}
+    local LEGACY_NATIVE_FILTER_TOKENS = {
+        ALL = false,
+        NOT_CANCELABLE = "!CANCELABLE",
+    }
+    return VALID_NATIVE_FILTER_TOKENS, LEGACY_NATIVE_FILTER_TOKENS
+end
+local VALID_NATIVE_FILTER_TOKENS, LEGACY_NATIVE_FILTER_TOKENS = NativeFilterTokenSets()
 
 local function AddNativeFilterToken(out, seen, token, baseToken)
     token = tostring(token or ""):upper():gsub("^%s+", ""):gsub("%s+$", "")

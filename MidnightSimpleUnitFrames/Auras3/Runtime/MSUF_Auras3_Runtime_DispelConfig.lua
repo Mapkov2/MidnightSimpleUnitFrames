@@ -129,6 +129,56 @@ local function CompileCornerDispelSlots(corner)
     return slots, table_concat(parts, "|")
 end
 
+local function DispelSensorPriorityDetail(border, visual)
+    -- Dispel and Purge borders sit in the Frame Outline Layer band at the
+    -- Borders-element highlight detail; the configured highlight priority
+    -- still orders them inside that band (first entry on top).
+    local priorityDetail = BORDER_SENSOR_DETAIL - 2
+    local priorityOrder = border and border.prioEnabled == true and border.prioOrder
+        or A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY
+    local priorityKey = visual == "purge" and "purge" or (visual == "border" and "dispel" or nil)
+    if priorityKey and type(priorityOrder) == "table" then
+        for index = 1, #priorityOrder do
+            if priorityOrder[index] == priorityKey then priorityDetail = BORDER_SENSOR_DETAIL + 1 - index; break end
+        end
+    end
+    return priorityDetail
+end
+
+local function CompileDispelSymbol(symbol)
+    local symbolMode, symbolStyle, symbolSlots, symbolSignature, symbolGrowth
+    local symbolSize, symbolSpacing, symbolAnchor, symbolX, symbolY
+    symbolMode = DS.Mode(symbol.mode)
+    symbolStyle = DS.Style(symbol.style)
+    symbolSize = Round(ClampNumber(symbol.size, 14, 4, 64))
+    symbolSpacing = Round(ClampNumber(symbol.spacing, 2, 0, 32))
+    symbolAnchor = ReadAnchor(symbol, nil, "anchor", "TOPRIGHT")
+    symbolX = Round(ClampNumber(symbol.x, 0, -256, 256))
+    symbolY = Round(ClampNumber(symbol.y, 0, -256, 256))
+    if symbolMode == "ALL" then
+        symbolSlots, symbolSignature, symbolGrowth = DS.Slots(symbol, symbolSize, symbolSpacing)
+    else
+        symbolGrowth = DS.ResolveGrowth(symbol.growth, symbol.anchor)
+    end
+    return symbolMode, symbolStyle, symbolSlots, symbolSignature, symbolGrowth,
+        symbolSize, symbolSpacing, symbolAnchor, symbolX, symbolY
+end
+
+local function DispelSensorTrigger(border, overlay, symbol, groupMode, visual)
+    local borderTrigger = NormalizeDispelSensorTrigger(border and border.dispelTrigger, "BY_ME")
+    local trigger = borderTrigger
+    if visual == "overlay" then
+        trigger = NormalizeDispelSensorTrigger(groupMode and overlay.dispelOverlayTrigger or overlay.trigger, "BORDER")
+        if trigger == "BORDER" then trigger = borderTrigger end
+    elseif visual == "corner" then
+        trigger = "BY_ME"
+    elseif visual == "symbol" then
+        trigger = NormalizeDispelSensorTrigger(symbol.trigger, "BORDER")
+        if trigger == "BORDER" then trigger = borderTrigger end
+    end
+    return trigger
+end
+
 local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     if not (type(unit) == "string" and unit ~= "" and type(frameSpec) == "table") then return nil end
     local border = frameSpec.border
@@ -153,33 +203,13 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     if visual == "corner" and not cornerSlots then return nil end
     if visual == "symbol" and not symbolOn then return nil end
 
-    local borderTrigger = NormalizeDispelSensorTrigger(border and border.dispelTrigger, "BY_ME")
-    local trigger = borderTrigger
-    if visual == "overlay" then
-        trigger = NormalizeDispelSensorTrigger(groupMode and overlay.dispelOverlayTrigger or overlay.trigger, "BORDER")
-        if trigger == "BORDER" then trigger = borderTrigger end
-    elseif visual == "corner" then
-        trigger = "BY_ME"
-    elseif visual == "symbol" then
-        trigger = NormalizeDispelSensorTrigger(symbol.trigger, "BORDER")
-        if trigger == "BORDER" then trigger = borderTrigger end
-    end
+    local trigger = DispelSensorTrigger(border, overlay, symbol, groupMode, visual)
 
     local symbolMode, symbolStyle, symbolSlots, symbolSignature, symbolGrowth
     local symbolSize, symbolSpacing, symbolAnchor, symbolX, symbolY
     if visual == "symbol" then
-        symbolMode = DS.Mode(symbol.mode)
-        symbolStyle = DS.Style(symbol.style)
-        symbolSize = Round(ClampNumber(symbol.size, 14, 4, 64))
-        symbolSpacing = Round(ClampNumber(symbol.spacing, 2, 0, 32))
-        symbolAnchor = ReadAnchor(symbol, nil, "anchor", "TOPRIGHT")
-        symbolX = Round(ClampNumber(symbol.x, 0, -256, 256))
-        symbolY = Round(ClampNumber(symbol.y, 0, -256, 256))
-        if symbolMode == "ALL" then
-            symbolSlots, symbolSignature, symbolGrowth = DS.Slots(symbol, symbolSize, symbolSpacing)
-        else
-            symbolGrowth = DS.ResolveGrowth(symbol.growth, symbol.anchor)
-        end
+        symbolMode, symbolStyle, symbolSlots, symbolSignature, symbolGrowth,
+            symbolSize, symbolSpacing, symbolAnchor, symbolX, symbolY = CompileDispelSymbol(symbol)
     end
 
     local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
@@ -221,18 +251,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     elseif visual == "symbol" then
         kind, rootKey = "dispelSymbol", "DispelSymbolSensor"
     end
-    -- Dispel and Purge borders sit in the Frame Outline Layer band at the
-    -- Borders-element highlight detail; the configured highlight priority
-    -- still orders them inside that band (first entry on top).
-    local priorityDetail = BORDER_SENSOR_DETAIL - 2
-    local priorityOrder = border and border.prioEnabled == true and border.prioOrder
-        or A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY
-    local priorityKey = visual == "purge" and "purge" or (visual == "border" and "dispel" or nil)
-    if priorityKey and type(priorityOrder) == "table" then
-        for index = 1, #priorityOrder do
-            if priorityOrder[index] == priorityKey then priorityDetail = BORDER_SENSOR_DETAIL + 1 - index; break end
-        end
-    end
+    local priorityDetail = DispelSensorPriorityDetail(border, visual)
     local borderLayer = Round(ClampNumber(border and border.layer, 0, 0, 30))
     -- Native dispel filters are not reaction-scoped. "Dispellable by me/group"
     -- keeps the assist identity gate for friendly cleansing, but "Any dispel
