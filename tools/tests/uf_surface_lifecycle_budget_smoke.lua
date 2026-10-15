@@ -63,10 +63,14 @@ local costs = { show, combatEnd, raidJoin }
 -- lifecycle with production providers adds 3855 (Mainline/Vanilla). Only
 -- raid-join caps move, to the exact 7.0 readings: +3483 Mainline/Forever,
 -- +2663 Classic after existing slack. Show/combat-end caps stay unchanged.
+-- 2026-10-15: the roster settle repaints every live raid frame once, so a 20 member
+-- raid join (header birth plus settle) costs +101752 instructions on Mainline,
+-- Vanilla, TBC and Mists and +103312 on Forever. Only the raid-join caps move, to
+-- the exact readings; show and combat-end caps are unchanged.
 local limits = {
-    Mainline = { 10438, 271832, 2052782 }, Forever = { 10837, 269792, 2056439 },
-    Vanilla = { 12987, 269712, 1796233 },
-    TBC = { 12987, 271200, 1796563 }, Mists = { 12868, 271210, 1792913 },
+    Mainline = { 10438, 271832, 2145249 }, Forever = { 10837, 269792, 2149976 },
+    Vanilla = { 12987, 269712, 1890190 },
+    TBC = { 12987, 271200, 1890520 }, Mists = { 12868, 271210, 1887260 },
 }
 local labels = { "unit OnShow", "combat end after combat show", "rounded raid join" }
 local failures = {}

@@ -464,6 +464,8 @@ clients+Forever	lua	tools/tests/profile_corpus_golden_smoke.lua	{root/} {flavor}
 -	python	.github/scripts/group_structure_smoke.py	{root}	Group structure headroom smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline native	Group roster native-call budget failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla native	Group roster native-call budget failed: Vanilla
+clients+Forever	lua	tools/tests/group_raid_identity_smoke.lua	{root} {flavor}	Raid roster occupant name and class-color regression: {flavor}
+-	lua	tools/tests/group_raid_identity_smoke.lua	{root} Mainline mythicraid	Mythic raid roster occupant identity regression
 -	lua	tools/tests/load_time_profile_read_smoke.lua	{root}	A file reads the profile while the addon loads, before the SavedVariables exist
 -	lua	tools/tests/group_aura_filter_token_owner_smoke.lua	{root}	State reaches into the Auras3 menu model for the Group Aura filter tokens, or the two lists drifted
 -	lua	tools/tests/resource_extras_translator_smoke.lua	{root}	Former class power resource extras keys are not carried by the profile translator

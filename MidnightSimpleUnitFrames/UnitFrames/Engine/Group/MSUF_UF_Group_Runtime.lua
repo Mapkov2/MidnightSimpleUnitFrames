@@ -70,15 +70,22 @@ local function SetupLiveHeader(key, kind)
   return header, scanned
 end
 
-local function RefreshPartyStateFrame(frame, _, kind, reason)
-  if kind ~= "party" then return false end
+local function RefreshRosterStateFrame(frame, _, kind, reason)
+  if frame._msufGFIsPreviewFrame or (kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid") then return false end
   local refresh = UF and UF.RefreshGroupFrameState
-  return type(refresh) == "function" and refresh(frame, reason) == true or false
+  local did = type(refresh) == "function" and refresh(frame, reason) == true or false
+  -- A roster slot can acquire another player without changing its unit token.
+  -- Repaint from the current unit; no readable GUID is required.
+  local active = frame._msufActiveElements
+  local elements = did and kind ~= "party" and UF.elements
+  local health = elements and elements.Health
+  if health and active and active.Health == true then health.UpdateIdentityBackground(frame) end
+  return did
 end
 
-local function RefreshVisiblePartyState(reason)
+local function RefreshVisibleRosterState(reason)
   if type(GF.ForEachFrame) ~= "function" then return false end
-  return GF.ForEachFrame(RefreshPartyStateFrame, false, reason)
+  return GF.ForEachFrame(RefreshRosterStateFrame, false, reason)
 end
 
 local function RoleFilteredAggroMode(mode)
@@ -656,7 +663,7 @@ end
 -- live kind/count and apply saved visuals once on the next frame so secure
 -- children have settled before anchor sizing, screen clamping, and opacity.
 --- What the one pending settle pass also refreshes; a merge keeps the widest.
---- ROSTER (party state and roles) includes ROLES (role state only).
+--- ROSTER (group state and roles) includes ROLES (role state only).
 local SETTLE = { LAYOUT = 0, ROLES = 1, ROSTER = 2 }
 local headerLayoutSettlePending = false
 local headerLayoutSettleState = SETTLE.LAYOUT
@@ -667,13 +674,16 @@ local function FlushHeaderLayoutSettle()
   headerLayoutSettleState = SETTLE.LAYOUT
 
   if not AnyGroupFrameEnabled() then return false end
+  local did
   if InCombat() then
-    return GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
+    -- Native headers already assigned their units. Only protected layout waits;
+    -- the coalesced roster repaint must also complete during combat.
+    did = GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
+  else
+    did = GF.RefreshHeaderLayout()
+    did = RefreshStartupVisuals() or did
   end
-
-  local did = GF.RefreshHeaderLayout()
-  did = RefreshStartupVisuals() or did
-  if state == SETTLE.ROSTER then did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did end
+  if state == SETTLE.ROSTER then did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did end
   if state == SETTLE.LAYOUT then return did end
   return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
 end
@@ -915,7 +925,7 @@ local function FlushDeferred()
     did = GF.UpdateGroupVisibility() or did
   end
   if reasons.roster then
-    did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+    did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did
     did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
   end
   --- No priority work unit on purpose: SetupWantedHeaders already ends in
@@ -959,7 +969,7 @@ local function RuntimeOnEvent(self, event, unit)
     GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then
       startupVisualsPending = true
-      RefreshVisiblePartyState(event)
+      RefreshVisibleRosterState(event)
       RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
       ScheduleHeaderLayoutSettle()
     end
@@ -1004,6 +1014,7 @@ local function RuntimeOnEvent(self, event, unit)
         GF.ForEachFrame(RefreshRosterRoleIdentity, false)
       end
       GF.DeferGroupRuntime("roster")
+      if event == "GROUP_ROSTER_UPDATE" then ScheduleHeaderLayoutSettle(SETTLE.ROSTER) end
     else
       -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;
       -- repeated roster churn and a role poll's burst of PLAYER_ROLES_ASSIGNED /

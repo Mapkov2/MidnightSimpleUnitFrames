@@ -41,6 +41,16 @@
 -- 571.1 -> 582.0 KB and 1045k -> 1033k instructions. The x86 cap moves
 -- 582 -> 594 KB (+12, below production 6.501's +14); x64 and all other
 -- limits stay unchanged. Native work is checked separately below.
+-- 2026-10-15: GROUP_ROSTER_UPDATE now repaints live raid frames once, after the
+-- native headers settle and also in combat, so a same-token occupant change shows
+-- (group_raid_identity_smoke). No GUID read is involved. Measured on this tree
+-- (Mainline / Vanilla instructions, 20 frames): raid_build 1454k / 1447k -> 1523k /
+-- 1516k, raid_settle 64k / 65k -> 133k / 134k, raid_shift 43k / 69k -> 125k / 151k;
+-- allocation unchanged (shift +0.4 KB). Native calls: +5 per frame in each of those
+-- cases (+100 for 20 frames). For 40 frames one settle costs +154k instructions
+-- (Mainline 116k -> 270k, Vanilla 124k -> 278k) and +200 native calls, 9.1 / 22.3 KB
+-- unchanged; it is coalesced to one pass per roster burst. The affected limits move
+-- to exactly the measured values; every other limit is unchanged.
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
 
@@ -51,12 +61,12 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1533, 3912 },
-        raid_settle = { 64, 8 }, raid_apply = { 1097, 594 }, raid_shift = { 84, 26 },
+        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1523, 3912 },
+        raid_settle = { 133, 8 }, raid_apply = { 1097, 594 }, raid_shift = { 125, 26 },
     },
     Vanilla = {
-        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1485, 4865 },
-        raid_settle = { 66, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 108, 75 },
+        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1516, 4865 },
+        raid_settle = { 134, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 151, 75 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
@@ -104,11 +114,11 @@ if arg[3] == "native" then
         end
     end
     h.nativeLimits = flavor == "Mainline" and {
-        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6151,
-        raid_settle = 148, raid_apply = 1120, raid_shift = 107,
+        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6222,
+        raid_settle = 221, raid_apply = 1120, raid_shift = 206,
     } or {
-        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6532,
-        raid_settle = 188, raid_apply = 1380, raid_shift = 161,
+        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6603,
+        raid_settle = 261, raid_apply = 1380, raid_shift = 260,
     }
 end
 
