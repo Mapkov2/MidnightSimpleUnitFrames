@@ -1,12 +1,10 @@
 --- Unit preview runtime readers.
 ---
---- The live specs are compiled and applied by the runtime (Config.Refresh inside
---- Factory.Apply, which a profile swap or reset runs). The preview never starts a
---- recompile itself: that would replace the sub-tables the live frames compare by
---- identity without applying them. SpecForPreviewKey only follows the runtime's
---- own state, so Config.GetSpec still recompiles when the runtime has marked its
---- specs dirty out of combat (or holds none for the unit); a recompile is then
---- already queued to apply.
+--- The runtime compiles and applies the live specs. Preview reads only the
+--- published tables, including while an apply is pending. Config.GetSpec can
+--- recompile dirty or missing specs in place without applying them, replacing
+--- sub-tables the live frames compare by identity. Missing specs keep using the
+--- renderer's existing fallbacks until the runtime publishes them.
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
@@ -61,10 +59,7 @@ function Runtime.SpecForPreviewKey(key)
     local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     if not runtimeUnit or not PreviewUnitSupported(runtimeUnit) then return nil end
     local specs = config and config.specs
-    local spec = type(specs) == "table" and specs[runtimeUnit] or nil
-    if spec and config and config.dirty ~= true then return spec end
-    if config and type(config.GetSpec) == "function" then return config.GetSpec(runtimeUnit) end
-    return spec
+    return type(specs) == "table" and specs[runtimeUnit] or nil
 end
 function Runtime.AppliedPortraitSizeForPreviewKey(key)
     local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key

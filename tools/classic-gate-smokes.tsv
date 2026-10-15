@@ -778,3 +778,4 @@ clients+Forever	lua	tools/tests/profile_sparse_client_transfer_smoke.lua	{root/}
 clients+Forever	lua	tools/tests/preview_config_signal_smoke.lua	{root} {flavor}	Settings signal direct-provider or preview ownership lifecycle failed: {flavor}
 clients+Forever	lua	tools/tests/settings_surface_commit_cost_smoke.lua	{root} {flavor}	Settings publication entered the internal surface commit original cost route: {flavor}
 clients+Forever	lua	tools/tests/preview_config_apply_bridge_smoke.lua	{root} {flavor}	Settings public bridge real-painter lifecycle failed: {flavor}
+clients+Forever	lua	tools/tests/preview_spec_lifecycle_smoke.lua	{root} {flavor}	Preview reads preserve live specs and deferred applies: {flavor}
