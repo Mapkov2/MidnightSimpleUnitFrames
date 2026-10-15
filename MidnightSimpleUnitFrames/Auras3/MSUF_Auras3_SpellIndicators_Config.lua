@@ -274,11 +274,7 @@ local function NormalizeFrameEffect(raw)
 end
 Runtime.NormalizeFrameEffect = NormalizeFrameEffect
 
-local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, spellIconStyle)
-    if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
-    local placed = type(item.placed) == "table" and item.placed or nil
-    local frameEffect = NormalizeFrameEffect(item.frame)
-    if not placed and not frameEffect then return nil end
+local function ResolveSlotCandidateFilters(item)
     local candidateFilters = item.candidateFilters
     local candidateFilterSignature = item.candidateFilterSignature
     if candidateFilters == nil then
@@ -287,9 +283,19 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     -- A temporary weapon enchant is not an aura at all -- Blizzard keeps them
     -- out of aura parsing, groups and slots entirely -- so an enchant reminder
     -- legitimately has nothing to filter on.
-    if not candidateFilters and item.allowAnyAura ~= true and item.enchantSlot == nil then return nil end
+    if not candidateFilters and item.allowAnyAura ~= true and item.enchantSlot == nil then return false end
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
         candidateFilters, candidateFilterSignature, item.hidePermanent == true)
+    return true, candidateFilters, candidateFilterSignature
+end
+
+local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, spellIconStyle)
+    if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
+    local placed = type(item.placed) == "table" and item.placed or nil
+    local frameEffect = NormalizeFrameEffect(item.frame)
+    if not placed and not frameEffect then return nil end
+    local eligible, candidateFilters, candidateFilterSignature = ResolveSlotCandidateFilters(item)
+    if not eligible then return nil end
 
     local visual = tostring(placed and placed.type or "none"):lower()
     if visual ~= "icon" and visual ~= "square" and visual ~= "bar" and visual ~= "number" and visual ~= "none" then

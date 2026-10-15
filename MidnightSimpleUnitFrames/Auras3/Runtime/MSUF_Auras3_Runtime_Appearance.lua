@@ -238,67 +238,71 @@ local AURA_SENSOR_OVERLAY_OPTIONS = {
 -- blank texture (DEBUFF_DISPLAY_INFO.None has no dispelIconAtlas).
 -- The same symbol descriptor table is extended by the compiler, native
 -- initializer and preview owner; do not fork its asset or layout rules.
-local DS = {
-    types = { "Magic", "Curse", "Disease", "Poison", "Bleed" },
-    -- Used only when AuraUtil is unavailable (for example in deterministic
-    -- menu smokes). Live clients resolve the current Blizzard defaults through
-    -- AuraUtil.GetAuraBorderColor so leaving an override disabled remains
-    -- exactly native even if Blizzard adjusts a default later.
-    defaultColors = {
-        Magic = { 0.20, 0.60, 1.00 },
-        Curse = { 0.60, 0.00, 1.00 },
-        Disease = { 0.60, 0.40, 0.00 },
-        Poison = { 0.00, 0.60, 0.00 },
-        Bleed = { 0.80, 0.10, 0.10 },
-    },
-    -- Blizzard's own per-type atlases, mirroring AuraUtil's DEBUFF_DISPLAY_INFO
-    -- on 12.1. Held literally so the menu preview -- which has no aura and
-    -- therefore never reaches AuraUtil -- can draw exactly the same art.
-    icons = {
-        Magic = "RaidFrame-Icon-DebuffMagic",
-        Curse = "RaidFrame-Icon-DebuffCurse",
-        Disease = "RaidFrame-Icon-DebuffDisease",
-        Poison = "RaidFrame-Icon-DebuffPoison",
-        Bleed = "RaidFrame-Icon-DebuffBleed",
-    },
-    rings = {
-        Magic = "ui-debuff-border-magic-icon",
-        Curse = "ui-debuff-border-curse-icon",
-        Disease = "ui-debuff-border-disease-icon",
-        Poison = "ui-debuff-border-poison-icon",
-        Bleed = "ui-debuff-border-bleed-icon",
-    },
-    borders = {
-        Magic = "ui-debuff-border-magic-noicon",
-        Curse = "ui-debuff-border-curse-noicon",
-        Disease = "ui-debuff-border-disease-noicon",
-        Poison = "ui-debuff-border-poison-noicon",
-        Bleed = "ui-debuff-border-bleed-noicon",
-    },
-    -- MSUF's own art, one folder per set.
-    folders = {
-        MSUF_LETTERS = "Letters",
-        MSUF_SHAPES = "Shapes",
-        MSUF_GLYPHS = "Glyphs",
-        MSUF_MINIMAL = "Minimal",
-    },
-    options = {
-        showWhenHarmful = true,
-        showWhenHelpful = false,
-        showWithoutDispelType = false,
-    },
-    assetCache = {},
-    -- One immutable candidate-filter table per dispel type. ALL mode compiles
-    -- often (every spec apply, every preview row); allocating five filter
-    -- tables per compile would be pure garbage for values that never change.
-    filters = {
-        Magic = { includeDispelTypes = { Magic = true } },
-        Curse = { includeDispelTypes = { Curse = true } },
-        Disease = { includeDispelTypes = { Disease = true } },
-        Poison = { includeDispelTypes = { Poison = true } },
-        Bleed = { includeDispelTypes = { Bleed = true } },
-    },
-}
+local function CreateDispelSymbolDescriptor()
+    return {
+        types = { "Magic", "Curse", "Disease", "Poison", "Bleed" },
+        -- Used only when AuraUtil is unavailable (for example in deterministic
+        -- menu smokes). Live clients resolve the current Blizzard defaults through
+        -- AuraUtil.GetAuraBorderColor so leaving an override disabled remains
+        -- exactly native even if Blizzard adjusts a default later.
+        defaultColors = {
+            Magic = { 0.20, 0.60, 1.00 },
+            Curse = { 0.60, 0.00, 1.00 },
+            Disease = { 0.60, 0.40, 0.00 },
+            Poison = { 0.00, 0.60, 0.00 },
+            Bleed = { 0.80, 0.10, 0.10 },
+        },
+        -- Blizzard's own per-type atlases, mirroring AuraUtil's DEBUFF_DISPLAY_INFO
+        -- on 12.1. Held literally so the menu preview -- which has no aura and
+        -- therefore never reaches AuraUtil -- can draw exactly the same art.
+        icons = {
+            Magic = "RaidFrame-Icon-DebuffMagic",
+            Curse = "RaidFrame-Icon-DebuffCurse",
+            Disease = "RaidFrame-Icon-DebuffDisease",
+            Poison = "RaidFrame-Icon-DebuffPoison",
+            Bleed = "RaidFrame-Icon-DebuffBleed",
+        },
+        rings = {
+            Magic = "ui-debuff-border-magic-icon",
+            Curse = "ui-debuff-border-curse-icon",
+            Disease = "ui-debuff-border-disease-icon",
+            Poison = "ui-debuff-border-poison-icon",
+            Bleed = "ui-debuff-border-bleed-icon",
+        },
+        borders = {
+            Magic = "ui-debuff-border-magic-noicon",
+            Curse = "ui-debuff-border-curse-noicon",
+            Disease = "ui-debuff-border-disease-noicon",
+            Poison = "ui-debuff-border-poison-noicon",
+            Bleed = "ui-debuff-border-bleed-noicon",
+        },
+        -- MSUF's own art, one folder per set.
+        folders = {
+            MSUF_LETTERS = "Letters",
+            MSUF_SHAPES = "Shapes",
+            MSUF_GLYPHS = "Glyphs",
+            MSUF_MINIMAL = "Minimal",
+        },
+        options = {
+            showWhenHarmful = true,
+            showWhenHelpful = false,
+            showWithoutDispelType = false,
+        },
+        assetCache = {},
+        -- One immutable candidate-filter table per dispel type. ALL mode compiles
+        -- often (every spec apply, every preview row); allocating five filter
+        -- tables per compile would be pure garbage for values that never change.
+        filters = {
+            Magic = { includeDispelTypes = { Magic = true } },
+            Curse = { includeDispelTypes = { Curse = true } },
+            Disease = { includeDispelTypes = { Disease = true } },
+            Poison = { includeDispelTypes = { Poison = true } },
+            Bleed = { includeDispelTypes = { Bleed = true } },
+        },
+    }
+end
+
+local DS = CreateDispelSymbolDescriptor()
 DS.mediaPath = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
     .. "\\Media\\Icons\\DispelTypes\\"
 A3.DispelSymbol = DS
