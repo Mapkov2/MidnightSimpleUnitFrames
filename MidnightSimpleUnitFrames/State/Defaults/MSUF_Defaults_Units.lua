@@ -11,11 +11,7 @@ local MSUF_Defaults_NormalizePortraitRenderValue = dependencies.MSUF_Defaults_No
 local function MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
     --- Legacy portrait baseline. Kept only as a migration source for older profiles;
     --- runtime and Unit Frame options use per-unit portrait fields directly.
-    if g.portraitShape == nil then g.portraitShape = "SQUARE" end
-    if g.portraitSizeOverride == nil then g.portraitSizeOverride = 0 end
-    if g.portraitPlacement == nil then g.portraitPlacement = "ATTACHED" end
-    if g.portraitWidth == nil then g.portraitWidth = 0 end
-    if g.portraitHeight == nil then g.portraitHeight = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "units_01")
     if g.portraitSizeMode ~= "UNIFORM" and g.portraitSizeMode ~= "SEPARATE" then
         if (tonumber(g.portraitSizeOverride) or 0) > 0 then
             g.portraitSizeMode = "UNIFORM"
@@ -25,33 +21,9 @@ local function MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
             g.portraitSizeMode = "UNIFORM"
         end
     end
-    if g.portraitDetachedPoint == nil then g.portraitDetachedPoint = "RIGHT" end
-    if g.portraitDetachedTo == nil then g.portraitDetachedTo = "LEFT" end
-    if g.portraitLevelOffset == nil then g.portraitLevelOffset = 7 end
-    if g.portraitOverlayAlign == nil then g.portraitOverlayAlign = "LEFT" end
-    if g.portraitAlpha == nil then g.portraitAlpha = 100 end
-    if g.portraitPanX == nil then g.portraitPanX = 0 end
-    if g.portraitPanY == nil then g.portraitPanY = 0 end
-    if g.portraitOffsetX == nil then g.portraitOffsetX = 0 end
-    if g.portraitOffsetY == nil then g.portraitOffsetY = 0 end
-    if g.portraitZoom == nil then g.portraitZoom = 100 end
-    if g.portraitBorderStyle == nil then g.portraitBorderStyle = "NONE" end
-    if g.portraitEdgeSoftness == nil then g.portraitEdgeSoftness = 0 end
-    if g.portraitBorderThickness == nil then g.portraitBorderThickness = 2 end
-    if g.portraitBorderColorR == nil then g.portraitBorderColorR = 1 end
-    if g.portraitBorderColorG == nil then g.portraitBorderColorG = 1 end
-    if g.portraitBorderColorB == nil then g.portraitBorderColorB = 1 end
-    if g.portraitBorderColorA == nil then g.portraitBorderColorA = 1 end
-    if g.portraitBgEnabled == nil then g.portraitBgEnabled = false end
-    if g.portraitBgColorR == nil then g.portraitBgColorR = 0.05 end
-    if g.portraitBgColorG == nil then g.portraitBgColorG = 0.05 end
-    if g.portraitBgColorB == nil then g.portraitBgColorB = 0.05 end
-    if g.portraitBgColorA == nil then g.portraitBgColorA = 0.85 end
-    if g.portraitClassStyle == nil then g.portraitClassStyle = "BLIZZARD" end
+    MSUF.DefaultsSchema.SeedGeneral(g, "units_02")
     g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
-    if g.portraitFillBorder == nil then g.portraitFillBorder = false end
-    if g.portraitBorderArt == nil then g.portraitBorderArt = "FLAT" end
-    if g.portraitBorderDirection == nil then g.portraitBorderDirection = "UP" end
+    MSUF.DefaultsSchema.SeedGeneral(g, "units_03")
     --- Retired Portrait panel UI state / old shared render value. Kept for imports only.
     if g._portraitScopeKey == nil then g._portraitScopeKey = "shared" end
     --- Initialize _portraitSharedRender from player's actual render type (migration from old layout)

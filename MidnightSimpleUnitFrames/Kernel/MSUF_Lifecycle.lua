@@ -69,7 +69,10 @@ local logoutOrder = {
         MSUF.ProfileVariants.CancelRecording(false, true)
     end,
     function() MSUF.ProfileSync.Flush() end,
-    function() _G.MSUF_DB = nil end,
+    function()
+        MSUF.DefaultsSchema.Persist(MSUF_GlobalDB)
+        _G.MSUF_DB = nil
+    end,
 }
 -- WoW guarantees no last-running PLAYER_LOGOUT handler. These frames register as late as the
 -- lifecycle can, so every handler registered earlier (core, Options, the Suite) still reads the

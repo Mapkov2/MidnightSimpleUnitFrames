@@ -772,3 +772,6 @@ clients+Forever	lua	tools/tests/menu_boss_target_highlight_inventory_smoke.lua	{
 -	python	tools/tests/menu_section_capture_environment_smoke.py	{root}	Section capture accepted interpreter startup contamination
 -	python	tools/tests/menu_section_shell_boundary_smoke.py	{root}	Section source authentication command failed its native shell boundary
 -	python	tools/tests/menu_section_proof_contract_smoke.py	{root}	Historical source ancestry receipt authenticity or native test runtime contract failed
+clients+Forever	lua	tools/tests/defaults_schema_parity_smoke.lua	{root/} {flavor}	Factory/repair defaults match the canonical typed schema: {flavor}
+clients+Forever	lua	tools/tests/profile_sparse_persistence_smoke.lua	{root/} {flavor}	Terminal sparse persistence preserves identities and typed overrides: {flavor}
+clients+Forever	lua	tools/tests/profile_sparse_client_transfer_smoke.lua	{root/} {flavor}	Portable sparse SavedVariables preserve all destination clients and return paths: {flavor}

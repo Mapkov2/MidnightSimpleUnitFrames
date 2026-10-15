@@ -10,20 +10,10 @@ local MSUF_Defaults_GetMenuFontDefault = dependencies.MSUF_Defaults_GetMenuFontD
 local MSUF_Defaults_MigrateUnitDispelOwnership = dependencies.MSUF_Defaults_MigrateUnitDispelOwnership
 local MSUF_Defaults_NormalizeFontShadowScope = dependencies.MSUF_Defaults_NormalizeFontShadowScope
 local function MSUF_Defaults_Stage_SeedShellDefaults(profileDB, g)
-    if g.anchorName == nil then
-        g.anchorName = "UIParent"
-    end
-    if g.anchorToCooldown == nil then
-        g.anchorToCooldown = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_01")
     --- New install defaults (UI scale + Flash menu anchor)
     --- Default: Unhalted-style global UI scale disabled; local MSUF scales remain independent.
-    if g.disableScaling == nil then
-        g.disableScaling = false
-    end
-    if g.globalUiScalePreset == nil then
-        g.globalUiScalePreset = "auto"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_02")
     --- Migrate global UI scale storage to the Unhalted-style table:
     --- General.UIScale.Enabled + General.UIScale.Scale. Keep the legacy preset keys
     --- populated so older exports/tools can still reason about the profile.
@@ -76,20 +66,7 @@ local function MSUF_Defaults_Stage_SeedShellDefaults(profileDB, g)
     end
     --- Nil value = Off (Unhalted-style global UI scale disabled)
     --- (Do NOT seed a default globalUiScaleValue on fresh installs.)
-    if g.msufUiScale == nil then
-        g.msufUiScale = 1.0
-    end
-    if g.flashFullPoint == nil then g.flashFullPoint = "CENTER" end
-    if g.flashFullRelPoint == nil then g.flashFullRelPoint = "CENTER" end
-    if g.flashFullX == nil then g.flashFullX = -60 end
-    if g.flashFullY == nil then g.flashFullY = 10 end
-    if g.flashFullW == nil then g.flashFullW = 900 end
-    if g.flashFullH == nil then g.flashFullH = 700 end
-    if g.flashFullXpx == nil then g.flashFullXpx = -60 end
-    if g.flashFullYpx == nil then g.flashFullYpx = 10 end
-    if g.tipCycleIndex == nil then
-        g.tipCycleIndex = 11
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_03")
     --- Minimap icon (LibDBIcon) defaults
     if g.showMinimapIcon == nil then
         g.showMinimapIcon = true
@@ -130,21 +107,7 @@ end
     --- Optional native Edit Mode adapters. The third-party addons remain the sole
     --- owners of their frames and saved positions; these switches only control
     --- whether MSUF registers movers for them.
-    if g.grid2EditModeIntegration == nil then
-        g.grid2EditModeIntegration = true
-    end
-    if g.detailsEditModeIntegration == nil then
-        g.detailsEditModeIntegration = true
-    end
-    if g.dominosEditModeIntegration == nil then
-        g.dominosEditModeIntegration = true
-    end
-    if g.dandersEditModeIntegration == nil then
-        g.dandersEditModeIntegration = true
-    end
-    if g.blizzardEditModeIntegration == nil then
-        g.blizzardEditModeIntegration = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_04")
     if g.dropdownStyleMode == nil then
         g.dropdownStyleMode = "msuf"
     elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then
@@ -172,18 +135,7 @@ end
     end
     --- Fonts: optionally color the *health text* by current health percentage.
     --- Default OFF to preserve existing behavior.
-    if g.colorHealthTextByHealth == nil then
-        g.colorHealthTextByHealth = false
-    end
-    if g.slashMenuSnapEnabled == nil then
-        g.slashMenuSnapEnabled = true
-    end
-    if g.previewDragHintAnimationEnabled == nil then
-        g.previewDragHintAnimationEnabled = true
-    end
-    if g.hideAdvancedMenu == nil then
-        g.hideAdvancedMenu = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_05")
     --- Navigation icons became the standard Menu2 presentation in Defaults
     --- revision 7. Upgrade older stored profiles once, but preserve an explicit
     --- user choice made after that migration.
@@ -193,63 +145,18 @@ end
         g.showNavigationIcons = true
     end
     -- Keep explicit guide choices, including profiles created before this default.
-    if g.classPowerPreviewGuidesEnabled == nil then
-        g.classPowerPreviewGuidesEnabled = false
-    end
-    if g.unitPreviewGuidesEnabled == nil then
-        g.unitPreviewGuidesEnabled = false
-    end
-    if g.showGameMenuButton == nil then
-        g.showGameMenuButton = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_06")
     if g.menuFontKey == nil then
         g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
     end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false --- Default: Snap OFF
     end
-    if g.editModeGridStep == nil then
-        g.editModeGridStep = 20
-    end
-    if g.editModeGridEnabled == nil then
-        g.editModeGridEnabled = true
-    end
-    if g.editModeSnapEnabled == nil then
-        g.editModeSnapEnabled = false
-    end
-    if g.editModeSnapMode == nil then
-        g.editModeSnapMode = "grid"
-    end
-    if g.editModeSnapModeGrid == nil then
-        g.editModeSnapModeGrid = true
-    end
-    if g.editModeSnapModeFrames == nil then
-        g.editModeSnapModeFrames = false
-    end
-    if g.editModeHideWhiteArrows == nil then
-        g.editModeHideWhiteArrows = true
-    end
-    if g.linkEditModes == nil then
-        g.linkEditModes = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_07")
 end
 
 local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
-    if g.boldText == nil then
-        g.boldText = false
-    end
-    if g.noOutline == nil then
-        g.noOutline = false
-    end
-    if g.nameClassColor == nil then
-        g.nameClassColor = false
-    end
-    if g.npcNameRed == nil then
-        g.npcNameRed = false
-    end
-    if g.nameNpcClassColor == nil then
-        g.nameNpcClassColor = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_08")
     if type(g.fontColor) ~= "string" then
         g.fontColor = "white"
     end
@@ -280,15 +187,7 @@ local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
         g.fontColorCustomG = nil
         g.fontColorCustomB = nil
     end
-    if g.textBackdrop == nil then
-        g.textBackdrop = true
-    end
-    if g.fontMonochrome == nil then
-        g.fontMonochrome = false
-    end
-    if g.fontSlug == nil then
-        g.fontSlug = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_09")
     if g.fontSlug == true then
         g.fontMonochrome = false
         if g.boldText == true then g.boldText = false end
@@ -372,28 +271,9 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
         g.bossTargetOutlineMode = g.bossTargetHighlightEnabled and 1 or 0
     end
     --- UnitFrame dispel overlay (health-bar tint driven by native 12.1 aura visual state)
-    if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
-    if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "DISPEL_TYPE" end
-    if g.dispelBorderShowOn == nil then g.dispelBorderShowOn = "BOTH" end
-    if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
-    if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
-    if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
-    if g.unitDispelOverlayAlpha == nil then g.unitDispelOverlayAlpha = 0.35 end
-    if g.unitDispelOverlayTrigger == nil then g.unitDispelOverlayTrigger = "BORDER" end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_10")
     --- UnitFrame dispel-type symbol (placed icon naming the debuff type)
-    if g.unitDispelSymbolEnabled == nil then g.unitDispelSymbolEnabled = false end
-    if g.unitDispelSymbolStyle == nil then g.unitDispelSymbolStyle = "BLIZZARD" end
-    if g.unitDispelSymbolMode == nil then g.unitDispelSymbolMode = "ALL" end
-    if g.unitDispelSymbolTrigger == nil then g.unitDispelSymbolTrigger = "BORDER" end
-    if g.unitDispelSymbolSize == nil then g.unitDispelSymbolSize = 14 end
-    if g.unitDispelSymbolSpacing == nil then g.unitDispelSymbolSpacing = 2 end
-    if g.unitDispelSymbolGrowth == nil then g.unitDispelSymbolGrowth = "RIGHT" end
-    if g.unitDispelSymbolAnchor == nil then g.unitDispelSymbolAnchor = "TOPRIGHT" end
-    if g.unitDispelSymbolX == nil then g.unitDispelSymbolX = 0 end
-    if g.unitDispelSymbolY == nil then g.unitDispelSymbolY = 0 end
-    if g.unitDispelSymbolAlpha == nil then g.unitDispelSymbolAlpha = 1 end
-    if g.unitDispelSymbolLayer == nil then g.unitDispelSymbolLayer = 8 end
-    if g.unitDispelSymbolStrata == nil then g.unitDispelSymbolStrata = "AUTO" end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_11")
     -- Overlay/Symbol controls now belong to their corresponding UnitFrame.
     -- Flatten the former Shared-vs-Bars-override result once so upgrading does
     -- not change any frame's appearance while future edits stay independent.
@@ -416,12 +296,7 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
     local hadLegacyTooltipStyle = (g.unitInfoTooltipStyle ~= nil)
     local hadTooltipProvider = (g.unitTooltipProvider ~= nil)
     local hadTooltipAnchor = (g.unitTooltipAnchor ~= nil)
-    if g.disableUnitInfoTooltips == nil then
-        g.disableUnitInfoTooltips = true
-    end
-    if g.unitInfoTooltipStyle == nil then
-        g.unitInfoTooltipStyle = "classic"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "shell_12")
     if (not hadTooltipProvider) and (not hadTooltipAnchor)
         and (not hadLegacyTooltipDisable) and (not hadLegacyTooltipStyle)
         and g.tooltipPosX == nil and g.tooltipPosY == nil then

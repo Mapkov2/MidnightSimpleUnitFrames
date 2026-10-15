@@ -226,3 +226,7 @@ IDs are NeverSecret. The policy adds no reader, timer, ticker or frame callback.
 Priorities default off; factory reset supplies new keys missing from older
 authored factory snapshots. Runtime and preview use the same policy helper.
 Optional defaults are read lazily; profile activation keeps older data intact.
+
+Profile defaults remain materialised on every client. The typed factory/repair catalog in
+`tools/fixtures/defaults/schema.lua` verifies the existing providers; certified scalar
+defaults are omitted only at terminal persistence. See `docs/PROFILE_STORAGE.md`.

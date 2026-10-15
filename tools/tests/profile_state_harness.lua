@@ -68,7 +68,7 @@ function Harness.Load(root, flavor)
         "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua",
         "Kernel/MSUF_Util.lua", "Kernel/MSUF_SuiteLink.lua", "Locales/MSUF_Localization.lua",
         "State/MSUF_StateHelpers.lua",
-        "State/MSUF_ProfileCodec.lua", "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+        "State/MSUF_ProfileCodec.lua", "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
         "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
         "State/MSUF_ProfileFields.lua",
     })

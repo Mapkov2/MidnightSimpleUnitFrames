@@ -71,6 +71,7 @@ Kernel\MSUF_Util.lua
 Kernel\MSUF_Keybinds.lua
 State\MSUF_StateHelpers.lua
 State\MSUF_AuraDefaults.lua
+State\Defaults\MSUF_Defaults_Schema.lua
 State\Defaults\MSUF_Defaults_Shell.lua
 State\Defaults\MSUF_Defaults_Bars.lua
 State\Defaults\MSUF_Defaults_Units.lua

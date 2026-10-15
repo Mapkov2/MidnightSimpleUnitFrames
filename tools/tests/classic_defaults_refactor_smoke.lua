@@ -16,7 +16,7 @@ load("State/MSUF_StateHelpers.lua")
 load("State/MSUF_ProfileCodec.lua")
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, "Vanilla", ns, {
-    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
     "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",
 })

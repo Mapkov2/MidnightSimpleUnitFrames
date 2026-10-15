@@ -2334,12 +2334,7 @@ local MSUF_Defaults_Stage_SeedShellDefaults = sharedShellDefaults.MSUF_Defaults_
 --- Dark mode, bar background fill/colour modes, gradients, aggro border,
 --- bar mode legacy flags, NPC colour mode, unified bar colour, outline colour.
 local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
-    if g.darkMode == nil then
-        g.darkMode = false
-    end
-    if g.darkBarTone == nil then
-        g.darkBarTone = "black"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_01")
     if g.darkBgBrightness == nil then
         g.darkBgBrightness = 0.25      --- 25% Grau als Standard
     end
@@ -2385,12 +2380,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
         g.barBgMatchHPColor = mode == "match_health"
         g.barBgClassColor = mode == "class"
     end
-    if g.enableGradient == nil then
-        g.enableGradient = false
-    end
-    if g.enableHealthGradient == nil then
-        g.enableHealthGradient = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_02")
     if g.healthGradientLowR == nil or g.healthGradientLowG == nil or g.healthGradientLowB == nil then
         g.healthGradientLowR = 1
         g.healthGradientLowG = 0
@@ -2419,12 +2409,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     --- keys, and MSUF_UF_Config falls back to exactly these values, so seeding
     --- them there would only change what a saved profile carries.
     if not IS_CLASSIC_FAMILY then
-        if g.healthLossColorR == nil then g.healthLossColorR = 1 end
-        if g.healthLossColorG == nil then g.healthLossColorG = 0.55 end
-        if g.healthLossColorB == nil then g.healthLossColorB = 0.08 end
-        if g.powerLossColorR == nil then g.powerLossColorR = 0.70 end
-        if g.powerLossColorG == nil then g.powerLossColorG = 0.90 end
-        if g.powerLossColorB == nil then g.powerLossColorB = 1 end
+        MSUF.DefaultsSchema.SeedGeneral(g, "base_03")
     end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
@@ -2481,10 +2466,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
                 g.gradientDirRight = true
             end
         end
-        if g.gradientDirLeft == nil then g.gradientDirLeft = false end
-        if g.gradientDirRight == nil then g.gradientDirRight = false end
-        if g.gradientDirUp == nil then g.gradientDirUp = false end
-        if g.gradientDirDown == nil then g.gradientDirDown = false end
+        MSUF.DefaultsSchema.SeedGeneral(g, "base_04")
         if (not g.gradientDirLeft) and (not g.gradientDirRight) and (not g.gradientDirUp) and (not g.gradientDirDown) then
             g.gradientDirRight = true
         end
@@ -2500,10 +2482,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
             g.powerGradientDirUp = g.gradientDirUp == true
             g.powerGradientDirDown = g.gradientDirDown == true
         end
-        if g.powerGradientDirLeft == nil then g.powerGradientDirLeft = false end
-        if g.powerGradientDirRight == nil then g.powerGradientDirRight = false end
-        if g.powerGradientDirUp == nil then g.powerGradientDirUp = false end
-        if g.powerGradientDirDown == nil then g.powerGradientDirDown = false end
+        MSUF.DefaultsSchema.SeedGeneral(g, "base_05")
         if (not g.powerGradientDirLeft) and (not g.powerGradientDirRight)
             and (not g.powerGradientDirUp) and (not g.powerGradientDirDown)
         then
@@ -2562,15 +2541,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     if g.npcColorMode ~= "reaction" and g.npcColorMode ~= "type" then
         g.npcColorMode = "reaction"
     end
-    if g.npcTypeColorBar == nil then
-        g.npcTypeColorBar = true
-    end
-    if g.npcTypeColorText == nil then
-        g.npcTypeColorText = true
-    end
-    if g.npcClassColorBar == nil then
-        g.npcClassColorBar = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_06")
     --- Per-unit NPC Type enable (nil/true = on, false = off)
     if g.npcTypeTarget == nil then g.npcTypeTarget = true end
     if g.npcTypeFocus  == nil then g.npcTypeFocus  = true end
@@ -2658,46 +2629,17 @@ local MSUF_Defaults_Stage_SeedPredictionDefaults = sharedBarsDefaults.MSUF_Defau
 --- Leader/level/raid group/combat/resting/PvP indicators, the ...Pos ->
 --- ...Anchor lift, per-unit raid marker, PvP flag and elite icon defaults.
 local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
-    if g.showLeaderIcon == nil then
-        g.showLeaderIcon = true
-    end
-    if g.leaderIconStyle == nil then
-        g.leaderIconStyle = "BLIZZARD"
-    end
-    if g.leaderIconOffsetX == nil then
-        g.leaderIconOffsetX = 0
-    end
-    if g.leaderIconOffsetY == nil then
-        g.leaderIconOffsetY = 3
-    end
-    if g.leaderIconLayer == nil then
-        g.leaderIconLayer = 7
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_07")
     --- Level indicator offset (global)
-    if g.levelIndicatorOffsetX == nil then
-        g.levelIndicatorOffsetX = 0
-    end
-    if g.levelIndicatorOffsetY == nil then
-        g.levelIndicatorOffsetY = 0
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_08")
     if g.levelIndicatorAnchor == nil then
         g.levelIndicatorAnchor = 'NAMERIGHT'
     end
-    if g.levelIndicatorLayer == nil then
-        g.levelIndicatorLayer = 7
-    end
-    if g.showRaidGroupInName == nil then
-        g.showRaidGroupInName = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_09")
     if g.raidGroupNameAnchor == nil then
         g.raidGroupNameAnchor = 'NAMERIGHT'
     end
-    if g.raidGroupNameOffsetX == nil then
-        g.raidGroupNameOffsetX = 3
-    end
-    if g.raidGroupNameOffsetY == nil then
-        g.raidGroupNameOffsetY = 0
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_10")
     if g.raidGroupNameStyle == nil then
         g.raidGroupNameStyle = 'PAREN'
     end
@@ -2733,36 +2675,11 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
     if g.incomingResIndicatorPos == nil then
         g.incomingResIndicatorPos = 'TOPRIGHT'
     end
-    if g.incomingResIndicatorLayer == nil then
-        g.incomingResIndicatorLayer = 7
-    end
-    if g.showCombatStateIndicator == nil then
-        g.showCombatStateIndicator = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_11")
     if g.combatStateIndicatorPos == nil then
         g.combatStateIndicatorPos = 'TOPLEFT'
     end
-    if g.combatStateIndicatorLayer == nil then
-        g.combatStateIndicatorLayer = 7
-    end
-    if g.showPvpIndicator == nil then
-        g.showPvpIndicator = true
-    end
-    if g.pvpIndicatorAnchor == nil then
-        g.pvpIndicatorAnchor = "TOPRIGHT"
-    end
-    if g.pvpIndicatorOffsetX == nil then
-        g.pvpIndicatorOffsetX = 0
-    end
-    if g.pvpIndicatorOffsetY == nil then
-        g.pvpIndicatorOffsetY = 0
-    end
-    if g.pvpIndicatorSize == nil then
-        g.pvpIndicatorSize = 18
-    end
-    if g.pvpIndicatorLayer == nil then
-        g.pvpIndicatorLayer = 7
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_12")
     --- Status Icons (Summon / Resting)
     --- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
     if g.showRestingIndicator == nil then
@@ -2771,15 +2688,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
     --- Rested icon defaults (Blizzard animated Zzz)
     --- Requirement: default size 39 and centered above the attached Player portrait.
     --- Only apply when the profile does not already carry explicit values (no regression for users who moved it).
-    if g.restedStateIndicatorSymbol == nil then
-        g.restedStateIndicatorSymbol = "rested_blizzard_animated"
-    end
-    if g.restedStateIndicatorIconStyle == nil then
-        g.restedStateIndicatorIconStyle = "BLIZZARD"
-    end
-    if g.restedStateIndicatorAnchor == nil then
-        g.restedStateIndicatorAnchor = "TOPLEFT"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_13")
     if g.restedStateIndicatorOffsetX == nil or type(g.restedStateIndicatorOffsetX) ~= "number" then
         g.restedStateIndicatorOffsetX = -40
     end
@@ -2789,19 +2698,9 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
     if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
         g.restedStateIndicatorSize = 39
     end
-    if g.restedStateIndicatorLayer == nil then
-        g.restedStateIndicatorLayer = 25
-    end
-    if g.stateIconsTestMode == nil then
-        g.stateIconsTestMode = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_14")
     --- Player indicators (Frames -> Player)
-    if g.showLevel == nil then
-        g.showLevel = false
-    end
-    if g.showRaidMarker == nil then
-        g.showRaidMarker = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "base_15")
     local legacyShowRaidMarker = g.showRaidMarker
     for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet", "pettarget","boss", "arena"}) do
         profileDB[key] = profileDB[key] or {}
@@ -3248,6 +3147,7 @@ MSUF.ProfileMigrations = (function()
         { "retired_group_tooltips", StripGroupTooltips },
         { "revision_17_additions", SeedAdditions },
         { "group_buff_strata", SeedTrackedStrata },
+        { "sparse_persistence_defaults", MSUF.DefaultsSchema.FillMenuDefaults },
     }
     function Migrations.Apply(profile, skipMedia)
         if type(profile) ~= "table" or MSUF_Defaults_IsFreshInstallProfileDB(profile) then return profile end
@@ -3259,6 +3159,7 @@ MSUF.ProfileMigrations = (function()
             -- Capability-dependent nil fills are portable across client changes.
             SeedAdditions(profile)
             SeedTrackedStrata(profile)
+            MSUF.DefaultsSchema.FillMenuDefaults(profile)
             return profile
         end
         for _, step in ipairs(Migrations.Ledger) do

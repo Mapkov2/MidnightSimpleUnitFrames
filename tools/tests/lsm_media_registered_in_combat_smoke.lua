@@ -102,6 +102,7 @@ local function NewWorld(startInCombat)
         return nil
     end
     world.ns = ns
+    assert(loadfile(addon .. "State/Defaults/MSUF_Defaults_Schema.lua"))("MidnightSimpleUnitFrames", ns)
     -- Libs schedules the legacy callback while files load; State supplies its
     -- migration owner before the next frame. Load that real owner here too.
     local defaults = assert(io.open(addon .. "State/MSUF_Defaults.lua", "rb"))

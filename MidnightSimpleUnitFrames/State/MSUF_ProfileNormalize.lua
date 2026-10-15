@@ -41,12 +41,7 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if type(profile.general) ~= "table" then
         profile.general = {}
     end
-    if profile.general.showGameMenuButton == nil then
-        profile.general.showGameMenuButton = true
-    end
-    if profile.general.previewDragHintAnimationEnabled == nil then
-        profile.general.previewDragHintAnimationEnabled = true
-    end
+    MSUF.DefaultsSchema.FillMenuDefaults(profile)
     -- Factory-created profiles explicitly start at false. Profiles predating
     -- the drag cue have already taught their owners the preview workflow, so a
     -- missing marker is migrated to the experienced cadence.

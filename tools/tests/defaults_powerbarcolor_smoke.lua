@@ -42,7 +42,7 @@ function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, "Mainline", ns, {
     "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
-    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
 })
 assert(#written == 0, "loading the defaults wrote into PowerBarColor: " .. table.concat(written, ", "))

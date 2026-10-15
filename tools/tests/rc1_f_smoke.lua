@@ -232,7 +232,7 @@ _G.MSUF_DB = { general = {}, auras3 = { enabled = true, shared = {}, perUnit = {
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(root, flavor, namespace, {
     "Game/Shared/Initialize.lua",
-    "State/MSUF_AuraDefaults.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
     "Game/Classic/Auras/MSUF_Auras3_Compile.lua",

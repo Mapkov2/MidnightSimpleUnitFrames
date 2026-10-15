@@ -1366,3 +1366,7 @@ captured local `type`. Ownership, binding model and the cost pins are in
 
 Unit-frame preview request ownership, early dependency order, family handoff and
 the retained core animation boundary are documented in [docs/PREVIEW_REQUESTS.md](docs/PREVIEW_REQUESTS.md).
+
+Profile defaults remain materialised on every client. The typed factory/repair catalog in
+`tools/fixtures/defaults/schema.lua` verifies the existing providers; certified scalar
+defaults are omitted only at terminal persistence. See `docs/PROFILE_STORAGE.md`.

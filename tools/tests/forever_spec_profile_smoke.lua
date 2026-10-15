@@ -131,7 +131,7 @@ manifest.LoadSelected(repo, spec.toc, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "State/MSUF_StateHelpers.lua",
-    "State/MSUF_ProfileCodec.lua",
+    "State/MSUF_ProfileCodec.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
 })
 function MSUF_EnsureDB() end
 function MSUF_CreateFactoryDefaultProfile() return { _msufProfileSchema = 600, general = {} } end

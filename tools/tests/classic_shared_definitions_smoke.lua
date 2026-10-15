@@ -3,7 +3,7 @@ local ns = { Client = { IsClassic = flavor ~= "Mainline" } }
 ns.ExportPublic = function(name, value) _G[name] = value end
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, flavor, ns, {
-    "State/MSUF_AuraDefaults.lua", "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
 })
 local A3 = assert(ns.MSUF_Auras3)
 assert(A3.NewPlayerDefensiveContainer == ns.MSUF_CreateCanonicalPlayerDefensiveAuraContainer)

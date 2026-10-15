@@ -113,7 +113,7 @@ local GUARDS = {
     { "the fresh-install chunked power bar override",
         "if not IS_CLASSIC_FAMILY then\n        db.bars.chunkedPowerBar = false", 1 },
     { "the health and power loss color seeds",
-        "if not IS_CLASSIC_FAMILY then\n        if g.healthLossColorR == nil then g.healthLossColorR = 1 end", 1 },
+        'if not IS_CLASSIC_FAMILY then\n        MSUF.DefaultsSchema.SeedGeneral(g, "base_03")', 1 },
     { "the combined Blizzard aura switch split",
         "if not IS_CLASSIC_FAMILY and a3.shared.hideBlizzardAuraFrames ~= nil then", 1 },
     { "the chunked health fill seed",
@@ -178,7 +178,7 @@ function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return
 _G.MSUF_NS, _G.MSUF = ns, ns
 local defaultsModules = {
     "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua", "Locales/MSUF_Localization.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
-    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
     "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
 }

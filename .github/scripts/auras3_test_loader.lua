@@ -324,7 +324,7 @@ local function PrepareDirectContracts(source, namespace)
         namespace.Client = namespace.Client or { IsClassic = false }
         local flavor = namespace.Client.IsClassic and "Vanilla" or "Mainline"
         manifest.LoadSelected(".", flavor, namespace, {
-            "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+            "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
             "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
         }, originalLoadfile)
     end

@@ -241,7 +241,7 @@ manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "Kernel/MSUF_SuiteLink.lua",
     "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",
-    "State/MSUF_ProfileCodec.lua",
+    "State/MSUF_ProfileCodec.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     -- Profile mutation invalidates the same compiled castbar owner as the client.
     "Castbars/MSUF_Castbars_PublicAPI.lua", "Castbars/MSUF_Castbars_Backend.lua", "Castbars/MSUF_CastbarConfig.lua",
     -- The general key owner registry every partial export and import asks.

@@ -3,27 +3,11 @@ local _, MSUF = ...
 MSUF.DefaultsStageFactories = MSUF.DefaultsStageFactories or {}
 MSUF.DefaultsStageFactories.Bars = function(dependencies)
 local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
-    if g.castbarInterruptibleColor == nil then
-        g.castbarInterruptibleColor = "turquoise"
-    end
-    if g.castbarNonInterruptibleColor == nil then
-        g.castbarNonInterruptibleColor = "red"
-    end
-    if g.castbarInterruptColor == nil then
-        g.castbarInterruptColor = "red"
-    end
-    if g.playerCastbarOverrideEnabled == nil then
-        g.playerCastbarOverrideEnabled = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_01")
     if g.playerCastbarOverrideMode == nil then
         g.playerCastbarOverrideMode = "CLASS" --- "CLASS" or "CUSTOM"
     end
-    if g.playerCastbarOverrideR == nil then g.playerCastbarOverrideR = 1 end
-    if g.playerCastbarOverrideG == nil then g.playerCastbarOverrideG = 1 end
-    if g.playerCastbarOverrideB == nil then g.playerCastbarOverrideB = 1 end
-    if g.castbarFillDirection == nil then
-        g.castbarFillDirection = "RTL"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_02")
     if g.castbarUnifiedFillDirection ~= nil then
         if g.castbarUnifiedDirection == nil then
             g.castbarUnifiedDirection = (g.castbarUnifiedFillDirection == true)
@@ -34,13 +18,7 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
         g.castbarUnifiedDirection = false
     end
     --- Channeled casts: show spell-specific tick lines (five-line fallback)
-    if g.castbarShowChannelTicks == nil then
-        g.castbarShowChannelTicks = false
-    end
-    if g.castbarShowLatencyText == nil then g.castbarShowLatencyText = false end
-    if g.castbarAccentLastTick == nil then g.castbarAccentLastTick = false end
-    if g.kickReadyTimeMarker == nil then g.kickReadyTimeMarker = false end
-    if g.kickReadyTimeSegment == nil then g.kickReadyTimeSegment = false end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_03")
     --- Opposite fill-direction for enemy castbar
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
@@ -57,47 +35,11 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     --- GCD/instant-cast bar (12.1 native-duration rebuild in Castbars/MSUF_CastbarGCD.lua).
     --- Opt-in: the v32 factory profile pins showGCDBar = false, and removal-era
     --- profiles carry an explicit false from the old force-disable.
-    if g.showGCDBar == nil then
-        g.showGCDBar = false
-    end
-    if g.gcdBarDetached == nil then g.gcdBarDetached = false end
-    if g.gcdBarIdle == nil then g.gcdBarIdle = false end
-    if g.gcdBarCombatOnly == nil then g.gcdBarCombatOnly = false end
-    if g.gcdBarWidth == nil then g.gcdBarWidth = 180 end
-    if g.gcdBarHeight == nil then g.gcdBarHeight = 12 end
-    if g.gcdBarX == nil then g.gcdBarX = 0 end
-    if g.gcdBarY == nil then g.gcdBarY = -180 end
-    if g.gcdBarOpacity == nil then g.gcdBarOpacity = 100 end
-    if g.showGCDBarTime == nil then
-        g.showGCDBarTime = true
-    end
-    if g.showGCDBarSpell == nil then
-        g.showGCDBarSpell = true
-    end
-    if g.empowerColorStages == nil then
-        g.empowerColorStages = true
-    end
-    if g.empowerStageBlink == nil then
-        g.empowerStageBlink = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_04")
     if g.empowerStageBlinkTime == nil or type(g.empowerStageBlinkTime) ~= "number" then
         g.empowerStageBlinkTime = 0.25
     end
-    if g.enableTargetCastbar == nil then
-        g.enableTargetCastbar = true
-    end
-    if g.enableFocusCastbar == nil then
-        g.enableFocusCastbar = true
-    end
-    if g.enablePlayerCastbar == nil then
-        g.enablePlayerCastbar = true
-    end
-    if g.enableBossCastbar == nil then
-        g.enableBossCastbar = true
-    end
-    if g.enableArenaCastbar == nil then
-        g.enableArenaCastbar = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_05")
     local function _NormalizeCastbarBackendDefault(value)
         if value == true then return "MSUF" end
         if value == false then return "BLIZZARD" end
@@ -123,48 +65,11 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     _InitCastbarBackend("focus", "castbarFocusBackend", "enableFocusCastbar")
     _InitCastbarBackend("boss", "bossCastbarBackend", "enableBossCastbar")
     _InitCastbarBackend("arena", "arenaCastbarBackend", "enableArenaCastbar")
-    if g.showPlayerCastTime == nil then
-        g.showPlayerCastTime = true
-    end
-    if g.showTargetCastTime == nil then
-        g.showTargetCastTime = true
-    end
-    if g.showFocusCastTime == nil then
-        g.showFocusCastTime = true
-    end
-    if g.showBossCastTime == nil then
-        g.showBossCastTime = true
-    end
-    if g.showArenaCastTime == nil then
-        g.showArenaCastTime = true
-    end
-    if g.castbarPlayerTimeFormat == nil then
-        g.castbarPlayerTimeFormat = "CURRENT"
-    end
-    if g.castbarTargetTimeFormat == nil then
-        g.castbarTargetTimeFormat = "CURRENT"
-    end
-    if g.castbarFocusTimeFormat == nil then
-        g.castbarFocusTimeFormat = "CURRENT"
-    end
-    if g.bossCastTimeFormat == nil then
-        g.bossCastTimeFormat = "CURRENT"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_06")
 if g.arenaCastTimeFormat == nil then
     g.arenaCastTimeFormat = "CURRENT"
 end
-    if g.bossCastbarOffsetX == nil then
-        g.bossCastbarOffsetX = 2
-    end
-    if g.bossCastbarOffsetY == nil then
-        g.bossCastbarOffsetY = -46
-    end
-    if g.bossCastbarWidth == nil then
-        g.bossCastbarWidth = 176
-    end
-    if g.bossCastbarHeight == nil then
-        g.bossCastbarHeight = 12
-end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_07")
 --- Arena castbars start on the boss physical edge-anchor model directly:
 --- castbar TOP anchors to the frame outline BOTTOM, no legacy conversion.
 if g.arenaCastbarOffsetX == nil then
@@ -193,12 +98,7 @@ if g.arenaCastbarHeight == nil then
         g.bossCastbarOffsetY = legacyOffsetY + bossHeight + castbarHeight + 4
         g._msufBossCastbarPhysicalEdgeAnchor_v1 = true
     end
-    if g.castbarShowIcon == nil then
-        g.castbarShowIcon = true
-    end
-    if g.castbarShowSpellName == nil then
-        g.castbarShowSpellName = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_08")
     if g.castbarShakeStrength == nil then
         g.castbarShakeStrength = 8   --- pixels; 0 = no movement
     end
@@ -209,45 +109,7 @@ if g.arenaCastbarHeight == nil then
     elseif g.castbarInterruptFeedbackDuration > 5 then
         g.castbarInterruptFeedbackDuration = 5
     end
-    if g.castbarSpellNameFontSize == nil then
-        g.castbarSpellNameFontSize = 0
-    end
-    if g.castbarTimeFontSize == nil then
-        g.castbarTimeFontSize = 0
-    end
-    if g.castbarIconOffsetX == nil then
-        g.castbarIconOffsetX = 0
-    end
-    if g.castbarIconOffsetY == nil then
-        g.castbarIconOffsetY = 0
-    end
-    if g.castbarIconZoom == nil then
-        g.castbarIconZoom = 100
-    end
-    if g.castbarTargetOffsetX == nil then
-        g.castbarTargetOffsetX = 0
-    end
-    if g.castbarTargetOffsetY == nil then
-        g.castbarTargetOffsetY = -60
-    end
-    if g.castbarFocusOffsetX == nil then
-        g.castbarFocusOffsetX = 2
-    end
-    if g.castbarFocusOffsetY == nil then
-        g.castbarFocusOffsetY = -50
-    end
-    if g.castbarPlayerOffsetX == nil then
-        g.castbarPlayerOffsetX = -2
-    end
-    if g.castbarPlayerOffsetY == nil then
-        g.castbarPlayerOffsetY = -59
-    end
-    if g.castbarPlayerTimeOffsetX == nil then
-        g.castbarPlayerTimeOffsetX = -2
-    end
-    if g.castbarPlayerTimeOffsetY == nil then
-        g.castbarPlayerTimeOffsetY = 0
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_09")
     if g.castbarFocusTimeOffsetX == nil then
         g.castbarFocusTimeOffsetX = g.castbarPlayerTimeOffsetX or -2
     end
@@ -267,15 +129,7 @@ if g.arenaCastbarHeight == nil then
         g.castbarGlobalHeight = 18   --- Standardhöhe
     end
     --- Per-castbar default sizes (match Edit Mode preview defaults)
-    if g.castbarPlayerBarWidth == nil then g.castbarPlayerBarWidth = 271 end
-    if g.castbarPlayerBarHeight == nil then g.castbarPlayerBarHeight = 18 end
-    if g.castbarTargetBarWidth == nil then g.castbarTargetBarWidth = 272 end
-    if g.castbarTargetBarHeight == nil then g.castbarTargetBarHeight = 18 end
-    if g.castbarFocusBarWidth == nil then g.castbarFocusBarWidth = 175 end
-    if g.castbarFocusBarHeight == nil then g.castbarFocusBarHeight = 18 end
-    if g.castbarPlayerPreviewEnabled == nil then
-        g.castbarPlayerPreviewEnabled = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_10")
 end
 
 local function MSUF_Defaults_Stage_PruneLegacyAuraKeysAndSeedFontSizes(g)
@@ -292,10 +146,7 @@ local function MSUF_Defaults_Stage_PruneLegacyAuraKeysAndSeedFontSizes(g)
         g.fontSize = 14
     end
     --- Per-text font sizes (0 means "use global" in some menus, but these are explicit defaults)
-    if g.nameFontSize == nil then g.nameFontSize = 14 end
-    if g.hpFontSize == nil then g.hpFontSize = 14 end
-    if g.powerFontSize == nil then g.powerFontSize = 12 end
-    if g.auraFontSize == nil then g.auraFontSize = 25 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_11")
 end
 
 local function MSUF_Defaults_Stage_SeedCastbarDetailDefaults(g)
@@ -307,15 +158,7 @@ local function MSUF_Defaults_Stage_SeedCastbarDetailDefaults(g)
         g.castbarTexture = "MSUF Lucent"
     end
     --- Castbar visuals
-    if g.castbarShowGlow == nil then
-        g.castbarShowGlow = false
-    end
-    if g.castbarShowSpark == nil then
-        g.castbarShowSpark = false
-    end
-    if g.castbarSparkOverflow == nil then
-        g.castbarSparkOverflow = true
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_12")
     --- Unit castbar width matching:
     --- nil/"manual" = manual, "unitframe" = own MSUF unitframe,
     --- "essential" = CDM essential row, "utility" = CDM utility bar.
@@ -354,16 +197,7 @@ if g.kickReadyShowArena  == nil then g.kickReadyShowArena  = false end
     if g.kickReadyColor      == nil then g.kickReadyColor      = { ["1"] = 0, ["2"] = 1, ["3"] = 0 } end
     if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] = 0, ["3"] = 0 } end
     --- Per-castbar toggles + offsets
-    if g.castbarTargetShowIcon == nil then g.castbarTargetShowIcon = true end
-    if g.castbarFocusShowIcon == nil then g.castbarFocusShowIcon = true end
-    if g.castbarPlayerShowIcon == nil then g.castbarPlayerShowIcon = true end
-    if g.castbarTargetShowSpellName == nil then g.castbarTargetShowSpellName = true end
-    if g.castbarFocusShowSpellName == nil then g.castbarFocusShowSpellName = true end
-    if g.castbarPlayerShowSpellName == nil then g.castbarPlayerShowSpellName = true end
-    if g.castbarTargetShowTargetName == nil then g.castbarTargetShowTargetName = false end
-    if g.castbarFocusShowTargetName == nil then g.castbarFocusShowTargetName = false end
-    if g.showBossCastTargetName == nil then g.showBossCastTargetName = false end
-    if g.showArenaCastTargetName == nil then g.showArenaCastTargetName = false end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_13")
     local function InitCastTargetTextDefaults(prefix)
         if g[prefix .. "TargetNamePosition"] == nil then g[prefix .. "TargetNamePosition"] = "BELOW" end
         if g[prefix .. "TargetNameFontSize"] == nil then g[prefix .. "TargetNameFontSize"] = 10 end
@@ -375,18 +209,7 @@ if g.kickReadyShowArena  == nil then g.kickReadyShowArena  = false end
     InitCastTargetTextDefaults("castbarFocus")
     InitCastTargetTextDefaults("bossCast")
     InitCastTargetTextDefaults("arenaCast")
-    if g.castbarTargetTextOffsetX == nil then g.castbarTargetTextOffsetX = 0 end
-    if g.castbarTargetTextOffsetY == nil then g.castbarTargetTextOffsetY = 0 end
-    if g.castbarFocusTextOffsetX == nil then g.castbarFocusTextOffsetX = 0 end
-    if g.castbarFocusTextOffsetY == nil then g.castbarFocusTextOffsetY = 0 end
-    if g.castbarPlayerTextOffsetX == nil then g.castbarPlayerTextOffsetX = 0 end
-    if g.castbarPlayerTextOffsetY == nil then g.castbarPlayerTextOffsetY = 0 end
-    if g.castbarTargetIconOffsetX == nil then g.castbarTargetIconOffsetX = 0 end
-    if g.castbarTargetIconOffsetY == nil then g.castbarTargetIconOffsetY = 0 end
-    if g.castbarFocusIconOffsetX == nil then g.castbarFocusIconOffsetX = 0 end
-    if g.castbarFocusIconOffsetY == nil then g.castbarFocusIconOffsetY = 0 end
-    if g.castbarPlayerIconOffsetX == nil then g.castbarPlayerIconOffsetX = 0 end
-    if g.castbarPlayerIconOffsetY == nil then g.castbarPlayerIconOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_14")
     local function InitCastbarDetailDefaults(prefix)
         if g[prefix .. "FrameLevelOffset"] == nil then g[prefix .. "FrameLevelOffset"] = 6 end
         if g[prefix .. "IconPosition"] == nil then g[prefix .. "IconPosition"] = "LEFT" end
@@ -422,54 +245,22 @@ if g.kickReadyShowArena  == nil then g.kickReadyShowArena  = false end
     InitCastbarDetailDefaults("castbarTarget")
     InitCastbarDetailDefaults("castbarFocus")
     --- Boss castbar UI bits (BossCastbars module reads these from general)
-    if g.showBossCastIcon == nil then g.showBossCastIcon = true end
-    if g.showBossCastName == nil then g.showBossCastName = true end
-    if g.bossPreviewEnabled == nil then g.bossPreviewEnabled = true end
-    if g.bossCastIconOffsetX == nil then g.bossCastIconOffsetX = 0 end
-    if g.bossCastIconOffsetY == nil then g.bossCastIconOffsetY = 0 end
-    if g.bossCastTextOffsetX == nil then g.bossCastTextOffsetX = 0 end
-    if g.bossCastTextOffsetY == nil then g.bossCastTextOffsetY = 0 end
-    if g.bossCastTimeOffsetX == nil then g.bossCastTimeOffsetX = 0 end
-    if g.bossCastTimeOffsetY == nil then g.bossCastTimeOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_15")
     InitCastbarDetailDefaults("bossCast")
     --- Arena castbar UI bits (ArenaCastbars module reads these from general)
-    if g.showArenaCastIcon == nil then g.showArenaCastIcon = true end
-    if g.showArenaCastName == nil then g.showArenaCastName = true end
-    if g.arenaPreviewEnabled == nil then g.arenaPreviewEnabled = true end
-    if g.arenaCastIconOffsetX == nil then g.arenaCastIconOffsetX = 0 end
-    if g.arenaCastIconOffsetY == nil then g.arenaCastIconOffsetY = 0 end
-    if g.arenaCastTextOffsetX == nil then g.arenaCastTextOffsetX = 0 end
-    if g.arenaCastTextOffsetY == nil then g.arenaCastTextOffsetY = 0 end
-    if g.arenaCastTimeOffsetX == nil then g.arenaCastTimeOffsetX = 0 end
-    if g.arenaCastTimeOffsetY == nil then g.arenaCastTimeOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_16")
     InitCastbarDetailDefaults("arenaCast")
     --- Focus Kick Icon defaults
-    if g.enableFocusKickIcon == nil then g.enableFocusKickIcon = false end
-    if g.focusKickShowCastbar == nil then g.focusKickShowCastbar = false end
-    if g.focusKickIconWidth == nil then g.focusKickIconWidth = 40 end
-    if g.focusKickIconHeight == nil then g.focusKickIconHeight = 40 end
-    if g.focusKickIconOffsetX == nil then g.focusKickIconOffsetX = 300 end
-    if g.focusKickIconOffsetY == nil then g.focusKickIconOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_17")
 end
 
 local function MSUF_Defaults_Stage_SeedBarTextureDefaults(g)
-    if g.barTexture == nil then
-        g.barTexture = "MSUF Lucent"
-    end
-    if g.barBackgroundTexture == nil then
-        g.barBackgroundTexture = "Solid"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_18")
     --- Prediction opacity defaults. Texture nil/"" remains a valid explicit
     --- request to follow the foreground texture outside the factory profile.
-    if g.absorbBarOpacity == nil then g.absorbBarOpacity = 1 end
-    if g.healAbsorbBarOpacity == nil then g.healAbsorbBarOpacity = 1 end
-    if g.tempMaxHealthEnabled == nil then g.tempMaxHealthEnabled = false end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_19")
     if type(g.tempMaxHealthTexture) ~= "string" then g.tempMaxHealthTexture = "Solid" end
-    if g.tempMaxHealthColorR == nil then g.tempMaxHealthColorR = 0.70 end
-    if g.tempMaxHealthColorG == nil then g.tempMaxHealthColorG = 0.10 end
-    if g.tempMaxHealthColorB == nil then g.tempMaxHealthColorB = 0.10 end
-    if g.tempMaxHealthOpacity == nil then g.tempMaxHealthOpacity = 1 end
-    if g.tempMaxHealthBackgroundOpacity == nil then g.tempMaxHealthBackgroundOpacity = 0.65 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_20")
     if g.absorbBarTexture ~= nil and type(g.absorbBarTexture) ~= "string" then
         g.absorbBarTexture = nil
     end
@@ -516,12 +307,7 @@ local function MSUF_Defaults_Stage_SeedBarTextureDefaults(g)
     if g.tempMaxHealthTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.tempMaxHealthTexture) then
         g.tempMaxHealthTexture = "Solid"
     end
-    if g.hpTextMode == nil then
-        g.hpTextMode = "FULL_PLUS_PERCENT"
-    end
-    if g.hpTextSeparator == nil then
-        g.hpTextSeparator = "-"
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_21")
     if g.powerTextSeparator == nil then
         g.powerTextSeparator = g.hpTextSeparator
     end
@@ -542,21 +328,9 @@ local function MSUF_Defaults_Stage_SeedPredictionDefaults(g)
     if g.healPredEnabled == nil then
         g.healPredEnabled = g.showSelfHealPrediction == true
     end
-    if g.healPredAllHealers == nil then g.healPredAllHealers = false end
-    if g.healPredAnchorMode == nil then
-        g.healPredAnchorMode = 3
-    end
-    if g.healAbsorbEnabled == nil then
-        g.healAbsorbEnabled = true
-    end
-    if g.healAbsorbAnchorMode == nil then g.healAbsorbAnchorMode = 3 end
-    if g.healPredictionBarHeight == nil then g.healPredictionBarHeight = 0 end
-    if g.healPredictionBarOffsetY == nil then g.healPredictionBarOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_22")
     if g.healPredictionBarOpacity == nil then g.healPredictionBarOpacity = g.healPredictionColorA or 0.45 end
-    if g.absorbBarHeight == nil then g.absorbBarHeight = 0 end
-    if g.absorbBarOffsetY == nil then g.absorbBarOffsetY = 0 end
-    if g.healAbsorbBarHeight == nil then g.healAbsorbBarHeight = 0 end
-    if g.healAbsorbBarOffsetY == nil then g.healAbsorbBarOffsetY = 0 end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_23")
 
     --- Absorb display is bar-only in 6.0; collapse legacy text modes on load.
     if g.absorbTextMode == nil then
@@ -576,12 +350,7 @@ local function MSUF_Defaults_Stage_SeedPredictionDefaults(g)
         --- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb; 3 = Follow HP; 5 = Reverse from max (default)
         g.absorbAnchorMode = 5
     end
-    if g.overAbsorbOverlay == nil then
-        g.overAbsorbOverlay = true
-    end
-    if g.fullHealthAbsorbStripe == nil then
-        g.fullHealthAbsorbStripe = false
-    end
+    MSUF.DefaultsSchema.SeedGeneral(g, "bars_24")
 
     --- v2 absorb-colour cleanup. Pre-v2 the colour picker (then in the retired
     --- MSUF_ColorsCore file, now the Menu2 colour pages) wrote to

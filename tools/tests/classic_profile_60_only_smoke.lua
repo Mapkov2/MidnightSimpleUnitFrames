@@ -115,7 +115,7 @@ end
 -- Load the actual split state providers; this test covers decoding policy,
 -- while runtime application is asserted in the separate profile apply suite.
 for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua", "Runtime/MSUF_NumberFormat.lua", "Kernel/MSUF_SuiteLink.lua", "State/MSUF_StateHelpers.lua",
-    "State/MSUF_ProfileCodec.lua",
+    "State/MSUF_ProfileCodec.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     -- Profile mutation invalidates the same compiled castbar owner as the client.
     "Castbars/MSUF_Castbars_PublicAPI.lua", "Castbars/MSUF_Castbars_Backend.lua", "Castbars/MSUF_CastbarConfig.lua" }) do
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. relative))("MidnightSimpleUnitFrames", namespace)

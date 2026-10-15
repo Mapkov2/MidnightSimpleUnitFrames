@@ -5,7 +5,7 @@
 -- reads the stored-token check from MSUF.ProfileNormalize, which State loads long
 -- before it (State/MSUF_ProfileNormalize.lua owns the list of filter tokens a
 -- stored profile may keep). A harness that loads the model without the State
--- layer installs the three State files that normalizer needs, unchanged; a file
+-- layer installs the four State files that normalizer needs, unchanged; a file
 -- whose export the harness already loaded itself is not loaded a second time:
 --
 --   local Normalizer = assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))()
@@ -23,6 +23,7 @@ local Loader = {}
 Loader.FILES = {
     { "State/MSUF_StateHelpers.lua", "StateHelpers" },
     { "State/MSUF_ProfileCodec.lua", "ProfileIOImportLimits" },
+    { "State/Defaults/MSUF_Defaults_Schema.lua", "DefaultsSchema" },
     { "State/MSUF_ProfileNormalize.lua", "ProfileNormalize" },
 }
 
