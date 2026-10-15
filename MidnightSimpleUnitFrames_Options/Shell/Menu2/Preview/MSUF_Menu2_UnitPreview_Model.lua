@@ -604,15 +604,7 @@ local function NormalizeStatusPreviewId(id)
     if id == "eliteicon" then return "elite" end
     return id
 end
-local function ClassColor(class)
-    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
-        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(class)
-        if r then return r, g, b end
-    end
-    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-    if c then return c.r, c.g, c.b end
-    return 0.12, 0.62, 0.95
-end
+local ClassColor = MSUF.UF.Config.ClassColor
 local Clamp01 = M.Clamp01
 local function SettingsCache()
     return type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
@@ -744,12 +736,7 @@ local function HealthColor(key, data)
     return PreviewHelpers.DarkBarColor(cache)
 end
 local function DarkMatchHPColor(r, g, b, cache)
-    local gen = (cache and cache.generalRef) or M.EnsureDB().general
-    if gen and gen.darkMode and not gen.darkBgCustomColor then
-        local br = Clamp01((cache and cache.darkBgBrightness) or gen.darkBgBrightness, 1)
-        return Clamp01(r * br, 0), Clamp01(g * br, 0), Clamp01(b * br, 0)
-    end
-    return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0)
+    return MSUF.UF.Config.DarkTint((cache and cache.generalRef) or M.EnsureDB().general, r, g, b)
 end
 local function PerUnitBackgroundAlpha(conf, key, fallbackKey, resolvedAlpha, resolver)
     local alpha = conf and conf[key]

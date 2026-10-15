@@ -230,3 +230,9 @@ Optional defaults are read lazily; profile activation keeps older data intact.
 Profile defaults remain materialised on every client. The typed factory/repair catalog in
 `tools/fixtures/defaults/schema.lua` verifies the existing providers; certified scalar
 defaults are omitted only at terminal persistence. See `docs/PROFILE_STORAGE.md`.
+
+Menu previews on every client share the core portrait border painter, resource
+slot/full colour resolvers, health background geometry and castbar detail rules.
+Client-specific portrait dressing remains a core decision; Options passes plain
+sample identity and scaled geometry without registering live unit consumers.
+See [shared runtime rules](../../docs/PREVIEW_RUNTIME_RULES.md).

@@ -79,30 +79,14 @@ function Render.HideAdditionalPreview(box)
 end
 Render._HealthBackgroundColorMode = M.PreviewHelpers.HealthBackgroundColorMode
 function Render._MatchHealthBackgroundColor(r, g, b, general)
-    if general and general.darkMode == true and general.darkBgCustomColor ~= true then
-        local brightness = tonumber(general.darkBgBrightness)
-        if brightness then
-            if brightness < 0 then brightness = 0 elseif brightness > 1 then brightness = 1 end
-            return r * brightness, g * brightness, b * brightness
-        end
-    end
-    return r, g, b
+    return MSUF.UF.Config.DarkTint(general, r, g, b)
 end
 function Render._ApplyHealthBackgroundFill(mock, missing, reverse, healthFraction)
     local backgroundBar = mock and mock._healthBgBar
     local bar = mock and mock._health
     if not (backgroundBar and bar) then return end
-    backgroundBar:ClearAllPoints()
-    if missing ~= true and (mock._nameBarTopInset or 0) > 0 then
-        backgroundBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, -mock._nameBarTopInset)
-        backgroundBar:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 0, 0)
-    else
-        backgroundBar:SetAllPoints(missing == true and bar or mock)
-    end
-    if backgroundBar.SetOrientation then backgroundBar:SetOrientation("HORIZONTAL") end
-    local backgroundReverse = reverse
-    if missing == true then backgroundReverse = not reverse end
-    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(backgroundReverse) end
+    MSUF.UF.elements.Health.LayoutBackgroundFill(backgroundBar, bar, mock, missing == true,
+        "HORIZONTAL", reverse, mock._nameBarTopInset)
     if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
     local pct = tonumber(healthFraction) or 0
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
@@ -335,37 +319,6 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
     end
 end
 
-local GROUP_PORTRAIT_MASKS = {
-    SQUARE = "Interface\\Buttons\\WHITE8x8",
-    CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
-    ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
-    DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
-}
-local GROUP_PORTRAIT_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
-do
-    local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
-    for level = 1, 15 do
-        local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
-        GROUP_PORTRAIT_SOFT_EDGE_MASKS.SQUARE[level] = root .. "texture_layer_edge_softness_" .. suffix
-        GROUP_PORTRAIT_SOFT_EDGE_MASKS.CIRCLE[level] = root .. "portrait_edge_softness_circle_" .. suffix
-        GROUP_PORTRAIT_SOFT_EDGE_MASKS.ROUNDED[level] = root .. "portrait_edge_softness_rounded_" .. suffix
-        GROUP_PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
-    end
-end
-local GROUP_PORTRAIT_SHAPED = { CIRCLE = true, ROUNDED = true, DIAMOND = true }
-local GROUP_PORTRAIT_RING_ART = {
-    SQUARE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_square.tga",
-    CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga",
-    ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_rounded.tga",
-    DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_diamond.tga",
-}
-local GROUP_PORTRAIT_RING_ROTATION = {
-    UP = { 0, 0, 0, 1, 1, 0, 1, 1 },
-    RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 },
-    DOWN = { 1, 1, 1, 0, 0, 1, 0, 0 },
-    LEFT = { 1, 0, 0, 0, 1, 1, 0, 1 },
-}
-
 local function DisableGroupPreviewPortraitMouse(frame)
     if not frame then return end
     if frame.EnableMouse then frame:EnableMouse(false) end
@@ -423,107 +376,22 @@ local function EnsureGroupPreviewPortrait(mock, handle)
 end
 
 local function HideGroupPreviewPortraitBorder(holder)
-    if not holder then return end
-    for i = 1, #(holder.edges or {}) do holder.edges[i]:Hide() end
-    if holder.ring then holder.ring:Hide() end
-    if holder.artBorder then holder.artBorder:Hide() end
+    if holder then MSUF.UF.elements.Portrait.PaintBorder(holder) end
 end
 
 local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, ScaleValue, classToken)
-    local cfg = portrait and portrait.border
-    local style = cfg and cfg.style or "NONE"
-    if style == "NONE" then
-        HideGroupPreviewPortraitBorder(holder)
-        return
+    local cfg = portrait.border
+    local p = holder._msufPreviewBorderSpec
+    if not p then
+        p = { border = {} }
+        holder._msufPreviewBorderSpec = p
     end
-    -- The live element's own rule; group members are friendly (reaction 5, green).
-    local r, g, b, a = MSUF.UF.elements.Portrait.BorderColor(cfg, classToken, 5)
-    local thick = ScaleValue(cfg.thickness or 2, previewScale, 1)
-    local shape = portrait.shape or "SQUARE"
-    if cfg.art == "RELIEF" then
-        local art = holder.artBorder
-        if not art then
-            art = PixelLayoutRegion(holder.border:CreateTexture(nil, "OVERLAY", nil, 2))
-            holder.artBorder = art
-        end
-        local width = tonumber(holder._msufPreviewWidth) or tonumber(holder:GetWidth()) or 36
-        local height = tonumber(holder._msufPreviewHeight) or tonumber(holder:GetHeight()) or 36
-        local multiplier = 0.0952380952 * ((tonumber(thick) or 2) / 2)
-        local inflateX = math.floor(math.max(1, width * multiplier) + 0.5)
-        local inflateY = math.floor(math.max(1, height * multiplier) + 0.5)
-        local direction = cfg.direction or "UP"
-        local key = shape .. "|" .. inflateX .. "|" .. inflateY .. "|" .. direction
-        if holder._msufPreviewArtKey ~= key then
-            art:ClearAllPoints()
-            art:SetPoint("TOPLEFT", holder, "TOPLEFT", -inflateX, inflateY)
-            art:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", inflateX, -inflateY)
-            art:SetTexture(GROUP_PORTRAIT_RING_ART[shape] or GROUP_PORTRAIT_RING_ART.SQUARE)
-            local rotation = GROUP_PORTRAIT_RING_ROTATION[direction] or GROUP_PORTRAIT_RING_ROTATION.UP
-            art:SetTexCoord(rotation[1], rotation[2], rotation[3], rotation[4],
-                rotation[5], rotation[6], rotation[7], rotation[8])
-            holder._msufPreviewArtKey = key
-        end
-        art:SetVertexColor(r, g, b, a)
-        art:Show()
-        for i = 1, #holder.edges do holder.edges[i]:Hide() end
-        if holder.ring then holder.ring:Hide() end
-        return
-    end
-    if holder.artBorder then holder.artBorder:Hide() end
-    if GROUP_PORTRAIT_SHAPED[shape] then
-        local ring = holder.ring
-        if not ring then
-            ring = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND", nil, -2))
-            ring:SetTexture("Interface\\Buttons\\WHITE8x8")
-            if holder.CreateMaskTexture and ring.AddMaskTexture then
-                holder.ringMask = holder:CreateMaskTexture()
-                ring:AddMaskTexture(holder.ringMask)
-            end
-            holder.ring = ring
-        end
-        local key = shape .. "|" .. thick
-        if holder._msufPreviewRingKey ~= key then
-            ring:ClearAllPoints()
-            ring:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
-            ring:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
-            if holder.ringMask then
-                holder.ringMask:ClearAllPoints()
-                holder.ringMask:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
-                holder.ringMask:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
-                holder.ringMask:SetTexture(GROUP_PORTRAIT_MASKS[shape])
-            end
-            holder._msufPreviewRingKey = key
-        end
-        ring:SetVertexColor(r, g, b, a)
-        ring:Show()
-        for i = 1, #holder.edges do holder.edges[i]:Hide() end
-        return
-    end
-    if holder.ring then holder.ring:Hide() end
-    local fill = cfg.fill == true
-    local key = thick .. "|" .. (fill and "1" or "0")
-    local top, bottom, left, right = holder.edges[1], holder.edges[2], holder.edges[3], holder.edges[4]
-    if holder._msufPreviewBorderKey ~= key then
-        for i = 1, #holder.edges do holder.edges[i]:ClearAllPoints() end
-        local pad = fill and 0 or thick
-        top:SetPoint("TOPLEFT", holder, "TOPLEFT", -pad, pad)
-        top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", pad, pad)
-        bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -pad, -pad)
-        bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", pad, -pad)
-        left:SetPoint("TOPLEFT", holder, "TOPLEFT", -pad, pad)
-        left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -pad, -pad)
-        right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", pad, pad)
-        right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", pad, -pad)
-        top:SetHeight(thick)
-        bottom:SetHeight(thick)
-        left:SetWidth(thick)
-        right:SetWidth(thick)
-        holder._msufPreviewBorderKey = key
-    end
-    for i = 1, #holder.edges do
-        holder.edges[i]:SetVertexColor(r, g, b, a)
-        holder.edges[i]:Show()
-    end
+    p.shape = portrait.shape
+    p.border.thickness = ScaleValue(cfg and cfg.thickness or 2, previewScale, 1)
+    p.border.fill, p.border.art = cfg and cfg.fill, cfg and cfg.art
+    p.border.direction = cfg and cfg.direction
+    holder._msufLayoutWidth, holder._msufLayoutHeight = holder._msufPreviewWidth, holder._msufPreviewHeight
+    MSUF.UF.elements.Portrait.PaintBorder(holder, p, MSUF.UF.elements.Portrait.BorderColor(cfg, classToken, 5))
 end
 
 --- Dispel-type symbol row.
@@ -770,13 +638,7 @@ local function PaintGroupPreviewPortrait(scene)
         handle:SetAlpha(layerAlpha)
     end
     if handle then handle:Show() end
-    if holder.mask then
-        local shape = portrait.shape or "SQUARE"
-        local softMasks = GROUP_PORTRAIT_SOFT_EDGE_MASKS[shape]
-        local mask = softMasks and softMasks[portrait.edgeSoftnessLevel]
-            or GROUP_PORTRAIT_MASKS[shape] or GROUP_PORTRAIT_MASKS.SQUARE
-        holder.mask:SetTexture(mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    end
+    MSUF.UF.elements.Portrait.PaintMask(holder, portrait)
     local classToken = scene.liveData and scene.liveData.class
         or scene.S.GF_PREVIEW_CLASSES[((scene.kind == "party" and 5 or 2) % #scene.S.GF_PREVIEW_CLASSES) + 1]
     local castTexture = portrait.castSpellIcon == true and scene.box._animationEnabled == true

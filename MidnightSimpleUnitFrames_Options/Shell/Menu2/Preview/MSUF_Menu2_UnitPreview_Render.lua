@@ -61,22 +61,15 @@ local function ApplyPreviewHealthBackgroundFill(mock, missing, vertical, reverse
     local backgroundBar = mock and mock.healthBackgroundBar
     local bar = mock and mock.healthBar
     if not (backgroundBar and bar) then return end
-    backgroundBar:ClearAllPoints()
-    backgroundBar:SetAllPoints(missing == true and bar or mock)
-    if backgroundBar.SetOrientation then backgroundBar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL") end
-    local backgroundReverse = reverse
-    if missing == true then backgroundReverse = not reverse end
-    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(backgroundReverse) end
+    MSUF.UF.elements.Health.LayoutBackgroundFill(backgroundBar, bar, mock, missing == true,
+        vertical and "VERTICAL" or "HORIZONTAL", reverse)
     if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
     local pct = tonumber(healthFraction) or 0
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
     local missingValue = missing == true and (1 - pct) or 1
     backgroundBar:SetValue(missingValue)
 end
--- Mirrors the live relief renderer. FULL overlays cache their resolved anchor
--- extents before this runs, avoiding stale configured portraitWidth/Height.
-local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
-local PREVIEW_RING_REFERENCE_THICKNESS = 2
+-- Preview scale and resolved FULL extents are inputs to the runtime painter.
 local function ScalePreviewOutline(value, scale)
     value = math.floor((tonumber(value) or 0) + 0.5)
     if value <= 0 then return 0 end
@@ -85,17 +78,14 @@ local function ScalePreviewOutline(value, scale)
     return math.max(1, math.floor((value * scale) + 0.5))
 end
 Render.ScalePreviewOutline = ScalePreviewOutline
+local previewPortraitExtents = {}
 local function PreviewPortraitRingInflation(portrait, thickness)
-    local pw = tonumber(portrait and portrait._msufPreviewLayoutWidth)
-        or (portrait and portrait.GetWidth and tonumber(portrait:GetWidth())) or 36
-    local ph = tonumber(portrait and portrait._msufPreviewLayoutHeight)
-        or (portrait and portrait.GetHeight and tonumber(portrait:GetHeight())) or 36
-    if pw <= 0 then pw = 36 end
-    if ph <= 0 then ph = 36 end
-    local scale = PREVIEW_RING_OPENING_INFLATE
-        * ((tonumber(thickness) or PREVIEW_RING_REFERENCE_THICKNESS) / PREVIEW_RING_REFERENCE_THICKNESS)
-    return math.floor(math.max(1, pw * scale) + 0.5),
-        math.floor(math.max(1, ph * scale) + 0.5)
+    portrait = portrait or previewPortraitExtents
+    portrait._msufLayoutWidth = portrait._msufPreviewLayoutWidth
+        or (portrait.GetWidth and portrait:GetWidth()) or 36
+    portrait._msufLayoutHeight = portrait._msufPreviewLayoutHeight
+        or (portrait.GetHeight and portrait:GetHeight()) or 36
+    return MSUF.UF.elements.Portrait.RingInflation(portrait, nil, tonumber(thickness) or 2)
 end
 Render.PreviewPortraitRingInflation = PreviewPortraitRingInflation
 
@@ -187,13 +177,7 @@ local function CastbarPreviewDetailPrefix(unitKey)
 end
 local NormalizeCastbarPreviewIconPos = _G.MSUF_NormalizeCastbarIconPosition
 local function ApplyCastbarPreviewIconZoom(icon, zoom)
-    local texture = icon and (icon.texture or icon.Texture or icon.Icon)
-    if not (texture and texture.SetTexCoord) then return end
-    zoom = tonumber(zoom) or 100
-    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-    local visible = 100 / zoom
-    local inset = (1 - visible) * 0.5
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    MSUF.Castbars.Visuals.ApplyIconZoom(icon and (icon.texture or icon.Texture or icon.Icon), zoom)
 end
 -- UnitPreview_Castbar loads immediately before this file and owns the text
 -- contract shared with the page-local castbar preview.
@@ -460,66 +444,17 @@ local function ShortenCastbarPreviewSpellName(key, text)
     return shorten({ unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key }, text)
 end
 local function HideCastbarPreviewIconBorder(icon)
-    local border = icon and icon._msufCastbarPreviewBorder
-    if border then
-        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-            if border[key] then border[key]:Hide() end
-        end
-    end
-    if icon and icon.SetBackdrop then PixelLayoutRegion(icon, "SetBackdrop", nil) end
-    if icon then
-        icon._msufCastbarPreviewBorderEdge = nil
-        icon._msufCastbarPreviewBorderR = nil
-        icon._msufCastbarPreviewBorderG = nil
-        icon._msufCastbarPreviewBorderB = nil
-        icon._msufCastbarPreviewBorderA = nil
-    end
+    if icon then MSUF.Castbars.Visuals.PaintIconBorder(icon, icon, "NONE", 0, nil, 0, true) end
 end
 local function ApplyCastbarPreviewIconBorder(icon, style, thickness, g)
     if not (icon and icon.SetBackdropBorderColor) then return end
-    style = tostring(style or "NONE"):upper()
-    thickness = tonumber(thickness) or 0
-    if thickness < 0 then thickness = 0 elseif thickness > 8 then thickness = 8 end
     local texture = icon.texture or icon.Texture or icon.Icon
     if texture and texture.ClearAllPoints and texture.SetAllPoints then
         texture:ClearAllPoints()
         texture:SetAllPoints(icon)
     end
-    if style == "NONE" or thickness <= 0 then
-        HideCastbarPreviewIconBorder(icon)
-        return
-    end
-    local legacy = icon._msufCastbarPreviewBorder
-    if legacy then
-        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-            if legacy[key] then legacy[key]:Hide() end
-        end
-    end
-    local r, green, b, a = 0, 0, 0, 0.95
-    if style == "DARK" then
-        r, green, b, a = 0, 0, 0, 0.95
-    elseif style == "CASTBAR" then
-        r, green, b, a = g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1
-    end
-    if icon._msufCastbarPreviewBorderEdge ~= thickness then
-        PixelLayoutRegion(icon, "SetBackdrop", {
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = thickness,
-            insets = { left = 0, right = 0, top = 0, bottom = 0 },
-        })
-        if icon.SetBackdropColor then icon:SetBackdropColor(0, 0, 0, 0) end
-        icon._msufCastbarPreviewBorderEdge = thickness
-    end
-    if icon._msufCastbarPreviewBorderR ~= r or icon._msufCastbarPreviewBorderG ~= green
-        or icon._msufCastbarPreviewBorderB ~= b or icon._msufCastbarPreviewBorderA ~= a
-    then
-        icon:SetBackdropBorderColor(r, green, b, a)
-        icon._msufCastbarPreviewBorderR = r
-        icon._msufCastbarPreviewBorderG = green
-        icon._msufCastbarPreviewBorderB = b
-        icon._msufCastbarPreviewBorderA = a
-    end
+    thickness = math.max(0, math.min(8, tonumber(thickness) or 0))
+    MSUF.Castbars.Visuals.PaintIconBorder(icon, icon, style, thickness, g, thickness, true)
 end
 local AnchorCastbarPreviewText = CastbarPreview.AnchorText
 local function ResolvePreviewTextSlotSize(runtimeText, conf, runtimeKey, dbKey, fallback)
@@ -4026,47 +3961,12 @@ function InstallStage.PortraitShape(s)
         return left, healthBottom + (healthH - ph) * 0.5 + oy, pw, ph
     end
     renderState.PreviewPortraitRect = PreviewPortraitRect
-    -- Mirrors the live element's relief renderer: the same greyscale ring art,
-    -- the same pre-baked 90 degree tex-coord rotations, tinted by the same
-    -- border colour. Kept in this file rather than reaching into the engine so
-    -- the preview keeps working when the engine has not compiled a spec yet.
-    local PREVIEW_RING_ART_BASE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_"
-    local PREVIEW_RING_ROTATION = {
-        UP    = { 0, 0, 0, 1, 1, 0, 1, 1 },
-        RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 },
-        DOWN  = { 1, 1, 1, 0, 0, 1, 0, 0 },
-        LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
-    }
-    local PREVIEW_RING_SHAPES = { SQUARE = "square", CIRCLE = "circle", ROUNDED = "rounded", DIAMOND = "diamond" }
-    -- Same paired contour assets and bounds as the live portrait element.
-    local PREVIEW_BLIZZ = {
-        mask = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask.tga",
-        ring = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_blizzard.tga",
-        circleMask = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
-    }
-    -- One mask texture per preview portrait covers every masked shape: the
-    -- Blizzard shape sets its matching contour, the geometric shapes set the
-    -- same mask files the live element uses, SQUARE detaches the mask.
-    local PREVIEW_SHAPE_MASKS = {
-        CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
-        ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
-        DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
-    }
-    local PREVIEW_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
-    do
-        local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
-        for level = 1, 15 do
-            local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
-            PREVIEW_SOFT_EDGE_MASKS.SQUARE[level] = root .. "texture_layer_edge_softness_" .. suffix
-            PREVIEW_SOFT_EDGE_MASKS.CIRCLE[level] = root .. "portrait_edge_softness_circle_" .. suffix
-            PREVIEW_SOFT_EDGE_MASKS.ROUNDED[level] = root .. "portrait_edge_softness_rounded_" .. suffix
-            PREVIEW_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
-        end
-    end
+    local PREVIEW_SHAPE_MASKS = MSUF.UFVisuals.PORTRAIT_MASKS
+    local PREVIEW_SOFT_EDGE_MASKS = MSUF.UFVisuals.PORTRAIT_SOFT_EDGE_MASKS
     local function ApplyPreviewPortraitShapeMask(portrait, shape, edgeSoftnessLevel, p)
         local wantAtlas = shape == "BLIZZARD"
         local softMasks = PREVIEW_SOFT_EDGE_MASKS[shape]
-        local file = softMasks and softMasks[edgeSoftnessLevel] or PREVIEW_SHAPE_MASKS[shape]
+        local file = softMasks and softMasks[edgeSoftnessLevel] or (shape ~= "SQUARE" and PREVIEW_SHAPE_MASKS[shape])
         local mask = portrait._msufPreviewShapeMask
         if not (wantAtlas or file) then
             if mask and portrait._msufPreviewShapeMasked then
@@ -4088,7 +3988,7 @@ function InstallStage.PortraitShape(s)
             portrait.tex:AddMaskTexture(mask)
             if portrait.bg and portrait.bg.AddMaskTexture then portrait.bg:AddMaskTexture(mask) end
         end
-        local key = wantAtlas and (LEGACY_BLIZZARD_PORTRAIT and PREVIEW_BLIZZ.circleMask
+        local key = wantAtlas and (LEGACY_BLIZZARD_PORTRAIT and PREVIEW_SHAPE_MASKS.CIRCLE
             or MSUF.PortraitDetails.GetBlizzardMask(p)) or file
         if portrait._msufPreviewShapeMaskKey ~= key then
             portrait._msufPreviewShapeMaskKey = key
@@ -4096,232 +3996,102 @@ function InstallStage.PortraitShape(s)
         end
     end
     renderState.ApplyPreviewPortraitShapeMask = ApplyPreviewPortraitShapeMask
-    s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION = PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION
-    s.PREVIEW_RING_SHAPES, s.PREVIEW_BLIZZ = PREVIEW_RING_SHAPES, PREVIEW_BLIZZ
-    s.PREVIEW_SHAPE_MASKS = PREVIEW_SHAPE_MASKS
+end
+
+-- The holder owns its own regions and chrome. Only its plain paint inputs are
+-- adapted here; the runtime owns the masks, relief geometry and border painting.
+local function PreviewPortraitSurface(portrait, needsEdges, width, height)
+    local edges = portrait.border.edges
+    if needsEdges and #edges == 0 then
+        for i = 1, 4 do
+            local edge = PixelLayoutRegion(portrait.border:CreateTexture(nil, "OVERLAY"))
+            edge:SetTexture(MSUF.UFVisuals.WHITE)
+            edge:Hide()
+            edges[i] = edge
+        end
+    end
+    portrait.edges = edges
+    portrait._msufLayoutWidth = width or portrait._msufPreviewLayoutWidth
+        or (portrait.GetWidth and portrait:GetWidth()) or 36
+    portrait._msufLayoutHeight = height or portrait._msufPreviewLayoutHeight
+        or (portrait.GetHeight and portrait:GetHeight()) or 36
+    local p = portrait._msufPreviewBorderSpec
+    if not p then
+        p = { border = {} }
+        portrait._msufPreviewBorderSpec = p
+    end
+    return p
+end
+local function SyncPreviewPortraitRegions(portrait)
+    -- The straight-edge host can stay hidden. Adopt new owned artwork once;
+    -- anchors and draw layers remain the runtime painter's responsibility.
+    if portrait.artBorder and portrait.artBorder ~= portrait._msufPreviewArtBorder then
+        portrait.artBorder:SetParent(portrait)
+    end
+    if portrait.blizzRing and portrait.blizzRing ~= portrait._msufPreviewBlizzRing then
+        portrait.blizzRing:SetParent(portrait)
+    end
+    if portrait.blizzCorner and portrait.blizzCorner ~= portrait._msufPreviewBlizzCorner then
+        portrait.blizzCorner:SetParent(portrait)
+    end
+    portrait._msufPreviewShapeRing = portrait.ring
+    portrait._msufPreviewShapeRingMask = portrait.ringMask
+    portrait._msufPreviewArtBorder = portrait.artBorder
+    portrait._msufPreviewBlizzRing = portrait.blizzRing
+    portrait._msufPreviewBlizzCorner = portrait.blizzCorner
+    if LEGACY_BLIZZARD_PORTRAIT then portrait._msufPreviewBlizzFallback = portrait.artBorder end
 end
 function InstallStage.PortraitRings(s)
-    local renderState, PREVIEW_BLIZZ, PREVIEW_SHAPE_MASKS = s.renderState, s.PREVIEW_BLIZZ, s.PREVIEW_SHAPE_MASKS
-    -- Mirrors the live element's solid ring renderer for shaped silhouettes:
-    -- an inflated quad below the art, clipped by the same mask shape at the
-    -- inflated size, tinted by the border colour.
-    local function LayoutPreviewPortraitShapeRing(portrait, shape, thickness, r, g, b, a)
-        local file = PREVIEW_SHAPE_MASKS[shape]
-        local ring = portrait._msufPreviewShapeRing
-        if not file then
-            if ring then ring:Hide() end
-            return false
-        end
-        if not ring then
-            if not (portrait.CreateTexture and portrait.CreateMaskTexture) then return false end
-            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "BACKGROUND", nil, -2))
-            ring:SetTexture("Interface\\Buttons\\WHITE8x8")
-            local mask = portrait:CreateMaskTexture()
-            ring:AddMaskTexture(mask)
-            portrait._msufPreviewShapeRing = ring
-            portrait._msufPreviewShapeRingMask = mask
-        end
-        thickness = math.max(1, math.floor((tonumber(thickness) or 1) + 0.5))
-        local key = shape .. "|" .. thickness
-        if portrait._msufPreviewShapeRingKey ~= key then
-            portrait._msufPreviewShapeRingKey = key
-            local mask = portrait._msufPreviewShapeRingMask
-            ring:ClearAllPoints()
-            ring:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
-            ring:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
-            if mask then
-                mask:ClearAllPoints()
-                mask:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
-                mask:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
-                mask:SetTexture(file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            end
-        end
-        ring:SetVertexColor(r, g, b, a or 1)
-        ring:Show()
-        return true
-    end
     local cornerAtlasAvailable
-    local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph, showCorner, showRing, p)
-        local ring = portrait._msufPreviewBlizzRing
-        if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
+    s.renderState.LayoutPreviewBlizzardPortrait = function(portrait, active, pw, ph, showCorner, showRing, source)
+        -- FULL overlays stretch to the bar, regardless of the configured portrait size.
+        pw, ph = portrait._msufPreviewLayoutWidth or pw, portrait._msufPreviewLayoutHeight or ph
+        local p = PreviewPortraitSurface(portrait, false, pw, ph)
+        portrait.border:Hide()
         if not active then
             if portrait.blizzElite then
                 portrait.blizzElite:Hide()
                 portrait.blizzElite._msufShown = false
             end
-            if ring then ring:Hide() end
-            if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
-            if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
-            return
-        end
-        if LEGACY_BLIZZARD_PORTRAIT then
-            if PREVIEW_CLASSIC then
-                local fallback = portrait._msufPreviewBlizzFallback
-                if not fallback and portrait.CreateTexture then
-                    fallback = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
-                    fallback:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga")
-                    fallback:SetVertexColor(1, 0.82, 0.3, 1)
-                    portrait._msufPreviewBlizzFallback = fallback
-                end
-                if fallback then
-                    local ix, iy = PreviewPortraitRingInflation(portrait, 2)
-                    fallback:ClearAllPoints()
-                    fallback:SetPoint("TOPLEFT", portrait, "TOPLEFT", -ix, iy)
-                    fallback:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", ix, -iy)
-                    fallback:Show()
-                end
+            p.shape = "SQUARE"
+            MSUF.UF.elements.Portrait.PaintBorder(portrait, p)
+        else
+            if showCorner and not LEGACY_BLIZZARD_PORTRAIT and cornerAtlasAvailable == nil then
+                local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
+                cornerAtlasAvailable = MSUF.Client.IsForever == true
+                    or (getAtlasInfo ~= nil and getAtlasInfo("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment") ~= nil)
             end
-            if ring then ring:Hide() end
-            if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
-            if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
-            return
+            p.shape = "BLIZZARD"
+            p.width, p.height = pw, ph
+            p.blizzardCorner, p.blizzardStandaloneRing = showCorner == true, showRing
+            p.blizzardCornerAvailable = cornerAtlasAvailable
+            p.blizzardDirection, p.flip = source and source.blizzardDirection, source and source.flip
+            MSUF.UF.elements.Portrait.PaintBorder(portrait, p)
         end
-        if not ring and showRing ~= false then
-            if not portrait.CreateTexture then return end
-            -- Paired contour assets share the portrait bounds at every size.
-            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2), true)
-            ring:SetSnapToPixelGrid(false)
-            ring:SetTexelSnappingBias(0)
-            portrait._msufPreviewBlizzRing = ring
-        end
-        if ring and showRing ~= false then
-            if ring._msufTexture ~= PREVIEW_BLIZZ.ring then
-                ring:SetTexture(PREVIEW_BLIZZ.ring)
-                ring._msufTexture = PREVIEW_BLIZZ.ring
-            end
-            MSUF.PortraitDetails.PaintBlizzardDirection(ring, p)
-            if not portrait._msufPreviewBlizzKey then
-                portrait._msufPreviewBlizzKey = true
-                ring:ClearAllPoints()
-                ring:SetAllPoints(portrait)
-            end
-            ring:Show()
-        elseif ring then
-            ring:Hide()
-        end
-        if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
-        local corner = portrait._msufPreviewBlizzCorner
-        -- A static client fact, probed once per session and only when asked for.
-        if showCorner and cornerAtlasAvailable == nil then
-            local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
-            cornerAtlasAvailable = MSUF.Client and MSUF.Client.IsForever == true
-                or (getAtlasInfo ~= nil and getAtlasInfo("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment") ~= nil)
-        end
-        if showCorner and cornerAtlasAvailable then
-            if not corner and portrait.CreateTexture then
-                corner = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 3), true)
-                corner:SetSnapToPixelGrid(false)
-                corner:SetTexelSnappingBias(0)
-                portrait._msufPreviewBlizzCorner = corner
-            end
-            if corner then
-                local width = tonumber(pw) or portrait:GetWidth() or 36
-                local height = tonumber(ph) or portrait:GetHeight() or 36
-                if not corner._msufAtlas then
-                    corner:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment")
-                    corner._msufAtlas = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
-                end
-                MSUF.PortraitDetails.LayoutBlizzardCorner(corner, portrait, width, height, p)
-                corner:SetVertexColor(1, 1, 1, 1)
-                corner:Show()
-            end
-        elseif corner then
-            corner:Hide()
-        end
+        SyncPreviewPortraitRegions(portrait)
     end
-    renderState.LayoutPreviewBlizzardPortrait = LayoutPreviewBlizzardPortrait
-    s.LayoutPreviewPortraitShapeRing = LayoutPreviewPortraitShapeRing
 end
 function InstallStage.PortraitBorders(s)
-    local deps, renderState, CPPreview = s.deps, s.renderState, s.CPPreview
-    local PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION = s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION
-    local PREVIEW_RING_SHAPES, LayoutPreviewPortraitShapeRing = s.PREVIEW_RING_SHAPES, s.LayoutPreviewPortraitShapeRing
-    local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
-        local art = portrait._msufPreviewArtBorder
-        if not art then
-            if not portrait.CreateTexture then return false end
-            art = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
-            portrait._msufPreviewArtBorder = art
-        end
-        local shape = PREVIEW_RING_SHAPES[portrait._msufPreviewBorderShape or "SQUARE"] or "square"
-        local direction = portrait._msufPreviewBorderDirection or "UP"
-        -- Same derivation as the live element: the ring art's opening is a fixed
-        -- fraction of the texture, so the inflation comes from the portrait size
-        -- rather than from a raw pixel thickness.
-        -- Per axis, like the live element: a non-square portrait stretches the
-        -- mask and the ring quad identically only if each axis is inflated from
-        -- its own extent.
-        local ix, iy = PreviewPortraitRingInflation(portrait, thickness)
-        local key = shape .. "|" .. ix .. "|" .. iy .. "|" .. direction
-        if portrait._msufPreviewArtKey ~= key then
-            art:ClearAllPoints()
-            art:SetPoint("TOPLEFT", portrait, "TOPLEFT", -ix, iy)
-            art:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", ix, -iy)
-            art:SetTexture(PREVIEW_RING_ART_BASE .. shape .. ".tga")
-            local rotation = PREVIEW_RING_ROTATION[direction] or PREVIEW_RING_ROTATION.UP
-            art:SetTexCoord(rotation[1], rotation[2], rotation[3], rotation[4],
-                rotation[5], rotation[6], rotation[7], rotation[8])
-            portrait._msufPreviewArtKey = key
-        end
-        art:SetVertexColor(r, g, b, a or 1)
-        art:Show()
-        return true
-    end
-    local function LayoutPreviewPortraitBorder(portrait, thickness, fill, r, g, b, a)
-        local border = portrait and portrait.border
-        if not border then return end
-        if not r then
-            if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
-            border:Hide()
-            if portrait._msufPreviewArtBorder then portrait._msufPreviewArtBorder:Hide() end
-            if portrait._msufPreviewShapeRing then portrait._msufPreviewShapeRing:Hide() end
-            return
-        end
-        if portrait._msufPreviewBorderArt == "RELIEF"
-            and LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a) then
-            if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
-            border:Hide()
-            if portrait._msufPreviewShapeRing then portrait._msufPreviewShapeRing:Hide() end
-            return
-        end
-        if portrait._msufPreviewArtBorder then portrait._msufPreviewArtBorder:Hide() end
-        -- Shaped silhouettes replace the straight edge renderer with the same
-        -- shape-following ring the live element draws.
-        local ringShape = portrait._msufPreviewBorderShape or "SQUARE"
-        if LayoutPreviewPortraitShapeRing(portrait, ringShape, thickness, r, g, b, a) then
-            if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
-            border:Hide()
-            return
-        end
-        if portrait._msufPreviewShapeRing then portrait._msufPreviewShapeRing:Hide() end
-        thickness = math.floor((tonumber(thickness) or 1) + 0.5)
-        if thickness < 1 then thickness = 1 end
-        if thickness > 30 then thickness = 30 end
-        local key = thickness .. "|" .. (fill and "1" or "0")
-        if portrait._previewBorderKey ~= key then
-            border:ClearAllPoints()
-            if fill then
-                border:SetAllPoints(portrait)
-            else
-                border:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
-                border:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
-            end
-            portrait._previewBorderKey = key
-        end
+    local renderState = s.renderState
+    renderState.CPPreview = s.CPPreview
+    renderState.LayoutPreviewPortraitBorder = function(portrait, thickness, fill, r, g, b, a)
+        -- The stock dressing was painted above, including parking MSUF edges.
+        if portrait._msufPreviewBorderShape == "BLIZZARD" then return end
+        local shape = portrait._msufPreviewBorderShape or "SQUARE"
+        local straight = r and shape == "SQUARE" and portrait._msufPreviewBorderArt ~= "RELIEF"
+        local p = PreviewPortraitSurface(portrait, straight)
+        p.shape = shape
+        p.border.thickness = math.max(1, math.min(30, math.floor((tonumber(thickness) or 1) + 0.5)))
+        p.border.fill = fill == true
+        p.border.art = portrait._msufPreviewBorderArt
+        p.border.direction = portrait._msufPreviewBorderDirection or "UP"
+        local border = portrait.border
         border._msufPreviewEdgeR, border._msufPreviewEdgeG, border._msufPreviewEdgeB, border._msufPreviewEdgeA = r, g, b, a or 1
-        border._msufPreviewEdgeOpts = border._msufPreviewEdgeOpts or {
-            linesKey = "edges",
-            maxEdgeSize = 30,
-            color = function(frame)
-                return frame._msufPreviewEdgeR or 1, frame._msufPreviewEdgeG or 1, frame._msufPreviewEdgeB or 1, frame._msufPreviewEdgeA or 1
-            end,
-        }
-        if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(border, thickness, border._msufPreviewEdgeOpts) end
-        border:Show()
+        MSUF.UF.elements.Portrait.PaintBorder(portrait, p, r, g, b, a or 1)
+        if straight then border:Show() else border:Hide() end
+        SyncPreviewPortraitRegions(portrait)
     end
-    renderState.CPPreview = CPPreview
-    renderState.LayoutPreviewPortraitBorder = LayoutPreviewPortraitBorder
-    deps._RenderState = renderState
+    s.deps._RenderState = renderState
 end
 function InstallStage.Refreshers(s)
     local Preview = s.Preview

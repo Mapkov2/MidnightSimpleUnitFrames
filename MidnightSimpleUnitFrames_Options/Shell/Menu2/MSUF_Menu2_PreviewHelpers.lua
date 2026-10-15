@@ -567,23 +567,28 @@ CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
     WHIRLWIND = { 0.20, 0.80, 0.20 },
 }
-CP.COMBO_POINT_SLOT_TOKENS = CP.COMBO_POINT_SLOT_TOKENS or {
-    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
-    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
-}
-local COMBO_POINT_RAMP_R = CP.COMBO_POINT_RAMP_R or { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
-local COMBO_POINT_RAMP_G = CP.COMBO_POINT_RAMP_G or { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
-local COMBO_POINT_RAMP_B = CP.COMBO_POINT_RAMP_B or { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
-CP.COMBO_POINT_RAMP_R, CP.COMBO_POINT_RAMP_G, CP.COMBO_POINT_RAMP_B = COMBO_POINT_RAMP_R, COMBO_POINT_RAMP_G, COMBO_POINT_RAMP_B
+CP.COMBO_POINT_SLOT_TOKENS = MSUF.ClassPowerColors.COMBO_POINT_SLOT_TOKENS
+CP.COMBO_POINT_RAMP_R = MSUF.ClassPowerColors.COMBO_POINT_RAMP_R
+CP.COMBO_POINT_RAMP_G = MSUF.ClassPowerColors.COMBO_POINT_RAMP_G
+CP.COMBO_POINT_RAMP_B = MSUF.ClassPowerColors.COMBO_POINT_RAMP_B
+local previewColorConfig = {}
+local function PreviewColorConfig(bars)
+    local config = previewColorConfig
+    local db = M.EnsureDB()
+    local general = db and db.general
+    config.colorOverrides = general and general.classPowerColorOverrides
+    local modes = bars and bars.classPowerSlotColorModes
+    config.slotColorModes = type(modes) == "table" and modes or nil
+    config.comboPointColorMode = bars and bars.classPowerComboPointColorMode
+    local enabled = bars and bars.classPowerFullColorEnabled
+    config.fullColorEnabled = type(enabled) == "table" and enabled or nil
+    return config
+end
 function CP.ColorOverride(tableName, token)
     local db = _G.MSUF_DB
     local general = db and db.general
     local overrides = general and general[tableName]
-    local c = overrides and token and overrides[token]
-    if type(c) ~= "table" then return nil end
-    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-    return nil
+    return MSUF.ClassPowerColors.OverrideRGB(overrides, token)
 end
 function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
     -- User overrides should show in preview, then fall back to runtime power-color helpers,
@@ -620,32 +625,15 @@ function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
     return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
 end
 function CP.ResolveSlotColor(bars, resourceToken, slot, baseR, baseG, baseB)
-    local modes = bars and bars.classPowerSlotColorModes
-    local mode = type(modes) == "table" and modes[resourceToken] or nil
-    if mode == nil and resourceToken == "COMBO_POINTS" then mode = bars and bars.classPowerComboPointColorMode end
-    if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
-    slot = tonumber(slot) or 1
-    if slot < 1 then slot = 1 elseif slot > 10 then slot = 10 end
-    if mode == "custom" then
-        local slotToken = resourceToken == "COMBO_POINTS" and CP.COMBO_POINT_SLOT_TOKENS[slot]
-            or (resourceToken and (resourceToken .. "_" .. tostring(slot)))
-        local r, g, b = CP.ColorOverride("classPowerColorOverrides", slotToken)
-        if r then return r, g, b end
-        if resourceToken ~= "COMBO_POINTS" then return baseR, baseG, baseB end
-    end
-    local rampSlot = slot > 7 and 7 or slot
-    return COMBO_POINT_RAMP_R[rampSlot] or baseR, COMBO_POINT_RAMP_G[rampSlot] or baseG, COMBO_POINT_RAMP_B[rampSlot] or baseB
+    local r, g, b = MSUF.ClassPowerColors.ResolveSlotColor(resourceToken, slot, baseR, baseG, baseB, PreviewColorConfig(bars))
+    if r == nil then return baseR, baseG, baseB end
+    return r, g, b
 end
 function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
     return CP.ResolveSlotColor(bars, "COMBO_POINTS", slot, baseR, baseG, baseB)
 end
 function CP.ResolveFullColor(bars, resourceToken, baseR, baseG, baseB)
-    local enabled = bars and bars.classPowerFullColorEnabled
-    if not (type(enabled) == "table" and enabled[resourceToken] == true) then
-        return false, baseR, baseG, baseB
-    end
-    local r, g, b = CP.ColorOverride("classPowerColorOverrides", tostring(resourceToken) .. "_FULL")
-    return true, r or baseR, g or baseG, b or baseB
+    return MSUF.ClassPowerColors.ResolveFullColor(resourceToken, baseR, baseG, baseB, PreviewColorConfig(bars))
 end
 function CP.IsFull(spec, valueOverride)
     if not spec or CP.IsSingleBarMode(spec.mode) then return false end
@@ -665,6 +653,7 @@ end
 --- The dark bar colour the engine draws: the settings cache's resolved
 --- colour, else the saved dark colour, else the dark gray, else 0.07 (the
 --- rule of UF_Config ResolveDarkColor and CP_PlayerHP DarkColor).
+local darkBarColor = {}
 function H.DarkBarColor(cache)
     if cache and type(cache.darkBarR) == "number" and type(cache.darkBarG) == "number"
         and type(cache.darkBarB) == "number" then
@@ -672,9 +661,8 @@ function H.DarkBarColor(cache)
     end
     local db = _G.MSUF_DB
     local g = db and db.general
-    local gray = tonumber(g and (g.darkBarGray or g.darkBgBrightness)) or 0.07
-    if gray > 1 then gray = gray / 100 end
-    return tonumber(g and g.darkBarR) or gray, tonumber(g and g.darkBarG) or gray, tonumber(g and g.darkBarB) or gray
+    MSUF.UF.Config.ResolveDarkColor(g, darkBarColor)
+    return darkBarColor.r, darkBarColor.g, darkBarColor.b
 end
 function CP.SegmentCount(spec)
     local count = floor(tonumber(spec and spec.segments) or 5)
@@ -3462,13 +3450,7 @@ function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, cou
 end
 
 local function PreviewBackgroundColorMode(health, general)
-    local mode = health and health.backgroundColorMode or general and general.barBgColorMode
-    if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
-        return mode
-    end
-    if (health and health.backgroundClassColor == true) or (general and general.barBgClassColor == true) then return "class" end
-    if (health and health.backgroundMatchHealth == true) or (general and general.barBgMatchHPColor == true) then return "match_health" end
-    return "custom"
+    return MSUF.UF.Config.ResolveBarBackgroundColorMode(general, health)
 end
 H.HealthBackgroundColorMode = PreviewBackgroundColorMode
 

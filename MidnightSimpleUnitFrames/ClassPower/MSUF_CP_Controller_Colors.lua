@@ -182,18 +182,20 @@ local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
 local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
 local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
 
-local function ResolveSlotColorMode(powerToken)
-    local modes = _cpDB.slotColorModes
+local function ResolveSlotColorMode(powerToken, config)
+    config = config or _cpDB
+    local modes = config.slotColorModes
     local mode = modes and modes[powerToken]
     -- Preserve existing Rogue profiles and Assistant actions without copying
     -- the legacy value into every profile.
-    if mode == nil and powerToken == "COMBO_POINTS" then mode = _cpDB.comboPointColorMode end
+    if mode == nil and powerToken == "COMBO_POINTS" then mode = config.comboPointColorMode end
     if mode ~= "ramp" and mode ~= "custom" then return "default" end
     return mode
 end
 
-local function ResolveSlotColor(powerToken, slot, baseR, baseG, baseB)
-    local mode = ResolveSlotColorMode(powerToken)
+local function ResolveSlotColor(powerToken, slot, baseR, baseG, baseB, config)
+    config = config or _cpDB
+    local mode = ResolveSlotColorMode(powerToken, config)
     if mode ~= "ramp" and mode ~= "custom" then return nil end
 
     slot = tonumber(slot) or 1
@@ -202,7 +204,7 @@ local function ResolveSlotColor(powerToken, slot, baseR, baseG, baseB)
     if mode == "custom" then
         local slotToken = powerToken == "COMBO_POINTS" and COMBO_POINT_SLOT_TOKENS[slot]
             or (powerToken and (powerToken .. "_" .. tostring(slot)))
-        local r, g, b = OverrideRGB(_cpDB.colorOverrides, slotToken or nil)
+        local r, g, b = OverrideRGB(config.colorOverrides, slotToken or nil)
         if r then return r, g, b end
         if powerToken ~= "COMBO_POINTS" then return baseR, baseG, baseB end
     end
@@ -213,13 +215,27 @@ local function ResolveSlotColor(powerToken, slot, baseR, baseG, baseB)
     return COMBO_POINT_RAMP_R[rampSlot] or baseR, COMBO_POINT_RAMP_G[rampSlot] or baseG, COMBO_POINT_RAMP_B[rampSlot] or baseB
 end
 
-local function ResolveFullResourceColor(powerToken, baseR, baseG, baseB)
-    local enabled = _cpDB.fullColorEnabled
+local function ResolveFullResourceColor(powerToken, baseR, baseG, baseB, config)
+    config = config or _cpDB
+    local enabled = config.fullColorEnabled
     if not (powerToken and enabled and enabled[powerToken] == true) then return false, baseR, baseG, baseB end
-    local r, g, b = OverrideRGB(_cpDB.colorOverrides, powerToken .. "_FULL")
+    local r, g, b = OverrideRGB(config.colorOverrides, powerToken .. "_FULL")
     if r then return true, r, g, b end
     return true, baseR, baseG, baseB
 end
+
+-- Plain settings can describe a second surface without changing controller
+-- caches. The live compiler and both menu surfaces call these same resolvers.
+MSUF.ClassPowerColors = {
+    OverrideRGB = OverrideRGB,
+    ResolveSlotColorMode = ResolveSlotColorMode,
+    ResolveSlotColor = ResolveSlotColor,
+    ResolveFullColor = ResolveFullResourceColor,
+    COMBO_POINT_SLOT_TOKENS = COMBO_POINT_SLOT_TOKENS,
+    COMBO_POINT_RAMP_R = COMBO_POINT_RAMP_R,
+    COMBO_POINT_RAMP_G = COMBO_POINT_RAMP_G,
+    COMBO_POINT_RAMP_B = COMBO_POINT_RAMP_B,
+}
 
 --- Profile refresh/shutdown drop only the token caches; the charged and
 --- Maelstrom caches survive until the next full invalidation.

@@ -204,27 +204,35 @@ local function SetHealthBackgroundValue(frame, unit, percent, percentSecret, ani
   return true
 end
 
-local function ApplyHealthBackgroundFillMode(frame, health)
-  local backgroundBar = frame and frame.healthBackgroundBar
-  if not (backgroundBar and frame.hpBar) then return false end
-  local missing = health and health.backgroundFillMode == "missing"
-  frame._msufHealthBackgroundFillMissing = missing == true
-  frame._msufHealthBackgroundNeedsValue = missing == true
-
+local function LayoutBackgroundFill(backgroundBar, bar, owner, missing, orientation, reverse, topInset)
   backgroundBar:ClearAllPoints()
-  backgroundBar:SetAllPoints(missing and frame.hpBar or frame)
-  local orientation = frame.hpBar._msufOrientation or "HORIZONTAL"
+  if topInset and not missing and topInset > 0 then
+    backgroundBar:SetPoint("TOPLEFT", owner, "TOPLEFT", 0, -topInset)
+    backgroundBar:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", 0, 0)
+  else
+    backgroundBar:SetAllPoints(missing and bar or owner)
+  end
   if backgroundBar.SetOrientation and backgroundBar._msufOrientation ~= orientation then
     backgroundBar:SetOrientation(orientation)
     backgroundBar._msufOrientation = orientation
   end
-  local reverse = frame.hpBar._msufReverseFill == true
-  local backgroundReverse = reverse
-  if missing then backgroundReverse = not reverse end
-  if backgroundBar.SetReverseFill and backgroundBar._msufReverseFill ~= backgroundReverse then
-    backgroundBar:SetReverseFill(backgroundReverse)
-    backgroundBar._msufReverseFill = backgroundReverse
+  if missing then reverse = not reverse end
+  if backgroundBar.SetReverseFill and backgroundBar._msufReverseFill ~= reverse then
+    backgroundBar:SetReverseFill(reverse)
+    backgroundBar._msufReverseFill = reverse
   end
+end
+Health.LayoutBackgroundFill = LayoutBackgroundFill
+
+local function ApplyHealthBackgroundFillMode(frame, health)
+  local backgroundBar = frame and frame.healthBackgroundBar
+  local bar = backgroundBar and frame.hpBar
+  if not bar then return false end
+  local missing = (health and health.backgroundFillMode) == "missing"
+  frame._msufHealthBackgroundFillMissing = missing
+  frame._msufHealthBackgroundNeedsValue = missing
+  LayoutBackgroundFill(backgroundBar, bar, frame, missing,
+    bar._msufOrientation or "HORIZONTAL", bar._msufReverseFill == true)
 
   if missing then
     -- Keep the missing interval on a native StatusBar for secret-safe values.
@@ -232,7 +240,7 @@ local function ApplyHealthBackgroundFillMode(frame, health)
       -- A settings/cold apply can arrive while the foreground is still easing.
       -- Finish that old target before the inverse bar is seeded so both native
       -- StatusBars start from one coherent visual state.
-      SnapBarInterpolation(frame.hpBar)
+      SnapBarInterpolation(bar)
     end
     backgroundBar._msufHealthMissingValue = nil
     backgroundBar._msufHealthMissingUnit = nil

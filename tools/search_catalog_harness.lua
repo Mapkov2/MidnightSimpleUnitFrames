@@ -177,7 +177,7 @@ do
     assert(seeded and type(seedResult) == "table", "current product defaults failed to seed: " .. tostring(seedResult))
 
     -- Group text binds UFText at load; retain the same real provider contract as the client.
-    dofile(Join(ROOT, "tools/tests/group_text_fixture.lua"))(MSUF, ROOT)
+    dofile(Join(ROOT, "tools/tests/group_text_fixture.lua"))(MSUF, ROOT, true)
     local groupDefaultsPath = Join(CORE, "GroupFrames/MSUF_GroupFrames_DB.lua")
     local groupChunk, groupErr = loadfile(groupDefaultsPath)
     assert(groupChunk, groupDefaultsPath .. ": " .. tostring(groupErr))

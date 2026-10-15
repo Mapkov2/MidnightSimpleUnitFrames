@@ -126,6 +126,10 @@ local function DetailString(g, prefix, suffix, globalKey, fallback)
     return tostring(value or fallback or "")
 end
 
+Visuals.DetailNum = DetailNum
+Visuals.DetailString = DetailString
+Visuals.PrefixForUnit = PrefixForUnit
+
 --- Boss and arena castbars keep their show toggles in flat keys (the Unit
 --- page castbar keys and Defaults_Bars.lua), not in the per-prefix
 --- <prefix>ShowIcon / <prefix>ShowSpellName family the other units use.
@@ -165,6 +169,10 @@ local function ShowTimeForUnit(g, unit)
     return true
 end
 
+Visuals.ShowIconForUnit = ShowIconForUnit
+Visuals.ShowSpellForUnit = ShowSpellForUnit
+Visuals.ShowTimeForUnit = ShowTimeForUnit
+
 local function NormalizeIconPosition(value)
     value = tostring(value or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
     if value == "INSIDELEFT" then value = "INSIDE_LEFT" end
@@ -185,6 +193,8 @@ local function JustifyForTextPosition(position)
     if position == "LEFT" or position == "RIGHT" then return position end
     return "CENTER"
 end
+
+Visuals.JustifyForTextPosition = JustifyForTextPosition
 
 local function NormalizeJustify(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper()
@@ -212,6 +222,8 @@ local function ApplyIconZoom(texture, zoom)
     local inset = (1 - visible) * 0.5
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
+
+Visuals.ApplyIconZoom = ApplyIconZoom
 
 local function CastbarTextColor(g, prefix, suffix)
     local r = prefix and g[prefix .. suffix .. "ColorR"] or nil
@@ -427,9 +439,35 @@ local function HideIconBorder(frame)
     local border = frame and frame._msufDetailIconBorder
     if not border then return end
     frame._msufDetailIconBorderKey = nil
+    border._msufIconBorderKey = nil
     if border.SetBackdrop then border:SetBackdrop(nil) end
     border:Hide()
 end
+
+local function PaintIconBorder(border, host, style, thickness, g, edge, keepShown)
+    style = tostring(style or "NONE"):upper()
+    thickness = Num(thickness, 0)
+    if style == "NONE" or style == "" or thickness <= 0 then
+        PixelLayoutRegion(border, "SetBackdrop", nil)
+        if not keepShown then border:Hide() end
+        border._msufIconBorderKey = nil
+        return
+    end
+    local r, green, b, a = 0, 0, 0, 0.95
+    if style == "CASTBAR" then
+        r, green, b, a = Num(g.castbarBorderR, 0), Num(g.castbarBorderG, 0), Num(g.castbarBorderB, 0), Num(g.castbarBorderA, 1)
+    end
+    edge = edge or IconBorderEdge(host, thickness)
+    local key = edge .. "|" .. r .. "|" .. green .. "|" .. b .. "|" .. a
+    if border._msufIconBorderKey ~= key then
+        PixelLayoutRegion(border, "SetBackdrop", IconBorderBackdrop(edge))
+        border:SetBackdropColor(0, 0, 0, 0)
+        border:SetBackdropBorderColor(r, green, b, a)
+        border._msufIconBorderKey = key
+    end
+    if not keepShown then border:Show() end
+end
+Visuals.PaintIconBorder = PaintIconBorder
 
 local function ApplyIconBorder(frame, host, g, prefix)
     local style = DetailString(g, prefix, "IconBorderStyle", nil, "NONE"):upper()
@@ -438,31 +476,12 @@ local function ApplyIconBorder(frame, host, g, prefix)
         HideIconBorder(frame)
         return
     end
-    local r, green, b, a = 0, 0, 0, 0.95
-    if style == "CASTBAR" then
-        r = Num(g.castbarBorderR, 0)
-        green = Num(g.castbarBorderG, 0)
-        b = Num(g.castbarBorderB, 0)
-        a = Num(g.castbarBorderA, 1)
-    end
-    local key = style .. "|"
-        .. KeyPart(thickness) .. "|"
-        .. KeyPart(r) .. "|"
-        .. KeyPart(green) .. "|"
-        .. KeyPart(b) .. "|"
-        .. KeyPart(a)
-    if frame and frame._msufDetailIconBorderKey == key then
-        return
-    end
-    if frame then
-        frame._msufDetailIconBorderKey = key
-    end
-    local border = EnsureIconBorder(frame, host)
-    local edge = IconBorderEdge(host, thickness)
-    PixelLayoutRegion(border, "SetBackdrop", IconBorderBackdrop(edge))
-    border:SetBackdropColor(0, 0, 0, 0)
-    border:SetBackdropBorderColor(r, green, b, a)
-    border:Show()
+    local key = style .. "|" .. KeyPart(thickness) .. "|"
+        .. KeyPart(g.castbarBorderR) .. "|" .. KeyPart(g.castbarBorderG) .. "|"
+        .. KeyPart(g.castbarBorderB) .. "|" .. KeyPart(g.castbarBorderA)
+    if frame._msufDetailIconBorderKey == key then return end
+    frame._msufDetailIconBorderKey = key
+    PaintIconBorder(EnsureIconBorder(frame, host), host, style, thickness, g)
 end
 
 --- Applies icon visibility and reserves statusbar space when the icon is outside
@@ -569,7 +588,7 @@ local function SetTextIfChanged(fontString, text)
     SetTextIfChangedFn(fontString, text or "")
 end
 
-local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
+local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify, scaleFn)
     if not (fs and relativeTo) then return end
     local justify
     if position == "CENTER" then
@@ -586,6 +605,7 @@ local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
         and fs._msufCastbarAnchorX == x
         and fs._msufCastbarAnchorY == y
         and fs._msufCastbarAnchorJustify == justify
+        and fs._msufCastbarAnchorScale == scaleFn
     then
         return
     end
@@ -594,18 +614,20 @@ local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
     fs._msufCastbarAnchorX = x
     fs._msufCastbarAnchorY = y
     fs._msufCastbarAnchorJustify = justify
+    fs._msufCastbarAnchorScale = scaleFn
     fs:ClearAllPoints()
-    if position == "CENTER" then
-        fs:SetPoint("CENTER", relativeTo, "CENTER", x, y)
-    elseif position == "RIGHT" then
-        fs:SetPoint("RIGHT", relativeTo, "RIGHT", x, y)
+    local point, relativePoint = "LEFT", "LEFT"
+    if position == "CENTER" or position == "RIGHT" then
+        point, relativePoint = position, position
     elseif position == "ABOVE" then
-        fs:SetPoint("BOTTOM", relativeTo, "TOP", x, y + 2)
+        point, relativePoint, y = "BOTTOM", "TOP", y + 2
     elseif position == "BELOW" then
-        fs:SetPoint("TOP", relativeTo, "BOTTOM", x, y - 2)
+        point, relativePoint, y = "TOP", "BOTTOM", y - 2
     else
-        fs:SetPoint("LEFT", relativeTo, "LEFT", 2 + x, y)
+        x = 2 + x
     end
+    if scaleFn then x, y = scaleFn(x), scaleFn(y) end
+    fs:SetPoint(point, relativeTo, relativePoint, x, y)
     -- SetJustifyH on a rect that is still unresolved after an anchor change
     -- leaves the FontString stuck on its previous alignment, so the Alignment
     -- setting stayed invisible until a later width/font change re-laid the
@@ -729,6 +751,8 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     RefreshCastbarSpellNameText(frame)
     return fontReady
 end
+
+Visuals.AnchorText = AnchorFontString
 
 local function ApplyTimeTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.timeText

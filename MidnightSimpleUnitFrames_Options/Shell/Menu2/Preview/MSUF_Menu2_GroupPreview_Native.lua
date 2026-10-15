@@ -614,15 +614,7 @@ end
 local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local Tr = M.Tr
-local function ClassColor(classToken, dr, dg, db)
-    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
-        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(classToken)
-        if r then return r, g, b end
-    end
-    local c = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
-    if c then return c.r, c.g, c.b end
-    return dr or 0.06, dg or 0.06, db or 0.07
-end
+local ClassColor = MSUF.UF.Config.ClassColor
 local function AuraGrowth(growth)
     return GF_AURA_GROWTH_TABLE[growth] or GF_AURA_GROWTH_TABLE.RIGHTDOWN
 end

@@ -108,6 +108,7 @@ if not PORTRAIT_SOFT_EDGE_MASKS then
     PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = diamondRoot .. suffix
   end
 end
+Visuals.PORTRAIT_SOFT_EDGE_MASKS = PORTRAIT_SOFT_EDGE_MASKS
 local DYNAMIC_PORTRAIT_BORDER = Visuals.DYNAMIC_PORTRAIT_BORDER or {
   CLASS_COLOR = true,
   REACTION = true,
@@ -143,6 +144,8 @@ local PORTRAIT_RING_ROTATION = {
   DOWN  = { 1, 1, 1, 0, 0, 1, 0, 0 },
   LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
 }
+Visuals.PORTRAIT_RING_ART = PORTRAIT_RING_ART
+Visuals.PORTRAIT_RING_ROTATION = PORTRAIT_RING_ROTATION
 --- Standalone portrait contour: three round quadrants and a small rounded
 --- lower-right corner. The paired assets share a distance field and bounds.
 --- Blizzard's full PlayerFrame atlas also contains bar housing, so cannot be
@@ -1323,8 +1326,15 @@ local function LayoutBlizzardPortraitCorner(holder, p)
     SetShown(corner, false)
     return
   end
-  local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-  if MSUF.Client and MSUF.Client.IsForever ~= true and not (getAtlasInfo and getAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS)) then
+  -- Mock surfaces pass the session's atlas capability, without querying a
+  -- live region or repeating the native probe on each menu repaint.
+  local available = p.blizzardCornerAvailable
+  if available == nil then
+    local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+    available = not MSUF.Client or MSUF.Client.IsForever == true
+      or (getAtlasInfo and getAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS))
+  end
+  if not available then
     SetShown(corner, false)
     return
   end
@@ -1481,6 +1491,13 @@ LayoutPortraitBorder = function(holder, p, r, g, b, a)
     SetShown(edges[i], true)
   end
 end
+
+-- Explicit paint entry points take a region surface and plain compiled inputs.
+-- They neither resolve a unit nor register the surface with the live engine.
+Portrait.PaintBorder = LayoutPortraitBorder
+Portrait.PaintBlizzardBorder = LayoutBlizzardPortraitRing
+Portrait.PaintMask = ApplyPortraitMask
+Portrait.RingInflation = PortraitRingInflation
 
 local function ApplyPortraitBackground(holder, p)
   local bg = holder and holder.bg

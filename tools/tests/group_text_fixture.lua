@@ -1,5 +1,5 @@
 -- Real UFText providers for narrow group, profile and catalog fixtures.
-return function(namespace, root)
+return function(namespace, root, previewRules)
     root = assert(root, "group fixture repository root required"):gsub("\\", "/"):gsub("/$", "")
     if not root:match("^%a:/") and root:sub(1, 1) ~= "/" then
         local command = package.config:sub(1, 1) == "\\" and "cd" or "pwd"
@@ -17,9 +17,10 @@ return function(namespace, root)
     local paths = World.Graph(root, World.CoreTOC(world.client.tocSuffix or flavor), "enUS",
         world.client.isForever and "camelot" or nil)
     local prefix = {}
+    local lastProvider = previewRules and "/MSUF_CP_Controller_Colors.lua" or "/MSUF_UF_Text_Runtime.lua"
     for _, path in ipairs(paths) do
         prefix[#prefix + 1] = path
-        if path:find("/MSUF_UF_Text_Runtime.lua", 1, true) then break end
+        if path:find(lastProvider, 1, true) then break end
     end
     -- Legacy loadfile adapters rebind dependency chunks to the fixture globals.
     -- This isolated graph must execute each complete provider in its own world.
@@ -41,6 +42,19 @@ return function(namespace, root)
     for _, name in ipairs({ "FormatValue", "FormatPercentValue", "FormatHealthString", "FormatPowerString", "TruncateName",
         "PercentFromValues", "MissingHealthFromValues", "ReadDisplayName" }) do
         assert(type(namespace.UFText[name]) == "function", "group fixture lacks real UFText." .. name)
+    end
+    if previewRules then
+        -- Catalog previews bind the same shipped rule providers as the client.
+        -- Keep their live registries isolated in this fixture world.
+        namespace.UF.Config = world.core.UF.Config
+        namespace.UF.elements = namespace.UF.elements or {}
+        namespace.UF.elements.Portrait = world.core.UF.elements.Portrait
+        namespace.UF.elements.Health = world.core.UF.elements.Health
+        namespace.UFVisuals = world.core.UFVisuals
+        namespace.ClassPowerColors = world.core.ClassPowerColors
+        namespace.Castbars.Visuals = world.core.Castbars.Visuals
+        assert(type(namespace.ClassPowerColors.ResolveSlotColor) == "function", "catalog resource rule provider missing")
+        assert(type(namespace.Castbars.Visuals.PaintIconBorder) == "function", "catalog castbar rule provider missing")
     end
     return namespace.UFText
 end

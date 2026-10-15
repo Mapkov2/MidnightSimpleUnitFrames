@@ -779,3 +779,5 @@ clients+Forever	lua	tools/tests/preview_config_signal_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/settings_surface_commit_cost_smoke.lua	{root} {flavor}	Settings publication entered the internal surface commit original cost route: {flavor}
 clients+Forever	lua	tools/tests/preview_config_apply_bridge_smoke.lua	{root} {flavor}	Settings public bridge real-painter lifecycle failed: {flavor}
 clients+Forever	lua	tools/tests/preview_spec_lifecycle_smoke.lua	{root} {flavor}	Preview reads preserve live specs and deferred applies: {flavor}
+clients+Forever	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} {flavor}	Runtime and menu call the same portrait, resource, health and castbar rules: {flavor}
+clients+Forever	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} {flavor}	Full-overlay portrait preview matches live dressing: {flavor}

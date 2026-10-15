@@ -441,6 +441,8 @@ local function DarkTint(general, r, g, b)
   return r or 0, g or 0, b or 0
 end
 
+Config.DarkTint = DarkTint
+
 local function ResolveBarBackgroundFillMode(general)
   return general and general.barBgFillMode == "missing" and "missing" or "full"
 end
@@ -453,6 +455,17 @@ local function ResolveBarBackgroundColorMode(general)
   if general and general.barBgClassColor == true then return "class" end
   if general and general.barBgMatchHPColor == true then return "match_health" end
   return "custom"
+end
+
+-- Previews also carry compiled health fields. Project that schema once per
+-- call into the canonical config rule; live config needs no adapter work.
+local backgroundColorProjection = {}
+function Config.ResolveBarBackgroundColorMode(general, health)
+  if not health then return ResolveBarBackgroundColorMode(general) end
+  backgroundColorProjection.barBgColorMode = health.backgroundColorMode or general and general.barBgColorMode
+  backgroundColorProjection.barBgClassColor = health.backgroundClassColor == true or general and general.barBgClassColor == true
+  backgroundColorProjection.barBgMatchHPColor = health.backgroundMatchHealth == true or general and general.barBgMatchHPColor == true
+  return ResolveBarBackgroundColorMode(backgroundColorProjection)
 end
 
 local function ResolveHealthBackground(general, bars, health, dst, conf)
@@ -2066,6 +2079,7 @@ local function MSUF_UFCore_GetClassBarColorFast(classToken)
   end
   return 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors Shared.FallbackClassColor()
 end
+Config.ClassColor = MSUF_UFCore_GetClassBarColorFast
 ExportPublic("MSUF_UFCore_GetClassBarColorFast", MSUF_UFCore_GetClassBarColorFast)
 
 local function MSUF_UFCore_GetNPCReactionColorFast(kind)

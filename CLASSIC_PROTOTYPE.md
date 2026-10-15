@@ -987,6 +987,15 @@ under `tools/` needs `git add -f`.
 A smoke that only a skipped tier or another shard covers counts as deferred, and the
 inventory line says how many there are.
 
+## Preview visual rule ownership
+
+Menu2 unit, group and resource previews consume core portrait painters, resource
+colour resolvers, health background geometry and castbar detail rules. Their
+scale, sample identity and chrome stay local. See
+[shared runtime rules](docs/PREVIEW_RUNTIME_RULES.md) for input contracts,
+remaining scene boundaries and validation limits. No TOC/XML load order changes
+are needed: each provider already loads in core before the Options addon.
+
 ## Regenerating the Menu2 search index
 
 The nightly gate also runs the generator with `--check` for both client-family

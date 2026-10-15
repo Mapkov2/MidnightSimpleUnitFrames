@@ -243,13 +243,7 @@ local function ClassColor(dr, dg, db, spec)
         local _
         _, class = UnitClass("player")
     end
-    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
-        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(class)
-        if r then return r, g, b end
-    end
-    local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
-    if c then return c.r, c.g, c.b end
-    return dr or 0.95, dg or 0.82, db or 0.10
+    return MSUF.UF.Config.ClassColor(class)
 end
 local function PowerColor(player)
     local pbc = _G.PowerBarColor

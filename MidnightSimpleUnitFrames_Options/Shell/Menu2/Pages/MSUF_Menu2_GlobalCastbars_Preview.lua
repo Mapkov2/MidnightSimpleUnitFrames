@@ -156,12 +156,7 @@ end
         return CastbarPreview.ShowText(unit, g or G())
     end
     local function CastbarShowTime(unit, g)
-        if unit == "boss" then return not (g and g.showBossCastTime == false) end
-            if unit == "arena" then return not (g and g.showArenaCastTime == false) end
-        local key = (unit == "player" and "showPlayerCastTime")
-            or (unit == "target" and "showTargetCastTime")
-            or (unit == "focus" and "showFocusCastTime")
-        return not (key and g and g[key] == false)
+        return MSUF.Castbars.Visuals.ShowTimeForUnit(g, unit)
     end
     local function CastbarShowTargetName(unit, g)
         if unit == "target" then return g and g.castbarTargetShowTargetName == true end
@@ -413,49 +408,16 @@ local function PreviewSetRowOffset(self, x)
         return edgeSize
     end
     local function LayoutIconOutline(frame, scale, unit, gdb)
-        local holder = frame and frame.iconOutlineFrame
-        local iconFrame = frame and frame.icon
+        local holder, iconFrame = frame and frame.iconOutlineFrame, frame and frame.icon
         if not (holder and holder.SetBackdrop and iconFrame) then return end
-        local prefix = unit == "player" and "castbarPlayer"
-            or unit == "target" and "castbarTarget"
-            or unit == "focus" and "castbarFocus"
-            or unit == "boss" and "bossCast"
-                or unit == "arena" and "arenaCast"
-        local thickness = prefix and tonumber(gdb and gdb[prefix .. "IconBorderThickness"]) or 0
-        local style = prefix and tostring((gdb and gdb[prefix .. "IconBorderStyle"]) or "NONE"):upper() or "NONE"
-        thickness = max(0, min(8, floor((thickness or 0) + 0.5)))
-        if thickness <= 0 or style == "NONE" or not iconFrame:IsShown() then
-            PixelLayoutRegion(holder, "SetBackdrop", nil)
-            holder:Hide()
-            frame._iconOutlinePreviewKey = nil
-            frame._iconOutlinePreviewColorKey = nil
-            return
-        end
-        local edgeSize = max(1, floor((thickness * (scale or 1)) + 0.5))
-        local key = tostring(edgeSize)
-        if frame._iconOutlinePreviewKey ~= key then
-            PixelLayoutRegion(holder, "SetBackdrop", {
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = edgeSize,
-                insets = { left = 0, right = 0, top = 0, bottom = 0 },
-            })
-            holder:SetBackdropColor(0, 0, 0, 0)
-            frame._iconOutlinePreviewKey = key
-        end
-        local r, gg, b, a = 0, 0, 0, 0.95
-        if style == "CASTBAR" then
-            r = tonumber(gdb.castbarBorderR) or 0
-            gg = tonumber(gdb.castbarBorderG) or 0
-            b = tonumber(gdb.castbarBorderB) or 0
-            a = tonumber(gdb.castbarBorderA) or 1
-        end
-        local colorKey = tostring(r) .. "|" .. tostring(gg) .. "|" .. tostring(b) .. "|" .. tostring(a)
-        if frame._iconOutlinePreviewColorKey ~= colorKey then
-            holder:SetBackdropBorderColor(r, gg, b, a)
-            frame._iconOutlinePreviewColorKey = colorKey
-        end
-        holder:Show()
+        local visuals = MSUF.Castbars.Visuals
+        local prefix = visuals.PrefixForUnit(unit)
+        local thickness = visuals.DetailNum(gdb, prefix, "IconBorderThickness", nil, 0)
+        local style = visuals.DetailString(gdb, prefix, "IconBorderStyle", nil, "NONE")
+        thickness = max(0, min(8, floor(thickness + 0.5)))
+        local edge = max(1, floor(thickness * (scale or 1) + 0.5))
+        if thickness <= 0 or not iconFrame:IsShown() then style = "NONE" end
+        visuals.PaintIconBorder(holder, iconFrame, style, edge, gdb, edge)
     end
 local function RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, duration)
     local remaining = max(0, (1 - progress) * duration)

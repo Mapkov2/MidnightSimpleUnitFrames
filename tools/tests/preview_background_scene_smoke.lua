@@ -59,6 +59,10 @@ local function LoadHelpers(isForever)
     }
     _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
     _G.issecretvalue = function() return false end
+    for _, path in ipairs({ "Kernel/MSUF_Bootstrap.lua", "ClassPower/MSUF_CP_Constants.lua",
+        "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", main)
+    end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))(
         "MidnightSimpleUnitFrames_Options", main)
     return main.MSUF2.PreviewHelpers, main.MSUF2

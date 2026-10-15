@@ -12,6 +12,7 @@ local CanonKey = PreviewModel.CanonKey
 local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
 local CoreFrame = MSUF.UF.GetFrame
+local EMPTY_DETAILS = {}
 function Castbar.OffsetFields(unitKey)
     -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
     -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
@@ -180,13 +181,12 @@ local function TextKey(key, suffix, bossKey)
     return prefix and (prefix .. suffix) or nil
 end
 function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
+    g = g or EMPTY_DETAILS
     local dbKey = TextKey(key, suffix, bossKey)
-    local v = dbKey and g and tonumber(g[dbKey]) or nil
-    if v == nil and suffix and suffix:find("Icon", 1, true) then
-        local globalKey = suffix:gsub("^Icon", "castbarIcon")
-        v = g and tonumber(g[globalKey]) or nil
-    end
-    return (v ~= nil) and v or fallback
+    local globalKey
+    if suffix and suffix:find("Icon", 1, true) then globalKey = suffix:gsub("^Icon", "castbarIcon") end
+    return MSUF.Castbars.Visuals.DetailNum(g, nil, nil, dbKey, nil)
+        or MSUF.Castbars.Visuals.DetailNum(g, nil, nil, globalKey, fallback)
 end
 -- Time text offsets follow the live castbar (MSUF_CastbarVisuals.lua
 -- ApplyTimeTextLayout): boss and arena store X relative to a -2 base and never
@@ -206,39 +206,18 @@ function Castbar.TimeOffsets(g, key)
     return tonumber(x) or -2, tonumber(y) or 0
 end
 function Castbar.ReadString(g, key, suffix, bossKey, fallback)
-    local dbKey = TextKey(key, suffix, bossKey)
-    local value = dbKey and g and g[dbKey] or nil
-    if value == nil or value == "" then value = fallback end
-    return tostring(value or fallback or "")
+    g = g or EMPTY_DETAILS
+    return MSUF.Castbars.Visuals.DetailString(g, nil, nil, TextKey(key, suffix, bossKey), fallback)
 end
 Castbar.NormalizeTextPosition = _G.MSUF_NormalizeCastbarTextPosition
-function Castbar.JustifyForTextPosition(position)
-    if position == "LEFT" or position == "RIGHT" then return position end
-    return "CENTER"
-end
+Castbar.JustifyForTextPosition = MSUF.Castbars.Visuals.JustifyForTextPosition
 Castbar.NormalizeTextJustify = _G.MSUF_NormalizeCastbarTextJustify
 function Castbar.AnchorText(fontString, relativeTo, position, x, y, justify, scaleFn)
-    if not (fontString and relativeTo) then return end
     position = Castbar.NormalizeTextPosition(position, "LEFT")
     justify = Castbar.NormalizeTextJustify(justify, Castbar.JustifyForTextPosition(position))
-    x, y = tonumber(x) or 0, tonumber(y) or 0
     if type(scaleFn) ~= "function" then scaleFn = tonumber end
-    fontString:ClearAllPoints()
-    if position == "CENTER" then
-        fontString:SetPoint("CENTER", relativeTo, "CENTER", scaleFn(x), scaleFn(y))
-    elseif position == "RIGHT" then
-        fontString:SetPoint("RIGHT", relativeTo, "RIGHT", scaleFn(x), scaleFn(y))
-    elseif position == "ABOVE" then
-        fontString:SetPoint("BOTTOM", relativeTo, "TOP", scaleFn(x), scaleFn(y + 2))
-    elseif position == "BELOW" then
-        fontString:SetPoint("TOP", relativeTo, "BOTTOM", scaleFn(x), scaleFn(y - 2))
-    else
-        fontString:SetPoint("LEFT", relativeTo, "LEFT", scaleFn(2 + x), scaleFn(y))
-    end
-    -- PTR FrameXML resolves the new rect before justification for the same
-    -- stale-alignment edge case (EncounterTimelineTimerEvent:UpdateNameTextLayout).
-    if fontString.GetRect then fontString:GetRect() end
-    fontString:SetJustifyH(justify)
+    MSUF.Castbars.Visuals.AnchorText(fontString, relativeTo, position,
+        tonumber(x) or 0, tonumber(y) or 0, justify, scaleFn)
 end
 function Castbar.ResolveTargetTextPreviewColor(key, fallbackR, fallbackG, fallbackB)
     key = CanonKey(key)
@@ -271,18 +250,8 @@ function Castbar.Enabled(key, g)
     return false
 end
 function Castbar.ShowIcon(key, g)
-    if key == "boss" then return g.showBossCastIcon ~= false end
-    if key == "arena" then return g.showArenaCastIcon ~= false end
-    if key == "player" and g.castbarPlayerShowIcon ~= nil then return g.castbarPlayerShowIcon ~= false end
-    if key == "target" and g.castbarTargetShowIcon ~= nil then return g.castbarTargetShowIcon ~= false end
-    if key == "focus" and g.castbarFocusShowIcon ~= nil then return g.castbarFocusShowIcon ~= false end
-    return g.castbarShowIcon ~= false
+    return MSUF.Castbars.Visuals.ShowIconForUnit(g, key, MSUF.Castbars.Visuals.PrefixForUnit(key))
 end
 function Castbar.ShowText(key, g)
-    if key == "boss" then return g.showBossCastName ~= false end
-    if key == "arena" then return g.showArenaCastName ~= false end
-    if key == "player" and g.castbarPlayerShowSpellName ~= nil then return g.castbarPlayerShowSpellName ~= false end
-    if key == "target" and g.castbarTargetShowSpellName ~= nil then return g.castbarTargetShowSpellName ~= false end
-    if key == "focus" and g.castbarFocusShowSpellName ~= nil then return g.castbarFocusShowSpellName ~= false end
-    return g.castbarShowSpellName ~= false
+    return MSUF.Castbars.Visuals.ShowSpellForUnit(g, key, MSUF.Castbars.Visuals.PrefixForUnit(key))
 end

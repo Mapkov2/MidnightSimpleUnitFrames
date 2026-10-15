@@ -34,6 +34,7 @@ end
 local function NewRegion(parent)
     local region = { parent = parent, shown = true, frameLevel = 1 }
     function region:GetParent() return self.parent end
+    function region:SetParent(parent) self.parent = parent end
     function region:EnableMouse(value) self.mouseEnabled = value end
     function region:Show() self.shown = true end
     function region:Hide() self.shown = false end
@@ -126,7 +127,7 @@ local atlasInfo = {
 }
 _G.C_Texture = { GetAtlasInfo = function(atlas) return atlasInfo[atlas] end }
 
-local function LoadElement(client)
+local function LoadElement(client, namespace)
     local registered
     local UF = {
         Layers = { PORTRAIT_OFFSET = 6, PORTRAIT_BORDER_OFFSET = 7 },
@@ -137,13 +138,11 @@ local function LoadElement(client)
     }
     -- Game/Shared/Initialize.lua loads before this element on every TOC, so the
     -- legacy Era portrait gate reads MSUF.Client and never the raw project ID.
-    local MSUF = {
-        Client = client,
-        UF = UF,
-        Secrets = {
-            IsNil = function(value) return value == nil end,
-            NotSecret = function() return true end,
-        },
+    local MSUF = namespace or {}
+    MSUF.Client, MSUF.UF = client, UF
+    MSUF.Secrets = {
+        IsNil = function(value) return value == nil end,
+        NotSecret = function() return true end,
     }
     _G.MSUF_NS = MSUF
     local commonChunk, commonError = loadfile(commonPath)
@@ -156,7 +155,15 @@ local function LoadElement(client)
     local portraitChunk, portraitError = loadfile(portraitPath)
     assert(portraitChunk, portraitError)
     portraitChunk("MidnightSimpleUnitFrames", MSUF)
+    UF.elements = { Portrait = registered }
     return assert(registered, "Portrait element was not registered")
+end
+
+local function NewPreviewPortrait()
+    local portrait = NewRegion()
+    portrait.border = NewRegion(portrait)
+    portrait.border.edges = {}
+    return portrait
 end
 
 local function NewFrame(shape, borderStyle)
@@ -272,12 +279,12 @@ do
     ns.MSUF2.PickFallbackTable = function(deps, defaults)
         return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
     end
-    assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
+    LoadElement(ns.Client, ns)
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
     local preview = {}
     ns.UFPreviewRender.Install(preview, {})
     local render = preview.RefreshDeps._RenderState
-    local portrait = NewRegion()
+    local portrait = NewPreviewPortrait()
     portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
     render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
     assert(portrait._msufPreviewShapeMask.texture == MASK_FILE, "preview must use the matching player mask")
@@ -335,12 +342,12 @@ local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVani
 ns.MSUF2.PickFallbackTable = function(deps, defaults)
     return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
 end
-assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
+LoadElement(ns.Client, ns)
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 local preview = {}
 ns.UFPreviewRender.Install(preview, {})
 local render = assert(preview.RefreshDeps._RenderState)
-local portrait = NewRegion()
+local portrait = NewPreviewPortrait()
 render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
 local previewArt = assert(portrait._msufPreviewBlizzFallback)
 assert(previewArt.shown and previewArt.vertexColor[2] == 0.82, "Era preview must show gold")
@@ -356,12 +363,12 @@ era.Apply(eraFrame, eraFrame.MSUFSpec)
 assert(eraFrame.MSUFPortraitHolder.artBorder.shown, "Era default Blizzard shape needs gold art")
 assert(eraFrame.MSUFPortraitHolder.mask.texture:find("circle_mask", 1, true))
 ns = { MSUF2 = ns.MSUF2, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
-assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
+LoadElement(ns.Client, ns)
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 preview = {}
 ns.UFPreviewRender.Install(preview, {})
 render = preview.RefreshDeps._RenderState
-portrait = NewRegion()
+portrait = NewPreviewPortrait()
 portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
 render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
 render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
