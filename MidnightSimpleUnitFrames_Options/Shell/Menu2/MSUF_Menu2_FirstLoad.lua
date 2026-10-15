@@ -471,6 +471,34 @@ end
 
 RegisterFirstLoadVirtualControls()
 
+local function CreateFooterButtons(scene, T, contentWidth, sceneWidth, footerTop, compact)
+    local footerButtons = {
+        { "What is new in 6.0", 132, function() M.ExecuteFirstLoadDashboardAction("whats_new") end, "whats_new" },
+        { "Not now", 74, function() M.ExecuteFirstLoadDashboardAction("not_now") end, "not_now" },
+        { "Open full settings", 126, function() M.ExecuteFirstLoadDashboardAction("full_settings") end, "full_settings" },
+    }
+    local footerHeight
+    if compact then
+        local buttonWidth = min(220, contentWidth)
+        local buttonX = floor((sceneWidth - buttonWidth) / 2)
+        for i = 1, #footerButtons do
+            local item = footerButtons[i]
+            CreateFooterButton(scene, T, item[1], buttonX, footerTop - ((i - 1) * 32), buttonWidth, item[3], item[4])
+        end
+        footerHeight = 88
+    else
+        local total = footerButtons[1][2] + footerButtons[2][2] + footerButtons[3][2] + 16
+        local x = floor((sceneWidth - total) / 2)
+        for i = 1, #footerButtons do
+            local item = footerButtons[i]
+            CreateFooterButton(scene, T, item[1], x, footerTop, item[2], item[3], item[4])
+            x = x + item[2] + 8
+        end
+        footerHeight = 24
+    end
+    return footerHeight
+end
+
 function M.BuildFirstLoadDashboardScene(ctx)
     RegisterFirstLoadVirtualControls()
     local firstLoad = Lifecycle()
@@ -583,30 +611,7 @@ function M.BuildFirstLoadDashboardScene(ctx)
 
     local routeGridHeight = compact and ((cardHeight * 3) + (cardGap * 2)) or cardHeight
     local footerTop = routeTop - routeGridHeight - 18
-    local footerButtons = {
-        { "What is new in 6.0", 132, function() M.ExecuteFirstLoadDashboardAction("whats_new") end, "whats_new" },
-        { "Not now", 74, function() M.ExecuteFirstLoadDashboardAction("not_now") end, "not_now" },
-        { "Open full settings", 126, function() M.ExecuteFirstLoadDashboardAction("full_settings") end, "full_settings" },
-    }
-    local footerHeight
-    if compact then
-        local buttonWidth = min(220, contentWidth)
-        local buttonX = floor((sceneWidth - buttonWidth) / 2)
-        for i = 1, #footerButtons do
-            local item = footerButtons[i]
-            CreateFooterButton(scene, T, item[1], buttonX, footerTop - ((i - 1) * 32), buttonWidth, item[3], item[4])
-        end
-        footerHeight = 88
-    else
-        local total = footerButtons[1][2] + footerButtons[2][2] + footerButtons[3][2] + 16
-        local x = floor((sceneWidth - total) / 2)
-        for i = 1, #footerButtons do
-            local item = footerButtons[i]
-            CreateFooterButton(scene, T, item[1], x, footerTop, item[2], item[3], item[4])
-            x = x + item[2] + 8
-        end
-        footerHeight = 24
-    end
+    local footerHeight = CreateFooterButtons(scene, T, contentWidth, sceneWidth, footerTop, compact)
 
     local footnoteTop = footerTop - footerHeight - 14
     local footnoteText = installKind == "upgrade"
