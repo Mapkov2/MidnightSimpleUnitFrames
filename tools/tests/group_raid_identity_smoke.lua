@@ -11,7 +11,7 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local members = { raid1 = { "Mage", "MAGE" }, raid2 = { "Warrior", "WARRIOR" } }
 local colors = { MAGE = { r = .1, g = .6, b = 1 }, WARRIOR = { r = .8, g = .5, b = .2 } }
 local guidReads, nameReads = 0, 0
-local adapterGuidReads, repaintGuidReads, inRepaint = 0, 0, false
+local adapterGuidReads, repaintGuidReads, rosterGuidReads, inRepaint = 0, 0, 0, false
 local secret = false
 local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.type, h.env.issecretvalue = type, issecretvalue
@@ -24,7 +24,9 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.UnitGUID = function(unit)
         guidReads = guidReads + 1
         if inRepaint then repaintGuidReads = repaintGuidReads + 1 end
-        if debug.getinfo(2, "S").source:find("MSUF_UF_Group_Adapter.lua", 1, true) then
+        local source = debug.getinfo(2, "S").source
+        if source:find("MSUF_UF_Group_Runtime.lua", 1, true) then rosterGuidReads = rosterGuidReads + 1 end
+        if source:find("MSUF_UF_Group_Adapter.lua", 1, true) then
             adapterGuidReads = adapterGuidReads + 1
         end
         if secret then return secretGUID end
@@ -159,9 +161,8 @@ inRepaint = false
 assert(#h.violations == 0, "protected call during the in-combat roster settle: " .. tostring(h.violations[1]))
 assert(refreshes == #children, "roster burst must refresh each live frame once")
 assert(registrations == 0 and auraRebinds == 0, "same-token roster repaint rebound event or aura ownership")
--- The combat role-overlay identity pass reads GUIDs in the roster event handler;
--- the settle that repaints names and colours must not.
-assert(adapterGuidReads == 0 and repaintGuidReads == 0, "roster repaint depends on GUID")
+-- Both identity painters and role-overlay ownership must be GUID independent.
+assert(rosterGuidReads == 0 and adapterGuidReads == 0 and repaintGuidReads == 0, "roster repaint depends on GUID")
 Check("burst final occupant")
 -- Cover the opposite native/addon event registration order as well.
 local frames, runtimeIndex, headerIndex = h.widgets.frames

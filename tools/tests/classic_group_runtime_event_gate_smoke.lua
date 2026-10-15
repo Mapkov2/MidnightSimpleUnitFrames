@@ -51,6 +51,7 @@ local function NewRuntimeGF(arena)
   function runtimeGF.GetLiveRaidKind() return "raid" end
   runtimeGF.ApplyBlizzardGroupFrameOwnership = noop
   runtimeGF.ApplyGroupBorder = noop
+  runtimeGF.SetRaidRosterFrozen = noop -- This registration fixture creates no native raid headers.
   function runtimeGF.SetupHeader() return { Show = noop }, true end
   function runtimeGF.ScanHeader() return false end
   function runtimeGF.RetireHeader() return true end

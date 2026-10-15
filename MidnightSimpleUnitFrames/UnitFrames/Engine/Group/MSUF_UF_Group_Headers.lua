@@ -57,7 +57,7 @@ local VALID_ROLES = {
 }
 
 local function InCombat()
-  return InCombatLockdown and InCombatLockdown()
+  return GF._raidRosterCombatActive or InCombatLockdown()
 end
 
 --- Hard dependencies on exports of files that load before this one (Kernel Util,
@@ -86,14 +86,6 @@ local function SuspendHeaderChildren(...)
   end
 end
 
-local function RetireHeader(header)
-  if not header then return end
-  if header.GetChildren then
-    SuspendHeaderChildren(header:GetChildren())
-  end
-  if header.Hide then header:Hide() end
-end
-
 function GF.ForEachHeader(key, fn)
   if type(fn) ~= "function" then return false end
   local first = GF.headers and GF.headers[key]
@@ -109,6 +101,66 @@ function GF.ForEachHeader(key, fn)
     return fn(first, nil) and true or false
   end
   return false
+end
+
+-- Stop the native roster rebuild too: deferring only Runtime leaves Blizzard's
+-- header free to create, compact and resize slots during combat. Unit consumers
+-- stay live because raidN can acquire another occupant without changing its token.
+local function DeferRaidNameUpdate(header, event, unit)
+  local reasons = GF._pendingGroupRuntimeReasons
+  local kind = GF._pendingGroupRuntimeKind
+  if reasons and reasons.roster and (kind == false or kind == "raid" or kind == "mythicraid") then return end
+  if event ~= "UNIT_NAME_UPDATE" or not IsUnitToken(unit) then return end
+  if unit == "player" or unit:match("^raid%d+$") then GF.DeferGroupRuntime("roster", "raid") end
+end
+
+local function FreezeRaidRoster(header)
+  if header._msufRaidRosterFrozen then return false end
+  -- Native OnShow may owe an OOC roster update hidden by an ancestor.
+  header._msufRaidRosterHiddenAtFreeze = not header:IsVisible() or nil
+  header:UnregisterEvent("GROUP_ROSTER_UPDATE")
+  header._msufRaidRosterOnShow = header:GetScript("OnShow")
+  header._msufRaidRosterOnEvent = header:GetScript("OnEvent")
+  header:SetScript("OnEvent", DeferRaidNameUpdate)
+  header:SetScript("OnShow", nil)
+  header:SetAttribute("_ignore", true)
+  header._msufRaidRosterFrozen = true
+  return true
+end
+
+local function ResumeRaidRoster(header)
+  if not header._msufRaidRosterFrozen then return false end
+  header._msufRaidRosterFrozen = nil
+  header:RegisterEvent("GROUP_ROSTER_UPDATE")
+  header:SetScript("OnShow", header._msufRaidRosterOnShow)
+  header._msufRaidRosterOnShow = nil
+  header:SetScript("OnEvent", header._msufRaidRosterOnEvent)
+  header._msufRaidRosterOnEvent = nil
+  header:SetAttribute("_ignore", nil)
+  -- Missed roster/name changes need a native refresh even with identical
+  -- layout attributes. An unchanged combat needs only its handlers restored.
+  if GF._pendingGroupRuntime or header._msufRaidRosterHiddenAtFreeze then
+    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  end
+  header._msufRaidRosterHiddenAtFreeze = nil
+  return true
+end
+
+local function RetireHeader(header)
+  if not header then return end
+  if header.GetChildren then
+    SuspendHeaderChildren(header:GetChildren())
+  end
+  if header.Hide then header:Hide() end
+  -- Another regen handler can retire this header before Runtime resumes it.
+  -- Restore after hiding so the native nonce cannot re-track retired children.
+  ResumeRaidRoster(header)
+end
+
+function GF.SetRaidRosterFrozen(frozen)
+  -- Keep refusal through the pre-lockdown edge until Runtime handles regen.
+  GF._raidRosterCombatActive = frozen and true or nil
+  return GF.ForEachHeader("raid", frozen and FreezeRaidRoster or ResumeRaidRoster)
 end
 
 function GF.ShowHeaders(key)
@@ -512,9 +564,9 @@ local function RequiredHeaderColumns(kind, conf, count)
     if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
     return columns
   end
-  -- The configured cap, not the live count: SecureGroupHeader re-lays itself out
-  -- on roster events in combat, where SetupHeader defers, and shows at most
-  -- unitsPerColumn * maxColumns units, so a count-sized cap drops a joiner.
+  -- Keep configured capacity for ordinary roster updates rather than capping
+  -- at the current count. Dedicated raid headers pause native updates in combat
+  -- and catch up at regen; out-of-combat joins still need the configured cap.
   return ClampInt(conf and conf.maxColumns, 8, 1, 40)
 end
 
@@ -1072,11 +1124,11 @@ local function NativeClassOrder(conf)
   return #ordered > 0 and table_concat(ordered, ",") or nil
 end
 
---- SecureGroupHeader sorts the live roster itself, also in combat: one grouping
+--- SecureGroupHeader supplies native roster sorting: one grouping
 --- dimension (GROUP, CLASS or ASSIGNEDROLE with a groupingOrder), INDEX or NAME
---- inside a group, and DESC over the whole list. A NAMELIST is a membership
---- filter frozen out of combat (a member who joins during a fight gets no frame
---- until it ends), so it is used only for orders native attributes cannot
+--- inside a group, and DESC over the whole list. Dedicated raid headers pause
+--- these updates in combat. A NAMELIST is an OOC membership filter, so it is
+--- used only for orders native attributes cannot
 --- express: player first inside a role, the flat Group + Role raid order, class
 --- priority under a role or group order, and a small raid on the Party layout
 --- that hides the player. Raid-wide role fill of preserved groups is decided in
@@ -1793,7 +1845,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
 end
 
 function GF.SetupHeader(key, kind)
-  if InCombat() then
+  if GF._raidRosterCombatActive or InCombatLockdown() then
     Defer("setup")
     return nil
   end

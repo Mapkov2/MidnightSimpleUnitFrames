@@ -73,8 +73,10 @@ function GF.PriorityFramesConfigured() Count("PriorityFramesConfigured"); return
 function GF.IsArenaPartyContext() Count("IsArenaPartyContext"); return false end
 function GF.IsPriorityGroupUnit(unit) return unit == "player" or unit:match("^party[1-4]$") ~= nil end
 function GF.RefreshPriorityFrames() Count("RefreshPriorityFrames"); return true end
+GF.RefreshFrameRoleOverlay = function() Count("roleOverlay"); return false end
 GF.EnsureDB = function() end
 GF.SetupHeader = function(key) Count("SetupHeader:" .. key); return nil, true end
+GF.SetRaidRosterFrozen = function(frozen) Count(frozen and "FreezeRaidRoster" or "ResumeRaidRoster"); return false end
 GF.SetupPriorityHeader = function() return nil end
 GF.ResolvePrioritySelection = function() return "Name-player", 1 end
 GF.RetireHeader = function() return true end
@@ -140,6 +142,7 @@ Check(#timers == 0 and not counts["SetupHeader:party"], "a role event in combat 
 combat = false
 eventFrame.onEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 Check(counts["SetupHeader:party"] == 1 and counts.roleState == #frames, "deferred role work was not flushed once at regen")
+Check(counts.ResumeRaidRoster == 1, "regen did not resume the header owner once")
 
 -- (c) No key strings are built on the target/focus edge path.
 local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua", "rb"))

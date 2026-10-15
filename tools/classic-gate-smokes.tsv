@@ -758,3 +758,5 @@ clients+Forever	lua	tools/tests/preview_family_exported_paths_smoke.lua	{root} {
 clients+Forever	lua	tools/tests/preview_family_exported_paths_smoke.lua	{root} {flavor} allocation	Hook-free heap exported and event preview family paths: {flavor}	nightly
 clients+Forever	lua	tools/tests/preview_family_sampler_controls_smoke.lua	{root} {flavor}	Public cleanup allocator controls: {flavor}
 clients+Forever	lua	tools/tests/editmode_preview_frozen_trace_smoke.lua	{root} {flavor}	Edit Mode preview behaviour drifted from the frozen parent: {flavor}
+clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavor}	Raid combat slot and geometry freeze regression: {flavor}
+clients+Forever	lua	tools/tests/group_role_overlay_secret_roster_smoke.lua	{root} {flavor}	Role-dependent power ownership with secret roster identities: {flavor}

@@ -1,4 +1,4 @@
--- Real secure-header identity shifts must repaint the role overlay in lockdown.
+-- Frozen roster slots and explicit secure rebinds retain role/Aura ownership.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "client flavor required")
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -63,9 +63,17 @@ local width, height = healer:GetWidth(), healer:GetHeight()
 for pass = 1, 2 do
     h:EnterCombat()
     local before, identityBefore = layoutCalls, identityCalls
+    local healerUnit, dpsUnit = healer.MSUFUnitKey, dps.MSUFUnitKey
     h.units[3], h.units[4] = h.units[4], h.units[3]
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
+    CheckOverlay(healer, healerUnit, roles[healerUnit] == "HEALER")
+    CheckOverlay(dps, dpsUnit, roles[dpsUnit] == "HEALER")
+    assert(identityCalls == identityBefore, "frozen roster rebound a secure slot")
+    -- Explicit secure unit changes still own their identity/Aura callback even
+    -- when the native roster event route is suspended.
+    h.RunSecure(healer.SetAttribute, healer, "unit", h.units[3])
+    h.RunSecure(dps.SetAttribute, dps, "unit", h.units[4])
     CheckOverlay(healer, pass == 1 and "raid4" or "raid3", pass == 2)
     CheckOverlay(dps, pass == 1 and "raid3" or "raid4", pass == 1)
     assert(identityCalls == identityBefore + 2, "role overlay bypassed the unit identity/aura callback")
@@ -76,27 +84,30 @@ for pass = 1, 2 do
     h:RunTimers()
     assert(layoutCalls > before and not GF._pendingGroupRuntime, "REGEN_ENABLED did not flush deferred layout")
 end
--- A native raid token can stay the same while its occupant GUID changes.
+-- The same tokens can acquire different roles; reconcile once per settled
+-- frame without using GUIDs. Only actual ownership transitions reapply elements.
 local overlay, overlayCalls = GF.RefreshFrameRoleOverlay, 0
 GF.RefreshFrameRoleOverlay = function(...)
     overlayCalls = overlayCalls + 1
     return overlay(...)
 end
+local apply, applyCalls = h.UF.ApplyElementsToFrame, 0
+h.UF.ApplyElementsToFrame = function(...) applyCalls = applyCalls + 1; return apply(...) end
 for pass = 1, 2 do
     h:EnterCombat()
     local before = layoutCalls
-    overlayCalls = 0
+    overlayCalls, applyCalls = 0, 0
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-    assert(overlayCalls == 0, "unchanged roster recompiled role overlays")
+    assert(overlayCalls == 10 and applyCalls == 0, "unchanged roster re-applied role ownership")
     guids.raid3, guids.raid4 = guids.raid4, guids.raid3
     roles.raid3, roles.raid4 = roles.raid4, roles.raid3
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-    assert(overlayCalls == 2, "GUID shift refreshed frames other than the two changed identities")
+    assert(overlayCalls == 20 and applyCalls == 2, "role shift lost or duplicated the two ownership transitions")
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-    assert(overlayCalls == 2, "repeated roster recompiled unchanged identities")
+    assert(overlayCalls == 30 and applyCalls == 2, "repeated roster re-applied unchanged identities")
     CheckOverlay(healer, "raid3", pass == 2)
     CheckOverlay(dps, "raid4", pass == 1)
     assert(layoutCalls == before and GF._pendingGroupRuntime == true, "same-token layout was not deferred")
@@ -118,13 +129,12 @@ local stop = Secrets.Watch({
     root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua",
 }, { strict = true })
 h:EnterCombat()
-local oldGUID = guids.raid3
 guids.raid3 = Secrets.New("string")
-overlayCalls = 0
+overlayCalls, applyCalls = 0, 0
 h:Event("GROUP_ROSTER_UPDATE")
 h:RunTimers()
-assert(overlayCalls == 0, "secret GUID triggered an identity comparison or overlay")
-assert(healer._msufGFRoleOverlayGUID == oldGUID, "secret GUID replaced the last readable identity")
+assert(overlayCalls == 10 and applyCalls == 0, "secret GUID changed unchanged role ownership")
+assert(healer._msufGFRoleOverlayGUID == nil, "roster runtime retained a GUID cache")
 roles.raid3 = Secrets.New("string")
 guids.raid3 = "Player-UnknownRole"
 h:Event("GROUP_ROSTER_UPDATE")
@@ -140,5 +150,5 @@ assert(#h.callMethodErrors == 0, "group child adoption raised: " .. tostring(h.c
 for _, err in ipairs(h.eventErrors) do
     assert(not err:find("Engine/Elements/", 1, true), "unit-frame element raised: " .. err)
 end
-print("group_role_overlay_identity_smoke: ok (" .. flavor .. ": token/GUID shifts, secret role, role icon "
+print("group_role_overlay_identity_smoke: ok (" .. flavor .. ": frozen slots/explicit rebinds, GUID-free role shifts, secret role, role icon "
     .. tostring(raid.roleIcon) .. ", 0 protected writes)")

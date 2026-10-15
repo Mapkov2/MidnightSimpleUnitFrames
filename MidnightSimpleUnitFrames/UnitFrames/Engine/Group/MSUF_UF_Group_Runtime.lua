@@ -25,7 +25,7 @@ local appliedLayoutScaleByKind = {}
 local appliedLayoutWidthByKind, appliedLayoutHeightByKind = {}, {}
 
 local function InCombat()
-  return InCombatLockdown and InCombatLockdown()
+  return GF._raidRosterCombatActive or InCombatLockdown()
 end
 
 local function SyncCombatState(inCombat)
@@ -70,8 +70,11 @@ local function SetupLiveHeader(key, kind)
   return header, scanned
 end
 
-local function RefreshRosterStateFrame(frame, _, kind, reason)
+local function RefreshRosterStateFrame(frame, _, kind, reason, refreshOverlay)
   if frame._msufGFIsPreviewFrame or (kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid") then return false end
+  -- OOC header scans already compile the binding. Frozen combat slots need
+  -- current power-role ownership before the lifecycle consumes their spec.
+  if refreshOverlay then GF.RefreshFrameRoleOverlay(frame) end
   local refresh = UF and UF.RefreshGroupFrameState
   local did = type(refresh) == "function" and refresh(frame, reason) == true or false
   -- A roster slot can acquire another player without changing its unit token.
@@ -85,7 +88,7 @@ end
 
 local function RefreshVisibleRosterState(reason)
   if type(GF.ForEachFrame) ~= "function" then return false end
-  return GF.ForEachFrame(RefreshRosterStateFrame, false, reason)
+  return GF.ForEachFrame(RefreshRosterStateFrame, false, reason, InCombat())
 end
 
 local function RoleFilteredAggroMode(mode)
@@ -634,7 +637,7 @@ end
 
 function GF.RefreshHeaderLayout(kind)
   if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
-  local inCombat = InCombat()
+  local inCombat = GF._raidRosterCombatActive or InCombatLockdown()
   if not inCombat and GF.EnsureDB then GF.EnsureDB() end
   local enabled = AnyGroupFrameEnabled()
   if inCombat then
@@ -676,8 +679,8 @@ local function FlushHeaderLayoutSettle()
   if not AnyGroupFrameEnabled() then return false end
   local did
   if InCombat() then
-    -- Native headers already assigned their units. Only protected layout waits;
-    -- the coalesced roster repaint must also complete during combat.
+    -- Raid slots/layout are frozen, but raidN occupants can still change. Keep
+    -- the coalesced identity repaint aligned with the secure click unit.
     did = GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
   else
     did = GF.RefreshHeaderLayout()
@@ -944,21 +947,6 @@ local function FlushDeferred()
   return did
 end
 
--- Raid tokens can acquire another occupant without a secure unit-attribute write.
--- Remember the readable identities at combat entry; only changed GUIDs need an
--- overlay compile on GROUP_ROSTER_UPDATE, never a full lifecycle per name event.
-local function RefreshRosterRoleIdentity(frame, unit, _, rememberOnly)
-  if not IsUnitToken(unit) then return false end
-  local guid = UnitGUID(unit)
-  if issecretvalue(guid) == true then return false end
-  local oldGUID = frame._msufGFRoleOverlayGUID
-  if issecretvalue(oldGUID) == true then oldGUID = nil end
-  frame._msufGFRoleOverlayGUID = guid
-  if rememberOnly or oldGUID == guid then return false end
-  GF.RefreshFrameRoleOverlay(frame)
-  return true
-end
-
 local function RuntimeOnEvent(self, event, unit)
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
@@ -976,11 +964,13 @@ local function RuntimeOnEvent(self, event, unit)
     return
   end
   if not AnyGroupFrameEnabled() and event ~= "PLAYER_REGEN_ENABLED" then
-    SetRuntimeEventsEnabled(false)
+    SetRuntimeEventsEnabled(false, InCombat())
     return
   end
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
+    local refreshEvents = GF._pendingGroupRuntime or runtimeEventState.regenOnly
+    GF.SetRaidRosterFrozen(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
     RefreshStartupVisuals()
     -- Priority selection is orthogonal to the broader pending reason. Catch up
@@ -989,7 +979,7 @@ local function RuntimeOnEvent(self, event, unit)
     if type(GF.RefreshCornerThreatState) == "function" then
       GF.RefreshCornerThreatState(event)
     end
-    SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
+    if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
     SyncCombatState(true)
@@ -1000,19 +990,15 @@ local function RuntimeOnEvent(self, event, unit)
     if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
       SetupWantedHeaders()
     end
-    if GF.ForEachFrame then GF.ForEachFrame(RefreshRosterRoleIdentity, false, true) end
+    GF.SetRaidRosterFrozen(true)
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
+    local inCombat = InCombat()
     if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then
-      -- The border textures are unprotected and can follow Party/Raid state
-      -- immediately even when secure header retirement must wait for combat.
-      GF.ApplyGroupBorder()
+      GF.ApplyGroupBorder(inCombat and "party" or nil)
     end
-    if InCombat() then
-      if event == "GROUP_ROSTER_UPDATE" and GF.ForEachFrame then
-        GF.ForEachFrame(RefreshRosterRoleIdentity, false)
-      end
+    if inCombat then
       GF.DeferGroupRuntime("roster")
       if event == "GROUP_ROSTER_UPDATE" then ScheduleHeaderLayoutSettle(SETTLE.ROSTER) end
     else

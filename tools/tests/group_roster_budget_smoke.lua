@@ -54,6 +54,14 @@
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
 
+-- 2026-10-15: native raid layout freezes in combat. Role-dependent Power
+-- ownership joins the existing coalesced paint before its lifecycle; separate
+-- GUID scans are removed. All original VM/native/allocation caps stay unchanged.
+-- New 40-frame/20-event budget: Mainline 1465k -> 670k,4000 -> 240 counted
+-- native calls; Vanilla 2121k -> 897k,5520 -> 1080. x86 burst27.9/290.5KB,
+-- x64 burst38.6/401.2KB. New cases use measured values+2%; no live CPU claim.
+-- Restoring the party-only combat border adds about 1k VM instructions to the
+-- forty-frame burst; all existing limits and counted native calls still hold.
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required")
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -63,10 +71,12 @@ local BUDGETS = {
     Mainline = {
         party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1523, 3912 },
         raid_settle = { 133, 8 }, raid_apply = { 1097, 594 }, raid_shift = { 125, 26 },
+        raid40_settle = { 275, 10 }, raid40_burst = { 683, 29 },
     },
     Vanilla = {
         party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1516, 4865 },
         raid_settle = { 134, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 151, 75 },
+        raid40_settle = { 284, 23 }, raid40_burst = { 914, 297 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
@@ -115,10 +125,10 @@ if arg[3] == "native" then
     end
     h.nativeLimits = flavor == "Mainline" and {
         party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6222,
-        raid_settle = 221, raid_apply = 1120, raid_shift = 206,
+        raid_settle = 221, raid_apply = 1120, raid_shift = 206, raid40_settle = 430, raid40_burst = 245,
     } or {
         party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6603,
-        raid_settle = 261, raid_apply = 1380, raid_shift = 260,
+        raid_settle = 261, raid_apply = 1380, raid_shift = 260, raid40_settle = 512, raid40_burst = 1102,
     }
 end
 
@@ -197,9 +207,8 @@ local function Measure(case, fn, repeatable)
     results[#results + 1] = { case = case, k = ticks, kb = kb }
     if h.nativeCounts then
         h.nativeCounts[case] = h.nativeCalls
-        local identityLimit = case == "raid_shift" and 20 or 0
-        Check(h.roleIdentityReads <= identityLimit, case .. ": roster identity GUID-read budget exceeded")
-        Check(h.nativeCalls - h.roleIdentityReads <= h.nativeLimits[case], case .. ": native-call budget exceeded")
+        Check(h.roleIdentityReads == 0, case .. ": roster runtime read GUIDs")
+        Check(h.nativeCalls <= h.nativeLimits[case], case .. ": native-call budget exceeded")
     end
     local budget = (BUDGETS[flavor] or {})[case]
     if budget and not MEASURE_ONLY then
@@ -255,7 +264,7 @@ Measure("raid_apply", function()
     GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end)
 
--- Two raid members swap slots in combat: the header rewrites both units.
+-- Raid slots stay fixed while the underlying roster changes in combat.
 h:EnterCombat()
 local units = h.units
 Measure("raid_shift", function()
@@ -266,6 +275,29 @@ end)
 h:LeaveCombat()
 Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violations[1]))
 
+-- Preserve the collected minimum-of-two sampler above for the 40-frame cases.
+-- 20-event combat burst: one lifecycle paint per frame, zero GUID reads.
+h:RunTimers()
+h:SetRaid(40); h:Event("GROUP_ROSTER_UPDATE"); h:RunTimers()
+Check(GF.FrameForUnit("raid40"), "forty-member fixture did not build")
+Measure("raid40_settle", function() h:Event("GROUP_ROSTER_UPDATE"); h:RunTimers() end, true)
+h:EnterCombat()
+local paints, refresh = 0, h.UF.RefreshGroupFrameState
+h.UF.RefreshGroupFrameState = function(...) paints = paints + 1; return refresh(...) end
+Measure("raid40_burst", function()
+    paints = 0
+    for i = 1, 20 do
+        h.units[1], h.units[40] = h.units[40], h.units[1]
+        h:Event("GROUP_ROSTER_UPDATE")
+    end
+    Check(paints == 0, "burst painted before settle")
+    h:RunTimers()
+    Check(paints == 40, "burst did not paint forty live frames once")
+end, true)
+h.UF.RefreshGroupFrameState = refresh
+Check(#h.violations == 0, "protected write in combat")
+h:LeaveCombat(); h:RunTimers()
+
 -- Probe after every measurement so calibration does not perturb the fixture heap.
 -- 64-bit baseline/current maxima in KB, measured with PUC Lua 5.1 (x64):
 -- Mainline: 284.1, 11.9, 262.6, 5103.2, 13.8, 744.7, 32.6.
@@ -273,9 +305,9 @@ Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violati
 -- Each limit is ceil(maximum * 1.02), exactly the original 2% headroom.
 local MEMORY_BUDGETS_64 = {
     Mainline = { party_join = 290, party_settle = 13, party_apply = 268, raid_build = 5206,
-        raid_settle = 15, raid_apply = 760, raid_shift = 34 },
+        raid_settle = 15, raid_apply = 760, raid_shift = 34, raid40_settle = 14, raid40_burst = 40 },
     Vanilla = { party_join = 360, party_settle = 15, party_apply = 531, raid_build = 6446,
-        raid_settle = 24, raid_apply = 1801, raid_shift = 97 },
+        raid_settle = 24, raid_apply = 1801, raid_shift = 97, raid40_settle = 32, raid40_burst = 410 },
 }
 collectgarbage("collect")
 collectgarbage("stop")

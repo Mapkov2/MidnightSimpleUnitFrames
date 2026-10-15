@@ -6,12 +6,9 @@
 -- mirror at _local_workflows/references/wow-ui-source. Without the mirror (the
 -- self-contained CI gate) only the attribute contracts below are checked.
 --
--- 1. Flat raid header, member joins in combat. SecureGroupHeader re-lays itself
---    out on GROUP_ROSTER_UPDATE in lockdown, where MSUF's SetupHeader defers,
---    and shows at most unitsPerColumn * maxColumns units (configureChildren).
---    maxColumns must therefore carry the configured cap, not the live count:
---    with a count-sized cap the eleventh member of a ten-member raid got no
---    frame (INDEX), or pushed an existing member out (GROUP, ROLE, NAME).
+-- 1. Raid slots freeze in combat. Native roster layout pauses; existing
+--    units/visibility/header dimensions stay fixed. Regen explicitly rebuilds
+--    the native header even when the configured capacity/attributes are equal.
 -- 2. Mythic "Hide groups 5-8" with preserved groups and the raid-wide role
 --    fill: the role fill ignores the block cap but must keep subgroups 5-8
 --    (the bench) out of the name lists; they used to take the slots of active
@@ -72,12 +69,25 @@ table.wipe = table.wipe or function(t) for k in pairs(t) do t[k] = nil end retur
 
 local Frame = {}
 Frame.__index = Frame
-function Frame:SetAttribute(key, value) self._attr[key] = value end
+function Frame:SetAttribute(key, value)
+    self._attr[key] = value
+    if self._nativeHeader then self._env.SecureGroupHeader_OnAttributeChanged(self, key, value) end
+end
 function Frame:GetAttribute(key) return self._attr[key] end
-function Frame:Show() self._shown = true end
+local function PropagateShown(frame)
+    if frame._scripts.OnShow then frame._scripts.OnShow(frame) end
+    for _, child in ipairs(frame._children) do
+        if child:IsVisible() then PropagateShown(child) end
+    end
+end
+function Frame:Show()
+    local wasVisible = self:IsVisible()
+    self._shown = true
+    if not wasVisible and self:IsVisible() then PropagateShown(self) end
+end
 function Frame:Hide() self._shown = false end
 function Frame:IsShown() return self._shown end
-function Frame:IsVisible() return self._shown end
+function Frame:IsVisible() return self._shown and (not self._parent or self._parent:IsVisible()) end
 function Frame:GetName() return self._name end
 function Frame:GetParent() return self._parent end
 function Frame:SetParent(parent) self._parent = parent end
@@ -89,9 +99,13 @@ function Frame:SetSize(width, height) self._w, self._h = width, height end
 function Frame:GetRect() return nil end
 function Frame:GetCenter() return 0, 0 end
 function Frame:GetEffectiveScale() return 1 end
+function Frame:SetScript(script, handler) self._scripts[script] = handler end
+function Frame:GetScript(script) return self._scripts[script] end
+function Frame:RegisterEvent(event) self._events[event] = true end
+function Frame:UnregisterEvent(event) self._events[event] = nil end
 local function Noop() end
-for _, name in ipairs({ "SetPoint", "ClearAllPoints", "EnableMouse", "SetClampedToScreen", "RegisterEvent",
-    "UnregisterAllEvents", "HookScript", "SetScript", "SetAlpha" }) do
+for _, name in ipairs({ "SetPoint", "ClearAllPoints", "EnableMouse", "SetClampedToScreen",
+    "UnregisterAllEvents", "HookScript", "SetAlpha" }) do
     Frame[name] = Noop
 end
 
@@ -114,12 +128,20 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
         return unpack(out)
     end
     local function NewFrame(name, parent)
-        local frame = setmetatable({ _attr = {}, _shown = false, _name = name, _parent = parent, _w = 0, _h = 0 }, Frame)
+        local frame = setmetatable({ _attr = {}, _events = {}, _scripts = {}, _children = {}, _env = env, _shown = false,
+            _name = name, _parent = parent, _w = 0, _h = 0 }, Frame)
+        if parent then parent._children[#parent._children + 1] = frame end
         if name then env[name] = frame end
         return frame
     end
-    env.CreateFrame = function(frameType, name, parent)
+    env.CreateFrame = function(frameType, name, parent, template)
         local frame = NewFrame(name, parent)
+        if template == "SecureGroupHeaderTemplate" and sghSource then
+            frame._nativeHeader = true
+            env.SecureGroupHeader_OnLoad(frame)
+            frame:SetScript("OnShow", env.SecureGroupHeader_Update)
+            frame:SetScript("OnEvent", env.SecureGroupHeader_OnEvent)
+        end
         if frameType == "Button" then frame._w, frame._h = 80, 32 end
         return frame
     end
@@ -158,6 +180,20 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
         GetConf = function() return conf end,
         GroupFilterAllowsSubgroup = function(filter) return filter == nil end,
     }
+    -- Runtime is deliberately absent in this native-header component fixture.
+    -- Its defer provider records only the input the real Runtime consumes.
+    GF.DeferGroupRuntime = function(reason, kind)
+        Check(reason == "setup" or (reason == "roster" and kind == "raid"), "unexpected native defer input")
+        GF._pendingGroupRuntime = true
+        local reasons = GF._pendingGroupRuntimeReasons or {}
+        GF._pendingGroupRuntimeReasons = reasons
+        reasons[reason] = true
+        kind = kind or false
+        local current = GF._pendingGroupRuntimeKind
+        if current == nil then GF._pendingGroupRuntimeKind = kind
+        elseif current ~= kind then GF._pendingGroupRuntimeKind = false end
+        GF._deferCalls = (GF._deferCalls or 0) + 1
+    end
     MSUF.GF = GF
     MSUF.UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end }
     local provided = {
@@ -185,6 +221,13 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
     function world:Update(header)
         if not header:IsShown() then header:Show() end
         env.SecureGroupHeader_Update(header)
+    end
+    function world:Event(header, event, unit)
+        -- Only roster changes use the absent Runtime event-frame input. Name
+        -- changes must reach the actual temporary header OnEvent and provider.
+        if self.combat and event == "GROUP_ROSTER_UPDATE" then GF.DeferGroupRuntime("roster", "raid") end
+        local onEvent = header:GetScript("OnEvent")
+        if header._events[event] and onEvent then onEvent(header, event, unit) end
     end
     -- Roster names with a shown frame on `header`.
     function world:Shown(header, out)
@@ -235,17 +278,30 @@ local function CombatJoin(label, sghSource, mode)
         Check(Missing(world, shown) == "", label .. ": out of combat, no frame for " .. Missing(world, shown))
     end
 
-    -- Lockdown: an eleventh member joins subgroup 1. MSUF must defer; only the
-    -- header's own GROUP_ROSTER_UPDATE relayout runs.
+    if sghSource then world.GF.SetRaidRosterFrozen(true) end
+    -- Lockdown: native events must not birth, resize or reorder raid slots.
     world.combat = true
     Add(world.roster, "Joiner", 1, "HEALER", "PRIEST")
     Check(world.GF.SetupHeader("raid", "raid") == nil, label .. ": SetupHeader did not defer in combat")
     if sghSource then
-        world:Update(header)
-        local shown = world:Shown(header)
-        Check(Missing(world, shown) == "", label .. ": in combat, no frame for " .. Missing(world, shown))
+        local width, height = header:GetWidth(), header:GetHeight()
+        local units = {}
+        for i = 1, 10 do units[i] = header:GetAttribute("child" .. i):GetAttribute("unit") end
+        world:Event(header, "GROUP_ROSTER_UPDATE")
+        world:Event(header, "UNIT_NAME_UPDATE", "raid1")
+        Check(not header:GetAttribute("child11"), label .. ": combat join built a slot")
+        Check(header:GetWidth() == width and header:GetHeight() == height, label .. ": combat resized header")
+        for i = 1, 10 do
+            Check(header:GetAttribute("child" .. i):GetAttribute("unit") == units[i], label .. ": combat reordered slots")
+        end
     end
     world.combat = false
+    if sghSource then
+        world.GF.SetRaidRosterFrozen(false)
+        world.GF.SetupHeader("raid", "raid")
+        local shown = world:Shown(header)
+        Check(Missing(world, shown) == "", label .. ": regen missed " .. Missing(world, shown))
+    end
 
     -- The configured cap still binds: two columns of five show ten of eleven.
     world.conf.maxColumns = 2
@@ -331,12 +387,108 @@ local function MythicBench(label, sghSource)
     Check(count == 20, label .. ": four blocks of five listed " .. count .. " names")
 end
 
+local function PreservedCombat(label, sghSource, mode)
+    if not sghSource then return end
+    local conf = FlatConf(mode)
+    conf.preserveRaidGroups, conf.sortClassPriority = true, true
+    local world = NewWorld(sghSource, conf, "raid", false)
+    for i = 1, 10 do Add(world.roster, "Member" .. i, math.ceil(i / 5)) end
+    world.GF.SetupHeader("raid", "raid")
+    local before = {}
+    world.GF.ForEachHeader("raid", function(header)
+        world:Update(header)
+        local state = { width = header:GetWidth(), height = header:GetHeight(), units = {} }
+        for i = 1, 5 do
+            local child = header:GetAttribute("child" .. i)
+            state.units[i] = child and child:GetAttribute("unit") or false
+        end
+        before[header] = state
+    end)
+    world.GF.SetRaidRosterFrozen(true)
+    world.combat = true
+    table.remove(world.roster, 1)
+    Add(world.roster, "Joiner", 3, "HEALER", "PRIEST")
+    for header, state in pairs(before) do
+        world:Event(header, "GROUP_ROSTER_UPDATE")
+        world:Event(header, "UNIT_NAME_UPDATE", "raid1")
+        header:SetAttribute("_freezeProbe", true)
+        local onShow = header:GetScript("OnShow")
+        if onShow then onShow(header) end
+        Check(header:GetWidth() == state.width and header:GetHeight() == state.height, label .. ": block resized")
+        for i = 1, 5 do
+            local child = header:GetAttribute("child" .. i)
+            Check((child and child:GetAttribute("unit") or false) == state.units[i], label .. ": block compacted")
+        end
+    end
+    world.combat = false
+    world.GF.SetRaidRosterFrozen(false)
+    world.GF.SetupHeader("raid", "raid")
+    local shown = {}
+    world.GF.ForEachHeader("raid", function(header) world:Shown(header, shown) end)
+    Check(Missing(world, shown) == "", label .. ": regen missed " .. Missing(world, shown))
+end
+
+-- The real native NAME sorter must catch up on a name-only event without
+-- a roster/count/configuration change or an extra manual native update.
+local function NameOnlyCombat(label, sghSource)
+    if not sghSource then return end
+    local world = NewWorld(sghSource, FlatConf("NAME"), "raid", false)
+    Add(world.roster, "Alpha", 1)
+    Add(world.roster, "Beta", 1)
+    Add(world.roster, "Gamma", 1)
+    local header = world.GF.SetupHeader("raid", "raid")
+    world:Update(header)
+    Check(header:GetAttribute("child1"):GetAttribute("unit") == "raid1", label .. ": initial native name order wrong")
+    world.GF.SetRaidRosterFrozen(true)
+    world.combat = true
+    world:Event(header, "UNIT_NAME_UPDATE", "nameplate1")
+    Check(not world.GF._pendingGroupRuntime, label .. ": unrelated name event deferred raid work")
+    world.roster[1].name = "Zulu"
+    for _ = 1, 20 do world:Event(header, "UNIT_NAME_UPDATE", "raid1") end
+    Check(world.GF._deferCalls == 1, label .. ": repeated name events did not coalesce")
+    Check(world.GF._pendingGroupRuntime, label .. ": name-only update not marked deferred")
+    Check(header:GetAttribute("child1"):GetAttribute("unit") == "raid1", label .. ": combat name update changed slots")
+    world.combat = false
+    world.GF.SetRaidRosterFrozen(false)
+    Check(header:GetAttribute("child1"):GetAttribute("unit") == "raid2", label .. ": regen missed native name-only sort")
+    Check(Missing(world, world:Shown(header)) == "", label .. ": name-only update lost membership")
+end
+
+-- Frame visibility includes ancestors. A hidden native header can miss an
+-- OOC roster update, then receive ancestor OnShow while its layout is frozen.
+local function HiddenParentCombat(label, sghSource)
+    if not sghSource then return end
+    local world = NewWorld(sghSource, FlatConf("INDEX"), "raid", false)
+    for i = 1, 3 do Add(world.roster, "Member" .. i, 1) end
+    local header = world.GF.SetupHeader("raid", "raid")
+    world:Update(header)
+    Check(header:GetAttribute("child3"):GetAttribute("unit") == "raid3", label .. ": initial roster incomplete")
+    world.env.UIParent:Hide()
+    Add(world.roster, "Member4", 1)
+    world:Event(header, "GROUP_ROSTER_UPDATE")
+    world.GF.SetupHeader("raid", "raid")
+    Check(not header:GetAttribute("child4"), label .. ": hidden header unexpectedly caught up")
+    world.GF.SetRaidRosterFrozen(true)
+    world.combat = true
+    world.env.UIParent:Show()
+    Check(not header:GetAttribute("child4"), label .. ": parent OnShow bypassed combat freeze")
+    world.combat = false
+    world.GF.SetRaidRosterFrozen(false)
+    local child = header:GetAttribute("child4")
+    Check(child and child:GetAttribute("unit") == "raid4", label .. ": regen missed hidden OOC change")
+    Check(not header._msufRaidRosterHiddenAtFreeze and not world.GF._raidRosterCombatActive,
+        label .. ": resumed header retained combat lifecycle state")
+end
+
 ------------------------------------------------------------------ run
 local runs = MirrorPresent() and ReadBranches() or { { label = "attributes only (no Blizzard UI mirror)" } }
 for _, run in ipairs(runs) do
-    for _, mode in ipairs({ "INDEX", "GROUP", "ROLE", "NAME" }) do
+    for _, mode in ipairs({ "INDEX", "GROUP", "ROLE", "GROUP_ROLE", "NAME" }) do
         CombatJoin(run.label .. " " .. mode, run.source, mode)
+        PreservedCombat(run.label .. " preserved " .. mode, run.source, mode)
     end
     MythicBench(run.label .. " mythic", run.source)
+    NameOnlyCombat(run.label .. " name-only", run.source)
+    HiddenParentCombat(run.label .. " parent-show", run.source)
 end
 print(("group_raid_header_blizzard_smoke: ok (%s)"):format(#runs > 1 and (#runs .. " Blizzard branches") or runs[1].label))

@@ -1,15 +1,9 @@
 -- group_raid_combat_join_smoke.lua <repoRoot> <flavor>
 --
--- A raid member who joins while the player is in combat must get a frame from
--- the flat raid header at once, also across a column boundary.
---
--- SecureGroupHeader re-lays itself out on GROUP_ROSTER_UPDATE in lockdown and
--- shows at most unitsPerColumn * maxColumns units (SecureGroupHeaders.lua
--- configureChildren); MSUF's SetupHeader defers until PLAYER_REGEN_ENABLED.
--- Before the fix the header's maxColumns was the live count's column count, so
--- the eleventh member of a ten-member raid had no frame for the whole fight.
--- The same happened when the member joined out of combat and the pull came
--- before the next-frame layout settle.
+-- Raid slots stay fixed in combat; a late member receives a frame at regen.
+-- A member who joined out of combat before the pull must already have a usable
+-- frame, even when the next-frame settle has not run. The configured column cap
+-- still binds the native header after catch-up.
 --
 -- Runs the real core load graph of one flavor on the SecureGroupHeader emulator
 -- of tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -63,7 +57,7 @@ Check(columns == 8, "a ten-member raid wrote maxColumns=" .. tostring(columns) .
 h:EnterCombat()
 Settle(11)
 local ok, missing = Coverage(header)
-Check(ok, "the member who joined in combat has no frame: " .. tostring(missing))
+Check(not ok and missing == "raid11", "combat join changed the frozen ten-member roster")
 Check(#h.violations == 0, "protected write in combat:\n" .. tostring(h.violations[1]))
 h:LeaveCombat()
 Check(Coverage(header), "a member is missing after the regen catch-up")
