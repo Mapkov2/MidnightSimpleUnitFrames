@@ -82,7 +82,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- packs plus MSUF_DeleteProfiles (16,626 LF bytes; largest selection koKR
         -- 16,883,294 -> 16,899,920, TBC/enUS 14,766,022 -> 14,782,648). The list
         -- itself is Options code; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16905000 or 14785000),
+        -- 2026-10-15: event-selected Player channels and cache/transition guards
+        -- add 1,430 LF bytes (TBC 14,784,140 -> 14,785,570). Increase only this
+        -- source-size tripwire by that exact delta, retaining 860 bytes headroom;
+        -- no startup catalog, Options code or runtime-cost budget changed.
+        assert(bytes < (suffix == "Mainline" and 16905000 or 14786430),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
