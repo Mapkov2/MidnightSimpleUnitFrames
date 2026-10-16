@@ -6953,13 +6953,6 @@ L["New-character default"] = "새 캐릭터 기본값"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "선택한 프로필 %d개를 삭제하시겠습니까?\n\n%s\n\n이 프로필을 사용하는 캐릭터는 Default로 전환됩니다. 내보내기 없이는 되돌릴 수 없습니다."
 L["Profiles deleted: %d"] = "삭제된 프로필: %d"
 
-
--- Group filter import compatibility.
-L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "가져온 프로필 '%s'에 형식 표시가 없는 그룹 선택이 있습니다.\n이전 체크박스 설정이거나 의도한 선택일 수 있습니다.\n\n선택을 유지하시겠습니까, 아니면 해당 필터를 수정하여 모든 그룹을 표시하시겠습니까?\n명시적으로 제외한 그룹과 프로필 변형은 유지됩니다."
-L["Repair legacy filters"] = "이전 필터 수정"
-L["Keep group selection"] = "그룹 선택 유지"
-L["Group selection changed; no legacy filter repair was applied."] = "그룹 선택이 변경되어 이전 필터를 수정하지 않았습니다."
-
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

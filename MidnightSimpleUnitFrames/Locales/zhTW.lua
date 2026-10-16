@@ -6953,13 +6953,6 @@ L["New-character default"] = "新角色預設"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "刪除所選的 %d 個設定檔？\n\n%s\n\n使用它們的角色會切換到 Default。沒有匯出就無法復原。"
 L["Profiles deleted: %d"] = "已刪除設定檔：%d"
 
-
--- Group filter import compatibility.
-L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "匯入的設定檔 '%s' 包含未標記格式的隊伍選擇。\n這可能來自舊版核取方塊設定，也可能是刻意選擇的。\n\n保留選擇，還是修復相關篩選器以顯示所有隊伍？\n明確排除的隊伍和設定檔變體將被保留。"
-L["Repair legacy filters"] = "修復舊版篩選器"
-L["Keep group selection"] = "保留隊伍選擇"
-L["Group selection changed; no legacy filter repair was applied."] = "隊伍選擇已變更，未修復任何舊版篩選器。"
-
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

@@ -604,6 +604,6 @@ clients+Forever	lua	tools/tests/group_raid_identity_smoke.lua	{root} {flavor}	Ra
 -	lua	tools/tests/group_raid_identity_smoke.lua	{root} Mainline mythicraid	Mythic raid roster occupant identity regression
 -	lua	tools/tests/player_channel_transition_smoke.lua	{root}	Player legacy cast-first selection and lifecycle regression
 clients+Forever	python	tools/tests/group_page_reset_smoke.py	{root} {flavor}	Group Reset Page restores the complete factory and survives pending edits: {flavor}
-clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter import repair preserves explicit selections: {flavor}
+clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter tables import unchanged, without a prompt, as 6.21 showed them: {flavor}
 clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavor}	Raid combat slot and geometry freeze regression: {flavor}
 -	lua	tools/tests/player_empower_cleanup_smoke.lua	{root}	Player Empower releases preceding channel ticks and preserves stage timing
