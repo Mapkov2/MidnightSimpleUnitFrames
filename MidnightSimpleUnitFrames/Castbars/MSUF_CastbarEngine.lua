@@ -221,34 +221,29 @@ end
 
 --- Main API: return a reusable state table for the unit. The same-frame cache
 --- avoids repeated UnitCastingInfo/UnitChannelInfo reads when multiple castbar
---- helpers ask for state during one event burst. Player channel events select
---- only the channel API; generic callers retain the cast-first query.
-function Engine:BuildState(unit, previousState, channelOnly)
+--- helpers ask for state during one event burst.
+function Engine:BuildState(unit, previousState)
     if not unit then
         return INACTIVE_STATE
     end
 
-    channelOnly = channelOnly == true
     local now = GetTime()
-    local state = Engine._state[unit]
-    if buildStateCacheTime[unit] == now and state and state._msufChannelOnly == channelOnly then
-        return state
+    if buildStateCacheTime[unit] == now and Engine._state[unit] then
+        return Engine._state[unit]
     end
 
     buildStateCacheTime[unit] = now
+
+    local state = Engine._state[unit]
     if not state then
         state = {}
         Engine._state[unit] = state
     end
-    state._msufChannelOnly = channelOnly
 
     -- isEmpowered/numEmpowerStages are only produced by the channel query
     -- below; declare them here so that poll never writes globals.
     local isEmpowered, numEmpowerStages
-    local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS
-    if not channelOnly then
-        name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
-    end
+    local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
     if name and HideTradeSkillCasts() and isTradeskill == true then
         -- isTradeskill is NeverSecret, so this comparison also holds for
         -- PvP-restricted units. Drop the cast before any frame work happens.
