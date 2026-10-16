@@ -95,16 +95,54 @@ listens for `CONFIG_APPLIED` and `PLAYER_REGEN_ENABLED` and answers either with 
 coalesced repaint (`root:Request`) on the next frame; combat defers the repaint and the
 regen edge brings the groups back (`group.want` keeps the count the owner asked for, an
 explicit `group:Hide()` forgets it). A scene shows its static sample state: it never
-follows the shared preview animation. `root:Deactivate()` hides every group and drops both
+follows the shared preview animation, only a clock its owner hands over (`root:SetClock`,
+below). `root:Deactivate()` hides every group and drops both
 subscriptions. The owner still calls `group:Refresh()` after a change the signals do not
 carry, `group:SetLayerFilter(visible, solo)` for the layer chips and `group:SetRole(role)`
 to lay the frames out for one role.
 
-The unit/group body renderers, class-resource surface construction, castbar page
-layout and preview aura painters remain scene-specific. Their region ownership,
-rounding, animation and interactions need scene integration before their larger
-render blocks can be deleted safely. Moving those blocks into another helper
-would retain their independent rendering rules.
+An owner embeds a scene in its own window: `group:Configure({ scale, level, role, sample,
+bodyOnly, layerVisible, layerSolo, ignoreOocFade })` sets, without a repaint, the zoom of the whole
+container (`SetScale`: the frames keep their spec size), the frame level the scene sits at
+(`SetLevel`: container, layout and frames take the one base, and every element level is
+shifted by the same bias, `Layers.SetLevelBias`), the role the row lays out for, one pinned
+sample for every row (`SetSample`: `name`, `class`, `hpPct`, `powerPct`, `hpMax`, `powerMax`,
+`absorb`, `healPct`, `absorbPct`, `healAbsorbPct`, `tempMaxPct`, `powerColor`; the prediction and
+reduced max health bars take their fractions from it, the absorb text and the combined health
+text take the absorb amount) and `bodyOnly` (`SetBodyOnly`: the scene paints
+the frame body, texts, prediction and border and leaves status icons, portrait, auras and
+spell indicators to the owner's own handles). A pinned `class` is the identity of the row
+wherever a unit would be asked: the portrait art and the class name colour follow it, not the
+member the slot holds. `root:SetClock(elapsed, noRefresh)` hands over a clock when the owner
+runs its own animation driver: every group animates at that elapsed time exactly as the
+shared animation state builder computes it (another root and the shared animation clock stay
+put), and `nil` returns the static sample. `ignoreOocFade` is for an owner whose window is
+always open out of combat: the scene shows no out-of-combat fade (`GF.ApplySceneButton`
+gives the scene frame an alpha lane of its own that inherits every other alpha setting from
+the shared compiled one, so the health bar opacity and the text and portrait exclusions stay
+live, the compiled spec stays shared, and the live Alpha and range fade elements know
+nothing of it).
+
+The Options group preview is such an owner. Its mock frame keeps the container, pan/zoom and
+handles; the engine scene paints the cell, so the cell looks like a live group frame (the
+SemiBold name face, the live name clip window, texts dimmed with the health bar opacity,
+prediction height and offset). The cell mirrors the player: the Options stage reads
+`MSUF.UFPreview.LiveUnitData("player")` during a refresh (pull-based, nothing in combat) and
+hands the scene its name, class, exact health and power with their maxima and the absorb
+amount, each field backed by the stylized sample when the player cannot give it; the scene
+itself still reads no unit. A live-state driver on the preview box (`ArmLiveStateDriver`)
+refreshes the cell when the player's health, power, absorb or name change while the menu is
+open, with zero combat overhead: `PLAYER_REGEN_DISABLED` drops every listener for the fight
+and only the re-arm signal stays. A text drag moves the engine texts by the delta divided by
+the cell's scale ratio, so the text and its handle stay together at any zoom. The scene root is built by the first paint of the preview, not
+when the Options file loads (sections 7 to 9 of
+`menu_preview_runtime_drift_smoke`). Its old mock-cell renderer is gone; the oracle fixtures
+of that preview were recaptured (see `tools/fixtures/preview-render-oracle/README.md`).
+
+The unit body renderer, class-resource surface construction, castbar page layout and
+preview aura painters remain scene-specific. Their region ownership, rounding, animation and
+interactions need scene integration before their larger render blocks can be deleted safely.
+Moving those blocks into another helper would retain their independent rendering rules.
 
 `runtime_preview_shared_rules_smoke.lua` boots the shipped graphs, checks live
 and preview call identity, changed shared assets, fixed geometry/colour samples,

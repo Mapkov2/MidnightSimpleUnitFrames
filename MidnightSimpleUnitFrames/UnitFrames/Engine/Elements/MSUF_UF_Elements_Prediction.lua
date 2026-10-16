@@ -2362,7 +2362,8 @@ local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHe
   end
 end
 
-function Prediction.ApplyPreview(frame, healthValue)
+--- The optional values are percentages of the bar (0..100); a preview that owns its sample passes them.
+function Prediction.ApplyPreview(frame, healthValue, incoming, absorb, healAbsorb)
   local cfg = frame and frame._msufPredictionRuntimeCfg
   if not (cfg and cfg.enabled == true) then return false end
   if cfg.test == true then
@@ -2372,7 +2373,7 @@ function Prediction.ApplyPreview(frame, healthValue)
   frame._msufPredictionDisabled = nil
   ApplyPreviewValues(frame, cfg, frame.MSUFUnitKey,
     cfg.heal == true, cfg.absorb == true, cfg.healAbsorb == true,
-    healthValue, PREVIEW_INCOMING, PREVIEW_ABSORB, PREVIEW_HEAL_ABSORB)
+    healthValue, incoming or PREVIEW_INCOMING, absorb or PREVIEW_ABSORB, healAbsorb or PREVIEW_HEAL_ABSORB)
   return true
 end
 UF.ApplyPredictionPreview = Prediction.ApplyPreview

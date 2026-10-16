@@ -222,31 +222,24 @@ _G.MSUF_DB.bars.slantedPowerBars = false
 assert(unitPreviewStyle("player") == "SLANTED" and not unitPreviewPower("player"))
 _G.MSUF_DB.bars.slantedPowerBars = true
 
-local groupPreviewPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Rounded.lua"
-local groupPreview = Slice.Read(groupPreviewPath)
-local groupStyle = Slice.Function(groupPreview, "local function FrameStyle", groupPreviewPath)
-local groupPower = Slice.Function(groupPreview, "local function RoundedPowerEnabled", groupPreviewPath)
-local groupHarness = [[
-local function ReadBarsBool(key, fallback)
-    local value = _G.MSUF_DB.bars[key]
-    if value == nil then return fallback == true end
-    return value == true
-end
-]] .. groupStyle .. "\n" .. groupPower .. "\n" .. [[
-return FrameStyle, RoundedPowerEnabled
-]]
-local groupPreviewStyle, groupPreviewPower = assert(compile(groupHarness))()
-assert(groupPreviewStyle(_G.MSUF_DB.gf_raid) == "SLANTED" and groupPreviewPower(_G.MSUF_DB.gf_raid))
-assert(groupPreviewStyle(_G.MSUF_DB.gf_party) == "ROUNDED" and groupPreviewPower(_G.MSUF_DB.gf_party))
+-- The group preview cell is an engine scene frame: its style and power-bar choice are the live resolver's, not a
+-- second mirror in the Options addon (slanted_direction_scope_smoke asserts that the cell takes them). The same
+-- toggle matrix the Options mirror answered, asked of a live raid and party frame.
+assert(style(raid) == "SLANTED" and power(raid))
+assert(style(party) == "ROUNDED" and power(party))
 _G.MSUF_DB.bars.slantedBarsEnabled = false
-assert(groupPreviewStyle(_G.MSUF_DB.gf_raid) == "ROUNDED" and not groupPreviewPower(_G.MSUF_DB.gf_raid))
+updateSlanted()
+assert(style(raid) == "ROUNDED" and not power(raid))
 _G.MSUF_DB.bars.slantedBarsEnabled = true
 _G.MSUF_DB.bars.slantedGroupFrames = false
-assert(groupPreviewStyle(_G.MSUF_DB.gf_raid) == "ROUNDED" and not groupPreviewPower(_G.MSUF_DB.gf_raid))
+updateSlanted()
+assert(style(raid) == "ROUNDED" and not power(raid))
 _G.MSUF_DB.bars.slantedGroupFrames = true
 _G.MSUF_DB.bars.slantedPowerBars = false
-assert(groupPreviewStyle(_G.MSUF_DB.gf_raid) == "SLANTED" and not groupPreviewPower(_G.MSUF_DB.gf_raid))
+updateSlanted()
+assert(style(raid) == "SLANTED" and not power(raid))
 _G.MSUF_DB.bars.slantedPowerBars = true
+updateSlanted()
 
 -- Execute the actual preset action: one history step, every frame scope, and
 -- no reset of existing frame colors or portrait options.

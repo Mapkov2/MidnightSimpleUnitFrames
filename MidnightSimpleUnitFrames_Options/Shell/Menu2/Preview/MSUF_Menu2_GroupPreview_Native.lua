@@ -503,114 +503,6 @@ local function PreviewScopeLabel(kind)
     if kind == "mythicraid" then return "Mythic Raid" end
     return "Party"
 end
-local function ResolvePreviewStatusbarTexture(conf, key)
-    conf = conf or {}
-    local value = conf[key]
-    if value == nil or value == "" then
-        local db = M.EnsureDB and M.EnsureDB()
-        value = db and db.general and db.general.barTexture or "Solid"
-    end
-    if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
-        local texture = _G.MSUF_ResolveStatusbarTextureKey(value)
-        if texture then return texture end
-    end
-    if LibStub then
-        local lsm = LibStub("LibSharedMedia-3.0", true)
-        if lsm and type(lsm.Fetch) == "function" then
-            local texture = lsm:Fetch("statusbar", value, true)
-            if texture then return texture end
-        end
-    end
-    return "Interface\\Buttons\\WHITE8X8"
-end
-local function NormalizeHealthMode(mode)
-    if type(mode) ~= "string" then return nil end
-    mode = mode:lower()
-    if mode == "global" then return nil end
-    if mode == "class" or mode == "gradient" or mode == "dark" or mode == "unified" then return mode end
-    if mode == "custom" then return "unified" end
-    return nil
-end
--- One stops table, refilled on every call: the shared gradient evaluator
--- caches its colour curve on the table and checks it against these values, so
--- a repaint or an animation tick builds neither a table nor a curve.
-local previewGradientStops = {}
-local NO_GRADIENT_CONF = {}
-local function PreviewGradientHealth(conf, cache)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general or NO_GRADIENT_CONF
-    conf = conf or NO_GRADIENT_CONF
-    local t = previewGradientStops
-    t.gradientLowR = (cache and cache.healthGradientLowR) or conf.healthGradientLowR or general.healthGradientLowR or 1
-    t.gradientLowG = (cache and cache.healthGradientLowG) or conf.healthGradientLowG or general.healthGradientLowG or 0
-    t.gradientLowB = (cache and cache.healthGradientLowB) or conf.healthGradientLowB or general.healthGradientLowB or 0
-    t.gradientMidR = (cache and cache.healthGradientMidR) or conf.healthGradientMidR or general.healthGradientMidR or 1
-    t.gradientMidG = (cache and cache.healthGradientMidG) or conf.healthGradientMidG or general.healthGradientMidG or 1
-    t.gradientMidB = (cache and cache.healthGradientMidB) or conf.healthGradientMidB or general.healthGradientMidB or 0
-    t.gradientHighR = (cache and cache.healthGradientHighR) or conf.healthGradientHighR or general.healthGradientHighR or 0
-    t.gradientHighG = (cache and cache.healthGradientHighG) or conf.healthGradientHighG or general.healthGradientHighG or 1
-    t.gradientHighB = (cache and cache.healthGradientHighB) or conf.healthGradientHighB or general.healthGradientHighB or 0
-    return t
-end
-local function PreviewGradientColor(conf, cache, pct)
-    local health = PreviewGradientHealth(conf, cache)
-    local p = max(0, min(1, tonumber(pct) or 0.72))
-    local common = MSUF and MSUF.UFBarTextCommon
-    if common and type(common.PreviewHealthGradientColor) == "function" then
-        local r, g, b = common.PreviewHealthGradientColor(health, p)
-        if r ~= nil then return r, g, b end
-    end
-    local lr, lg, lb = health.gradientLowR, health.gradientLowG, health.gradientLowB
-    local mr, mg, mb = health.gradientMidR, health.gradientMidG, health.gradientMidB
-    local hr, hg, hb = health.gradientHighR, health.gradientHighG, health.gradientHighB
-    if p <= 0.5 then
-        local t = p * 2
-        return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t
-    end
-    local t = (p - 0.5) * 2
-    return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t
-end
-local function HealthColor(conf, pct, classToken)
-    conf = conf or {}
-    local getCache = _G.MSUF_UFCore_GetSettingsCache
-    local cache = type(getCache) == "function" and getCache() or nil
-    local mode = NormalizeHealthMode(conf.gfBarMode)
-    if not mode then
-        local general = _G.MSUF_DB and _G.MSUF_DB.general or nil
-        local globalMode = NormalizeHealthMode((cache and cache.barMode) or (general and general.barMode))
-        if globalMode == "gradient" and cache and cache.healthGradientEnabled == false then
-            globalMode = "class"
-        elseif globalMode == "gradient" and not cache and general and general.enableHealthGradient == false then
-            globalMode = "class"
-        end
-        mode = globalMode or NormalizeHealthMode(conf.healthColorMode) or "class"
-    end
-    if mode == "dark" then
-        -- Group Config: each channel of the scope's own dark colour wins.
-        local r, g, b = PreviewHelpers.DarkBarColor(cache)
-        return tonumber(conf.gfDarkR) or r, tonumber(conf.gfDarkG) or g, tonumber(conf.gfDarkB) or b
-    end
-    if mode == "unified" then
-        return conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10,
-            conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60,
-            conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
-    end
-    if mode == "class" then
-        local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
-        local r, g, b
-        if type(fastClass) == "function" then r, g, b = fastClass(classToken) end
-        if not r then
-            local cc = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
-            if cc then r, g, b = cc.r, cc.g, cc.b end
-        end
-        return r or 0.2, g or 0.8, b or 0.2
-    end
-    if mode == "gradient" then
-        return PreviewGradientColor(conf, cache, pct)
-    end
-    return conf.healthCustomR or 0.2,
-        conf.healthCustomG or 0.8,
-        conf.healthCustomB or 0.2
-end
 local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local Tr = M.Tr
@@ -783,10 +675,9 @@ local function CurrentSpellColor(kind)
     local c = info and info.color
     return (c and c[1]) or 0.69, (c and c[2]) or 0.50, (c and c[3]) or 0.88
 end
--- Rounding, the heal prediction anchor and the rounded/outline painters are
--- the rounded module's (MSUF_Menu2_GroupPreview_Rounded.lua, loaded first).
-local GFRounded = M.GroupPreviewRounded or {}
-local Round = GFRounded.Round
+local function Round(value)
+    return floor((tonumber(value) or 0) + 0.5)
+end
 local function ScaleValue(value, scale, minValue)
     local v = Round((tonumber(value) or 0) * (tonumber(scale) or 1))
     if minValue ~= nil and v < minValue then v = minValue end
@@ -823,11 +714,6 @@ local function HealPredictionEnabled(kind, conf)
     if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
     return SharedHealPredictionEnabled()
 end
-local HealPredAnchorMode = GFRounded.HealPredAnchorMode
-local SetOutlineShown = GFRounded.SetOutlineShown or Fallbacks.Noop
-local LayoutOutline = GFRounded.LayoutOutline or Fallbacks.Noop
-local BaseEdgeColor = GFRounded.BaseEdgeColor or Fallbacks.BlackRGBA
-local ApplyRounded = GFRounded.ApplyRounded or Fallbacks.False
 local function ConfigToOffset(value, scale)
     return Round((tonumber(value) or 0) * (tonumber(scale) or 1))
 end
@@ -1223,8 +1109,7 @@ local Helpers = {
     CurrentScope = CurrentScope, Conf = Conf, PreviewScopeLabel = PreviewScopeLabel,
     SetTextMoveTogether = SetTextMoveTogether, CurrentTextKind = CurrentTextKind, TextOffsetKeys = TextOffsetKeys,
     NudgeStep = NudgeStep, StatusSpecs = StatusSpecs, TextLabel = TextLabel, PreviewFocusForPage = PreviewFocusForPage,
-    MockPowerHeight = MockPowerHeight, HealPredAnchorMode = HealPredAnchorMode, HealPredictionEnabled = HealPredictionEnabled,
-    SetOutlineShown = SetOutlineShown, LayoutOutline = LayoutOutline, TextMovesTogether = TextMovesTogether,
+    MockPowerHeight = MockPowerHeight, HealPredictionEnabled = HealPredictionEnabled, TextMovesTogether = TextMovesTogether,
     PlaceHandleAroundRegions = PlaceHandleAroundRegions, NormalizeTextFocusKind = NormalizeTextFocusKind,
     NormalizeTextFocusSlot = NormalizeTextFocusSlot, ApplyTextFocus = ApplyTextFocus,
 }
@@ -1290,18 +1175,11 @@ local NativeDeps = {
     UpdateZoomControls = UpdateZoomControls,
     ConfigToOffset = ConfigToOffset,
     AuraGrowth = AuraGrowth,
-    ApplyRounded = ApplyRounded,
-    ApplyFrameBorder = MSUF.UFPreviewCore and MSUF.UFPreviewCore.ApplyFrameBorder,
     ApplyBoundsGuide = MSUF.UFPreviewCore and MSUF.UFPreviewCore.ApplyBoundsGuide,
-    BaseEdgeColor = BaseEdgeColor,
-    LayoutOutline = LayoutOutline,
     ClampLayer = ClampLayer,
     HealPredictionEnabled = HealPredictionEnabled,
-    HealPredAnchorMode = HealPredAnchorMode,
     MockPowerHeight = MockPowerHeight,
     ClassColor = ClassColor,
-    HealthColor = HealthColor,
-    ResolveStatusbarTexture = ResolvePreviewStatusbarTexture,
 }
 -- The native preview installs in stages that share one per-call state table;
 -- NativeBuild.Create runs them once, in order. Per-refresh work stays inside
@@ -1612,8 +1490,8 @@ function NativeBuild.Mock(state)
     local T, M = Deps.T, Deps.M
     local mock = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()), true)
     PixelLayoutRegion(mock, "SetBackdrop", { bgFile = Deps.WHITE8X8 })
-    mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
-    mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
+    mock:SetBackdropColor(0, 0, 0, 0)
+    mock:SetBackdropBorderColor(0, 0, 0, 0)
     mock:EnableMouse(true)
     mock:EnableMouseWheel(true)
     if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(false) end
@@ -1647,67 +1525,10 @@ function NativeBuild.Mock(state)
         help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
-    mock._healthBgBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._healthBgBar:SetMinMaxValues(0, 1)
-    mock._healthBgBar:SetValue(1)
-    mock._healthBgBar:SetStatusBarTexture(Deps.WHITE8X8)
-    mock._healthBgBar:EnableMouse(false)
-    if mock._healthBgBar.SetFrameLevel and mock.GetFrameLevel then
-        mock._healthBgBar:SetFrameLevel(mock:GetFrameLevel() or 0)
-    end
-    mock._healthBg = mock._healthBgBar:GetStatusBarTexture()
-    if mock._healthBg.SetDrawLayer then mock._healthBg:SetDrawLayer("BACKGROUND", -7) end
-    mock._health = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._health:SetMinMaxValues(0, 1)
-    mock._health:SetValue(0.72)
-    mock._tempMaxHealth = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._tempMaxHealth:SetMinMaxValues(0, 1)
-    mock._tempMaxHealth:SetValue(0.20)
-    mock._tempMaxHealth:SetStatusBarTexture(Deps.WHITE8X8)
-    mock._tempMaxHealth:SetStatusBarColor(0.70, 0.10, 0.10, 1)
-    mock._tempMaxHealthBg = PixelLayoutRegion(mock._tempMaxHealth:CreateTexture(nil, "BACKGROUND"))
-    mock._tempMaxHealthBg:SetColorTexture(0, 0, 0, 0.65)
-    local tempMaxFill = mock._tempMaxHealth.GetStatusBarTexture
-        and mock._tempMaxHealth:GetStatusBarTexture()
-    mock._tempMaxHealthBg:SetAllPoints(tempMaxFill or mock._tempMaxHealth)
-    mock._healPred = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._healPred:SetMinMaxValues(0, 1)
-    mock._healPred:SetValue(0.12)
-    mock._healPred:SetStatusBarTexture(Deps.WHITE8X8)
-    mock._healPred:SetStatusBarColor(0, 1, 0.4, 0.45)
-    mock._absorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._absorb:SetMinMaxValues(0, 1)
-    mock._absorb:SetValue(1)
-    mock._absorb:SetStatusBarTexture(Deps.WHITE8X8)
-    mock._absorb:SetStatusBarColor(0.55, 0.70, 1, 0.55)
-    mock._healAbsorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock._health))
-    mock._healAbsorb:SetMinMaxValues(0, 1)
-    mock._healAbsorb:SetValue(0.07)
-    mock._healAbsorb:SetStatusBarTexture(Deps.WHITE8X8)
-    mock._healAbsorb:SetStatusBarColor(0.70, 0, 0, 1)
-    if mock._health.SetClipsChildren then mock._health:SetClipsChildren(true) end
-    if mock._healAbsorb.SetFrameLevel and mock._health.GetFrameLevel then mock._healAbsorb:SetFrameLevel((mock._health:GetFrameLevel() or 1) + 3) end
-    mock._power = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock._power:SetMinMaxValues(0, 1)
-    mock._power:SetValue(1)
-    mock._power:SetStatusBarColor(0.13, 0.27, 0.67, 1)
-    mock._powerBg = PixelLayoutRegion(mock._power:CreateTexture(nil, "BACKGROUND"))
-    mock._powerBg:SetAllPoints()
-    mock._nameTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    mock._nameTextLayer:SetAllPoints(mock)
-    mock._healthTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    mock._healthTextLayer:SetAllPoints(mock)
-    mock._powerTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    mock._powerTextLayer:SetAllPoints(mock)
-    mock._nameFS = T.Font(mock._nameTextLayer, "GameFontHighlightSmall", "", T.colors.text)
-    mock._hpFS = T.Font(mock._healthTextLayer, "GameFontHighlight", "", T.colors.text)
-    mock._powerFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
-    mock._hpLeftFS = T.Font(mock._healthTextLayer, "GameFontHighlight", "", T.colors.text)
-    mock._hpCenterFS = T.Font(mock._healthTextLayer, "GameFontHighlight", "", T.colors.text)
-    mock._hpRightFS = mock._hpFS
-    mock._powerLeftFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
-    mock._powerCenterFS = mock._powerFS
-    mock._powerRightFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
+    -- The frame body is an engine frame: an isolated scene hangs on the mock and Render.RenderCell aliases its regions
+    -- (_health, _power, _nameFS, ...) onto the mock for the handles. The scene root is the kit host of this preview:
+    -- Activate/Deactivate follow the box's visibility. It is built by the first paint (Render.RenderCell), not here:
+    -- a preview that is never shown, or a host without the engine, never builds a scene.
     state.mock = mock
 end
 function NativeBuild.Handles(state)
@@ -1954,6 +1775,8 @@ function NativeBuild.Lifecycle(state)
         end
         if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
         StopHandleDrag(self and self._selectedHandle)
+        -- The cell is not on screen while the preview is suspended: the scene root goes quiet with it.
+        if self._scene then self._scene:Deactivate() end
         -- This is the one place the runtime preview is suspended - page switches,
         -- the fixed-preview expander and window hides all funnel through here,
         -- repeatedly and in any order - so it is also the one place the selection
@@ -1965,51 +1788,11 @@ function NativeBuild.Lifecycle(state)
             self:SetPropagateKeyboardInput(true)
         end
     end
-    -- Live-state driver: the mock cell mirrors the player's current values,
-    -- so refresh when they change while the menu preview is visible. Zero
-    -- combat overhead by construction: PLAYER_REGEN_DISABLED drops every
-    -- listener for the whole fight and only the re-arm signal stays.
-    local GF_LIVE_STATE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE" }
-    local liveStateDriver = CreateFrame("Frame")
-    box._msufGFLiveStateDriver = liveStateDriver
-    function box:ArmLiveStateDriver()
-        local driver = self._msufGFLiveStateDriver
-        if not driver then return end
-        driver:UnregisterAllEvents()
-        if PreviewAnimationInCombat() then
-            driver._msufLiveArmed = false
-            driver:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-        driver._msufLiveArmed = true
-        driver:RegisterEvent("PLAYER_REGEN_DISABLED")
-        if driver.RegisterUnitEvent then
-            for i = 1, #GF_LIVE_STATE_EVENTS do
-                driver:RegisterUnitEvent(GF_LIVE_STATE_EVENTS[i], "player")
-            end
-        end
-    end
-    function box:ReleaseLiveStateDriver()
-        local driver = self._msufGFLiveStateDriver
-        if not driver then return end
-        driver:UnregisterAllEvents()
-        driver._msufLiveArmed = false
-    end
-    liveStateDriver:SetScript("OnEvent", function(driver, event)
-        if PreviewHelpers.LiveStateDriverGate(driver, event, box) then return end
-        if event == "PLAYER_REGEN_ENABLED" then
-            box:ArmLiveStateDriver()
-            return
-        end
-        if PreviewAnimationInCombat() then return end
-        box:RequestRefresh("GROUP_PREVIEW_LIVE_STATE")
-    end)
     box:HookScript("OnShow", function(self)
         if self.RegisterEvent then
             self:RegisterEvent("PLAYER_REGEN_DISABLED")
             self:RegisterEvent("PLAYER_REGEN_ENABLED")
         end
-        if self.ArmLiveStateDriver then self:ArmLiveStateDriver() end
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
@@ -2020,7 +1803,6 @@ function NativeBuild.Lifecycle(state)
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
         end
-        if self.ReleaseLiveStateDriver then self:ReleaseLiveStateDriver() end
         self:ReleaseRuntimePreview()
     end)
     box:SetScript("OnEvent", function(self, event)
@@ -2045,6 +1827,46 @@ function NativeBuild.Lifecycle(state)
         self:RequestRefresh("GROUP_PREVIEW_SIZE")
     end)
 end
+-- Live-state driver: the cell mirrors the player's current values (Render.BuildScene samples them), so refresh when
+-- they change while the menu preview is visible. Zero combat overhead by construction: PLAYER_REGEN_DISABLED drops
+-- every listener for the whole fight and only the re-arm signal stays.
+local GF_LIVE_STATE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
+    "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE" }
+function NativeBuild.LiveState(state)
+    local box = state.box
+    local driver = CreateFrame("Frame")
+    box._msufGFLiveStateDriver = driver
+    function box:ArmLiveStateDriver()
+        driver:UnregisterAllEvents()
+        if PreviewAnimationInCombat() then
+            driver._msufLiveArmed = false
+            driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+        driver._msufLiveArmed = true
+        driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+        if driver.RegisterUnitEvent then
+            for i = 1, #GF_LIVE_STATE_EVENTS do
+                driver:RegisterUnitEvent(GF_LIVE_STATE_EVENTS[i], "player")
+            end
+        end
+    end
+    function box:ReleaseLiveStateDriver()
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+    end
+    driver:SetScript("OnEvent", function(_, event)
+        if PreviewHelpers.LiveStateDriverGate(driver, event, box) then return end
+        if event == "PLAYER_REGEN_ENABLED" then
+            box:ArmLiveStateDriver()
+            return
+        end
+        if PreviewAnimationInCombat() then return end
+        box:RequestRefresh("GROUP_PREVIEW_LIVE_STATE")
+    end)
+    box:HookScript("OnShow", box.ArmLiveStateDriver)
+    box:HookScript("OnHide", box.ReleaseLiveStateDriver)
+end
 function NativeBuild.Create(parent, ctx, onOpen)
     local state = NativeBuild.Frame(parent, ctx)
     NativeBuild.Stage(state)
@@ -2053,6 +1875,7 @@ function NativeBuild.Create(parent, ctx, onOpen)
     NativeBuild.Handles(state)
     NativeBuild.Render(state)
     NativeBuild.Lifecycle(state)
+    NativeBuild.LiveState(state)
     return state.box
 end
 M.GroupPreview = M.GroupPreview or {}

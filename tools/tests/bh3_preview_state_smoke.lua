@@ -262,8 +262,16 @@ cases["C33-A2"] = function()
     local mw = Open(); local conf = mw.env.MSUF_DB.gf_party
     conf.showPower, conf.powerBarDetached, conf.showPowerText = true, true, true
     local box = Group(mw); local mock = box._msufGFSceneState.mock
-    assert(select(2,mock._hpLeftFS:GetPoint()) == mock._health, "health text anchors to whole frame")
-    assert(select(2,mock._powerLeftFS:GetPoint()) == mock._power and mock._powerLeftFS:GetPoint() == "LEFT", "power text ignores its bar")
+    -- The engine anchors each used text slot to its bar: health text to the health bar (the whole frame once the
+    -- power bar is detached), power text to the detached power bar. An unused slot is a hidden stand-in.
+    local function Anchored(keys)
+        for _, key in ipairs(keys) do
+            local point, relative = mock[key]:GetPoint()
+            if point then return relative end
+        end
+    end
+    assert(Anchored({ "_hpLeftFS", "_hpCenterFS", "_hpRightFS" }) == mock._health, "health text anchors to whole frame")
+    assert(Anchored({ "_powerLeftFS", "_powerCenterFS", "_powerRightFS" }) == mock._power, "power text ignores its bar")
 end
 cases["C33-A3"] = function()
     local mw = Open(); local conf = mw.env.MSUF_DB.gf_party
@@ -276,8 +284,8 @@ cases["C33-A4"] = function()
     local mw = Open(); local conf = mw.env.MSUF_DB.gf_party
     conf.healthTextDecimals, conf.hpTextLeft = true, "PERCENT"
     local box = Group(mw)
-    local state = box._msufGFHealthTextState
-    assert(state and state.percentDecimals == 1, "preview drops configured decimals")
+    -- The engine scene formats the cell's health text from the compiled text spec: the decimal reaches it.
+    assert(box._msufGFSceneState.runtimeText.healthPercentDecimals == 1, "preview drops configured decimals")
     assert(mw.core.GF.FormatHealthText("PERCENT", 7234, 10000, " / ",false,nil,false,true,0,false,1) == "72.3%", "decimal formatter differs")
 end
 cases["C33-A5"] = function()

@@ -348,7 +348,6 @@ Near(b, .8, "full B")
 
 general.darkMode, general.darkBgCustomColor, general.darkBgBrightness = true, false, .4
 Config.Refresh()
-Calls(Config.DarkTint, function() M.GroupPreviewRender._MatchHealthBackgroundColor(.2, .4, .6, general) end, "group tint")
 local dr, dg, db = Config.DarkTint(general, .2, .4, .6)
 Near(dr, .08, "tint R")
 Near(dg, .16, "tint G")

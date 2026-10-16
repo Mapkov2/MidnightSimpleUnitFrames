@@ -96,6 +96,13 @@ function TempMaxHealth.IsEnabled(frame, spec)
     and (cfg.test == true or type(GetUnitTotalModifiedMaxHealthPercent) == "function")
 end
 
+--- A preview scene frame (UF.ApplySceneSpec) shows its sample whether or not the client has the API the live bar reads:
+--- the setting is on, so the preview shows what it would look like.
+function TempMaxHealth.SceneIsEnabled(frame, spec)
+  local cfg = Config(frame, spec)
+  return cfg ~= nil and cfg.enabled == true
+end
+
 function TempMaxHealth.Create(frame, spec)
   if not (frame and CreateFrame) or frame.tempMaxHealthBar then return end
   local hpBar = frame.hpBar or frame.Health
@@ -161,6 +168,13 @@ function TempMaxHealth.Update(frame, event, unit, eventPercent)
   else
     bar:SetValue(0)
   end
+end
+
+--- A preview scene frame (UF.ApplySceneSpec) paints a sample reduced-max-health fraction; the live update asks the
+--- client for the unit's own.
+function TempMaxHealth.ApplySample(frame, fraction)
+  local bar = frame and frame.tempMaxHealthBar
+  if bar and fraction then bar:SetValue(fraction) end
 end
 
 function TempMaxHealth.Disable(frame)

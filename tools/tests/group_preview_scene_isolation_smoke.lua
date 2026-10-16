@@ -18,7 +18,12 @@ local function Check(condition, message)
     if not condition then error("group_preview_scene_isolation_smoke " .. flavor .. ": " .. message, 2) end
 end
 
-local h = Harness.New(root, flavor, { beforeBoot = function(world) world.env.MAX_BOSS_FRAMES = 5 end })
+-- The reduced-max-health bar of the on-screen dummies exists where the client has the API the live bar reads; a scene
+-- shows its sample on every client, so the comparison gives every client the API.
+local h = Harness.New(root, flavor, { beforeBoot = function(world)
+    world.env.MAX_BOSS_FRAMES = 5
+    world.env.GetUnitTotalModifiedMaxHealthPercent = function() return 0 end
+end })
 local GF, UF, env = h.GF, h.core.UF, h.env
 GF.EnsureDB()
 env.MSUF2_GFPagePreviewActive = true

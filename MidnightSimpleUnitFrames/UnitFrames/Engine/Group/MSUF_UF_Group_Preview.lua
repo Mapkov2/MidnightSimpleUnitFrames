@@ -122,21 +122,24 @@ local previewLayerVisible, previewLayerSolo
 --- GF.SetPreviewLayerFilter). An isolated scene swaps its own in for the length of one call and puts the
 --- previous pair back, so the default scenes' paint costs nothing extra.
 local savedLayerVisible, savedLayerSolo
---- The isolated scene whose call is running (nil for the default scenes, which paint live-adjacent dummies). An
---- isolated scene paints static sample data only: no unit query and no shared animation clock.
-local activeScene
+--- The isolated scene whose call is running (nil for the default scenes, which paint live-adjacent dummies) and
+--- the clock its root was handed (nil unless the owner animates it). An isolated scene paints static sample data,
+--- or follows its owner's clock: no unit query and no shared animation clock.
+local activeScene, sceneElapsed
 
 local function EnterScene(scene)
   if scene.default then return end
   savedLayerVisible, savedLayerSolo = previewLayerVisible, previewLayerSolo
   previewLayerVisible, previewLayerSolo = scene.layerVisible, scene.layerSolo
   activeScene = scene
+  local root = scene.root
+  sceneElapsed = root and root.animating and root.elapsed or nil
 end
 
 local function LeaveScene(scene)
   if scene.default then return end
   previewLayerVisible, previewLayerSolo = savedLayerVisible, savedLayerSolo
-  activeScene = nil
+  activeScene, sceneElapsed = nil, nil
 end
 
 --- Guides and Bounds are drag-handle chrome that exists only inside the docked
@@ -367,6 +370,11 @@ local function PositionContainer(scene, count)
     container:ClearAllPoints()
     container:SetSize(containerW, containerH)
     container:SetPoint(point, relative, relativePoint, x, y)
+  end
+  -- An isolated scene is zoomed as a whole: the owner picks the scale, the frames keep their spec size.
+  if isolated and container._msufGFPreviewScale ~= (scene.scale or 1) then
+    container._msufGFPreviewScale = scene.scale or 1
+    container:SetScale(scene.scale or 1)
   end
 
   local layoutW, layoutH = containerW, containerH
@@ -1112,14 +1120,22 @@ local function ClearPreviewTexts(frame)
   for i = 1, #PREVIEW_TEXT_REGIONS do SetText(frame[PREVIEW_TEXT_REGIONS[i]], "") end
 end
 
-local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
+local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class, absorb)
   local text = MSUF and MSUF.UFText
   local rt = frame and frame._msufTextRuntime
   if not (text and rt and text.UpdateTextSlots) then return end
 
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
+  -- A scene sample carries the absorb amount its absorb text and combined health text show (the live frame asks
+  -- the unit for it); nil clears the previous one.
+  if activeScene then
+    rt.healthAbsorb = absorb
+  end
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey or "player",
     PercentFactory((hp / max(hpMax, 1)) * 100), rt.healthNeedsPercent, rt)
+  if activeScene and absorb ~= nil and (rt.healthAbsorbSlotCount or 0) > 0 then
+    text.UpdateTextSlots(rt.healthAbsorbSlots, rt.healthAbsorbSlotCount, nil, nil, frame.MSUFUnitKey or "player", nil, false, rt)
+  end
   if rt.healthColorByClass == true and text.SetHealthTextColor then
     local r, g, b = ClassColor(class)
     text.SetHealthTextColor(frame, rt, r, g, b, rt.healthTextAlpha or rt.textColorA or 1)
@@ -1265,6 +1281,19 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   SetShown(frame.statusAFKTimerText, false)
 end
 
+--- Sample heal prediction, absorb and heal-absorb bars of a scene frame (fractions of the health bar). The
+--- prediction element paints them from the compiled prediction settings, like a live frame, without a unit.
+local function ApplyScenePrediction(frame, sample, hpPct, animState)
+  local prediction = MSUF.UF.ApplyPredictionPreview
+  if not prediction then return end
+  local heal, absorb = sample and sample.healPct, sample and sample.absorbPct
+  if animState then
+    heal = max(0.01, min(0.24, tonumber(animState.healPct) or heal or 0.12))
+    absorb = max(0.01, min(0.24, tonumber(animState.absorbPct) or absorb or 0.08))
+  end
+  prediction(frame, hpPct * 100, heal and heal * 100, absorb and absorb * 100, sample and sample.healAbsorbPct and sample.healAbsorbPct * 100)
+end
+
 --- Seed fake unit state into one preview frame after UF.ApplySpec has built the
 --- regions. Keep this data fake/local; live group frames own real roster state.
 local function ApplyPreviewData(frame, slot, kind)
@@ -1274,14 +1303,19 @@ local function ApplyPreviewData(frame, slot, kind)
   kind = NormalizeKind(kind) or "party"
   -- The member this frame shows was chosen when the frame was prepared for its slot (PreviewMember).
   local index = frame._msufGFPreviewIndex or slot
-  local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
+  -- A scene can pin one sample (name, class, fractions) for all its rows; see Scene:SetSample.
+  local sample = activeScene and activeScene.sample
+  local class = sample and sample.class or PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
   local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
   -- An isolated scene never asks the client who the player is: every index draws its sample name.
   local playerName = not activeScene and UnitName and UnitName("player")
   -- Preview identities are synthetic; an unreadable player name uses the same
   -- sample as an unavailable name, before shortening or caching it.
   if issecretvalue(playerName) then playerName = nil end
-  local name = (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+  local name = sample and sample.name or (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+  -- The pinned class is also the class the frame's name colour and portrait art draw (a scene frame holds no unit).
+  local classPinned = sample and sample.class and frame._msufPortraitSampleClass ~= class
+  if classPinned then frame._msufPortraitSampleClass = class end
 
   frame._msufGFPreviewActive = true
   frame._msufGFPreviewIndex = index
@@ -1310,22 +1344,26 @@ local function ApplyPreviewData(frame, slot, kind)
     frame.nameText:Show()
   end
 
-  local hpPct = min(0.95, 0.34 + (((index * 13) % 55) * 0.01))
+  local hpPct = sample and sample.hpPct or min(0.95, 0.34 + (((index * 13) % 55) * 0.01))
   local animState
-  -- An isolated scene shows its static sample state; only the default scenes follow the shared preview animation.
-  if not activeScene and PreviewAnimationActive() and _G.MSUF_GetPreviewAnimationFrameState then
+  if activeScene then
+    -- The scene's own clock, not the shared preview animation: scenes animate only while their owner hands one over.
+    if sceneElapsed then
+      animState = Dep("MSUF_BuildPreviewAnimationFrameState")(frame, index, kind, frame._msufGFPreviewAnimState or {}, sceneElapsed)
+    end
+  elseif PreviewAnimationActive() and _G.MSUF_GetPreviewAnimationFrameState then
     animState = _G.MSUF_GetPreviewAnimationFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {})
   end
   if animState then
     frame._msufGFPreviewAnimState = animState
     hpPct = min(0.98, max(0.02, tonumber(animState.hpPct) or hpPct))
   end
-  local hpMax = 100
+  local hpMax = sample and sample.hpMax or 100
   local hp = floor(hpPct * hpMax + 0.5)
   SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true, PreviewHealthColor(frame, class, hpPct))
 
-  local powerMax = 100
-  local power = min(powerMax, 35 + ((index * 11) % 55))
+  local powerMax = sample and sample.powerMax or 100
+  local power = sample and sample.powerPct and floor(sample.powerPct * powerMax + 0.5) or min(powerMax, 35 + ((index * 11) % 55))
   if animState then
     power = min(powerMax, max(0, floor((tonumber(animState.powerPct) or (power / powerMax)) * powerMax + 0.5)))
   end
@@ -1334,16 +1372,40 @@ local function ApplyPreviewData(frame, slot, kind)
   -- settings, so switching the chip never fakes a layout change on the dummies.
   if powerBar and (not powerBar.IsShown or powerBar:IsShown()) then
     if PreviewLayerOn("power") then
-      SetBar(powerBar, power, powerMax, true, 0.10, 0.45, 0.95, 1)
+      local color = sample and sample.powerColor
+      if color then
+        SetBar(powerBar, power, powerMax, true, color[1], color[2], color[3], 1)
+      else
+        SetBar(powerBar, power, powerMax, true, 0.10, 0.45, 0.95, 1)
+      end
     elseif powerBar.Hide then
       powerBar:Hide()
     end
   end
 
   if textLayerOn then
-    ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
+    ApplyPreviewText(frame, hp, hpMax, power, powerMax, class, sample and sample.absorb)
   else
     ClearPreviewTexts(frame)
+  end
+  -- A scene frame skips the spec apply's live updates, so the elements whose update paints a preview sample (and
+  -- reads no unit for a preview frame) run here.
+  if activeScene then
+    if sample then
+      ApplyScenePrediction(frame, sample, hpPct, animState)
+      local tempMax = MSUF.UF.elements and MSUF.UF.elements.TempMaxHealth
+      if tempMax and tempMax.ApplySample then tempMax.ApplySample(frame, sample.tempMaxPct) end
+    end
+    if activeScene.bodyOnly then
+      -- The owner draws the portrait, icons, auras and indicators (its handles) over this body.
+      SetShown(frame.MSUFPortraitHolder, false)
+      frame:Show()
+      return true
+    end
+    local portrait = MSUF.UF.elements and MSUF.UF.elements.Portrait
+    if classPinned and portrait and portrait.SceneApply then portrait.SceneApply(frame, frame.MSUFSpec) end
+    local threat = MSUF.UF.elements and MSUF.UF.elements.ThreatIndicator
+    if threat and threat.Update then threat.Update(frame, "MSUF_PREVIEW") end
   end
   ApplyPreviewStatus(frame, kind, index, role)
   if animState and frame.combatStateIndicatorIcon and PreviewLayerOn("status") then
@@ -1352,12 +1414,6 @@ local function ApplyPreviewData(frame, slot, kind)
   end
   if GF.PreviewSpellIndicators then GF.PreviewSpellIndicators(frame, kind, nil, nil) end
   if GF.PreviewFrameAuras then GF.PreviewFrameAuras(frame, kind, index) end
-  -- A scene frame skips the spec apply's live updates, so the elements whose update paints a preview sample (and
-  -- reads no unit for a preview frame) run here.
-  if activeScene then
-    local threat = MSUF.UF.elements and MSUF.UF.elements.ThreatIndicator
-    if threat and threat.Update then threat.Update(frame, "MSUF_PREVIEW") end
-  end
   frame:Show()
   return true
 end
@@ -1581,7 +1637,12 @@ local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, ex
     and type(GF.ApplyPreviewButtonDirty) == "function"
   local ok
   if frame._msufPreviewScope == true then
-    ok = GF.ApplySceneButton(frame, kind, canApplyDirty and dirtyMask or nil)
+    -- An embedded scene shifts every element level into its owner's band, for the span of this one spec apply.
+    local owner = frame._msufPreviewScene
+    local bias = owner.levelBase
+    if bias then MSUF.UF.Layers.SetLevelBias(bias) end
+    ok = GF.ApplySceneButton(frame, kind, canApplyDirty and dirtyMask or nil, owner.ignoreOocFade)
+    if bias then MSUF.UF.Layers.SetLevelBias(0) end
   elseif canApplyDirty then
     ok = GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
   elseif GF.ApplyButton then
@@ -1749,6 +1810,25 @@ local function QueuePreviewDataRefresh(scene, serial, frames, visibleCount)
   return true
 end
 
+--- An embedded scene sits at its owner's frame level: container, layout and frames take the one base, and a frame
+--- whose level moved applies its spec again so every element level follows (see Layers.SetLevelBias).
+local function SeatSceneLevels(scene, container, layout, frames, count)
+  local base = scene.levelBase
+  if container._msufGFLevelBase ~= base then
+    container._msufGFLevelBase = base
+    container:SetFrameLevel(base)
+    layout:SetFrameLevel(base)
+  end
+  for i = 1, count do
+    local frame = frames[i]
+    if frame and frame._msufGFLevelBase ~= base then
+      frame._msufGFLevelBase = base
+      frame:SetFrameLevel(base)
+      frame._msufGFPreviewApplyKey = nil
+    end
+  end
+end
+
 local function ShowScene(scene, count, opts)
   local kind, t = scene.kind, scene.t
   count = floor((tonumber(count) or DefaultPreviewCount(kind)) + 0.5)
@@ -1770,6 +1850,7 @@ local function ShowScene(scene, count, opts)
   for i = #frames, visibleCount + 1, -1 do
     ReleasePreviewFrame(scene, frames, i)
   end
+  if scene.levelBase then SeatSceneLevels(scene, container, layout, frames, visibleCount) end
   container:Show()
   local reason = opts and opts.reason or "MSUF_GF_PREVIEW"
   local dirtyMask = opts and opts.dirtyMask or nil
@@ -1986,6 +2067,19 @@ function SceneRoot:IsActive() return self.host.active == true end
 --- Ask for a repaint on the next frame (many requests, one paint). Ignored while the root is inactive.
 function SceneRoot:Request(reason) return self.host:Request(reason) end
 
+--- An owner that runs its own animation driver hands the clock over: a number animates every group at that
+--- elapsed time, nil returns the groups to their static sample. The active groups repaint, unless the owner is
+--- about to show or refresh them itself (noRefresh).
+function SceneRoot:SetClock(elapsed, noRefresh)
+  local animating = elapsed ~= nil
+  if animating then self.elapsed = elapsed end
+  self.animating = animating or nil
+  if noRefresh == true then return end
+  for _, group in pairs(self.groups) do
+    if group.t.active[group.kind] == true then group:RefreshData() end
+  end
+end
+
 function SceneRoot:SetParent(parent)
   self.parent = parent
   for _, group in pairs(self.groups) do group:SetParent(parent) end
@@ -2074,6 +2168,78 @@ function Scene:SetLayerFilter(visible, solo)
   if type(visible) ~= "table" then visible = nil end
   if type(solo) ~= "string" or PREVIEW_LAYER_KEYS[solo] ~= true then solo = nil end
   self.layerVisible, self.layerSolo = visible, solo
+  return self:RefreshData()
+end
+
+--- Zoom the whole scene: the frames keep their spec size, the container carries the scale.
+function Scene:SetScale(scale)
+  scale = tonumber(scale)
+  if not (scale and scale > 0) then scale = 1 end
+  if self.scale == scale then return false end
+  self.scale = scale
+  local container = self.t.container[self.kind]
+  if container and container._msufGFPreviewScale ~= scale then
+    container._msufGFPreviewScale = scale
+    container:SetScale(scale)
+  end
+  return true
+end
+
+--- The frame level the scene sits at (its owner's); element levels are shifted by the same base.
+function Scene:SetLevel(base)
+  base = tonumber(base)
+  if self.levelBase == base then return false end
+  self.levelBase = base
+  return true
+end
+
+--- Several settings in one call, without a repaint: the next Show or Refresh paints them. Fields: scale, level,
+--- role, sample, bodyOnly, layerVisible, layerSolo (see the setters of the same names) and ignoreOocFade (the owner's
+--- window is always open out of combat, so the scene shows no out-of-combat fade; every other alpha setting stays).
+function Scene:Configure(opts)
+  if opts.scale ~= nil then self:SetScale(opts.scale) end
+  if opts.level ~= nil then self:SetLevel(opts.level) end
+  if opts.role ~= nil then
+    local role = opts.role
+    if role ~= "TANK" and role ~= "HEALER" and role ~= "DAMAGER" then role = nil end
+    if self.role ~= role then
+      self.role = role
+      local frames = self.t.frames[self.kind]
+      for i = 1, frames and #frames or 0 do frames[i]._msufGFPreviewApplyKey = nil end
+    end
+  end
+  if opts.sample ~= nil then self.sample = type(opts.sample) == "table" and opts.sample or nil end
+  if opts.ignoreOocFade ~= nil then
+    local ignore = opts.ignoreOocFade == true or nil
+    if self.ignoreOocFade ~= ignore then
+      self.ignoreOocFade = ignore
+      local frames = self.t.frames[self.kind]
+      for i = 1, frames and #frames or 0 do frames[i]._msufGFPreviewApplyKey = nil end
+    end
+  end
+  if opts.bodyOnly ~= nil then self.bodyOnly = opts.bodyOnly == true or nil end
+  if opts.layerVisible ~= nil or opts.layerSolo ~= nil then
+    self.layerVisible = type(opts.layerVisible) == "table" and opts.layerVisible or nil
+    self.layerSolo = type(opts.layerSolo) == "string" and PREVIEW_LAYER_KEYS[opts.layerSolo] == true and opts.layerSolo or nil
+  end
+end
+
+--- Pin one sample for every row of the scene: { name, class, hpPct, powerPct, hpMax, powerMax, absorb, healPct,
+--- absorbPct, healAbsorbPct, tempMaxPct, powerColor = { r, g, b } } (any field optional; fractions 0..1, maxima the
+--- bar and text scale, absorb the amount the absorb texts show).
+--- nil clears it.
+function Scene:SetSample(sample)
+  if type(sample) ~= "table" then sample = nil end
+  self.sample = sample
+  return self:RefreshData()
+end
+
+--- Body only: the scene paints the frame itself (bars, texts, border, prediction) and leaves status icons, auras,
+--- spell indicators and the threat sample to the owner's own widgets.
+function Scene:SetBodyOnly(on)
+  on = on == true
+  if (self.bodyOnly == true) == on then return false end
+  self.bodyOnly = on or nil
   return self:RefreshData()
 end
 

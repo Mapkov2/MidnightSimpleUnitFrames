@@ -344,8 +344,13 @@ do
         local w = case.want
         local ur, ug, ub = Model.HealthColor("target", nil)
         Expect("the unit preview (" .. case.label .. ")", ur, ug, ub, w[1], w[2], w[3])
-        local gr, gg, gb = groupState.HealthColor(conf, 0.72, "WARRIOR")
-        Expect("the group preview (" .. case.label .. ")", gr, gg, gb, w[1], w[2], w[3])
+        -- The group cell is an engine frame: its health colour is the scene's, from the same dark fallback.
+        MSUF.GF.InvalidateCompiledSpecs("party")
+        group:Refresh("SETTINGS")
+        local gcolor = Check(group._mock._health and group._mock._health.color, "the group preview cell has no health colour")
+        -- A group frame keeps its own dark colour per scope; the cell must draw what the live party spec resolves.
+        local live = Check(MSUF.GF.CompileSpec("party", nil, nil).health, "no live party health spec")
+        Expect("the group preview (" .. case.label .. ")", gcolor[1], gcolor[2], gcolor[3], live.r, live.g, live.b)
         cpBox:Refresh()
         local fill = Check(cpBox.playerHP and cpBox.playerHP.fill, "the Class Resources preview has no second HP bar")
         local color = fill.vertexColor or {}

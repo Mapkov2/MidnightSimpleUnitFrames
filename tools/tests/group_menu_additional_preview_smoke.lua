@@ -3,7 +3,7 @@ local function Read(path) local f=assert(io.open(root..'/'..path,'rb'));local s=
 local source=Read('MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua')
 local NS={MSUF2={},MSUF_Auras3={MockAuraPainter={}}}
 NS.Require=function(name) return NS[name] end
-local prefix=assert(source:match('^(.-)Render%._HealthBackgroundColorMode'))
+local prefix=assert(source:match('^(.-)local function DefaultCompiledAuraLane'))
 local function Frame(w,h)
  local f={w=w or 1,h=h or 1,shown=true}
  function f:GetWidth() return self.w end;function f:GetHeight() return self.h end
@@ -40,7 +40,7 @@ local b=R.AdditionalPreviewLayout(gf,'party',conf,120,40)
 assert(b.pets.x==a.pets.x and b.pets.y==a.pets.y,'saved world position leaked into menu projection')
 assert(conf.offsetX==-975 and conf.offsetY==591,'projection mutated configured anchor')
 Stage={}
-local layout=assert(source:match('(function Stage.LayoutMockFrame.-)\n%-%-%- Health bar colors'))
+local layout=assert(source:match('(function Stage.LayoutMockFrame.-)\n%-%-%- The engine paints the frame body'))
 local layoutChunk=assert(loadstring(layout))
 setfenv(layoutChunk,setmetatable({MENU_EXTRA_OPTIONS={position=false,sampleCount=3},PixelLayoutRegion=function(frame,method,...) if method then return frame[method](frame,...) end return frame end},{__index=_G}))
 layoutChunk()
@@ -96,19 +96,7 @@ assert(native:find('M.GroupPreviewRender.HideAdditionalPreview(self)',1,true),'n
 conf.friendlyBossEnabled,conf.healerManaEnabled=true,true
 st.kind='party';st.reason='SETTINGS';Stage.LayoutMockFrame(st,env)
 assert(box._additionalPreviewRoots.friendlyBoss.shown and box._additionalPreviewRoots.healerMana.shown)
-local nameCode=assert(source:match('(function Render.ApplyNameBar.-)\nlocal function ResolvePreviewNamePoint'))
-assert(loadstring(nameCode..'\nRender.NameGeometry = ResolvePreviewNameGeometry'))()
-local nameMock=Frame(120,40)
-function nameMock:CreateTexture() self.created=(self.created or 0)+1;return Frame() end
-local nc={nameBarEnabled=true,nameBarHeight=30,height=40,nameFontSize=12,nameAnchor='LEFT',nameOffsetY=99,nameOffsetX=4}
-R.ApplyNameBar(nameMock,nc,{},.5,20,6)
-assert(nameMock._nameBarTopInset==13.5 and nameMock.created==1,'name strip did not reserve clamped health space')
-local point,x,y=R.NameGeometry(nc,{},1,nameMock._nameBarTopInset/.5)
--- Centred in the strip: the free X offset (here 4) does not apply to the bar.
-assert(point=='TOP' and x==0 and y==-6.5,'name bar did not force centered frame-top geometry')
-R.ApplyNameBar(nameMock,nc,{},.5,20,6);assert(nameMock.created==1,'name bar allocated again')
-nc.nameBarEnabled=false;R.ApplyNameBar(nameMock,nc,{},.5,20,6)
-assert(nameMock._nameBarTopInset==0 and not nameMock._nameBarBackground.shown,'name bar disable retained strip')
+-- The name bar strip and the name anchor are the engine scene's (Group_Visuals / Text layout), not this module's.
 -- Buff coverage samples come from the real Forever module (one shared renderer
 -- for the menu mock and Edit Mode test frames) and scale with the preview.
 assert(source:find('gf.RenderBuffCoveragePreview(mock, conf, previewScale)',1,true)

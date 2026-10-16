@@ -50,15 +50,50 @@ party.nameOffsetX = 28
 GF.InvalidateCompiledSpecs("party")
 local text = GF.CompileSpec("party").text
 assert(text.nameAnchor == "TOP" and text.nameX == 0, "the name sits off-centre in the name bar")
-local render = World.Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
-local geometry = assert(render:match("\nlocal function ResolvePreviewNameGeometry%(conf, runtimeText, baselineOffset, nameBarHeight%)\n(.-)\nend\n"),
-    "the preview name geometry moved")
-local ResolvePreviewName = assert(loadstring("return function(conf, runtimeText, baselineOffset, nameBarHeight)\n"
-    .. geometry .. "\nend"))()
-local previewAnchor, previewX = ResolvePreviewName({ nameBarEnabled = true, nameOffsetX = 28, nameBarHeight = 14, nameFontSize = 12 }, {}, 0, 14)
-assert(previewAnchor == "TOP" and previewX == 0, "the menu preview puts the name off-centre in the name bar")
-previewAnchor, previewX = ResolvePreviewName({ nameOffsetX = 28 }, {}, 0)
-assert(previewAnchor == "LEFT" and previewX == 28, "the menu preview lost the free name offset without the bar")
+-- The menu preview cell is an engine scene frame: it applies the same compiled text spec, so the name sits where
+-- a live frame's does, centred in the bar, and keeps the free offset without the bar.
+local sceneHost = env.CreateFrame("Frame", nil, env.UIParent)
+sceneHost:SetSize(400, 300)
+local sceneRoot = GF.NewPreviewScene(sceneHost)
+sceneRoot:Activate()
+local cell = sceneRoot:Group("party")
+local function NamePoint(target)
+    local point, _, relPoint, x, y = target.nameText:GetPoint()
+    return point, relPoint, x, y
+end
+local function CellFrame()
+    cell:Show(1, { immediate = true })
+    world.widgets:RunTimers()
+    return assert(cell:Frames()[1], "the preview scene showed no cell")
+end
+local function LiveFrame()
+    UF.ApplySpec(frame, GF.CompileSpec("party", frame, "party1"), nil, GF.GROUP_APPLY_MASK)
+    return frame
+end
+local previewFrame, liveFrame = CellFrame(), LiveFrame()
+assert(previewFrame.MSUFSpec.text.nameAnchor == "TOP" and previewFrame.MSUFSpec.text.nameX == 0,
+    "the menu preview puts the name off-centre in the name bar")
+do
+    local pp, pr, px, py = NamePoint(previewFrame)
+    local lp, lr, lx, ly = NamePoint(liveFrame)
+    assert(pp == lp and pr == lr and px == lx and py == ly, "the menu preview anchors the name differently from a live frame in the name bar")
+end
+party.nameBarEnabled = false
+GF.InvalidateCompiledSpecs("party")
+previewFrame, liveFrame = CellFrame(), LiveFrame()
+assert(previewFrame.MSUFSpec.text.nameAnchor ~= "TOP" and previewFrame.MSUFSpec.text.nameX == 28,
+    "the menu preview lost the free name offset without the bar")
+do
+    local pp, pr, px, py = NamePoint(previewFrame)
+    local lp, lr, lx, ly = NamePoint(liveFrame)
+    assert(pp == lp and pr == lr and px == lx and py == ly, "the menu preview anchors the free name differently from a live frame")
+end
+party.nameBarEnabled = true
+GF.InvalidateCompiledSpecs("party")
+sceneRoot:Release()
+world.widgets:RunTimers()
+-- Back to the state the retire check below expects: the bar on, then off.
+frame = LiveFrame()
 
 -- Turning the bar off retires the element again (nothing else needs it).
 assert(GF.GetConf("party") == party, "the party conf was swapped during apply")

@@ -45,6 +45,25 @@ comparison authorizes replacing expected values. In particular, corrected drift
 from subsequent baseline packages needs property-level red/green evidence and a
 reason for each accepted change. Historical provenance stays historical.
 
+## Group scene re-baseline
+
+The Options group preview now paints its cell with the engine's group preview scene
+(`GF.NewPreviewScene`) instead of its own mock-cell renderer. That is a deliberate change of the
+observed structure, so the twenty group fixtures (Party default, Party hidden layers, Party
+custom portrait/aura config, Raid default; five clients) were recaptured with the same cases and
+inputs. The bytes they replace are in the history of the commit before this re-baseline, and
+`evidence/pre-scene-group-sha256.json` records their (LF-normalised) hashes. Everything outside
+the cell subtree (the stage, handles, aura lanes, spell indicators, the portrait and status
+handles) is unchanged except two handle sizes that follow the stub's constant font height, and on
+TBC and Mists the anchor target of the spell-preview edges (the health fill texture is now the
+engine's). Inside the cell the roles `group/_health`, `_power`, `_healPred`, `_absorb`,
+`_healAbsorb`, `_nameFS`, `_hpCenterFS` and `_cell` keep their names; the cell is a scaled
+container, so sizes are the engine's spec sizes with the zoom in `effectiveScale` (a name drawn at
+18 with scale 0.864 is drawn at 12 with scale 1.296: the same 15.55), statusbar ranges are the
+engine's (health 0..1e6, power/prediction 0..100) and the cell gains the engine's own regions. The
+engine text draws names and small texts in the SemiBold face where the old mock drew Regular, and
+gives the name the live clip window; the 68 other fixtures are untouched.
+
 ## Scope and matrix
 
 | Client | Previews | Conditional coverage |

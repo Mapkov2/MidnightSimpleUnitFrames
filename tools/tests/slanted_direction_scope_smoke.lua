@@ -106,17 +106,77 @@ mock:SetSize(180, 40)
 mock.hpBG, mock.hp, mock.powerBG, mock.power = mock:CreateTexture(), mock:CreateTexture(), mock:CreateTexture(), mock:CreateTexture()
 mw.core.UFPreviewCore.ApplyRounded({ mock = mock }, "target", true, 1, true, 1)
 assert(seenScope == "target", "unit preview lost its selected scope")
-local gm = env.CreateFrame("Frame", nil, env.UIParent)
-gm:SetSize(180, 40)
-gm._health = env.CreateFrame("StatusBar", nil, gm)
-gm._power = env.CreateFrame("StatusBar", nil, gm)
-M.GroupPreviewRounded.ApplyRounded(gm, db.gf_party, true, 1, true, false, 1)
-assert(seenConf == db.gf_party, "group preview lost its config")
+-- The group preview cell is an engine scene frame: it adopts its scope's mask and edge through the live rounded
+-- surface, exactly like a live group frame of the same kind.
+local cellBoxes = {}
+local function CellOf(kind)
+    local box = cellBoxes[kind]
+    M.gfScope = kind
+    if not box then
+        box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+        box:Show()
+        box._stage:SetSize(600, 220)
+        cellBoxes[kind] = box
+    end
+    mw.core.GF.InvalidateCompiledSpecs(kind)
+    box:Refresh("SETTINGS")
+    return assert(box._mock._cell, kind .. ": the group preview has no cell")
+end
+local function CellMask(cell)
+    local masks = cell._msufRUF_MaskedTextures
+    local mask = masks and masks[cell.hpBar:GetStatusBarTexture()]
+    return mask and mask:GetTexture() or nil
+end
+-- The cell must carry the mask the live resolver gives a group frame of this kind (nil: a square frame, no mask).
+local function CellAgrees(kind, label)
+    local scope = "gf_" .. kind
+    local live = { configKey = scope, _msufIsGroupFrame = true, _msufGFKind = kind }
+    local expected = kit.RoundedFrameEnabled(live) and kit.SurfaceMaskPath(live) or nil
+    local cell = CellOf(kind)
+    local actual = CellMask(cell)
+    assert(actual == expected, label .. ": the " .. kind .. " cell mask is " .. tostring(actual) .. ", a live frame gets " .. tostring(expected))
+    return actual, cell
+end
+do
+    local mask, cell = CellAgrees("raid", "slanted raid")
+    assert(mask == kit.SLANTED_MASK_PATHS.BOTH_DOWN, "the slanted raid cell lost the shared direction (" .. tostring(mask) .. ")")
+    assert(cell._msufRUF_Edge and cell._msufRUF_Edge:GetTexture() == kit.SLANTED_EDGE_PATHS.BOTH_DOWN, "the slanted raid cell has the wrong outline cut")
+    -- A rounded group scope draws the rounded mask, a square one none; the group toggle and the master gate it.
+    local savedBars = { db.bars.roundedFramesEnabled, db.bars.roundedGroupFrames, db.bars.slantedBarsEnabled, db.bars.slantedGroupFrames }
+    local savedShape = { db.gf_party.frameBarShape, db.gf_raid.frameBarShape }
+    db.bars.roundedFramesEnabled, db.bars.roundedGroupFrames = true, true
+    db.gf_party.frameBarShape = "ROUNDED"
+    env.MSUF_ApplyRoundedUnitframes()
+    local partyMask = CellAgrees("party", "rounded party")
+    assert(partyMask and partyMask ~= kit.SLANTED_MASK_PATHS.BOTH_DOWN, "the rounded party cell drew a slanted mask")
+    db.bars.slantedBarsEnabled = false
+    env.MSUF_ApplyRoundedUnitframes()
+    local raidRounded = CellAgrees("raid", "slanted off")
+    assert(raidRounded == partyMask, "turning slanted off must reveal the rounded mask on the raid cell")
+    db.bars.slantedBarsEnabled, db.bars.slantedGroupFrames = true, false
+    env.MSUF_ApplyRoundedUnitframes()
+    local raidNotSlanted = CellAgrees("raid", "slanted group frames off")
+    assert(raidNotSlanted == partyMask, "the group frames toggle off must leave the raid cell on the rounded mask")
+    db.bars.roundedFramesEnabled = false
+    env.MSUF_ApplyRoundedUnitframes()
+    local raidSquare = CellAgrees("raid", "no rounded and no slanted group frames")
+    assert(raidSquare == nil, "a square raid frame must leave its cell without a mask")
+    db.bars.roundedFramesEnabled, db.bars.roundedGroupFrames, db.bars.slantedBarsEnabled, db.bars.slantedGroupFrames = savedBars[1], savedBars[2], savedBars[3], savedBars[4]
+    db.gf_party.frameBarShape, db.gf_raid.frameBarShape = savedShape[1], savedShape[2]
+    env.MSUF_ApplyRoundedUnitframes()
+    CellAgrees("raid", "restored")
+end
 preview.ResolveFrameBarMedia = Resolve
 for _, scope in ipairs({ "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena", "gf_party", "gf_raid" }) do
     Select(scope, "BOTH_UP")
     mw:RunTimers()
     Paths(scope, "BOTH_UP", scope:match("^gf_(.+)$"))
+    -- The group preview cell takes the same scoped cut.
+    local kind = scope:match("^gf_(party)$") or scope:match("^gf_(raid)$")
+    if kind then
+        local cellMask = CellMask(CellOf(kind))
+        assert(cellMask == kit.SLANTED_MASK_PATHS.BOTH_UP, scope .. ": the preview cell did not take the scope's cut (" .. tostring(cellMask) .. ")")
+    end
 end
 assert(db.gf_mythicraid.slantedBarDirection == "BOTH_UP", "Raid did not update its Mythic config")
 Paths("gf_mythicraid", "BOTH_UP", "mythicraid")

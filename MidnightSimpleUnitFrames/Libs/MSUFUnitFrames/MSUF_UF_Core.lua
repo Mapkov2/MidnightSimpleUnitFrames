@@ -2224,7 +2224,10 @@ function UF.ApplySceneSpec(frame, spec, mask)
     if mask == true or mask[name] == true then
       local element = UF.elements[name]
       if element then
-        if ApplyElementAllowed(name) ~= true or UF.ElementEnabled(element, frame, spec) == false then
+        local sceneEnabled = element.SceneIsEnabled
+        if ApplyElementAllowed(name) ~= true
+          or (sceneEnabled and sceneEnabled(frame, spec) == false)
+          or (not sceneEnabled and UF.ElementEnabled(element, frame, spec) == false) then
           FrameDisableElement(frame, name, true)
         else
           if element.Create and not created[name] then

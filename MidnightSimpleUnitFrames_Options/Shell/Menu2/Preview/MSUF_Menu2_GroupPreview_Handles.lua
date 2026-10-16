@@ -390,15 +390,21 @@ function Stage.BindTextDrag(st)
         local moved = false
         local captured = handle._textDragRegions
         if captured then
+            -- The delta is in the units of the outer preview frame. The engine texts sit in the zoomed cell, whose
+            -- offsets are in the cell's own units: the same screen distance is the delta over the scale ratio.
+            local mockScale = box._mock and box._mock.GetEffectiveScale and box._mock:GetEffectiveScale() or 1
             for i = 1, #captured do
                 local item = captured[i]
                 local frame = item and item.frame
                 local points = item and item.points
                 if frame and points and frame.ClearAllPoints and frame.SetPoint then
+                    local owner = frame.GetEffectiveScale and frame or (frame.GetParent and frame:GetParent())
+                    local frameScale = owner and owner.GetEffectiveScale and owner:GetEffectiveScale() or mockScale
+                    local k = (mockScale and mockScale > 0 and frameScale and frameScale > 0) and mockScale / frameScale or 1
                     frame:ClearAllPoints()
                     for j = 1, #points do
                         local p = points[j]
-                        frame:SetPoint(p.point, p.relTo or box._mock, p.relPoint or p.point, (p.x or 0) + dx, (p.y or 0) + dy)
+                        frame:SetPoint(p.point, p.relTo or box._mock, p.relPoint or p.point, (p.x or 0) + dx * k, (p.y or 0) + dy * k)
                     end
                     -- Direct drag painting temporarily mutates the same region
                     -- cached by Group Preview Name layout. Mark it dirty so the

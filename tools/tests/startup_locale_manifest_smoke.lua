@@ -81,7 +81,14 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 9,970,540 -> 9,996,537, TBC/ruRU 7,846,662 -> 7,872,659) while the menu keeps drawing its own
         -- group cell until it is switched over (Options code removed: none). Both ceilings rise by exactly that
         -- delta: Mainline 9,970,828 -> 9,996,825, Classic 7,856,000 -> 7,881,997.
-        assert(bytes < (suffix == "Mainline" and 9996825 or 7881997),
+        -- 2026-10-17: the Options group preview paints its cell with an embedded scene (Scene:Configure with SetScale,
+        -- SetLevel, SetSample, SetBodyOnly and ignoreOocFade, SetClock, Layers.SetLevelBias, the sample prediction,
+        -- reduced max health and absorb text paints, the pinned sample class) and drops its own mock-cell renderer.
+        -- Measured as this smoke counts (LF bytes, worst locale ruRU): +10,437 on every client, Mainline 9,996,537 ->
+        -- 10,006,974 and TBC 7,872,659 -> 7,883,096. The Options addon loses MSUF_Menu2_GroupPreview_Rounded.lua and
+        -- about 1,300 net lines, which do not count toward core startup. Both ceilings rise by exactly the measured
+        -- delta: Mainline 9,996,825 -> 10,007,262, Classic 7,881,997 -> 7,892,434.
+        assert(bytes < (suffix == "Mainline" and 10007262 or 7892434),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

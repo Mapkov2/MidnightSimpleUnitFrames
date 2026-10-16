@@ -11,10 +11,58 @@ local STOCK_COLORS = {
     EVOKER = { r = 0.2, g = 0.58, b = 0.5 },
 }
 
-function Adapter.Open(root, flavor, Regions)
+-- Working curves in C_CurveUtil's shape (every client ships it). The engine paints the group cell, and its
+-- health-following text colours evaluate a curve; the harness stand-in answers with opaque stubs the observation
+-- contract refuses. Linear by default, step for any other curve type. Group cases only: the legacy unit,
+-- castbar and resource renderers were captured against the stand-in.
+local function InstallCurves(world)
+    local env = world.env
+    local base = env.C_CurveUtil
+    local function NewCurve()
+        local xs, ys = {}, {}
+        local curve = { curveType = 0 }
+        function curve:SetType(curveType) self.curveType = curveType end
+        function curve:GetType() return self.curveType end
+        function curve:ClearPoints() for i = #xs, 1, -1 do xs[i], ys[i] = nil, nil end end
+        function curve:AddPoint(x, y)
+            local i = #xs + 1
+            while i > 1 and xs[i - 1] > x do xs[i], ys[i] = xs[i - 1], ys[i - 1]; i = i - 1 end
+            xs[i], ys[i] = x, y
+        end
+        local function Span(x)
+            local n = #xs
+            if n == 0 then return nil end
+            if x <= xs[1] then return ys[1], ys[1], 0 end
+            if x >= xs[n] then return ys[n], ys[n], 0 end
+            for i = 2, n do
+                if x <= xs[i] then
+                    if curve.curveType ~= 0 then return ys[i - 1], ys[i - 1], 0 end
+                    return ys[i - 1], ys[i], (x - xs[i - 1]) / (xs[i] - xs[i - 1])
+                end
+            end
+        end
+        local function Lerp(a, b, t) return a + (b - a) * t end
+        function curve:EvaluateUnpacked(x)
+            local a, b, t = Span(tonumber(x) or 0)
+            if not a then return 0, 0, 0, 0 end
+            return Lerp(a.r, b.r, t), Lerp(a.g, b.g, t), Lerp(a.b, b.b, t), Lerp(a.a or 1, b.a or 1, t)
+        end
+        function curve:Evaluate(x)
+            local a, b, t = Span(tonumber(x) or 0)
+            if not a then return 0 end
+            if type(a) == "number" then return Lerp(a, b, t) end
+            return env.CreateColor(self:EvaluateUnpacked(x))
+        end
+        return curve
+    end
+    env.C_CurveUtil = setmetatable({ CreateCurve = NewCurve, CreateColorCurve = NewCurve }, { __index = base })
+end
+
+function Adapter.Open(root, flavor, Regions, options)
     local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
     return MenuWorld.Open(root, flavor, { open = false, beforeCore = function(world)
         Regions.Install(world)
+        if options and options.curves then InstallCurves(world) end
         world.env.RAID_CLASS_COLORS = STOCK_COLORS
         world.env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
         world.env.CLASS_ICON_TCOORDS = {}
@@ -175,7 +223,7 @@ local PAINTERS = { unit = Unit, group = Group, castbar = Castbar, classpower = C
 
 function Adapter.Render(root, flavor, case, Regions, Cases)
     math.randomseed(1701)
-    local mw = Adapter.Open(root, flavor, Regions)
+    local mw = Adapter.Open(root, flavor, Regions, { curves = case.surface == "group" })
     Cases.Configure(mw, case)
     local roots, aliases, provenance = assert(PAINTERS[case.surface])(mw, case, Regions)
     return mw, roots, aliases, provenance

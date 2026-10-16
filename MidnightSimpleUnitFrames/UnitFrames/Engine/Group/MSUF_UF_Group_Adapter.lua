@@ -741,12 +741,32 @@ function GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
   return ApplyUnitFrame(frame, kind or frame._msufGFKind or "party", unit, reason, applyMask, true)
 end
 
+--- The alpha settings of a scene frame that ignores the out-of-combat fade: its spec gets an alpha table of its own
+--- that inherits every other setting from the compiled one. The compiled spec itself is shared and stays untouched.
+local function SceneAlphaLane(frame, spec, ignoreOocFade)
+  local compiled = frame._msufGFSpecBase and frame._msufGFSpecBase.alpha
+  local own = rawget(spec, "alpha")
+  if ignoreOocFade ~= true or not (compiled and compiled.oocFade == true) then
+    if own ~= nil then spec.alpha = nil end
+    return
+  end
+  if own == nil then
+    own = setmetatable({}, { __index = compiled })
+    spec.alpha = own
+  else
+    getmetatable(own).__index = compiled
+  end
+  own.oocFade = false
+end
+
 --- A preview scene frame is a paint target that holds no unit: it compiles for its sample role, applies the
 --- element layout and never subscribes to, registers with or queries the live roster (see GF.NewPreviewScene).
-function GF.ApplySceneButton(frame, kind, dirtyMask)
+--- ignoreOocFade: the owner's window is always open out of combat, so the scene shows no out-of-combat fade.
+function GF.ApplySceneButton(frame, kind, dirtyMask, ignoreOocFade)
   if not (frame and kind and GF.CompileSpec) then return false end
   local spec = GF.CompileSpec(kind, frame, GF.PreviewSampleRole(frame))
   if not spec then return false end
+  SceneAlphaLane(frame, spec, ignoreOocFade)
   frame._msufIsGroupFrame = true
   frame._msufGFKind = kind
   UF.SetFrameSpec(frame, spec)

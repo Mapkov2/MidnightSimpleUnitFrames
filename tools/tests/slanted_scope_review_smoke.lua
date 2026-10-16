@@ -29,24 +29,27 @@ Check(db.player.slantedBarDirection == nil and db.gf_raid.slantedBarDirection ==
     "Reset all overrides left scoped directions behind")
 mw:RunTimers()
 
-local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
-local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"
-local paintSource = Slice.Function(Slice.Read(root .. "/" .. path), "local function PaintGroupBlockBorder", path)
-local loader = assert(loadstring("local PixelLayoutRegion = function(region) return region end\n"
-    .. "local GROUP_BLOCK_BORDER_EDGES = { 'top', 'bottom', 'left', 'right' }\n" .. paintSource .. "\nreturn PaintGroupBlockBorder"))
-setfenv(loader, env)
-local Paint = loader()
-local host = env.CreateFrame("Frame", nil, env.UIParent)
-host:SetSize(180, 40)
+-- The preview block border is the engine scene container's: the scene draws it through the live group border
+-- function, so the group scope's shape and direction reach it the way they reach a live block.
+local sceneHost = env.CreateFrame("Frame", nil, env.UIParent)
+sceneHost:SetSize(400, 300)
 db.gf_raid.groupBorderEnabled, db.gf_raid.slantedBarDirection = true, "LEFT_UP"
 db.bars.slantedUnitFrames = false
 env.MSUF_ApplyRoundedUnitframes()
-Paint(host, db.gf_raid, 1, function(value) return value end)
-local conf = assert(host._msufGroupBlockRoundedConf)
-Check(conf.frameBarShape == "SLANTED" and conf.slantedBarDirection == "LEFT_UP",
+core.GF.InvalidateCompiledSpecs("raid")
+local sceneRoot = core.GF.NewPreviewScene(sceneHost)
+sceneRoot:Activate()
+local raidScene = sceneRoot:Group("raid")
+raidScene:Show(2, { immediate = true })
+mw:RunTimers()
+local host = assert(raidScene:Container(), "the raid preview scene has no container")
+local state = assert(host._msufRGFBlockBorderState, "the preview block border drew no rounded state")
+Check(state.frameBarShape == "SLANTED" and state.slantedBarDirection == "LEFT_UP",
     "group preview block border lost shape/direction")
 Check(host._msufRGFBlockBorderEdge and host._msufRGFBlockBorderEdge:GetTexture() == kit.SLANTED_EDGE_PATHS.LEFT_UP,
     "group-only preview block used the unit toggle or the wrong cut")
+sceneRoot:Release()
+mw:RunTimers()
 
 db.player.frameBarShape, db.player.slantedBarDirection = "SLANTED", "LEFT_UP"
 db.bars.slantedUnitFrames = true

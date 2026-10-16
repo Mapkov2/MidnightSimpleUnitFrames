@@ -93,8 +93,16 @@ function Layers.ClampDetail(detail)
   return detail
 end
 
+-- A preview embedded in a window (a scene inside the menu) paints in the window's own level band: it shifts the
+-- absolute element levels by one constant, the way a live frame keeps them comparable to the castbars. 0 outside
+-- such a paint.
+local levelBias = 0
+function Layers.SetLevelBias(bias)
+  levelBias = tonumber(bias) or 0
+end
+
 function Layers.ElementLevel(layer, fallback, detail)
-  return Layers.ELEMENT_LEVEL_BASE
+  return Layers.ELEMENT_LEVEL_BASE + levelBias
     + Layers.ClampLayer(layer, fallback) * Layers.ELEMENT_LEVEL_STRIDE
     + Layers.ClampDetail(detail)
 end

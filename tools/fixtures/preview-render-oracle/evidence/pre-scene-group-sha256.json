@@ -1,0 +1,22 @@
+{
+  "Forever/group-party-default.lua": "43819b2a3d0cb844487b2b6f518001b485b97877507972cc43c46641266f6eb8",
+  "Forever/group-party-layers-hidden.lua": "9d63c66cf76b13b1816438d1a95c173cbbb2ecae2913bf72b7ae1f788047741f",
+  "Forever/group-party-portrait-auras.lua": "f9bbfd643ca190e4e4c0db29231390112086c8d9301dad822ddc34ed91711dc9",
+  "Forever/group-raid-default.lua": "bd53ea543e6796a1c308382ed01f164c06f2c56ba985e5bfe80142b5bb1af365",
+  "Mainline/group-party-default.lua": "646049e966916e265687d0d4b40767823f7ff53ea921406e2fa62408796a1fd7",
+  "Mainline/group-party-layers-hidden.lua": "f5414121f0964d2ef7e121ebc9a75e3b295a29fe874cb9bea4abc8b9ba1184ef",
+  "Mainline/group-party-portrait-auras.lua": "0ef4afada73ef7a45e17276e270414bca5f268146a7eaecef4124aad9c61cbb5",
+  "Mainline/group-raid-default.lua": "8fc81fc1373f04bf892b643d0b0446db025cee5ddec912fb75e04ba3747f2574",
+  "Mists/group-party-default.lua": "befba382ab8653dbc6e2c6175e9004e77396d0c7d380d4e06460dfe18569d954",
+  "Mists/group-party-layers-hidden.lua": "5f8553186b38116def89641cee3f1e29c584c67a7907755db58e914353ac8abd",
+  "Mists/group-party-portrait-auras.lua": "c6a00dbef3c31c429a5f7200492a946d7266398e6c91e6792762f62129b4e87a",
+  "Mists/group-raid-default.lua": "c413c4bb48a0567274aa89ae780178b2b9c6191983c49c8af9a08cdd4e4a6326",
+  "TBC/group-party-default.lua": "ee2e0761d5b5598212525a110af1205ea2c4c7f3beb6d8b2ad46f90d0c12f2b4",
+  "TBC/group-party-layers-hidden.lua": "1f59dcf78555b218a4accb815fc9a79754d8fbd227f96d846faf956fb6f98cff",
+  "TBC/group-party-portrait-auras.lua": "baf4ad2ef96c5f11d2c05adfe1d2f1012bf0cbe72fc7d9c01ab5ada765315600",
+  "TBC/group-raid-default.lua": "d6b014fbde660c2150ac41257ca44ee70fbc7c0920f1e9503267551667b5b9cc",
+  "Vanilla/group-party-default.lua": "e112f82dd36b1aed2f70362307eec2ebc585ae8240973803898fd2129f04ee2d",
+  "Vanilla/group-party-layers-hidden.lua": "51ec228163d9795db1bfa2eb6ab559e18bdc7c33da9d899ca47bc0369ed88a1a",
+  "Vanilla/group-party-portrait-auras.lua": "301539a89406037f0e087a5e8b56f3c02cca23071d9a42c85db43186dcf49a53",
+  "Vanilla/group-raid-default.lua": "98fa04736ca7224d6cc122ca519eaaf2b5f19267621d3dc286c1a5584a8b2033"
+}

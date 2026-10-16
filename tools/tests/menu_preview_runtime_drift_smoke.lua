@@ -15,6 +15,10 @@
 --   5. Group preview names: shortening never cuts a UTF-8 character.
 --   6. The first spec read of the unit preview does not recompile (and so does
 --      not replace) the specs the live frames hold.
+--   7. The group preview cell is an engine scene built by the first paint, once.
+--   8. That cell ignores the out-of-combat fade (the Options window is always
+--      open out of combat) and keeps every other alpha setting live.
+--   9. The Animate chip hands its clock to the cell, which then moves.
 --
 -- Sections report together so one run shows every drift. Plain Lua 5.1, repo
 -- root as arg 1, client matrix Suffix (or Forever) as arg 2.
@@ -118,7 +122,17 @@ local function UnitBox(mw, key)
     return box, Refresh
 end
 
-local mw = Open({ page = "home" })
+-- The group preview scenes the Options graph builds (section 7).
+local sceneBuilds = 0
+local mw = Open({ page = "home", beforeOptions = function(world)
+    local GF = assert(world.core.GF, "harness: the core has no group frame namespace before the Options graph loads")
+    local build = assert(GF.NewPreviewScene, "harness: the core has no group preview scene")
+    GF.NewPreviewScene = function(...)
+        sceneBuilds = sceneBuilds + 1
+        return build(...)
+    end
+end })
+local buildsAtOpen = sceneBuilds
 local env, core, M = mw.env, mw.core, mw.M
 
 Section("1 class resource width and anchor", function()
@@ -187,11 +201,22 @@ Section("2 health text gradient", function()
     gbox:Show()
     core.UF.Config.Refresh()
     gbox:Refresh("SETTINGS")
-    local state, htx = gbox._msufGFSceneState, gbox._msufGFHealthTextState
-    Check(state and state.mock and state.runtimeHealth and htx and htx.byHealth == true,
-        "harness: the group preview kept no by-health text state")
-    local fakeHP = math.max(1, math.floor(htx.fakeMax * state.hpPct + 0.5))
-    Expect("group preview", state.runtimeHealth, fakeHP / htx.fakeMax, state.mock._hpLeftFS.textColor)
+    -- The engine scene paints the cell's text: its colour follows the same gradient at the sample fraction.
+    local state = gbox._msufGFSceneState
+    Check(state and state.mock and state.runtimeHealth and state.runtimeText, "harness: the group preview kept no scene state")
+    Check(state.runtimeText.healthColorByHealth == true, "harness: the group text is not coloured by health")
+    local shown
+    for _, key in ipairs({ "_hpLeftFS", "_hpCenterFS", "_hpRightFS" }) do
+        local fs = state.mock[key]
+        if fs and fs.shown == true and fs.textColor then shown = fs break end
+    end
+    Check(shown, "harness: the cell shows no health text")
+    -- The cell colours its text from the gradient stops of the health spec at its own bar fraction.
+    local bar = state.mock._health
+    Check(bar and tonumber(bar.value) and tonumber(bar.maximum) and bar.maximum > 0, "harness: the cell health bar holds no values")
+    Expect("group preview", state.runtimeHealth, bar.value / bar.maximum, shown.textColor)
+    Check(core.GF.CompileSpec("party", nil, nil).text.healthColorByHealth == true,
+        "the live party spec does not colour health text by health")
     gbox:Hide()
     for _, field in ipairs(FIELDS) do general[field] = saved[field] end
     Refresh()
@@ -286,7 +311,7 @@ Section("4 portrait border colour", function()
         mock._health = env.CreateFrame("StatusBar", nil, mock)
         mock._health:SetFrameLevel(501)
         local scene = { kind = "party", mock = mock, runtimeSpec = spec, layerAvailable = {}, layerVisible = {},
-            previewScale = 1, liveData = { class = class }, box = {}, MSUF = core,
+            previewScale = 1, sampleClass = class, box = {}, MSUF = core,
             S = { Layers = core.UF.Layers, ScaleValue = function(v, scale) return v * scale end,
                 ClassColor = function() return unpack(customClassColor) end } }
         M.GroupPreviewRender.PaintGroupPreviewPortrait(scene)
@@ -403,6 +428,282 @@ Section("6 first preview refresh keeps the live specs", function()
     fresh.core.UFPreviewRuntime.SpecForPreviewKey("player")
     Check(Config.specs.player.portrait == portrait and Config.serial == serial,
         "a profile swap made the preview recompile the live specs")
+end)
+
+-- 7. The group cell is an engine scene the first paint builds ------------------
+-- The Options file captures nothing of the scene at load: no root is built until a preview paints, and the root is
+-- built once for the preview, not once per paint.
+Section("7 group cell scene is built by the first paint", function()
+    Check(buildsAtOpen == 0, "loading the Options graph and opening a page built " .. tostring(buildsAtOpen) .. " group preview scenes")
+    M.gfScope = "party"
+    local base = sceneBuilds
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    Check(sceneBuilds == base and box._scene == nil, "creating a group preview built a scene before it was shown")
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box:Refresh("SETTINGS")
+    Check(sceneBuilds == base + 1 and box._scene ~= nil, "the first paint built " .. tostring(sceneBuilds - base) .. " scenes, not one")
+    local root = box._scene
+    box:Refresh("SETTINGS")
+    Check(sceneBuilds == base + 1 and box._scene == root, "a second paint built another scene")
+    Check(box._mock._cell and box._mock._cell.IsShown and box._mock._cell:IsShown(), "the first paint left no cell on screen")
+    -- Suspending the preview quiets the root; the next paint brings the same one back.
+    box:ReleaseRuntimePreview()
+    Check(root:IsActive() == false, "a suspended preview left its scene root active")
+    box:Refresh("SETTINGS")
+    Check(sceneBuilds == base + 1 and box._scene == root and root:IsActive(), "resuming the preview built another scene or left it quiet")
+    box:Hide()
+end)
+
+-- 8. The Options preview ignores the out-of-combat fade ------------------------
+-- The Options window is always open out of combat, so the live fade would leave the preview permanently faded. Every
+-- other alpha setting (here the health bar opacity) stays live, and a frame of the same engine that is not asked
+-- still fades.
+Section("8 group cell ignores the out-of-combat fade", function()
+    local conf = env.MSUF_DB.gf_party
+    local saved = { conf.oocFadeEnabled, conf.oocFadeAlpha, conf.hpBarAlpha }
+    conf.oocFadeEnabled, conf.oocFadeAlpha, conf.hpBarAlpha = true, 0.4, 0.6
+    core.GF.InvalidateCompiledSpecs("party")
+    M.gfScope = "party"
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box:Refresh("SETTINGS")
+    local cell = box._mock._cell
+    Check(cell and cell.GetAlpha, "harness: the group preview has no cell frame")
+    -- Control: the same engine without the request fades, and so does an on-screen dummy.
+    local plain = core.GF.NewPreviewScene(env.UIParent)
+    plain:Activate()
+    local plainGroup = plain:Group("party")
+    plainGroup:Show(1, { immediate = true })
+    mw.world.widgets:RunTimers()
+    local plainFrame = plainGroup:Frames()[1]
+    Check(plainFrame and plainFrame:GetAlpha() == 0.4, "harness: a scene frame without the request does not fade (" .. tostring(plainFrame and plainFrame:GetAlpha()) .. ")")
+    plain:Release()
+    local dummy
+    local wasPreviewing = env.MSUF2_GFPagePreviewActive
+    env.MSUF2_GFPagePreviewActive = true
+    core.GF.ShowPreview("party", 1, { immediate = true })
+    mw.world.widgets:RunTimers()
+    dummy = core.GF._previewFrames.party and core.GF._previewFrames.party[1]
+    Check(dummy and dummy:GetAlpha() == 0.4, "harness: the on-screen dummy does not fade (" .. tostring(dummy and dummy:GetAlpha()) .. ")")
+    core.GF.HidePreview("party")
+    env.MSUF2_GFPagePreviewActive = wasPreviewing
+    Check(cell:GetAlpha() == 1, "the Options preview cell is faded by the out-of-combat fade (" .. tostring(cell:GetAlpha()) .. ")")
+    Check(cell.MSUFSpec.alpha.active == true and cell.MSUFSpec.alpha.hpAlpha == 0.6 and cell.MSUFSpec.alpha.oocFade == false,
+        "the Options preview cell lost the health bar opacity with the fade")
+    -- The health bar opacity dims the cell's texts like a live frame's (the live look of the Options preview).
+    Check(cell.nameText and cell.nameText:GetAlpha() == 0.6, "the health bar opacity is not live in the Options preview (name text alpha "
+        .. tostring(cell.nameText and cell.nameText:GetAlpha()) .. ")")
+    Check(core.GF.CompileSpec("party").alpha.oocFade == true, "the Options preview changed the shared compiled spec")
+    conf.oocFadeEnabled, conf.oocFadeAlpha, conf.hpBarAlpha = saved[1], saved[2], saved[3]
+    core.GF.InvalidateCompiledSpecs("party")
+    box:Hide()
+end)
+
+-- 9. The Animate chip moves the cell ------------------------------------------
+-- The preview's own driver hands its elapsed time to the scene root; without that clock the cell would stay at its
+-- static sample while the handles and aura lanes animate.
+Section("9 animate moves the group cell", function()
+    M.gfScope = "party"
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box:Refresh("SETTINGS")
+    local health = box._mock._health
+    Check(health and health.value, "harness: the group preview cell has no health bar")
+    local still = health.value
+    local action = box._previewAnimationButton and box._previewAnimationButton._msuf2CommandAction
+    Check(action and action.set(true) == true, "the Animate toggle does not start the animation")
+    local onUpdate = box:GetScript("OnUpdate")
+    Check(type(onUpdate) == "function", "Animate installs no OnUpdate driver")
+    local seen = {}
+    for _ = 1, 12 do
+        onUpdate(box, 0.2)
+        seen[health.value] = true
+    end
+    local distinct = 0
+    for _ in pairs(seen) do distinct = distinct + 1 end
+    Check(distinct >= 3, "Animate ticks left the group cell at " .. distinct .. " distinct health values")
+    Check(seen[still] ~= true or distinct >= 3, "Animate never left the static sample")
+    action.set(false)
+    box:Refresh("SETTINGS")
+    Check(health.value == still, "turning Animate off did not return the cell to its static sample")
+    box:Hide()
+end)
+
+-- 10. The group cell mirrors the live player --------------------------------
+-- The Options stage reads the player (MSUF.UFPreview.LiveUnitData) and hands the engine scene a sample: name, class,
+-- exact health and power with their maxima and the absorb amount. The scene itself reads no unit. Any field the
+-- player cannot give falls back to the stylized sample.
+local livePlayer = { on = true, name = "Mirror", class = "MAGE", className = "Mage", hp = 600000, hpMax = 2400000,
+    power = 40, powerMax = 200, absorb = 77000 }
+local function StubLivePlayer()
+    local function Wrap(name, value)
+        local plain = env[name]
+        env[name] = function(unit, ...)
+            if unit == "player" and livePlayer.on then return value() end
+            if type(plain) == "function" then return plain(unit, ...) end
+        end
+    end
+    Wrap("UnitExists", function() return true end)
+    Wrap("UnitName", function() return livePlayer.name end)
+    Wrap("UnitClass", function() return livePlayer.className, livePlayer.class end)
+    Wrap("UnitHealth", function() return livePlayer.hp end)
+    Wrap("UnitHealthMax", function() return livePlayer.hpMax end)
+    Wrap("UnitPower", function() return livePlayer.power end)
+    Wrap("UnitPowerMax", function() return livePlayer.powerMax end)
+    Wrap("UnitGetTotalAbsorbs", function() return livePlayer.absorb end)
+end
+StubLivePlayer()
+-- The cell's value texts are formatted by the engine with client functions this harness only stubs, so the check
+-- watches what the scene hands the text runtime: the exact health and the absorb amount it formats.
+local textCalls
+local function WatchTexts(cell)
+    local text = core.UFText
+    assert(text and text.UpdateTextSlots, "harness: no text slot updater")
+    textCalls = { health = nil, absorb = nil }
+    local plain = text.UpdateTextSlots
+    text.UpdateTextSlots = function(slots, count, current, max, ...)
+        local rt = cell._msufTextRuntime
+        if rt and slots == rt.healthSlots then textCalls.health = { current, max, rt.healthAbsorb } end
+        if rt and slots == rt.healthAbsorbSlots then textCalls.absorb = { rt.healthAbsorb } end
+        return plain(slots, count, current, max, ...)
+    end
+    return function() text.UpdateTextSlots = plain end
+end
+Section("10 group cell mirrors the live player", function()
+    M.gfScope = "party"
+    local conf = env.MSUF_DB.gf_party
+    local saved = { conf.textLeft, conf.textCenter, conf.textRight }
+    conf.textLeft, conf.textCenter, conf.textRight = "ABSORB", "NONE", "CURRENT"
+    core.GF.InvalidateCompiledSpecs("party")
+    livePlayer.on = true
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box:Refresh("SETTINGS")
+    local cell = box._mock._cell
+    Check(cell and cell.nameText, "harness: the group preview has no cell")
+    Check(cell.nameText.text == "Mirror", "the cell does not carry the player's name (" .. tostring(cell.nameText.text) .. ")")
+    Check(cell._msufPortraitSampleClass == "MAGE", "the cell does not carry the player's class (" .. tostring(cell._msufPortraitSampleClass) .. ")")
+    local bar = cell.hpBar
+    Check(bar and bar.value == 600000 and bar.maximum == 2400000,
+        "the health bar is not the player's exact health (" .. tostring(bar and bar.value) .. "/" .. tostring(bar and bar.maximum) .. ")")
+    local powerBar = cell.targetPowerBar or cell.powerBar
+    if powerBar and powerBar.maximum then
+        Check(powerBar.value == 40 and powerBar.maximum == 200,
+            "the power bar is not the player's exact power (" .. tostring(powerBar.value) .. "/" .. tostring(powerBar.maximum) .. ")")
+    end
+    local unwatch = WatchTexts(cell)
+    box:Refresh("SETTINGS")
+    Check(textCalls.health and textCalls.health[1] == 600000 and textCalls.health[2] == 2400000,
+        "the health text is not formatted from the player's exact health")
+    Check(textCalls.absorb and textCalls.absorb[1] == 77000, "the absorb text is not formatted from the player's absorb")
+    -- Without a readable player the stylized sample backs every field.
+    livePlayer.on = false
+    box:Refresh("SETTINGS")
+    Check(cell.nameText.text ~= "Mirror" and cell.hpBar.value == 720000 and cell.hpBar.maximum == 1000000,
+        "an unreadable player did not fall back to the stylized sample (" .. tostring(cell.nameText.text) .. ", "
+        .. tostring(cell.hpBar.value) .. ")")
+    Check(textCalls.health and textCalls.health[1] == 720000 and textCalls.absorb and textCalls.absorb[1] == 125000,
+        "the stylized text values are gone without a player (" .. tostring(textCalls.health and textCalls.health[1]) .. ", "
+        .. tostring(textCalls.absorb and textCalls.absorb[1]) .. ")")
+    unwatch()
+    livePlayer.on = true
+    conf.textLeft, conf.textCenter, conf.textRight = saved[1], saved[2], saved[3]
+    core.GF.InvalidateCompiledSpecs("party")
+    box:Hide()
+end)
+
+-- 11. The live-state driver keeps the cell current ---------------------------
+Section("11 group cell live-state driver", function()
+    M.gfScope = "party"
+    livePlayer.on = true
+    livePlayer.hp = 600000
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    local driver = box._msufGFLiveStateDriver
+    Check(driver, "the group preview has no live-state driver")
+    Check(driver:IsEventRegistered("UNIT_HEALTH") ~= true, "the driver listens before the preview is shown")
+    -- Show and Hide fire OnShow and OnHide like the client (the driver arms and drops with them).
+    MenuWorld.FireVisibilityScripts(box)
+    box:Hide()
+    box:Show()
+    box._stage:SetSize(600, 220)
+    mw:RunTimers()
+    for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "PLAYER_REGEN_DISABLED" }) do
+        Check(driver:IsEventRegistered(event), "the driver does not listen for " .. event .. " while the preview is shown")
+    end
+    local cell = box._mock._cell
+    Check(cell and cell.hpBar and cell.hpBar.value == 600000, "harness: the cell is not at the player's health")
+    -- A health tick repaints the cell with the new value (coalesced on the live-state window).
+    livePlayer.hp = 1200000
+    mw.world:FireEvent("UNIT_HEALTH", "player")
+    mw:RunTimers()
+    Check(box._mock._cell.hpBar.value == 1200000, "a health change did not reach the cell (" .. tostring(box._mock._cell.hpBar.value) .. ")")
+    -- Combat drops every listener but the re-arm signal; leaving combat arms the driver again.
+    mw.world:EnterCombat()
+    mw:RunTimers()
+    Check(not driver:IsEventRegistered("UNIT_HEALTH") and not driver:IsEventRegistered("PLAYER_REGEN_DISABLED"),
+        "the driver kept listening in combat")
+    Check(driver:IsEventRegistered("PLAYER_REGEN_ENABLED"), "the driver lost its re-arm signal in combat")
+    mw.world:LeaveCombat()
+    mw:RunTimers()
+    Check(driver:IsEventRegistered("UNIT_HEALTH"), "the driver was not armed again after combat")
+    -- A hidden preview listens to nothing.
+    box:Hide()
+    Check(not driver:IsEventRegistered("UNIT_HEALTH") and not driver:IsEventRegistered("PLAYER_REGEN_DISABLED"),
+        "a hidden preview kept its live-state listeners")
+    livePlayer.hp = 600000
+end)
+
+-- 12. A text drag moves the engine text as far as the handle ------------------
+-- The drag delta is in the units of the outer preview frame, the engine texts sit in the zoomed cell: without the
+-- scale ratio the text runs ahead of the handle by the zoom and snaps back on release.
+Section("12 group text drag follows the zoomed cell", function()
+    M.gfScope = "party"
+    local conf = env.MSUF_DB.gf_party
+    local savedConf = { conf.nameOffsetX, conf.nameOffsetY }
+    local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+    box._manualZoom = 3
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box:Refresh("SETTINGS")
+    local mock = box._mock
+    local zoom = tonumber(mock._previewScale)
+    Check(zoom and zoom > 1.5, "harness: the preview is not zoomed (" .. tostring(zoom) .. ")")
+    local handle = box._textHandles and box._textHandles.name
+    Check(handle and handle._cfgText, "harness: the group preview has no name text handle")
+    local region = mock._nameFS
+    Check(region and region.GetPoint and region:GetPoint(1), "harness: the name text has no anchor")
+    local cellScale = region:GetEffectiveScale() / mock:GetEffectiveScale()
+    Check(math.abs(cellScale - zoom) < 1e-6, "harness: the cell is not zoomed with the preview (" .. tostring(cellScale) .. " vs " .. tostring(zoom) .. ")")
+    local function Offset()
+        local _, _, _, x, y = region:GetPoint(1)
+        return x, y
+    end
+    local startX, startY = Offset()
+    local cursorX, cursorY = 500, 400
+    local plain = { env.GetCursorPosition, env.IsMouseButtonDown, env.IsControlKeyDown }
+    env.GetCursorPosition = function() return cursorX, cursorY end
+    env.IsMouseButtonDown = function() return true end
+    env.IsControlKeyDown = function() return false end
+    local start = assert(handle.scripts and handle.scripts.OnMouseDown, "harness: the text handle has no drag start")
+    start(handle, "LeftButton")
+    Check(handle._dragging == true, "harness: the text drag did not start")
+    -- 30 screen pixels at the cell's zoom of 3 are 10 configured units.
+    cursorX, cursorY = cursorX + 10 * zoom, cursorY + 6 * zoom
+    local update = box._dragFrame:GetScript("OnUpdate")
+    update(box._dragFrame, 0.016)
+    local movedX, movedY = Offset()
+    Check(math.abs((movedX - startX) - 10) < 1e-6 and math.abs((movedY - startY) - 6) < 1e-6,
+        "the dragged text moved " .. tostring(movedX - startX) .. "," .. tostring(movedY - startY) .. " instead of 10,6 cell units")
+    env.IsMouseButtonDown = function() return false end
+    update(box._dragFrame, 0.016)
+    env.GetCursorPosition, env.IsMouseButtonDown, env.IsControlKeyDown = plain[1], plain[2], plain[3]
+    conf.nameOffsetX, conf.nameOffsetY = savedConf[1], savedConf[2]
+    core.GF.InvalidateCompiledSpecs("party")
+    box:Hide()
 end)
 
 if #failures > 0 then

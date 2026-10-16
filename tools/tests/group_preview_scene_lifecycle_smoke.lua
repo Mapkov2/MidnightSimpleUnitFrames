@@ -125,6 +125,7 @@ raid.levelText, raid.roleIcon, raid.showGroupNumber = true, true, true
 env.MSUF_DB.general.colorHealthTextByHealth = true
 -- Class and NPC name colours read the unit's identity on a live frame.
 env.MSUF_DB.general.nameClassColor, env.MSUF_DB.general.npcNameRed, env.MSUF_DB.general.nameNpcClassColor = true, true, true
+env.MSUF_DB.general.tempMaxHealthEnabled = true
 -- The features that are off by default and read the unit on a live frame.
 for _, key in ipairs({ "tempMaxHealthEnabled", "dispelOverlayEnabled", "healthFadeEnabled", "offlineFadeEnabled", "deadBgEnabled",
     "nameBarEnabled", "hpAbsorbIcon", "focusIndicator" }) do
@@ -458,6 +459,256 @@ rootB:Release()
 h:RunTimers()
 Check(Queued() == 0, "a released root keeps a timer")
 Check(not Subscribed("CONFIG_APPLIED", rootB.eventKey), "a released root kept a subscription")
+
+---------------------------------------------------------------------------
+-- 7b. An embedded scene (the Options preview): the owner sets zoom, frame level, role and one sample, and gets the
+-- frame body only. Still no unit API.
+---------------------------------------------------------------------------
+do
+    local embedHost = env.CreateFrame("Frame", nil, env.UIParent)
+    embedHost:SetSize(400, 300)
+    local embedRoot = GF.NewPreviewScene(embedHost)
+    embedRoot:Activate()
+    local cell = embedRoot:Group("party")
+    local sample = { name = "Sample", class = "MAGE", hpPct = 0.5, powerPct = 0.25, hpMax = 1000000, powerMax = 100,
+        healPct = 0.2, absorbPct = 0.1, healAbsorbPct = 0.05, tempMaxPct = 0.25, powerColor = { 0.1, 0.2, 0.3 } }
+    cell:Configure({ scale = 1.5, level = 40, role = "HEALER", sample = sample, bodyOnly = true })
+    cell:Show(1, { immediate = true })
+    h:RunTimers()
+    local frame = cell:Frames()[1]
+    Check(frame and #cell:Frames() == 1, "the embedded scene did not show one row")
+    Check(cell:Container():GetScale() == 1.5, "the embedded scene is not zoomed as a whole")
+    Check(cell:Container():GetFrameLevel() == 40 and frame:GetFrameLevel() == 40, "the embedded scene is not seated at its owner's level")
+    local bar = frame.hpBar or frame.Health or frame.health
+    Check(bar and bar.value == 500000 and bar.maximum == 1000000, "the sample hp did not reach the health bar")
+    Check(frame.powerBar and frame.powerBar.value == 25 and frame.powerBar.maximum == 100, "the sample power did not reach the power bar")
+    Check(frame.nameText and frame.nameText.text == "Sample", "the sample name did not reach the name text")
+    Check(frame.MSUFUnitKey == nil, "an embedded scene frame holds a unit")
+    -- The reduced-max-health sample is painted where the client has the API the live bar uses.
+    local reduced = frame.tempMaxHealthBar
+    Check(reduced and reduced.value == 0.25, "the sample reduced max health did not reach its bar")
+    -- A second sample repaints without a unit query; a clock animates the groups and nil returns them to the sample.
+    sample.hpPct = 0.8
+    cell:SetSample(sample)
+    h:RunTimers()
+    Check(bar.value == 800000, "a new sample did not repaint the row")
+    embedRoot:SetClock(2.5, true)
+    cell:Refresh({ immediate = true })
+    Check(bar.value ~= 800000, "a handed clock did not animate the row")
+    embedRoot:SetClock(nil, true)
+    cell:Refresh({ immediate = true })
+    Check(bar.value == 800000, "a cleared clock did not return the sample")
+    cell:SetBodyOnly(false)
+    h:RunTimers()
+    embedRoot:Release()
+    h:RunTimers()
+end
+
+---------------------------------------------------------------------------
+-- 7c. The clock an owner hands over (the Options "Animate" chip drives its own ticker): the scene follows that elapsed
+-- time exactly as the animation state builder computes it, another root and the shared animation clock stay put, and
+-- nil returns the static sample.
+---------------------------------------------------------------------------
+do
+    local clockHost = env.CreateFrame("Frame", nil, env.UIParent)
+    clockHost:SetSize(400, 300)
+    local clockedRoot, stillRoot = GF.NewPreviewScene(clockHost), GF.NewPreviewScene(clockHost)
+    local clocked, still = clockedRoot:Group("party", 3), stillRoot:Group("party", 3)
+    clockedRoot:Activate()
+    stillRoot:Activate()
+    h:RunTimers()
+    local function StaticAt(index) return math.floor(math.min(0.95, 0.34 + (((index * 13) % 55) * 0.01)) * 100 + 0.5) end
+    local function ExpectedHp(frame, index, elapsed)
+        local state = env.MSUF_BuildPreviewAnimationFrameState(frame, index, "party", {}, elapsed)
+        return math.floor(math.min(0.98, math.max(0.02, state.hpPct)) * 100 + 0.5)
+    end
+    local sharedElapsed = MSUF.PreviewAnimation and MSUF.PreviewAnimation.elapsed
+    for index, frame in ipairs(clocked:Frames()) do Check(HpOf(frame) == StaticAt(index), "a root without a clock left its static sample") end
+    -- A clock repaints the active groups (no noRefresh) and the picture follows the builder at that time.
+    for _, elapsed in ipairs({ 0.9, 2.5, 7.25 }) do
+        clockedRoot:SetClock(elapsed)
+        h:RunTimers()
+        local moved = false
+        for index, frame in ipairs(clocked:Frames()) do
+            Check(HpOf(frame) == ExpectedHp(frame, index, elapsed), "clock " .. elapsed .. ": row " .. index .. " does not follow the handed clock")
+            if HpOf(frame) ~= StaticAt(index) then moved = true end
+        end
+        Check(moved, "clock " .. elapsed .. ": the animated scene never left its static sample")
+        for index, frame in ipairs(still:Frames()) do
+            Check(HpOf(frame) == StaticAt(index), "another root's scene moved with this root's clock")
+        end
+        Check(MSUF.PreviewAnimation == nil or MSUF.PreviewAnimation.elapsed == sharedElapsed, "a handed clock advanced the shared preview animation clock")
+    end
+    -- noRefresh: the owner paints next itself, so the clock alone repaints nothing.
+    local held = HpOf(clocked:Frames()[1])
+    clockedRoot:SetClock(11, true)
+    Check(HpOf(clocked:Frames()[1]) == held, "a clock handed with noRefresh repainted the group")
+    clocked:Refresh({ immediate = true })
+    h:RunTimers()
+    Check(HpOf(clocked:Frames()[1]) == ExpectedHp(clocked:Frames()[1], 1, 11), "the owner's refresh did not use the clock it handed over")
+    clockedRoot:SetClock(nil)
+    h:RunTimers()
+    for index, frame in ipairs(clocked:Frames()) do Check(HpOf(frame) == StaticAt(index), "clearing the clock left row " .. index .. " animated") end
+    clockedRoot:Release()
+    stillRoot:Release()
+    h:RunTimers()
+end
+
+---------------------------------------------------------------------------
+-- 7d. A pinned sample class is the class of the row: its portrait art and its class name colour follow the sample,
+-- not the member the slot holds.
+---------------------------------------------------------------------------
+do
+    local pinHost = env.CreateFrame("Frame", nil, env.UIParent)
+    pinHost:SetSize(400, 300)
+    local pinRoot = GF.NewPreviewScene(pinHost)
+    pinRoot:Activate()
+    local cell = pinRoot:Group("party")
+    party.portraitMode, party.portraitRender, party.portraitBorderStyle = "LEFT", "CLASS", "NONE"
+    GF.InvalidateCompiledSpecs("party")
+    local function NameRGB(class)
+        local fast = env.MSUF_UFCore_GetClassBarColorFast
+        if type(fast) == "function" then
+            local r, g, b = fast(class)
+            if type(r) == "number" then return r, g, b end
+        end
+        local c = env.RAID_CLASS_COLORS[class]
+        return c.r, c.g, c.b
+    end
+    for _, class in ipairs({ "MAGE", "DRUID", "MAGE" }) do
+        cell:Configure({ sample = { name = "Pinned", class = class } })
+        cell:Show(1, { immediate = true })
+        h:RunTimers()
+        local frame = cell:Frames()[1]
+        Check(frame._msufPortraitSampleClass == class, class .. ": the frame kept the class of its slot (" .. tostring(frame._msufPortraitSampleClass) .. ")")
+        Check(frame.portrait and frame.portrait._msufPortraitClassToken == class, class .. ": the portrait does not draw the pinned class")
+        local er, eg, eb = NameRGB(class)
+        local color = frame.nameText.textColor or {}
+        Check(color[1] == er and color[2] == eg and color[3] == eb, class .. ": the name is not in the pinned class colour")
+    end
+    pinRoot:Release()
+    h:RunTimers()
+end
+
+---------------------------------------------------------------------------
+-- 7e. The out-of-combat fade: an owner whose window is always open out of combat asks its scene to ignore it. Every
+-- other alpha setting stays live, the shared compiled spec keeps the fade, and a scene or an on-screen dummy that does
+-- not ask still fades like a live frame.
+---------------------------------------------------------------------------
+do
+    local function Fills(frame)
+        local bar = frame.hpBar or frame.Health or frame.health
+        local texture = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+        return texture and texture.GetAlpha and texture:GetAlpha()
+    end
+    local savedHp = party.hpBarAlpha
+    party.oocFadeEnabled, party.oocFadeAlpha, party.hpBarAlpha = true, 0.4, 0.6
+    GF.InvalidateCompiledSpecs("party")
+    local shared = GF.CompileSpec("party")
+    Check(shared.alpha.oocFade == true and shared.alpha.active == true, "harness: the party spec carries no out-of-combat fade")
+    local fadeHost = env.CreateFrame("Frame", nil, env.UIParent)
+    fadeHost:SetSize(400, 300)
+    local fadeRoot = GF.NewPreviewScene(fadeHost)
+    fadeRoot:Activate()
+    local cell = fadeRoot:Group("party")
+    -- Control: a scene that does not ask fades like a live frame, and so does the on-screen dummy.
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    local frame = cell:Frames()[1]
+    Check(frame:GetAlpha() == 0.4, "a plain scene does not fade out of combat (" .. tostring(frame:GetAlpha()) .. "); the control is blind")
+    armed = false
+    GF.ShowPreview("party", 2, { immediate = true })
+    h:RunTimers()
+    local dummy = GF._previewFrames.party and GF._previewFrames.party[1]
+    Check(dummy and dummy:GetAlpha() == 0.4, "the on-screen dummy does not fade out of combat; the live control is blind")
+    GF.HidePreview("party")
+    armed = true
+    -- The request: the frame is at full alpha, with the health bar opacity and the shared spec untouched.
+    cell:Configure({ ignoreOocFade = true })
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    for index, f in ipairs(cell:Frames()) do
+        Check(f:GetAlpha() == 1, "row " .. index .. " faded out of combat although the scene ignores it (" .. tostring(f:GetAlpha()) .. ")")
+        Check(f.MSUFSpec.alpha.oocFade == false and f.MSUFSpec.alpha.active == true and f.MSUFSpec.alpha.hpAlpha == 0.6,
+            "row " .. index .. ": the scene alpha lane lost another alpha setting")
+        Check(Fills(f) == 0.6 and f.nameText:GetAlpha() == 0.6, "row " .. index .. ": the health bar opacity is no longer live (fill "
+            .. tostring(Fills(f)) .. ", name " .. tostring(f.nameText:GetAlpha()) .. ")")
+    end
+    Check(GF.CompileSpec("party").alpha.oocFade == true, "the scene changed the shared compiled spec")
+    Check(frame.MSUFSpec.alpha ~= shared.alpha and getmetatable(frame.MSUFSpec.alpha).__index == shared.alpha, "the scene alpha lane is not an overlay of the compiled one")
+    -- Flipping the request repaints: back to the fade, then to full alpha again.
+    cell:Configure({ ignoreOocFade = false })
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    Check(frame:GetAlpha() == 0.4 and frame.MSUFSpec.alpha == shared.alpha, "withdrawing the request did not bring the fade back")
+    cell:Configure({ ignoreOocFade = true })
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    Check(frame:GetAlpha() == 1, "asking again did not remove the fade")
+    -- No health bar opacity: the fade is the only alpha setting, so the scene has no alpha element to run and the
+    -- frame returns to full alpha when the request comes and to the fade when it goes.
+    party.hpBarAlpha = 1
+    GF.InvalidateCompiledSpecs("party")
+    cell:Configure({ ignoreOocFade = false })
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    Check(frame:GetAlpha() == 0.4, "without a health bar opacity the plain scene does not fade")
+    cell:Configure({ ignoreOocFade = true })
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    Check(frame:GetAlpha() == 1 and frame.MSUFSpec.alpha.oocFade == false, "without a health bar opacity the request did not remove the fade")
+    -- The fade switched off: the overlay is gone and the compiled lane is used as it is.
+    party.oocFadeEnabled = false
+    GF.InvalidateCompiledSpecs("party")
+    cell:Show(2, { immediate = true })
+    h:RunTimers()
+    Check(frame:GetAlpha() == 1 and frame.MSUFSpec.alpha == GF.CompileSpec("party").alpha, "a profile without the fade kept a scene alpha overlay")
+    party.oocFadeEnabled, party.oocFadeAlpha, party.hpBarAlpha = nil, nil, savedHp
+    GF.InvalidateCompiledSpecs("party")
+    fadeRoot:Release()
+    h:RunTimers()
+end
+
+---------------------------------------------------------------------------
+-- 7f. A sample absorb amount reaches the absorb text and the combined health text of the scene frame (the live frame
+-- asks the unit for it); a sample without one leaves none behind.
+---------------------------------------------------------------------------
+do
+    local absorbHost = env.CreateFrame("Frame", nil, env.UIParent)
+    absorbHost:SetSize(400, 300)
+    local absorbRoot = GF.NewPreviewScene(absorbHost)
+    absorbRoot:Activate()
+    local cell = absorbRoot:Group("party")
+    local savedText = { party.textLeft, party.textCenter, party.textRight }
+    party.textLeft, party.textCenter, party.textRight = "ABSORB", "NONE", "CURRENT"
+    GF.InvalidateCompiledSpecs("party")
+    cell:Configure({ sample = { name = "Absorb", class = "MAGE", hpPct = 0.5, hpMax = 1000000, absorb = 77000 }, bodyOnly = true })
+    cell:Show(1, { immediate = true })
+    h:RunTimers()
+    local frame = cell:Frames()[1]
+    local text = MSUF.UFText
+    local plain = text.UpdateTextSlots
+    local seen = {}
+    text.UpdateTextSlots = function(slots, count, current, max, ...)
+        local rt = frame._msufTextRuntime
+        if slots == rt.healthAbsorbSlots then seen.absorbSlots = rt.healthAbsorb end
+        if slots == rt.healthSlots then seen.health, seen.healthAbsorb = current, rt.healthAbsorb end
+        return plain(slots, count, current, max, ...)
+    end
+    cell:Refresh({ immediate = true })
+    h:RunTimers()
+    Check(seen.health == 500000 and seen.healthAbsorb == 77000, "the combined health text did not get the sample absorb (" .. tostring(seen.healthAbsorb) .. ")")
+    Check(seen.absorbSlots == 77000, "the absorb text did not get the sample absorb (" .. tostring(seen.absorbSlots) .. ")")
+    seen = {}
+    cell:SetSample({ name = "Absorb", class = "MAGE", hpPct = 0.5, hpMax = 1000000 })
+    h:RunTimers()
+    Check(frame._msufTextRuntime.healthAbsorb == nil and seen.absorbSlots == nil, "a sample without an absorb kept the previous one")
+    text.UpdateTextSlots = plain
+    party.textLeft, party.textCenter, party.textRight = savedText[1], savedText[2], savedText[3]
+    GF.InvalidateCompiledSpecs("party")
+    absorbRoot:Release()
+    h:RunTimers()
+end
 
 ---------------------------------------------------------------------------
 -- 8. The spy saw nothing.

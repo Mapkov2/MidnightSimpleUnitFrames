@@ -619,7 +619,8 @@ for _, scope in ipairs({ "party", "raid" }) do
         MSUF.UF.Config.Refresh()
         MSUF.GF.InvalidateCompiledSpecs(scope)
         AnimateGroup(group, "group " .. scope .. " " .. bgMode)
-        Check(mock._msufGFPreviewBackgroundColorMode == bgMode,
+        -- The cell is an engine frame: its health element resolved the background mode the settings asked for.
+        Check(mock._cell and mock._cell._msufHealthBackgroundColorMode == bgMode,
             "harness: the " .. scope .. " preview background is not in " .. bgMode .. " mode")
         RestoreFields(general, savedGeneral)
     end
