@@ -1375,6 +1375,17 @@ function GroupRangeFade.Apply(frame)
   if frame then frame._msufGFRangeApplying = nil end
 end
 
+--- A preview scene frame (UF.ApplySceneSpec) is never out of range: no settle registration, no visibility hook, no
+--- range presence. It still takes the unified alpha (health, prediction and background fills, out-of-combat fade),
+--- which a frame without a unit resolves to its in-range value.
+function GroupRangeFade.SceneApply(frame)
+  frame._msufGFRangeSettleDeferred = nil
+  ClearAlphaCaches(frame)
+  CompileRangeRuntime(frame, frame.MSUFSpec)
+  if UF.CompileAlphaRuntime then UF.CompileAlphaRuntime(frame, frame.MSUFSpec) end
+  ApplyAlpha(frame, "MSUF_APPLY")
+end
+
 function GroupRangeFade.UpdateConnectionState(frame, event)
   ApplyAlpha(frame, event)
 end

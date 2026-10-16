@@ -801,6 +801,15 @@ function Status.Apply(frame, spec)
   end
 end
 
+--- A preview scene frame (UF.ApplySceneSpec): the region layout without the state pass, which asks the client about
+--- the unit; the scene paints its sample status itself.
+function Status.SceneApply(frame, spec)
+  frame._msufStatusTextValue = nil
+  frame._msufStatusTextLayout = nil
+  frame._msufAFKTimerLayout = nil
+  ApplyConfiguredRegions(frame, spec)
+end
+
 function Status.Disable(frame)
   StopRestingFlipbook(frame and frame.restingIndicatorIcon)
   HideAFKTimerText(frame)
@@ -956,6 +965,7 @@ StatusStructure.GetEvents = Status.GetEvents
 StatusStructure.GetUnitlessEvents = Status.GetUnitlessEvents
 StatusStructure.Create = Status.Create
 StatusStructure.Apply = Status.Apply
+StatusStructure.SceneApply = Status.SceneApply
 StatusStructure.Disable = Status.Disable
 StatusStructure.IsEnabled = Status.IsEnabled
 

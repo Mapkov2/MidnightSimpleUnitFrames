@@ -1799,6 +1799,38 @@ function Portrait.Apply(frame, spec)
   end
 end
 
+--- Apply for a preview scene frame (UF.ApplySceneSpec), which holds no unit: the layout of Apply with the row's
+--- sample class as its identity. The art is the class icon whatever the render mode (a bust needs a unit), the
+--- class border takes the sample class and the reaction border the friendly colour. The client's portrait
+--- renderer and its class and reaction lookups are never asked; a scene has no cast overlay and no click target.
+function Portrait.SceneApply(frame, spec)
+  local p = spec and spec.portrait
+  local holder = EnsurePortrait(frame)
+  frame._msufPortraitRuntimeCfg = p
+  frame._msufPortraitFrameHeight = spec and spec.height or nil
+  if not (p and p.enabled == true) then
+    Portrait.Disable(frame)
+    return
+  end
+  frame._msufPortraitPositionAnchorOnly = nil
+  frame._msufUpdatePortraitConnection = nil
+  frame._msufPortraitNeedsVisibleRefresh = nil
+  frame._msufPortraitForceRefresh = nil
+  RestoreCastPortraitIcon(frame, true)
+  LayoutPortrait(frame, p)
+  ApplyPortraitMask(holder, p)
+  ApplyPortraitBackground(holder, p)
+  Details.ApplyShadow(holder, p)
+  local class = frame._msufPortraitSampleClass
+  LayoutPortraitBorder(holder, p, BorderStyleColor(p.border, class, 5))
+  UpdatePortraitClassification(frame, p)
+  SetShown(holder, true)
+  SetShown(frame.portrait, true)
+  if type(class) == "string" then
+    ApplyClassPortrait(frame.portrait, nil, p, class, frame)
+  end
+end
+
 function Portrait.Disable(frame)
   ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)

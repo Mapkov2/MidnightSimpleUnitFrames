@@ -294,6 +294,20 @@ local function HealthGradientFromValues(frame, hp, hpMax)
   return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t, 1
 end
 
+--- A preview scene frame colours its health text by health from the sample values it paints, never from a unit
+--- (the live path evaluates the unit's health through a colour curve).
+local function SetSampleHealthTextColor(frame, rt, hp, hpMax)
+  local r, g, b = HealthGradientFromValues(frame, hp, hpMax)
+  if not r then return false end
+  local a = rt.healthTextAlpha
+  if a == nil then
+    local _
+    _, _, _, a = BaseTextColor(frame)
+  end
+  SetHealthTextColor(frame, rt, r, g, b, a)
+  return true
+end
+
 local function HealthTextColor(frame, unit, hp, hpMax, rt)
   local a = rt and rt.healthTextAlpha
   if frame and frame._msufHealthColorByHealth == true then
@@ -437,6 +451,13 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   local fallback = spec and spec.textColor
   local fr, fg, fb, fa = fallback and fallback.r or 1, fallback and fallback.g or 1, fallback and fallback.b or 1, fallback and fallback.a or 1
   if not classNames and not npcNames and not npcClassNames then
+    return fr, fg, fb, fa
+  end
+  if unit == nil then
+    -- A preview scene frame holds no unit and asks the client nothing: its sample class stands for a player.
+    local sampleR, sampleG, sampleB
+    if classNames then sampleR, sampleG, sampleB = ClassColorForToken(frame and frame._msufPortraitSampleClass) end
+    if sampleR ~= nil then return sampleR, sampleG, sampleB, fa end
     return fr, fg, fb, fa
   end
   local isPlayer = PlainUnitIsPlayer(frame, unit)
@@ -660,6 +681,7 @@ Text.SetPowerTextColor = SetPowerTextColor
 Text.SetHealthTextColor = SetHealthTextColor
 Text.HealthTextColor = HealthTextColor
 Text.UpdateHealthTextColor = UpdateHealthTextColor
+Text.SetSampleHealthTextColor = SetSampleHealthTextColor
 Text.SetNameTextColor = SetNameTextColor
 Text.NameTextColorFor = NameTextColorFor
 Text.NameTextColor = NameTextColor

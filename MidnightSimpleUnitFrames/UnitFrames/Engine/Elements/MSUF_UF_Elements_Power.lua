@@ -770,7 +770,7 @@ local function SetColor(frame, force, resolvedPowerType, resolvedToken, resolved
   if not (IsFiniteNumber(r) and IsFiniteNumber(g) and IsFiniteNumber(b)) then
     local powerType, token = resolvedPowerType, resolvedToken
     local metaKnown = resolvedMetaReady == true and (powerType ~= nil or token ~= nil) or false
-    if mode ~= "class" and resolvedMetaReady ~= true and UnitPowerType then
+    if mode ~= "class" and resolvedMetaReady ~= true and frame.MSUFUnitKey then
       powerType, token = ReadPowerTypeCached(bar, frame.MSUFUnitKey, true)
       metaKnown = powerType ~= nil or token ~= nil
     end

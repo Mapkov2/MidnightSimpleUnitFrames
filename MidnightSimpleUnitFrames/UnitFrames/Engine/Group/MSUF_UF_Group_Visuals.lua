@@ -1389,6 +1389,22 @@ function GroupVisuals.Apply(frame)
   ApplyNameBar(frame, cfg)
   UpdateVisuals(frame, "MSUF_GF_VISUALS_APPLY")
 end
+--- A preview scene frame (UF.ApplySceneSpec): the layout and the name bar, without the target/focus indicator
+--- registration (a registry and a driver on the client's target) or the state pass (the unit's identity and health).
+function GroupVisuals.SceneApply(frame)
+  frame._msufGFDeadBgState = nil
+  frame._msufGFDeadBgOffline = nil
+  ClearHealthFadeState(frame)
+  CompileVisualRuntime(frame.MSUFSpec)
+  local cfg = frame.MSUFSpec and frame.MSUFSpec.group
+  local goneFn = cfg and cfg.runtimeOnDeadBg or nil
+  frame._msufGFVisualRuntimeGroup = cfg
+  frame._msufGFVisualRuntimeGone = goneFn
+  frame._msufGFVisualHealthBackgroundTexture = frame.MSUFSpec and frame.MSUFSpec.health and frame.MSUFSpec.health.backgroundTexture or false
+  frame._msufUpdateGroupVisualsGoneState = goneFn and UpdateGoneStateFromHealth or nil
+  PrepareVisuals(frame, cfg)
+  ApplyNameBar(frame, cfg)
+end
 function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP, percentReady)
   UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
 end

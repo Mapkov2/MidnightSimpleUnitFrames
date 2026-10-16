@@ -741,6 +741,22 @@ function GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
   return ApplyUnitFrame(frame, kind or frame._msufGFKind or "party", unit, reason, applyMask, true)
 end
 
+--- A preview scene frame is a paint target that holds no unit: it compiles for its sample role, applies the
+--- element layout and never subscribes to, registers with or queries the live roster (see GF.NewPreviewScene).
+function GF.ApplySceneButton(frame, kind, dirtyMask)
+  if not (frame and kind and GF.CompileSpec) then return false end
+  local spec = GF.CompileSpec(kind, frame, GF.PreviewSampleRole(frame))
+  if not spec then return false end
+  frame._msufIsGroupFrame = true
+  frame._msufGFKind = kind
+  UF.SetFrameSpec(frame, spec)
+  UF.ApplySceneSpec(frame, spec, dirtyMask ~= nil and GF.ApplyMaskForDirtyMask(dirtyMask) or BASIC_GROUP_MASK)
+  GF.RebindGroupHotRuntime(frame, spec)
+  local rounded = MSUF.Optional("MSUF_RoundedUF_OnGroupFrameApplied")
+  if rounded then rounded(frame, kind) end
+  return true
+end
+
 local ROLE_OVERLAY_ELEMENTS = { "Health", "Power", "Text", "PowerText", "GroupVisuals" }
 
 function GF.RefreshFrameRoleOverlay(frame, withoutRoleIcon)

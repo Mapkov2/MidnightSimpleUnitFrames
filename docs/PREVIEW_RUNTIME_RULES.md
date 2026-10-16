@@ -34,6 +34,72 @@ its native inverse percentage, secret handling, interpolation and surface masks.
 Mocks provide public sample fractions without unit API reads. Castbar padding is
 scaled after the runtime resolves the anchor offset, preserving fractional zoom.
 
+## Group preview scenes
+
+`GF.NewPreviewScene(parent)` returns a scene root; `root:Group(kind, count)` makes the
+isolated group scene of a kind and shows `count` plain Buttons in a container parented
+to `parent`. Whoever owns `parent` places and scales it (a new parent takes effect at
+the next `Show` or `Refresh`). The frames are applied with
+the compiled group spec through `GF.ApplySceneButton` and painted with the same fake
+roster data as the Edit Mode dummies, so a scene frame paints exactly what the
+on-screen dummy of the same index paints. The scene keeps its own frame pool,
+container, layout frame, count, build serial and layer filter. The on-screen and Edit
+Mode previews are the three default scenes (one per kind) and keep their state in the
+`GF._preview*` tables the Edit Mode, header and aura code read; the two kinds of scene
+never share a frame, a container or a layout count (`GF.GetActivePreviewCount(kind,
+frame)` answers for the frame's own scene).
+
+A scene frame carries `_msufPreviewScope` and holds no unit: `MSUFUnitKey` is nil. It is
+applied by `UF.ApplySceneSpec`, not by the live apply. The scene wires the element
+methods but installs no event script or show/hide hook, keeps the frame out of
+`UF.attachedFrames`, builds no event routing and runs no update on apply. The group adapter keeps it out
+of `GF.frames`, `GF.frameList`, the unit index, click casting and the secure unit
+attribute. A scene never reads or migrates the saved grid position and never clamps its
+container to the screen. `GF.HidePreviewsForCombat` hides every scene and a scene
+refuses to show in combat; its result is true only when a default preview hid (those
+retire a live header, which the runtime then hands back at REGEN_DISABLED), never for
+an isolated scene, which retires none. While its root is inactive a group's `Show` only
+records the wanted count, which `Activate` paints.
+
+A scene frame is static: no scene paint calls a unit, roster or aura-of-a-unit API.
+The live code carries no scene check at all (the live frame-apply budgets stay exact);
+the scene variants live beside the live functions instead. An element whose apply asks
+the client or joins a registry names its scene form `SceneApply` (status regions, group
+visuals, group status, range fade, portrait). A nil unit already makes the other elements
+read nothing. Names, levels, roles and hp come from the sample data
+(`PREVIEW_NAMES`, the sample role of the row or the one `group:SetRole(role)` pins, the
+row's sample hp, health text by health from the sample values); the threat sample is
+painted by the scene's own preview data. The row's sample class (`_msufPortraitSampleClass`)
+is its identity wherever a unit would be asked: `Portrait.SceneApply` draws the class icon
+in either render mode (a bust needs a unit; `SetPortraitTexture` is never called), takes
+the class border colour from it and uses the friendly colour for the reaction border, and
+the name colour with class name colour on is the same class colour
+(`Text.PaintSampleName`, `NameTextColorFor` for a frame with no unit).
+Compiling the group spec is the one shared settings pass left: it reads the player's
+class to select spell-indicator specs, and runs once per configuration revision. The
+scene never asks the client who the player is: row 1 draws its sample name where the
+on-screen dummy draws the player's own. A change to a live element that makes its apply
+read a unit must keep the scene form in step; `group_preview_scene_lifecycle_smoke`
+fails on the first unit API a scene calls.
+
+A grid slot and the sample member it shows are two things. `PreviewMember(scene, slot)`
+(Group_Preview.lua) is the one place that maps the first to the second; it stores the member
+in `frame._msufGFPreviewIndex`, and the sample role (`GF.PreviewSampleRole`), the portrait
+class, the sample name and everything `ApplyPreviewData` paints read that field, never the
+slot. A sorted preview order changes only `PreviewMember`.
+
+The scene root is a preview kit host (`UnitFrames/Engine/MSUF_UF_PreviewKit.lua`, the
+same shape the Suite implements: `NewHost`, `Activate`/`Deactivate`, `Acquire`/`ReleaseAll`,
+`Request`). Nothing shows or listens until `root:Activate()`. While active the root
+listens for `CONFIG_APPLIED` and `PLAYER_REGEN_ENABLED` and answers either with one
+coalesced repaint (`root:Request`) on the next frame; combat defers the repaint and the
+regen edge brings the groups back (`group.want` keeps the count the owner asked for, an
+explicit `group:Hide()` forgets it). A scene shows its static sample state: it never
+follows the shared preview animation. `root:Deactivate()` hides every group and drops both
+subscriptions. The owner still calls `group:Refresh()` after a change the signals do not
+carry, `group:SetLayerFilter(visible, solo)` for the layer chips and `group:SetRole(role)`
+to lay the frames out for one role.
+
 The unit/group body renderers, class-resource surface construction, castbar page
 layout and preview aura painters remain scene-specific. Their region ownership,
 rounding, animation and interactions need scene integration before their larger
@@ -45,3 +111,34 @@ and preview call identity, changed shared assets, fixed geometry/colour samples,
 hide/restore transitions and mock inputs. Existing portrait, drift, repaint,
 profile and per-event budget checks remain unchanged. These checks do not prove
 game pixels, anchors, combat/taint behaviour or graphics-driver rendering.
+
+## Preview kit
+
+`UnitFrames/Engine/MSUF_UF_PreviewKit.lua` is the lifecycle and frame pool every preview
+surface shares. Client-neutral on purpose: the kit reads no addon setting, knows no
+unit-frame concept and registers no event or OnUpdate script of its own. A change signal
+calls `host:Request` while the host is active; the owner subscribes to the signal in its
+`activate` hook and drops it in `deactivate`, so a closed preview costs nothing. The one
+timer is a single-shot `C_Timer.After` per coalesced repaint request.
+
+```
+Host (Kit.NewHost(parent, opts)):
+  opts.build(host)             once, on the first Activate
+  opts.activate(host)          on every Activate, before the first paint (subscribe to change signals here)
+  opts.paint(host, reason)     repaint everything the surface shows; only ever called while active
+  opts.deactivate(host)        on Deactivate, before the pools are released (drop signals, hide extras)
+  opts.allowed(host)           optional gate; false defers a repaint (combat) until the next Request
+  opts.create(kind, host)      a new pooled object; opts.reset(kind, object) on release (default: Hide)
+  opts.after(delay, fn)        timer (default C_Timer.After)
+host:Activate() / host:Deactivate()     build once, hide and release on Deactivate, no timers while closed
+host:Acquire(kind) / host:Release(kind, object) / host:ReleaseAll(kind)     frame pools
+host:Request(reason)                    coalesced repaint on the next frame; ignored while inactive
+host:Refresh(reason)                    repaint now; same gate
+```
+
+The kit ships only what its current consumers use. A handle controller (select, drag, arrow-key nudge) and a
+throttled animation ticker belong to the first surface that needs them and arrive with
+it. Rules for that code: an arrow-key handler does nothing under lockdown (neither a
+nudge nor a `SetPropagateKeyboardInput` call, which is blocked in combat), and a host
+`Deactivate` cancels a running drag and deselects, so a closed preview holds no key
+script and no keyboard capture.

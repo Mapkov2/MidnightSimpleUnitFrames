@@ -862,6 +862,26 @@ function Text.UpdateName(frame, event, unit)
   SetShownCached(frame.nameText, false)
 end
 
+--- The sample name of a preview scene frame (UF.ApplySceneSpec), which holds no unit: the preview branch of
+--- UpdateName without a unit. The colour comes from the frame's sample class (NameTextColorFor), so no unit API is
+--- asked.
+function Text.PaintSampleName(frame, previewName)
+  local nameText = frame.nameText
+  if not nameText then return end
+  local rt = frame._msufTextRuntime
+  frame._msufPreviewNameText = previewName
+  frame._msufNameStatusUnit = nil
+  frame._msufNameStatusHidden = nil
+  frame._msufNameTextUnit = nil
+  nameText._msufShown = nil
+  SetShownCached(nameText, true)
+  if rt and rt.nameLegacyTruncation == true then
+    previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+  end
+  SetNameTextCached(frame, previewName)
+  ApplyNameTextColor(frame, nil)
+end
+
 local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime

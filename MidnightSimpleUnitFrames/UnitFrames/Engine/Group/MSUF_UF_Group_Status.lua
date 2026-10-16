@@ -607,6 +607,15 @@ function GroupStatusRuntime.Apply(frame)
   dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
 end
 
+--- A preview scene frame (UF.ApplySceneSpec) joins no unitless registration and runs no state pass; the scene paints
+--- its sample status itself.
+function GroupStatusRuntime.SceneApply(frame)
+  frame._msufUpdateGroupStatusState = nil
+  frame._msufGFStatusRuntimeStatus = nil
+  frame._msufGFStatusRuntimeDispatch = nil
+  ClearUnitlessRegistration(frame)
+end
+
 function GroupStatusRuntime.Disable(frame)
   if frame then
     ClearUnitlessRegistration(frame)

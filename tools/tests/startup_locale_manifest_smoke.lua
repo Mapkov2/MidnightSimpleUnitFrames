@@ -75,7 +75,13 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- worst (ruRU) selection of every client: Mainline 9,975,537 -> 9,969,784, TBC 7,851,659
         -- -> 7,845,906. The Mainline ceiling falls by exactly that, 9,976,581 -> 9,970,828; the
         -- Classic ceiling never rose for the confirmation and is unchanged.
-        assert(bytes < (suffix == "Mainline" and 9970828 or 7856000),
+        -- 2026-10-16: the preview kit (MSUF_UF_PreviewKit.lua: host lifecycle and pools) and the isolated,
+        -- static group preview scenes (GF.NewPreviewScene: per-scene pool, kit-hosted root, the scene apply
+        -- UF.ApplySceneSpec and the elements' SceneApply forms) add 25,997 LF bytes to core startup on every client (Mainline/ruRU
+        -- 9,970,540 -> 9,996,537, TBC/ruRU 7,846,662 -> 7,872,659) while the menu keeps drawing its own
+        -- group cell until it is switched over (Options code removed: none). Both ceilings rise by exactly that
+        -- delta: Mainline 9,970,828 -> 9,996,825, Classic 7,856,000 -> 7,881,997.
+        assert(bytes < (suffix == "Mainline" and 9996825 or 7881997),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

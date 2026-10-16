@@ -2201,6 +2201,53 @@ function UF.ApplySpec(frame, spec, reason, mask)
   return true
 end
 
+--- Apply for a preview scene frame (GF.NewPreviewScene): a paint target that holds no unit. It gets the same
+--- element layout as a live frame and none of the live wiring a static scene never uses: no event script, no
+--- show/hide hooks, no attached-frame registry entry, no event routing and no update on apply (this function never
+--- calls the routing refresh or an element's Update). An element whose apply asks the client something or joins a
+--- registry names its scene form SceneApply.
+function UF.ApplySceneSpec(frame, spec, mask)
+  if not (frame and spec) then return false end
+  if not frame._msufPixelLayoutTemplateVisited then PixelLayoutRegion(frame) end
+  frame._msufCoreScope = "group"
+  frame._msufVisualRoot = frame
+  local created = frame._msufCreatedElements
+  if not created then created = {} frame._msufCreatedElements = created end
+  local active = frame._msufActiveElements
+  if not active then active = {} frame._msufActiveElements = active end
+  mask = mask or DEFAULT_APPLY_MASK
+  local order = scopedElementOrders.group or elementOrder
+  local wasApplying = UF._msufApplyingSpec
+  UF._msufApplyingSpec = true
+  for i = 1, #order do
+    local name = order[i]
+    if mask == true or mask[name] == true then
+      local element = UF.elements[name]
+      if element then
+        if ApplyElementAllowed(name) ~= true or UF.ElementEnabled(element, frame, spec) == false then
+          FrameDisableElement(frame, name, true)
+        else
+          if element.Create and not created[name] then
+            element.Create(frame, spec)
+            created[name] = true
+          end
+          local apply = element.SceneApply or element.Apply
+          if apply then apply(frame, spec) end
+          if element.Enable and element.Enable(frame, spec) == false then
+            FrameDisableElement(frame, name, true)
+          else
+            frame[GetUpdateKey(name)] = SelectElementUpdate(element, frame)
+            active[name] = true
+          end
+        end
+      end
+    end
+  end
+  UF._msufApplyingSpec = wasApplying
+  if Compiler.AfterApply then Compiler.AfterApply(frame) end
+  return true
+end
+
 function UF.BeginEventRegistrationBatch()
   UF._msufApplyingSpec = true
 end

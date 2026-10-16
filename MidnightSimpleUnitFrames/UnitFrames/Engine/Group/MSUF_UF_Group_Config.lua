@@ -2041,7 +2041,7 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   local shell = frame._msufSecureShell or frame
   local header = shell.GetParent and shell:GetParent()
   local previewCount = (frame._msufGFIsPreviewFrame or shell._msufGFIsPreviewFrame) and GF.GetActivePreviewCount
-    and GF.GetActivePreviewCount(kind) or nil
+    and GF.GetActivePreviewCount(kind, frame) or nil
   if (shell._msufGFPriorityFrame or (header and header._msufGFPriorityHeader)) and GF.GetPriorityFrameMetrics then
     metrics.width, metrics.height = GF.GetPriorityFrameMetrics(kind)
   elseif previewCount and GF.GetLayoutTier and GF.GetLayoutTier(kind, previewCount) then
