@@ -305,7 +305,9 @@ function Variants.ValidateForProfile(db,schema)
     return clean
 end
 
-function Variants.HasExternalOverlay(root)
+-- db limits the answer to that profile: only the active one carries an overlay.
+function Variants.HasExternalOverlay(root, db)
+    if db ~= nil and db ~= activeDB then return false end
     for _,record in pairs(journal) do if record.path[1]==root then return true end end
     return false
 end

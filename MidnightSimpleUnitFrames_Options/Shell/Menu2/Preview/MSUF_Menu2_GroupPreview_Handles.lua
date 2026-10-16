@@ -614,14 +614,14 @@ function Stage.BindPositionWriters(st)
         CheckpointHandleHistory(handle, "Nudge")
         return true
     end
-    st.NudgeHandlePosition, st.SaveHandlePosition = NudgeHandlePosition, SaveHandlePosition
+    st.AuraLaneConf, st.NudgeHandlePosition, st.SaveHandlePosition = AuraLaneConf, NudgeHandlePosition, SaveHandlePosition
 end
 
 --- Exact (scripted) nudges: read/write one handle's configured position and
 --- the transactional box:NudgeHandleExact API.
 function Stage.BindExactNudge(st)
     local CheckpointHandleHistory, CurrentStatusSpec, H, HandleHistoryLabel, M, RefreshGroupPreviewAfterMove, Round, SelectHandle = st.CheckpointHandleHistory, st.CurrentStatusSpec, st.H, st.HandleHistoryLabel, st.M, st.RefreshGroupPreviewAfterMove, st.Round, st.SelectHandle
-    local SpellPlacedForHandle, WriteTextHandleOffsets, box = st.SpellPlacedForHandle, st.WriteTextHandleOffsets, st.box
+    local AuraLaneConf, SpellPlacedForHandle, WriteTextHandleOffsets, box = st.AuraLaneConf, st.SpellPlacedForHandle, st.WriteTextHandleOffsets, st.box
     local ExactPreviewDelta = MSUF.MSUF2.PreviewHelpers.ExactPreviewDelta
     local function ReadHandlePositionExact(handle)
         if not handle then return nil end
@@ -661,9 +661,7 @@ function Stage.BindExactNudge(st)
         local conf = H.Conf(H.CurrentScope())
         if not conf then return false end
         if handle._cfgGroup then
-            conf.auras = conf.auras or {}
-            conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
-            local cfg = conf.auras[handle._cfgGroup]
+            local cfg = AuraLaneConf(conf, handle._cfgGroup)
             if handle._cfgTrackedBuff then cfg.trackedX, cfg.trackedY = x, y else cfg.x, cfg.y = x, y end
         elseif handle._cfgStatus then
             local spec = handle._statusSpec or CurrentStatusSpec()

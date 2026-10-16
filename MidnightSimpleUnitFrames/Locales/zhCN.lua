@@ -7419,6 +7419,13 @@ L["Third choice"] = "第三选择"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "为每种职责选择最多三种祝福。\n圣骑士使用已学会的第一个选择。其他职业使用第一个选择；未分配职责的成员按伤害输出处理。"
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "职业例外会替代职责优先级。圣骑士必须已学会所选祝福。"
 
+
+-- Group filter import compatibility.
+L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "导入的配置文件 '%s' 包含未标记格式的小队选择。\n这可能来自旧版复选框设置，也可能是有意选择的。\n\n保留选择，还是修复相关过滤器以显示所有小队？\n明确排除的小队和配置文件变体将被保留。"
+L["Repair legacy filters"] = "修复旧版过滤器"
+L["Keep group selection"] = "保留小队选择"
+L["Group selection changed; no legacy filter repair was applied."] = "小队选择已更改，未修复任何旧版过滤器。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

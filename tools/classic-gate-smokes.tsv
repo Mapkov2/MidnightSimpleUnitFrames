@@ -785,3 +785,4 @@ clients+Forever	lua	tools/tests/preview_render_oracle_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/preview_oracle_contract_smoke.lua	{root}	Preview observation semantic roles and native-state contract
 -	python	tools/tests/preview_oracle_mutation_smoke.py	{root}	Known actual preview output mutations must fail comparison
 -	python	tools/tests/preview_oracle_corpus_smoke.py	{root}	Frozen legacy preview fixture inventory and byte integrity
+clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter import repair preserves explicit selections: {flavor}

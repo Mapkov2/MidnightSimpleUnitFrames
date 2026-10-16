@@ -2254,6 +2254,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         end
         payload.profileVariants=clean
     end
+    plan.legacyGroupFilters = MSUF.ProfileNormalize.PrepareGroupFrameImport(payload, kind)
     if kind == "unitselection" then
         local selectedUnits, selectionError, selectionTemplate, selectionKey = UnitSelection.Validate(payload)
         if not selectedUnits then
@@ -2328,6 +2329,66 @@ end
 --- Partial kinds merge into a private copy of it; full kinds only take its
 --- local variants while variant import is off.
 local ImportTx = {}
+function ImportTx.RepairGroupFilters(offer)
+    if InCombatLockdown() or not Variants.CanMutateProfile() then return false end
+    local profile = offer.profile
+    if MSUF_GlobalDB.profiles[offer.name] ~= profile then return false end
+    local base = Variants.BaseSnapshot(profile, true)
+    if not base then return false end
+    for key, filter in pairs(offer.filters) do
+        local scope = base[key]
+        if type(scope) ~= "table" or not MSUF.ProfileFields.Equal(scope.groupFilter, filter) then return false end
+    end
+    if profile == MSUF_DB then
+        if ProfileSync and not ProfileSync.Flush() then return false end
+        PrepareProfileMutation()
+    elseif Variants.IsMaterialized(profile) then
+        Variants.Restore()
+    end
+    for key in pairs(offer.filters) do profile[key].groupFilter = nil end
+    if profile == MSUF_DB then
+        if ProfileSync then ProfileSync.Rebase() end
+        ApplyProfileRuntime("PROFILE_GROUP_FILTER_REPAIR", true)
+    end
+    return true
+end
+function ImportTx.OfferGroupFilterRepair(profile, name, plan)
+    local previous = ImportTx.groupFilterOffer
+    ImportTx.groupFilterOffer = nil
+    if not previous and not plan.legacyGroupFilters then return end
+    local ui = MSUF.Require("MSUF_UI", "State/MSUF_Profiles.lua")
+    ui.HidePrompt("MSUF_IMPORT_GROUP_FILTER_REPAIR")
+    if not plan.legacyGroupFilters then return end
+    local offer = { profile = profile, name = name, filters = plan.legacyGroupFilters }
+    ImportTx.groupFilterOffer = offer
+    local function Finish(repair)
+        if ImportTx.groupFilterOffer ~= offer then return end
+        ImportTx.groupFilterOffer = nil
+        if repair and not ImportTx.RepairGroupFilters(offer) then
+            ProfileChat("error", "Group selection changed; no legacy filter repair was applied.")
+        end
+        if offer.finished then offer.finished() end
+    end
+    ui.ShowPrompt("MSUF_IMPORT_GROUP_FILTER_REPAIR", {
+        owned = true,
+        text = string.format(Translate([[The imported profile '%s' contains an unmarked group selection.
+It may be an old checkbox setting or an intentional selection.
+
+Keep the selection, or repair the affected filters to show all groups?
+Explicit exclusions and profile variants are preserved.]]), name),
+        accept = Translate("Repair legacy filters"),
+        cancel = Translate("Keep group selection"),
+        canAnswer = function() return not InCombatLockdown() and Variants.CanMutateProfile() end,
+        onAccept = function() Finish(true) end,
+        onCancel = function() Finish(false) end,
+    })
+end
+function MSUF.ProfileIOAfterGroupFilterRepair(callback)
+    local offer = ImportTx.groupFilterOffer
+    if not offer or offer.profile ~= MSUF_DB then return false end
+    offer.finished = callback
+    return true
+end
 function ImportTx.Merge(kind, payload, db)
     if kind == "unitframe" then
         --- Wipe & replace the same general-key set that Unitframes export.
@@ -2574,6 +2635,7 @@ function MSUF_ImportFromString(str)
         ProfileChat("ok", "Profile imported into the active profile.")
     end
     MSUF_ProfileIO_ReportImportWarnings()
+    ImportTx.OfferGroupFilterRepair(MSUF_DB, MSUF_ActiveProfile, plan)
     return true
 end
 --- Imports a string into a new profile and switches to it. The string is
@@ -2632,6 +2694,7 @@ function MSUF_ImportIntoNewProfile(name, str)
         ProfileChat("ok", "Profile imported into the active profile.")
     end
     MSUF_ProfileIO_ReportImportWarnings()
+    ImportTx.OfferGroupFilterRepair(MSUF_DB, name, plan)
     return true
 end
 ---
@@ -2802,7 +2865,9 @@ function MSUF_ImportExternal(profileString, profileKey)
     if not plan then
         return false, why
     end
-    return MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
+    local ok, reason = MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
+    if ok then ImportTx.OfferGroupFilterRepair(MSUF_GlobalDB.profiles[profileKey], profileKey, plan) end
+    return ok, reason
 end
 --- Deprecated compatibility aliases (MSUF_Profiles_*) of the profile string API,
 --- once used by load-order proxies; MSUF itself calls the canonical names.

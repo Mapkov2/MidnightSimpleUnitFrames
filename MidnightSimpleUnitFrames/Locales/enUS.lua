@@ -5070,6 +5070,13 @@ L["Third choice"] = "Third choice"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Class exceptions replace role priorities. Paladins must know the chosen blessing."
 
+
+-- Group filter import compatibility.
+L["The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."] = "The imported profile '%s' contains an unmarked group selection.\nIt may be an old checkbox setting or an intentional selection.\n\nKeep the selection, or repair the affected filters to show all groups?\nExplicit exclusions and profile variants are preserved."
+L["Repair legacy filters"] = "Repair legacy filters"
+L["Keep group selection"] = "Keep group selection"
+L["Group selection changed; no legacy filter repair was applied."] = "Group selection changed; no legacy filter repair was applied."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

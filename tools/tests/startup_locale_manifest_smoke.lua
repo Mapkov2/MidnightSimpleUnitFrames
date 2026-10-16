@@ -58,7 +58,14 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- under relocation + 5 KB. The enUS Edit Mode session drops from
         -- 17,009,067 to 9,444,283 Mainline; TBC 14,725,840 to 7,338,657.
         -- Core-only gesture/late-UI smoke proves no Options request or parse.
-        assert(bytes < (suffix == "Mainline" and 9966000 or 7856000),
+        -- 2026-10-16: the group import compatibility fix adds 8,598 LF bytes to the
+        -- worst (ruRU) selection of every client: Mainline 9,965,909 -> 9,974,507,
+        -- TBC 7,842,031 -> 7,850,629. Cold import confirmation and format
+        -- handling, reset safety and four translated keys in twelve packs. Only the
+        -- Mainline ceiling rises, by that exact delta; the Classic selection still
+        -- fits its existing ceiling. No Options code, startup catalog or
+        -- runtime-cost budget changed.
+        assert(bytes < (suffix == "Mainline" and 9974598 or 7856000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
