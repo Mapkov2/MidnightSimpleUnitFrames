@@ -65,7 +65,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- Mainline ceiling rises, by that exact delta; the Classic selection still
         -- fits its existing ceiling. No Options code, startup catalog or
         -- runtime-cost budget changed.
-        assert(bytes < (suffix == "Mainline" and 9974598 or 7856000),
+        -- 2026-10-16: the shared mock aura painter (Auras3/MSUF_Auras3_MockAuraPainter.lua) moves the
+        -- Edit Mode, group and menu aura preview painting into one core module and removes it from
+        -- five copies; it adds 1,983 LF bytes to core startup on every client (Mainline/ruRU
+        -- 9,973,605 -> 9,975,588) while the Options addon shrinks by 323 lines. The Mainline
+        -- ceiling rises by exactly that, 9,974,598 -> 9,976,581; the Classic ceiling is unchanged.
+        assert(bytes < (suffix == "Mainline" and 9976581 or 7856000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

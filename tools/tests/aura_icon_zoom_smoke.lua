@@ -45,20 +45,29 @@ local function PreviewZoom(path, functionName)
     local source = file:read("*a"):gsub("\r\n", "\n")
     file:close()
     local code = assert(source:match("local function " .. functionName .. "%(.-\nend"), path)
-    if functionName == "ApplySpellIndicatorPreview" then
-        code = assert(source:match("local function ShowSpellPreviewTimer%(.-\nend"), path) .. "\n" .. code
-    end
     local chunk = assert(loadstring(code .. "\nreturn " .. functionName))
-    setfenv(chunk, setmetatable({A3=A3, MSUF=namespace, Clamp=Clamp, ClampNumber=Clamp,
+    setfenv(chunk, setmetatable({A3=A3, Auras=A3, MSUF=namespace, Clamp=Clamp, ClampNumber=Clamp,
         max=math.max, min=math.min, floor=math.floor, VALID_POINTS={TOPLEFT=true},
         PreviewLayerOn=function() return false end, FrameAuraPreviewOffset=function() return 0,0 end, ApplySpellFrameEffectPreview=function() return false end,
+        PaintIconLayers=Noop, ShowPreviewTimer=Noop,
     }, {__index=_G}))
     return chunk()
 end
-CheckZoom("Edit Mode", PreviewZoom("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Preview.lua", "ApplyIconZoom"))
-CheckZoom("Unit preview", PreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua", "ApplyIconZoom"))
+local mock = assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, namespace)
+local function SharedPreviewZoom(path, callsite, binding)
+    local file = assert(io.open(root .. "/" .. path, "rb"))
+    local source = file:read("*a"):gsub("\r\n", "\n")
+    file:close()
+    assert(source:find(callsite, 1, true), path .. ": shared zoom route was disconnected")
+    if binding then assert(source:find(binding, 1, true), path .. ": shared painter binding was disconnected") end
+    return mock.IconZoom
+end
+CheckZoom("Edit Mode", SharedPreviewZoom("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Preview.lua", "local ApplyIconZoom = AuraPainter.IconZoom"))
+CheckZoom("Unit preview", SharedPreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua", "PaintArt(icon,",
+    "local AuraState, PaintArt, DispelBorder = AuraPainter.AuraState, AuraPainter.Art, AuraPainter.DispelBorder"))
 CheckZoom("Group preview", PreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua", "ApplyPreviewIconZoom"))
-CheckZoom("Aura Style preview", PreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua", "ApplyAuraPreviewIconZoom"))
+CheckZoom("Aura Style preview", SharedPreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua",
+    "PaintAuraArt(icon,", "local PaintAuraArt, PlaceAuraText = AuraPainter.Art, AuraPainter.PlaceText"))
 local groupPath = "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua"
 local auraPreview = PreviewZoom(groupPath, "ApplyFrameAuraPreview")
 local spellPreview = PreviewZoom(groupPath, "ApplySpellIndicatorPreview")

@@ -11,6 +11,10 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local PREVIEW_ICONS = 4
 local Preview = MSUF.UFPreview or {}
+local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Menu2/UnitPreview_Auras").MockAuraPainter,
+    "MSUF: missing core mock aura painter")
+local AuraState, PaintArt, DispelBorder = AuraPainter.AuraState, AuraPainter.Art, AuraPainter.DispelBorder
+local PaintSwipe, PaintDurationBar = AuraPainter.Swipe, AuraPainter.DurationBar
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
@@ -48,7 +52,6 @@ local function PlaceHandleAroundShownRegions(handle, parent, regions, pad)
     if type(place) ~= "function" then return false end
     return place(handle, parent, regions, pad) == true
 end
-local AuraDurationBarColor = MSUF.MSUF_Auras3.GetDurationBarColor
 local function RuntimeRound(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
@@ -74,27 +77,9 @@ local AURA_ANCHOR_OK = {
     LEFT=true, CENTER=true, RIGHT=true,
     BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
 }
---- Justification the live runtime derives from each aura text anchor. Baked into
---- a lookup so per-icon placement costs one table read instead of the runtime's
---- if-chain over anchor strings.
-local AURA_TEXT_JUSTIFY = {
-    TOPLEFT     = { "LEFT",   "TOP" },
-    TOP         = { "CENTER", "TOP" },
-    TOPRIGHT    = { "RIGHT",  "TOP" },
-    LEFT        = { "LEFT",   "MIDDLE" },
-    CENTER      = { "CENTER", "MIDDLE" },
-    RIGHT       = { "RIGHT",  "MIDDLE" },
-    BOTTOMLEFT  = { "LEFT",   "BOTTOM" },
-    BOTTOM      = { "CENTER", "BOTTOM" },
-    BOTTOMRIGHT = { "RIGHT",  "BOTTOM" },
-}
 local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
-}
-local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
-    BORDER = "ui-debuff-border-magic-noicon",
-    SYMBOL = "ui-debuff-border-magic-icon",
 }
 local function MenuModel()
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -1214,17 +1199,8 @@ local function CreateIcon(parent)
     -- Keep the animated swipe deterministically above the icon artwork.  The
     -- client does not guarantee ordering for two regions on the same draw
     -- layer/sublevel, which could leave this shown region hidden by f.tex.
-    f.swipe = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK", nil, 1))
-    f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, 0)
-    f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
-    f.swipe:SetTexture(TEX_W8)
-    f.swipe:SetVertexColor(0, 0, 0, 0.58)
-    f.swipe:Hide()
-    f.durationBar = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
-    f.durationBar:SetTexture(TEX_W8)
-    local durationR, durationG, durationB = AuraDurationBarColor()
-    f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
-    f.durationBar:Hide()
+    f.swipe = AuraPainter.NewSwipe(f, 0, 0, 0)
+    f.durationBar = AuraPainter.NewDurationBar(f)
     f.edge = PixelLayoutRegion(f:CreateTexture(nil, "BORDER"))
     f.edge:SetAllPoints(f)
     f.edge:SetTexture(TEX_W8)
@@ -1237,12 +1213,6 @@ local function CreateIcon(parent)
     f.timer = MakeFS(f, "OVERLAY", Layers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
     f:Hide()
     return f
-end
-
-local function ApplyIconZoom(texture, zoom, width, height)
-    if not (texture and texture.SetTexCoord) then return end
-    zoom = ClampNumber(zoom, 100, 100, 200)
-    texture:SetTexCoord(MSUF.MSUF_Auras3.IconShape.IconTexCoords(zoom, width, height))
 end
 
 local function ForwardHandleScript(handle, scriptName, ...)
@@ -1463,51 +1433,25 @@ local function CustomTextConfig(bounds)
     }
 end
 
-local function PreviewAuraState(box, kind, index, icon, cfg, targetDots)
-    -- One options table per icon, refilled: the animation tick asks for a new
-    -- state every frame.
-    local options = icon._msufPreviewAuraOptions
-    if not options then
-        options = {}
-        icon._msufPreviewAuraOptions = options
-    end
-    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
-    options.duration, options.oneShot, options.pandemicThreshold = nil, nil, nil
-    local fn
-    local elapsed
-    if box and box._animationEnabled == true then
-        local previewAnimation = MSUF and MSUF.PreviewAnimation
-        fn = previewAnimation and previewAnimation.BuildAuraState
-            or _G.MSUF_BuildPreviewAnimationAuraState
-        elapsed = tonumber(box._animationElapsed) or 0
-        if targetDots == true then
-            -- A target DoT starts at full duration on every Animate press,
-            -- enters the real 30% Pandemic window, then expires once instead
-            -- of wrapping back to a fresh aura while the rest of the preview
-            -- keeps animating.
-            kind = "debuff"
-            options.duration = 18
-            options.oneShot = true
-            options.pandemicThreshold = 0.30
-        end
-    else
-        fn = _G.MSUF_GetPreviewAnimationAuraState
-    end
-    if type(fn) ~= "function" then return nil end
-    icon._msufPreviewAuraScratch = icon._msufPreviewAuraScratch or {}
-    if elapsed ~= nil then
-        return fn(kind, index, icon._msufPreviewAuraScratch, options, elapsed)
-    end
-    return fn(kind, index, icon._msufPreviewAuraScratch, options)
+--- Sample clock of one lane: its aura kind, the animation time (nil while the
+--- preview is static) and, for a target DoT, its one-shot duration and Pandemic
+--- window. A target DoT starts at full duration on every Animate press, enters
+--- the real 30% Pandemic window, then expires once instead of wrapping back to
+--- a fresh aura while the rest of the preview keeps animating.
+local function SampleClock(box, kind, targetDots)
+    if not (box and box._animationEnabled == true) then return kind end
+    local elapsed = tonumber(box._animationElapsed) or 0
+    if targetDots == true then return "debuff", elapsed, 18, true, 0.30 end
+    return kind, elapsed
 end
 
--- The swipe and duration bar painters are shared with the group preview
--- (MSUF_Menu2_PreviewHelpers.lua); a unit icon measures itself.
+-- The swipe and duration bar painters are the shared core ones (Auras3 MockAuraPainter);
+-- a unit icon measures itself.
 local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
     local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
     local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
-    MSUF.MSUF2.PreviewHelpers.PaintPreviewAuraSwipe(swipe, icon, iconWidth, iconHeight, remainingFrac, reverse)
+    PaintSwipe(swipe, icon, iconWidth, iconHeight, remainingFrac, reverse)
 end
 
 local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
@@ -1517,23 +1461,13 @@ local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
     end
     local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
     local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
-    MSUF.MSUF2.PreviewHelpers.PaintPreviewDurationBar(bar, icon, cfg, iconWidth, iconHeight, auraState)
+    PaintDurationBar(bar, icon, cfg, iconWidth, iconHeight, auraState)
 end
 
 --- Places a stack or cooldown text on a dummy icon. Anchor, scaled offsets and
 --- justification are resolved once per lane, so this mirrors the live runtime's
 --- placement without repeating its per-anchor branching for every icon.
-local function PlaceAuraText(fs, icon, anchor, x, y)
-    if not fs then return end
-    local justify = AURA_TEXT_JUSTIFY[anchor]
-    if not justify then
-        anchor, justify = "CENTER", AURA_TEXT_JUSTIFY.CENTER
-    end
-    fs:ClearAllPoints()
-    fs:SetPoint(anchor, icon, anchor, x, y)
-    fs:SetJustifyH(justify[1])
-    if fs.SetJustifyV then fs:SetJustifyV(justify[2]) end
-end
+local PlaceAuraText = AuraPainter.PlaceText
 local function PreviewDebuffBorderMode(cfg)
     local mode = cfg and cfg.debuffTypeBorderMode
     if mode == true then return "SYMBOL" end
@@ -1546,28 +1480,6 @@ local function PreviewDebuffBorderMode(cfg)
     end
     if cfg and cfg.useDebuffTypeBorders == true then return "SYMBOL" end
     return "OFF"
-end
-local function LayoutPreviewDispelBorder(icon, size, mode, shape, index)
-    local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
-    local border = icon and icon.dispelBorder
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyAuraDispelPreview) == "function"
-        and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape,
-            a3.PreviewDispelTypeForIndex(index)) then
-        return
-    end
-    if not (atlas and border and border.SetAtlas) then
-        if border then border:Hide() end
-        return
-    end
-    local pad = a3 and type(a3.NativeAuraDispelBorderPadding) == "function"
-        and a3.NativeAuraDispelBorderPadding(size)
-        or max(1, floor((tonumber(size) or 24) / 6 + 0.5))
-    border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-    border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-    border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-    border:Show()
 end
 local function LayoutPreviewStealableMarker(icon, size, enabled, style, shape, index)
     local marker = icon and icon.stealableMarker
@@ -1614,10 +1526,11 @@ local function AnimateAuraVisual(box, visual, a3)
     local anim = visual and visual._msufAuraAnim
     local icons = visual and visual._icons
     if not (anim and icons and visual:IsShown()) then return end
+    local stateKind, elapsed, duration, oneShot, pandemic = SampleClock(box, anim.kind, anim.targetDots)
     for i = 1, tonumber(anim.shown) or 0 do
         local icon = icons[i]
         if not icon then return end
-        local auraState = PreviewAuraState(box, anim.kind, i, icon, anim.textCfg, anim.targetDots)
+        local auraState = AuraState(icon, stateKind, i, anim.textCfg, elapsed, duration, oneShot, pandemic)
         if anim.swipe and icon.swipe then
             LayoutPreviewAuraSwipe(icon.swipe, icon, anim.size, auraState and auraState.remainingFrac, anim.swipeReverse)
         end
@@ -1722,11 +1635,11 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local debuffBorderMode = textureKind == "debuff" and (bounds.custom
         and PreviewDebuffBorderMode(bounds.stylePlaced or (bounds.item and bounds.item.placed))
         or PreviewDebuffBorderMode(cfg)) or "OFF"
-    local padX, padY = PaddingInset(bounds.initialAnchor or "TOPLEFT", S(bounds.padding or 0))
+    local initialAnchor = bounds.initialAnchor or "TOPLEFT"
+    local padX, padY = PaddingInset(initialAnchor, S(bounds.padding or 0))
     -- Bar-only lanes render no icon chrome at runtime, so the style stays off.
     local iconStyle = (not barOnly) and bounds.iconStyle or nil
     local a3 = MSUF and MSUF.MSUF_Auras3
-    local applyIconStyle = a3 and a3.ApplyIconStylePreview
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
     local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
     local handleLeft = S(bounds.left or bounds.laneLeft or 0)
@@ -1745,31 +1658,26 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         or ((baseLevel or 0) + max(50, layer + 45))) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
     PlaceMinimumHitHandle(handle, box.mock, handleLeft, handleBottom, handleW, handleH, 4, 18)
+    local stateKind, elapsed, duration, oneShot, pandemic = SampleClock(box, kind, bounds.item and bounds.item.targetDots == true)
+    local reminderPlaced = bounds.item and type(bounds.item.placed) == "table" and bounds.item.placed or nil
+    -- Only a target-DoT lane (or an icon that still carries a Pandemic region) needs the glow pass.
+    local pandemicLane = a3 and type(a3.ApplyPandemicVisual) == "function" and bounds.item and bounds.item.targetDots == true
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)
         BindDragProxy(icon, handle)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
-        local targetDots = bounds.item and bounds.item.targetDots == true
-        local auraState = PreviewAuraState(box, kind, i, icon, textCfg, targetDots)
+        local auraState = AuraState(icon, stateKind, i, textCfg, elapsed, duration, oneShot, pandemic)
         local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
         icon:SetSize(size, iconH)
         icon:ClearAllPoints()
-        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX + padX,
+        icon:SetPoint(initialAnchor, visual, initialAnchor, col * step * bounds.growthX + padX,
             row * stepY * bounds.growthY + padY)
         local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
-        icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
-        ApplyIconZoom(icon.tex, bounds.iconZoom, size, iconH)
-        if a3 and type(a3.ApplyAuraIconShape) == "function" then
-            a3.ApplyAuraIconShape(icon, bounds.iconShape, nil, icon.bg, icon.tex, icon.swipe)
-        end
-        if icon.bg then icon.bg:SetShown(not barOnly) end
-        icon.tex:SetShown(not barOnly)
-        icon.edge:SetVertexColor(0, 0, 0, 0)
-        if type(applyIconStyle) == "function" then applyIconStyle(icon, iconStyle, size, bounds.iconShape) end
+        PaintArt(icon, icon.tex, icon.bg, icon.swipe,
+            previewTexture or textures[((i - 1) % #textures) + 1], bounds.iconZoom, size, iconH, bounds.iconShape, barOnly, iconStyle, size, icon.edge)
         -- Buff Reminder shows two states, and the dimmed one IS the feature.
         -- Previewing every icon lit would hide exactly what the mode does, so
         -- alternate slots render as the missing look here.
-        local reminderPlaced = bounds.item and type(bounds.item.placed) == "table" and bounds.item.placed or nil
         if reminderPlaced and reminderPlaced.reminderEnabled == true and i % 2 == 0 then
             local tint = type(reminderPlaced.reminderColor) == "table" and reminderPlaced.reminderColor or nil
             if icon.tex.SetDesaturated then icon.tex:SetDesaturated(reminderPlaced.reminderDesaturate ~= false) end
@@ -1788,10 +1696,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
             end
         end
         LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
-        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape, i)
+        DispelBorder(icon.dispelBorder, icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape, i)
         LayoutPreviewStealableMarker(icon, size, kind == "buff" and cfg.buffShowStealable == true,
             cfg.buffStealableStyle, bounds.iconShape, i)
-        ApplyPreviewPandemic(a3, icon, bounds, auraState, i, barOnly)
+        if pandemicLane or icon._msufA3PandemicRegion then ApplyPreviewPandemic(a3, icon, bounds, auraState, i, barOnly) end
         ApplyAuraFont(icon.stack, stackFont)
         PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
         icon.stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
@@ -1863,8 +1771,9 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     local showSwipe = textCfg.showCooldownSwipe ~= false
     local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
     local a3 = MSUF and MSUF.MSUF_Auras3
-    local applyIconStyle = a3 and a3.ApplyIconStylePreview
     local iconStyle = (not barOnly) and bounds.iconStyle or nil
+    local stateKind, elapsed, duration, oneShot, pandemic = SampleClock(box, "custom4", bounds.item and bounds.item.targetDots == true)
+    local pandemicLane = a3 and type(a3.ApplyPandemicVisual) == "function" and bounds.item and bounds.item.targetDots == true
     for i = 1, shown do
         local icon = EnsureIcon(visual, i)
         icon:SetSize(iconWidth, iconHeight)
@@ -1873,22 +1782,13 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         icon:SetPoint(initialAnchor, visual, initialAnchor,
             col * stepX * bounds.growthX, row * stepY * bounds.growthY)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
-        icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
-        ApplyIconZoom(icon.tex, bounds.iconZoom)
-        if a3 and type(a3.ApplyAuraIconShape) == "function" then
-            a3.ApplyAuraIconShape(icon, bounds.iconShape, nil, icon.bg, icon.tex, icon.swipe)
-        end
-        icon.bg:SetShown(not barOnly)
-        icon.tex:SetShown(not barOnly)
-        icon.edge:SetVertexColor(0, 0, 0, 0)
-        if type(applyIconStyle) == "function" then
-            applyIconStyle(icon, iconStyle, size, bounds.iconShape)
-        end
+        PaintArt(icon, icon.tex, icon.bg, icon.swipe,
+            bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1], bounds.iconZoom,
+            nil, nil, bounds.iconShape, barOnly, iconStyle, size, icon.edge)
         if icon.dispelBorder then icon.dispelBorder:Hide() end
         if icon.stealableMarker then icon.stealableMarker:Hide() end
-        local targetDots = bounds.item and bounds.item.targetDots == true
-        local auraState = PreviewAuraState(box, "custom4", i, icon, textCfg, targetDots)
-        ApplyPreviewPandemic(a3, icon, bounds, auraState, i, barOnly)
+        local auraState = AuraState(icon, stateKind, i, textCfg, elapsed, duration, oneShot, pandemic)
+        if pandemicLane or icon._msufA3PandemicRegion then ApplyPreviewPandemic(a3, icon, bounds, auraState, i, barOnly) end
         if icon.swipe then
             if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size,

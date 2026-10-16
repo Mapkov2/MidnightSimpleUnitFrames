@@ -298,6 +298,7 @@ local Client = {
 local MSUF = { MSUF2 = M, MSUF_Auras3 = A3, Client = Client, AddonName = "MidnightSimpleUnitFrames" }
 -- Load the shared crop owner, as the shipped Core graph does before Options.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, MSUF)
 local pages = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
 -- The group page requires the shipped group aura filter table at load.
 assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, MSUF)

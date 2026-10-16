@@ -1,7 +1,8 @@
 local root=assert(arg[1]):gsub('\\','/')
 local function Read(path) local f=assert(io.open(root..'/'..path,'rb'));local s=f:read('*a');f:close();return s end
 local source=Read('MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua')
-local NS={MSUF2={}}
+local NS={MSUF2={},MSUF_Auras3={MockAuraPainter={}}}
+NS.Require=function(name) return NS[name] end
 local prefix=assert(source:match('^(.-)Render%._HealthBackgroundColorMode'))
 local function Frame(w,h)
  local f={w=w or 1,h=h or 1,shown=true}

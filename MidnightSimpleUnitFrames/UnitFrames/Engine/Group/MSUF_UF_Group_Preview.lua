@@ -9,6 +9,10 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
+local Auras = MSUF.Require("MSUF_Auras3", "GroupFrames/Preview")
+local AuraPainter = assert(Auras.MockAuraPainter)
+local PlacePreviewText = AuraPainter.PlaceText
+local GroupDurationBar, TopSwipe = AuraPainter.GroupDurationBar, AuraPainter.TopSwipe
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -360,19 +364,13 @@ local PREVIEW_AURA_LANES = {
 
 local function SetPreviewFont(fontString, size)
   if not (fontString and fontString.SetFont) then return end
-  size = max(6, tonumber(size) or 10)
+  size = tonumber(size) or 10
+  if not (size >= 6) then size = 6 end
   if fontString._msufGFPreviewFontSize == size then return end
   fontString._msufGFPreviewFontSize = size
   fontString:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
 end
 
-local function PlacePreviewText(fontString, owner, point, x, y)
-  if not (fontString and owner) then return end
-  point = tostring(point or "CENTER"):upper()
-  if not VALID_POINTS[point] then point = "CENTER" end
-  fontString:ClearAllPoints()
-  fontString:SetPoint(point, owner, point, tonumber(x) or 0, tonumber(y) or 0)
-end
 
 local function EnsureAuraPreview(frame, index, poolKey)
   local pool = frame[poolKey]
@@ -408,6 +406,40 @@ local function EnsurePreviewFontString(visual, key)
     visual[key] = fontString
   end
   return fontString
+end
+
+local function ShowPreviewTimer(visual, cfg, text)
+  local timer = EnsurePreviewFontString(visual, "_timer")
+  SetPreviewFont(timer, cfg.cooldownSize or 8)
+  timer:SetText(text)
+  timer:SetTextColor(1, 1, 1, 1)
+  PlacePreviewText(timer, visual, cfg.cooldownAnchor or "CENTER", cfg.cooldownX or 0, cfg.cooldownY or 0, "POINT_ONLY")
+  timer:Show()
+end
+
+--- Swipe, timer, stack and duration bar of an icon-type lane aura or indicator;
+--- both read the same field names. Returns the icon's swipe region, if any.
+local function PaintIconLayers(visual, cfg, size, barOnly, textOn, timerText)
+  if cfg.showCooldownSwipe == true and not barOnly then
+    TopSwipe(EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1), visual, size, 0.42)
+  end
+  if cfg.showCooldownText == true and textOn then ShowPreviewTimer(visual, cfg, timerText) end
+  if cfg.showStacks == true and textOn then
+    local stack = EnsurePreviewFontString(visual, "_stack")
+    SetPreviewFont(stack, cfg.stackSize or 10)
+    stack:SetText("2")
+    local r, g, b
+    if type(Auras.GetStackCountColor) == "function" then r, g, b = Auras.GetStackCountColor() end
+    stack:SetTextColor(r or 1, g or 1, b or 1, 1)
+    PlacePreviewText(stack, visual, cfg.stackAnchor or "BOTTOMRIGHT", cfg.stackX or 0, cfg.stackY or 0, "POINT_ONLY")
+    stack:Show()
+  end
+  if cfg.showDurationBar == true then
+    local height = tonumber(cfg.durationBarHeight) or 2
+    if not (height < size) then height = size elseif height < 1 then height = 1 end
+    GroupDurationBar(EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2), visual, cfg.durationBarPosition, height)
+  end
+  return visual._swipe
 end
 
 
@@ -446,7 +478,8 @@ local function FrameAuraPreviewOffset(lane, slot)
   if lane.verticalGrowth == true then
     return 0, slot * step * (tonumber(lane.ySign) or -1)
   end
-  local perRow = max(1, floor((tonumber(lane.perRow) or 1) + 0.5))
+  local perRow = floor((tonumber(lane.perRow) or 1) + 0.5)
+  if not (perRow >= 1) then perRow = 1 end
   local column = slot % perRow
   local row = floor(slot / perRow)
   local x = column * step * (tonumber(lane.xSign) or 1)
@@ -455,9 +488,14 @@ local function FrameAuraPreviewOffset(lane, slot)
 end
 
 local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host)
-  local size = max(1, tonumber(lane.size) or 18)
-  local initialAnchor = tostring(lane.initialAnchor or "TOPLEFT"):upper()
-  if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
+  local A3 = Auras
+  local size = tonumber(lane.size) or 18
+  if not (size >= 1) then size = 1 end
+  local initialAnchor = lane.initialAnchor
+  if not VALID_POINTS[initialAnchor] then
+    initialAnchor = tostring(initialAnchor or "TOPLEFT"):upper()
+    if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
+  end
   local x, y = FrameAuraPreviewOffset(lane, slot)
 
   visual:ClearAllPoints()
@@ -469,8 +507,9 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   local texture = visual._texture
   local textures = descriptor.textures
   texture:SetTexture(textures[((sampleIndex - 1) % #textures) + 1] or PREVIEW_QUESTION)
-  local zoom = max(100, min(200, tonumber(lane.iconZoom) or 100))
-  local inset = MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom)
+  local zoom = tonumber(lane.iconZoom) or 100
+  if not (zoom < 200) then zoom = 200 elseif zoom < 100 then zoom = 100 end
+  local inset = A3.IconShape.IconZoomInset(zoom)
   texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
   texture:SetVertexColor(1, 1, 1, 1)
 
@@ -484,70 +523,19 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
   texture:SetShown(not barOnly)
 
-  if lane.showCooldownSwipe == true and not barOnly then
-    swipe = EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1)
-    swipe:ClearAllPoints()
-    swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
-    swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
-    swipe:SetTexture(PREVIEW_WHITE)
-    swipe:SetVertexColor(0, 0, 0, 0.58)
-    swipe:Show()
-  end
+  swipe = PaintIconLayers(visual, lane, size, barOnly, PreviewLayerOn("auraText"), sampleIndex == 1 and "12" or "8")
 
-  local auraTextOn = PreviewLayerOn("auraText")
-  if lane.showCooldownText == true and auraTextOn then
-    timer = EnsurePreviewFontString(visual, "_timer")
-    SetPreviewFont(timer, lane.cooldownSize or 8)
-    timer:SetText(sampleIndex == 1 and "12" or "8")
-    timer:SetTextColor(1, 1, 1, 1)
-    PlacePreviewText(timer, visual, lane.cooldownAnchor or "CENTER", lane.cooldownX or 0, lane.cooldownY or 0)
-    timer:Show()
-  end
-
-  if lane.showStacks == true and auraTextOn then
-    stack = EnsurePreviewFontString(visual, "_stack")
-    SetPreviewFont(stack, lane.stackSize or 10)
-    stack:SetText("2")
-    local A3 = MSUF and MSUF.MSUF_Auras3
-    local r, g, b
-    if A3 and type(A3.GetStackCountColor) == "function" then r, g, b = A3.GetStackCountColor() end
-    stack:SetTextColor(r or 1, g or 1, b or 1, 1)
-    PlacePreviewText(stack, visual, lane.stackAnchor or "BOTTOMRIGHT", lane.stackX or 0, lane.stackY or 0)
-    stack:Show()
-  end
-
-  if lane.showDurationBar == true then
-    durationBar = EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2)
-    local height = max(1, min(size, tonumber(lane.durationBarHeight) or 2))
-    durationBar:ClearAllPoints()
-    if lane.durationBarPosition == "TOP" then
-      durationBar:SetPoint("TOPLEFT", visual, "TOPLEFT", 1, -1)
-      durationBar:SetPoint("TOPRIGHT", visual, "TOPRIGHT", -1, -1)
-    else
-      durationBar:SetPoint("BOTTOMLEFT", visual, "BOTTOMLEFT", 1, 1)
-      durationBar:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", -1, 1)
-    end
-    durationBar:SetHeight(height)
-    durationBar:SetTexture(PREVIEW_WHITE)
-    local A3 = MSUF and MSUF.MSUF_Auras3
-    local r, g, b
-    if A3 and type(A3.GetDurationBarColor) == "function" then r, g, b = A3.GetDurationBarColor() end
-    durationBar:SetVertexColor(r or 1, g or 1, b or 1, 1)
-    durationBar:Show()
-  end
-
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  if A3 and type(A3.ApplyAuraIconShape) == "function" then
+  if type(A3.ApplyAuraIconShape) == "function" then
     A3.ApplyAuraIconShape(visual, lane.iconShape, nil, texture, swipe)
   end
-  if A3 and type(A3.ApplyIconStylePreview) == "function" then
+  if type(A3.ApplyIconStylePreview) == "function" then
     local selectedValue2
     if not (barOnly) then selectedValue2 = lane.iconStyle end
     A3.ApplyIconStylePreview(visual, selectedValue2, size, lane.iconShape)
   end
   if lane.showAuraBorder == true and not barOnly then
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
-    if A3 and type(A3.ApplyAuraDispelPreview) == "function"
+    if type(A3.ApplyAuraDispelPreview) == "function"
       and A3.ApplyAuraDispelPreview(dispelBorder, visual, size,
         lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape,
         A3.PreviewDispelTypeForIndex(sampleIndex)) then
@@ -763,16 +751,6 @@ local function ApplySpellFrameEffectPreview(visual, frame, slot)
     effect, frame) == true
 end
 
-local function ShowSpellPreviewTimer(visual, slot)
-  if slot.showCooldownText ~= true then return end
-  local timer = EnsurePreviewFontString(visual, "_timer")
-  SetPreviewFont(timer, slot.cooldownSize or 8)
-  timer:SetText("12")
-  timer:SetTextColor(1, 1, 1, 1)
-  PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
-  timer:Show()
-end
-
 local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   local visualType = slot and tostring(slot.visual or "none"):lower() or "none"
   local hiddenVisual = slot and slot.hiddenVisual == true
@@ -782,9 +760,12 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     return false
   end
 
-  local size = max(1, tonumber(slot.size) or 18)
-  local width = max(1, tonumber(slot.width) or size)
-  local height = max(1, tonumber(slot.height) or size)
+  local size = tonumber(slot.size) or 18
+  if not (size >= 1) then size = 1 end
+  local width = tonumber(slot.width) or size
+  if not (width >= 1) then width = 1 end
+  local height = tonumber(slot.height) or size
+  if not (height >= 1) then height = 1 end
   local anchor = tostring(slot.anchor or "TOPLEFT"):upper()
   if not VALID_POINTS[anchor] then anchor = "TOPLEFT" end
   visual:ClearAllPoints()
@@ -833,7 +814,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     durationBar:SetTexture(PREVIEW_WHITE)
     durationBar:SetVertexColor(r, g, b, a)
     durationBar:Show()
-    ShowSpellPreviewTimer(visual, slot)
+    if slot.showCooldownText == true then ShowPreviewTimer(visual, slot, "12") end
   elseif visualType == "square" then
     texture:SetTexture(PREVIEW_WHITE)
     texture:SetTexCoord(0, 1, 0, 1)
@@ -845,56 +826,18 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     SetPreviewFont(stack, size * 0.72)
     stack:SetText("2")
     stack:SetTextColor(r, g, b, a)
-    PlacePreviewText(stack, visual, "CENTER", 0, 0)
+    PlacePreviewText(stack, visual, "CENTER", 0, 0, "POINT_ONLY")
     stack:Show()
   else
     texture:SetTexture(slot.icon or PREVIEW_QUESTION)
-    local zoom = max(100, min(200, tonumber(slot.iconZoom) or 100))
-    local inset = MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom)
+    local zoom = tonumber(slot.iconZoom) or 100
+    if not (zoom < 200) then zoom = 200 elseif zoom < 100 then zoom = 100 end
+    local inset = A3.IconShape.IconZoomInset(zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:SetShown(not barOnly)
 
-    if slot.showCooldownSwipe == true and not barOnly then
-      swipe = EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1)
-      swipe:ClearAllPoints()
-      swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
-      swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
-      swipe:SetTexture(PREVIEW_WHITE)
-      swipe:SetVertexColor(0, 0, 0, 0.58)
-      swipe:Show()
-    end
-
-    ShowSpellPreviewTimer(visual, slot)
-
-    if slot.showStacks == true then
-      stack = EnsurePreviewFontString(visual, "_stack")
-      SetPreviewFont(stack, slot.stackSize or 10)
-      stack:SetText("2")
-      local sr, sg, sb
-      if A3 and type(A3.GetStackCountColor) == "function" then sr, sg, sb = A3.GetStackCountColor() end
-      stack:SetTextColor(sr or 1, sg or 1, sb or 1, 1)
-      PlacePreviewText(stack, visual, slot.stackAnchor or "BOTTOMRIGHT", slot.stackX or 0, slot.stackY or 0)
-      stack:Show()
-    end
-
-    if slot.showDurationBar == true then
-      durationBar = EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2)
-      durationBar:ClearAllPoints()
-      if slot.durationBarPosition == "TOP" then
-        durationBar:SetPoint("TOPLEFT", visual, "TOPLEFT", 1, -1)
-        durationBar:SetPoint("TOPRIGHT", visual, "TOPRIGHT", -1, -1)
-      else
-        durationBar:SetPoint("BOTTOMLEFT", visual, "BOTTOMLEFT", 1, 1)
-        durationBar:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", -1, 1)
-      end
-      durationBar:SetHeight(max(1, min(size, tonumber(slot.durationBarHeight) or 2)))
-      durationBar:SetTexture(PREVIEW_WHITE)
-      local dr, dg, db
-      if A3 and type(A3.GetDurationBarColor) == "function" then dr, dg, db = A3.GetDurationBarColor() end
-      durationBar:SetVertexColor(dr or 1, dg or 1, db or 1, 1)
-      durationBar:Show()
-    end
+    PaintIconLayers(visual, slot, size, barOnly, true, "12")
 
     if A3 and type(A3.ApplyIconStylePreview) == "function" then
       local selectedValue1

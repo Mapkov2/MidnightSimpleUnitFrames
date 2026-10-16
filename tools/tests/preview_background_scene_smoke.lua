@@ -63,6 +63,7 @@ local function LoadHelpers(isForever)
         "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", main)
     end
+    assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, main)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))(
         "MidnightSimpleUnitFrames_Options", main)
     return main.MSUF2.PreviewHelpers, main.MSUF2

@@ -213,6 +213,12 @@ do
     -- Its Group Aura filter code reads State's stored-token check from
     -- MSUF.ProfileNormalize, which the shipped core loads long before it.
     assert(loadfile(Join(ROOT, "tools/tests/profile_normalize_loader.lua")))().Install(ROOT, MSUF)
+    -- Preview consumers now share the shipped core mock painter. Load its
+    -- actual namespace and shape owners before the menu, as every TOC does.
+    for _, name in ipairs({"Core", "IconShape", "MockAuraPainter"}) do
+        local path = Join(CORE, "Auras3/MSUF_Auras3_" .. name .. ".lua")
+        assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
+    end
     local auraModelPath = Join(CORE, "Auras3/MSUF_Auras3_Menu_Model.lua")
     local auraChunk, auraErr = Auras3Loader.LoadFile(auraModelPath)
     assert(auraChunk, auraModelPath .. ": " .. tostring(auraErr))

@@ -375,6 +375,10 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
     end
+    -- Chunks that paint preview auras take the shipped painter, which the Core TOC loads before them.
+    if (Uses(").MockAuraPainter") or Uses("Auras.MockAuraPainter")) and type(auras3) == "table" and not auras3.MockAuraPainter then
+        assert(originalLoadfile("tools/tests/aura_mock_painter_fixture.lua"))().Install(".", namespace)
+    end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
         if not namespace.ProfilePolicy then
             assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua")))("MSUF", namespace)
@@ -481,7 +485,7 @@ local function NeedsDirectContracts(source)
         "MSUF.MSUF_Auras3.GetDurationBarColor", "Layers.BaseFrameLevel", "= Apply.Text", "= Apply.Shown", "= Apply.Texture", "MSUF.UF.Clamp01", "MSUF.UFBarTextCommon.HealthModeNeedsIdentity", "UF.IsBossUnit", "GF.GetLiveGroupKind", "GF.GetAnchorPoint", "_G.MSUF_UF_ScheduleApplyCommit", "_G.MSUF_GetSharedMedia", "_G.MSUF_EnsureCastbarGeneralDB", "M.AuraCatalogToken", "M.GroupAuraSettingKeys", "M.TrimText", "PreviewHelpers.ReadPreviewBarsBool", "M.Widgets.SetTextLayout", "M.Widgets.ResolveContextColorOption", "M.NormalizeControlPath", "M.PortableControlToken", "M.AccessibleNumber",
         "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta",
         "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(",
-        "A3.LaneKeySchema", "A3.CUSTOM_CONTAINER_COUNT", "A3.PRESET_CUSTOM_CONTAINER_INDEX" }) do
+        "A3.LaneKeySchema", "A3.CUSTOM_CONTAINER_COUNT", "A3.PRESET_CUSTOM_CONTAINER_INDEX", ").MockAuraPainter", "Auras.MockAuraPainter" }) do
         if source:find(key, 1, true) then return true end
     end
     return false

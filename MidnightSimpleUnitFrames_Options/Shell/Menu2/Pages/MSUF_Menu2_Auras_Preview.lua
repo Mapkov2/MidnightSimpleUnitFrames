@@ -20,6 +20,8 @@ if type(AurasPage) ~= "table" then return end
 local W = M.Widgets
 local T = M.Theme
 local A3 = MSUF.MSUF_Auras3
+local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Menu2/Auras_Preview").MockAuraPainter,
+    "MSUF: missing core mock aura painter")
 local Model = A3 and A3.MenuModel
 local PreviewHelpers = M.PreviewHelpers or {}
 local CreateFrame = _G.CreateFrame
@@ -29,11 +31,6 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
 local floor, ceil, max, min = math.floor, math.ceil, math.max, math.min
 local tonumber, tostring, type, pairs = tonumber, tostring, type, pairs
-local function AuraDurationBarColor()
-    local resolver = A3 and A3.GetDurationBarColor
-    if type(resolver) == "function" then return resolver() end
-    return 1, 1, 1
-end
 local AURA_SCOPE_VALID, AccessibleNumber, AurasMenuCombatLocked = M.AuraSettings.AURA_SCOPE_VALID, M.AuraSettings.AccessibleNumber, M.AuraSettings.AurasMenuCombatLocked
 local IsGroupScope, LaneDefaultMax, LaneMaxKey, LanePlural = M.AuraSettings.IsGroupScope, M.AuraSettings.LaneDefaultMax, M.AuraSettings.LaneMaxKey, M.AuraSettings.LanePlural
 local LaneSizeKey, Round, ScopeLabel, Tr = M.AuraSettings.LaneSizeKey, M.AuraSettings.Round, M.AuraSettings.ScopeLabel, M.AuraSettings.Tr
@@ -59,17 +56,8 @@ local function CreateAuraPreviewIcon(parent)
     if f.icon.SetTexCoord then f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     -- Match the full Unit Preview: the swipe must sort above the icon rather
     -- than sharing its otherwise undefined ARTWORK ordering.
-    f.swipe = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK", nil, 1))
-    f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, -1)
-    f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
-    f.swipe:SetTexture(TEX_W8)
-    f.swipe:SetVertexColor(0, 0, 0, 0.58)
-    f.swipe:Hide()
-    f.durationBar = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
-    f.durationBar:SetTexture(TEX_W8)
-    local durationR, durationG, durationB = AuraDurationBarColor()
-    f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
-    f.durationBar:Hide()
+    f.swipe = AuraPainter.NewSwipe(f, -1, -1, 1)
+    f.durationBar = AuraPainter.NewDurationBar(f)
     f.dispelBorder = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.dispelBorder:Hide()
     f.edge = {}
@@ -81,12 +69,6 @@ local function CreateAuraPreviewIcon(parent)
     f.timer:SetFont(FONT, T.FontSize("micro"), "OUTLINE")
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
-end
-local function ApplyAuraPreviewIconZoom(texture, zoom, width, height)
-    if not (texture and texture.SetTexCoord) then return end
-    zoom = tonumber(zoom) or 100
-    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-    texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, width, height))
 end
 local function ApplyAuraPreviewFont(fs, size)
     if not fs then return end
@@ -107,30 +89,6 @@ local function ApplyAuraPreviewFont(fs, size)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
-end
-local function PlaceAuraPreviewText(fs, icon, anchor, x, y)
-    if not (fs and icon) then return end
-    anchor = tostring(anchor or "CENTER"):upper()
-    x = tonumber(x) or 0
-    y = tonumber(y) or 0
-    fs:ClearAllPoints()
-    fs:SetPoint(anchor, icon, anchor, x, y)
-    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-        fs:SetJustifyH("LEFT")
-    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
-        fs:SetJustifyH("RIGHT")
-    else
-        fs:SetJustifyH("CENTER")
-    end
-    if fs.SetJustifyV then
-        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
-            fs:SetJustifyV("TOP")
-        elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-            fs:SetJustifyV("BOTTOM")
-        else
-            fs:SetJustifyV("MIDDLE")
-        end
-    end
 end
 local function RefreshMiniAuraPreviewNow(refreshPreview)
     if AurasMenuCombatLocked() then return end
@@ -407,172 +365,99 @@ local function HidePreviewIcon(icon)
     icon.swipe:Hide()
     icon.durationBar:Hide()
     icon.dispelBorder:Hide()
-    if icon.msufStyleBorder then icon.msufStyleBorder:Hide() end
-    if icon.msufStyleBorderPieces then MSUF.BorderStyles.Hide(icon.msufStyleBorderPieces) end
-    if icon.msufStyleShadow then MSUF.BorderStyles.Hide(icon.msufStyleShadow) end
 end
--- Mirrors the runtime's icon style: a BACKGROUND(-7) soft shadow band and a
--- BORDER(-1) ring that is either the flat pixel quad (Solid) or an edgeFile
--- drawn by the shared 8-piece renderer.
-local function ApplyPreviewIconStyle(icon, cfg, barOnly)
+-- The icon style the runtime draws: a BACKGROUND(-7) soft shadow band and a BORDER(-1)
+-- ring, solid or from an edgeFile (inner styles shade from ARTWORK(7) on top). IconShape
+-- loads that shared renderer on every supported client before this page and owns it.
+local function PreviewIconStyle(cfg, barOnly)
+    if barOnly then return nil end
     local B = MSUF.BorderStyles
-    if type(A3.ApplyIconStylePreview) == "function" then
-        local texture = B and cfg.styleBorderStyle and B.Resolve(cfg.styleBorderStyle) or nil
-        local c, sc = cfg.styleBorderColor, cfg.styleShadowColor
-        A3.ApplyIconStylePreview(icon, not barOnly and {
-            borderEnabled = cfg.styleBorderEnabled == true,
-            borderTexture = texture,
-            borderEdge = B and B.EdgeSize(cfg.styleBorderStyle, cfg.styleBorderThickness or 1) or 1,
-            borderPlacement = B and B.Placement(cfg.styleBorderStyle) or "outer",
-            borderThickness = cfg.styleBorderThickness or 1,
-            borderR = c and c[1] or 0, borderG = c and c[2] or 0,
-            borderB = c and c[3] or 0, borderA = c and c[4] or 1,
-            shadowEnabled = cfg.styleShadowEnabled == true,
-            shadowSize = cfg.styleShadowSize or 4,
-            shadowR = sc and sc[1] or 0, shadowG = sc and sc[2] or 0,
-            shadowB = sc and sc[3] or 0, shadowA = sc and sc[4] or 0.8,
-        } or nil, cfg.size, cfg.iconShape)
-        return
-    end
-    local border = icon.msufStyleBorder
-    local borderPieces = icon.msufStyleBorderPieces
     local texture = B and cfg.styleBorderStyle and B.Resolve(cfg.styleBorderStyle) or nil
-    if cfg.styleBorderEnabled == true and not barOnly then
-        local c = cfg.styleBorderColor
-        local cr, cg, cb, ca = c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 1
-        local t = cfg.styleBorderThickness or 1
-        if texture then
-            if border then border:Hide() end
-            -- Same split as the runtime: inner styles shade the icon from
-            -- ARTWORK(7) on top, outer styles frame it from BORDER(-1).
-            local inner = B.Placement(cfg.styleBorderStyle) == "inner"
-            local edge = B.EdgeSize(cfg.styleBorderStyle, t)
-            local inset = 0
-            if inner then
-                edge = max(1, min(edge, floor(cfg.size * 0.3)))
-                inset = edge * 0.5
-            end
-            if borderPieces and icon.msufStyleBorderInner ~= inner then
-                B.Hide(borderPieces)
-                borderPieces = nil
-            end
-            if not borderPieces then
-                borderPieces = B.Create(icon, inner and "ARTWORK" or "BORDER", inner and 7 or -1, texture)
-                icon.msufStyleBorderPieces = borderPieces
-                icon.msufStyleBorderInner = inner
-            else
-                B.SetTexture(borderPieces, texture)
-            end
-            B.Apply(borderPieces, icon, edge, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100, cr, cg, cb, ca, inset)
-        else
-            if borderPieces then B.Hide(borderPieces) end
-            if not border then
-                border = PixelLayoutRegion(icon:CreateTexture(nil, "BORDER", nil, -1))
-                border:SetTexture("Interface\\Buttons\\WHITE8X8")
-                icon.msufStyleBorder = border
-            end
-            border:ClearAllPoints()
-            border:SetPoint("TOPLEFT", icon, "TOPLEFT", -t, t)
-            border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", t, -t)
-            border:SetVertexColor(cr, cg, cb, ca)
-            border:Show()
-        end
-    else
-        if border then border:Hide() end
-        if borderPieces then B.Hide(borderPieces) end
-    end
-    local shadow = icon.msufStyleShadow
-    if cfg.styleShadowEnabled == true and not barOnly and B then
-        if not shadow then
-            shadow = B.Create(icon, "BACKGROUND", -7, M.AURA_SHADOW_TEXTURE)
-            icon.msufStyleShadow = shadow
-        end
-        local base = cfg.styleBorderEnabled == true and (cfg.styleBorderThickness or 1) or 0
-        local extent = (cfg.styleShadowSize or 4) + base
-        local c = cfg.styleShadowColor
-        B.Apply(shadow, icon, extent * 2, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100,
-            c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 0.8)
-    elseif shadow then
-        B.Hide(shadow)
-    end
+    local c, sc = cfg.styleBorderColor, cfg.styleShadowColor
+    return {
+        borderEnabled = cfg.styleBorderEnabled == true,
+        borderTexture = texture,
+        borderEdge = B and B.EdgeSize(cfg.styleBorderStyle, cfg.styleBorderThickness or 1) or 1,
+        borderPlacement = B and B.Placement(cfg.styleBorderStyle) or "outer",
+        borderThickness = cfg.styleBorderThickness or 1,
+        borderR = c and c[1] or 0, borderG = c and c[2] or 0,
+        borderB = c and c[3] or 0, borderA = c and c[4] or 1,
+        shadowEnabled = cfg.styleShadowEnabled == true,
+        shadowSize = cfg.styleShadowSize or 4,
+        shadowR = sc and sc[1] or 0, shadowG = sc and sc[2] or 0,
+        shadowB = sc and sc[3] or 0, shadowA = sc and sc[4] or 0.8,
+    }
 end
+local PaintAuraArt, PlaceAuraText = AuraPainter.Art, AuraPainter.PlaceText
+local LayoutDurationBar = AuraPainter.LayoutDurationBar
 local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText, opts)
-    icon:SetSize(cfg.size, cfg.size * (cfg.heightPercent or 100) / 100)
+    local swipe, durationBar = icon.swipe, icon.durationBar
+    local dispelBorder, stack, timer = icon.dispelBorder, icon.stack, icon.timer
+    local size = cfg.size
+    local height = size * (cfg.heightPercent or 100) / 100
+    icon:SetSize(size, height)
     icon:SetAlpha(tonumber(cfg.alpha) or 1)
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     local tex = isBuffIcon and buffTex or debuffTex
     local previewTextures = cfg.previewTextures
     local previewTexture = previewTextures and previewTextures[((index - 1) % max(1, #previewTextures)) + 1]
-    icon.icon:SetTexture(previewTexture or tex[((index - 1) % #tex) + 1])
-    ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom, cfg.size, cfg.size * (cfg.heightPercent or 100) / 100)
-    if type(A3.ApplyAuraIconShape) == "function" then
-        cfg.iconShape = A3.ApplyAuraIconShape(icon, cfg.iconShape, nil, icon.bg, icon.icon, icon.swipe)
-    end
-    icon.bg:SetShown(not barOnly)
-    icon.icon:SetShown(not barOnly)
-    ApplyPreviewIconStyle(icon, cfg, barOnly)
+    local iconStyle = PreviewIconStyle(cfg, barOnly)
+    local iconShape = PaintAuraArt(icon, icon.icon, icon.bg, swipe,
+        previewTexture or tex[((index - 1) % #tex) + 1], cfg.iconZoom,
+        size, height, cfg.iconShape, barOnly, iconStyle, size)
+    cfg.iconShape = iconShape
     local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
     local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
-    local showPreviewEdges = isBuffIcon == true and not barOnly and cfg.iconShape == "RECTANGLE"
+    local showPreviewEdges = isBuffIcon == true and not barOnly and iconShape == "RECTANGLE"
     for _, edge in pairs(icon.edge) do
         edge:SetShown(showPreviewEdges)
         edge:SetVertexColor(r, g, b, 0.95)
     end
-    icon.swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
-    icon.swipe:ClearAllPoints()
+    swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
+    swipe:ClearAllPoints()
     if cfg.cooldownSwipeReverse == true then
-        icon.swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, -1)
-        icon.swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
+        swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, -1)
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
     else
-        icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, -1)
-        icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+        swipe:SetPoint("TOPLEFT", icon, "TOP", 0, -1)
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
     end
     if borderAtlas and type(A3.ApplyAuraDispelPreview) == "function"
-        and not (CLASSIC_RECTANGLE_DISPEL_ATLAS and cfg.iconShape == "RECTANGLE") then
-        A3.ApplyAuraDispelPreview(icon.dispelBorder, icon, cfg.size, cfg.debuffBorderMode,
-            cfg.iconShape, A3.PreviewDispelTypeForIndex(index))
-    elseif borderAtlas and icon.dispelBorder.SetAtlas then
+        and not (CLASSIC_RECTANGLE_DISPEL_ATLAS and iconShape == "RECTANGLE") then
+        A3.ApplyAuraDispelPreview(dispelBorder, icon, size, cfg.debuffBorderMode,
+            iconShape, A3.PreviewDispelTypeForIndex(index))
+    elseif borderAtlas and dispelBorder.SetAtlas then
         local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
-            and A3.NativeAuraDispelBorderPadding(cfg.size)
-            or max(1, floor((cfg.size / 6) + 0.5))
-        icon.dispelBorder:ClearAllPoints()
-        icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-        icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-        icon.dispelBorder:SetAtlas(borderAtlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-        icon.dispelBorder:Show()
+            and A3.NativeAuraDispelBorderPadding(size)
+            or max(1, floor((size / 6) + 0.5))
+        dispelBorder:ClearAllPoints()
+        dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+        dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+        dispelBorder:SetAtlas(borderAtlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+        dispelBorder:Show()
     else
-        icon.dispelBorder:Hide()
+        dispelBorder:Hide()
     end
     if cfg.showDurationBar == true then
-        local inset = max(1, floor((cfg.size / 32) + 0.5))
-        local availableWidth = max(1, cfg.size - (inset * 2))
+        local inset = max(1, floor((size / 32) + 0.5))
         -- This workbench is intentionally event-driven rather than animated.
         -- Give each sample aura a deterministic remaining fraction so the
         -- Remaining/Elapsed setting is still visible without an OnUpdate.
         local remainingFraction = max(0.18, 0.88 - (((index - 1) % 6) * 0.13))
         local fillFraction = cfg.durationBarDirection == "ELAPSED"
             and (1 - remainingFraction) or remainingFraction
-        icon.durationBar:ClearAllPoints()
-        icon.durationBar:SetHeight(cfg.durationBarHeight or 2)
-        icon.durationBar:SetWidth(max(1, floor((availableWidth * fillFraction) + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            icon.durationBar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            icon.durationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-        local r, g, b = AuraDurationBarColor()
-        icon.durationBar:SetVertexColor(r, g, b, 0.92)
-        icon.durationBar:Show()
+        LayoutDurationBar(durationBar, icon, cfg.durationBarPosition,
+            cfg.durationBarHeight or 2, inset, size, fillFraction)
     else
-        icon.durationBar:Hide()
+        durationBar:Hide()
     end
-    ApplyAuraPreviewFont(icon.stack, cfg.stackSize)
-    ApplyAuraPreviewFont(icon.timer, cfg.cooldownSize)
-    PlaceAuraPreviewText(icon.stack, icon, cfg.stackAnchor, cfg.stackX, cfg.stackY)
-    PlaceAuraPreviewText(icon.timer, icon, cfg.cooldownAnchor, cfg.cooldownX, cfg.cooldownY)
-    icon.stack:SetText(cfg.showStacks and ((forceText or index % 3 == 1) and "2" or "") or "")
+    ApplyAuraPreviewFont(stack, cfg.stackSize)
+    ApplyAuraPreviewFont(timer, cfg.cooldownSize)
+    PlaceAuraText(stack, icon, cfg.stackAnchor, cfg.stackX, cfg.stackY, "WORKBENCH")
+    PlaceAuraText(timer, icon, cfg.cooldownAnchor, cfg.cooldownX, cfg.cooldownY, "WORKBENCH")
+    stack:SetText(cfg.showStacks and ((forceText or index % 3 == 1) and "2" or "") or "")
     local sampleSeconds = forceText and 2.7 or (index % 2 == 0 and 12 or nil)
-    icon.timer:SetText(cfg.showTimers and sampleSeconds and FormatAuraPreviewTimer(sampleSeconds, cfg) or "")
+    timer:SetText(cfg.showTimers and sampleSeconds and FormatAuraPreviewTimer(sampleSeconds, cfg) or "")
     if type(A3.ApplyPandemicVisual) == "function"
         and (opts.previewContainer == "targetDots" or icon._msufA3PandemicRegion) then
         A3.ApplyPandemicVisual(icon, cfg,

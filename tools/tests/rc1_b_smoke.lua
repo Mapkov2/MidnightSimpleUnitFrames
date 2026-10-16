@@ -425,6 +425,9 @@ local function PagePreviewWorld()
     namespace.UF.GetFrame = function(unit) return namespace.UF.frames[unit] end
     G.MSUF_DB = { auras3 = { enabled = true, showBoss = true, showArena = true, shared = {}, perUnit = {} } }
     local A3 = { CUSTOM_CONTAINER_COUNT = 4, PRESET_CUSTOM_CONTAINER_INDEX = 4 }
+    -- Auras3 Core provides this before the mock painter in every TOC; this
+    -- partial world has no Core, so it supplies Core's no-setting default.
+    function A3.GetDurationBarColor() return 1, 1, 1 end
     namespace.MSUF_Auras3 = A3
     G._G = G
     setmetatable(G, { __index = _G })
@@ -435,6 +438,8 @@ local function PagePreviewWorld()
         chunk("MidnightSimpleUnitFrames", namespace)
     end
     Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua")
+    -- Edit Mode Preview requires the core mock aura painter, as the TOCs load it.
+    assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, namespace)
     for _, part in ipairs({ "Config", "Layout", "Drag", "Preview" }) do
         Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_" .. part .. ".lua")
     end

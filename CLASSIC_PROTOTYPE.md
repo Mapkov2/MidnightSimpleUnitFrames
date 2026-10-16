@@ -259,7 +259,8 @@ calculator would be less correct and more expensive.
   Defaults shells (`State/Defaults/MSUF_Defaults_Shell.lua`,
   `State/Defaults/MSUF_Defaults_Bars.lua`,
   `State/Defaults/MSUF_Defaults_Units.lua`),
-  `Auras3/MSUF_Auras3_IconShape.lua`, the Options files
+  `Auras3/MSUF_Auras3_IconShape.lua`, `Auras3/MSUF_Auras3_MockAuraPainter.lua` (the
+  shared mock aura painter of the preview surfaces), the Options files
   `Shell/Menu2/MSUF_Menu2_ColorPicker.lua` and
   `Shell/Menu2/MSUF_Menu2_Theme_Forever.lua` (Classic Glass and Midnight menu
   presets, selectable on every client; only Forever defaults to Classic Glass), the WoW Forever aura

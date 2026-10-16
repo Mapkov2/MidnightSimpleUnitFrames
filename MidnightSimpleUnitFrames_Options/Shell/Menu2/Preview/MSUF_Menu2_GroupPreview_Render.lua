@@ -5,6 +5,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- the hot refresh path that lays out the mock group frame and preview layers.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Menu2/GroupPreview_Render").MockAuraPainter, "MSUF: missing core mock aura painter")
+local AuraState, PaintSwipe, PaintDurationBar = AuraPainter.AuraState, AuraPainter.Swipe, AuraPainter.DurationBar
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local EnsureDB = M.EnsureDB
@@ -742,11 +744,6 @@ local GROUP_RENDER_FALLBACKS = {
     ClassColor = DefaultClassColor, HealthColor = Fallbacks.HealthRGB,
     SelectHandle = Fallbacks.Noop, NudgeHandlePosition = Fallbacks.Noop, AddIconPool = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop,
 }
-local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
-    BORDER = "ui-debuff-border-magic-noicon",
-    SYMBOL = "ui-debuff-border-magic-icon",
-}
-
 -- A refresh first resolves immutable inputs into a scene. Render components then
 -- measure and paint that scene without reaching back through the install closure.
 -- The tracked lane is read into one table kept per preview box: every key is
@@ -1425,42 +1422,11 @@ local SPELL_PREVIEW_GLOW_HELPERS = {
     "SpellPreviewHealthFill", "SyncSpellPreviewName",
 }
 
---- Aura sample state at the box's animation clock. Scratch and options live
---- on the lane handle per icon, so neither a repaint nor an animation tick
---- allocates them.
-local function GroupPreviewAuraState(box, previewAnimation, groupKey, index, handle, cfg)
-    if not (box._animationEnabled == true and handle) then return nil end
-    local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
-    if type(buildAuraState) ~= "function" then return nil end
-    local states = handle._previewAuraStates
-    if not states then
-        states = {}
-        handle._previewAuraStates = states
-    end
-    local scratch = states[index]
-    if not scratch then
-        scratch = {}
-        states[index] = scratch
-    end
-    local optionsByIndex = handle._previewAuraOptions
-    if not optionsByIndex then
-        optionsByIndex = {}
-        handle._previewAuraOptions = optionsByIndex
-    end
-    local options = optionsByIndex[index]
-    if not options then
-        options = {}
-        optionsByIndex[index] = options
-    end
-    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
-    return buildAuraState(groupKey, index, scratch, options, box._animationElapsed)
-end
--- The swipe and duration bar painters are shared with the unit preview
--- (MSUF_Menu2_PreviewHelpers.lua); a group lane icon is size x size.
+-- A group lane icon is size x size; the swipe and duration bar painters are the shared core ones.
 local function GroupAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
     size = tonumber(size) or 1
-    M.PreviewHelpers.PaintPreviewAuraSwipe(swipe, icon, size, size, remainingFrac, reverse)
+    PaintSwipe(swipe, icon, size, size, remainingFrac, reverse)
 end
 local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
     if not (bar and icon and cfg and cfg.showDurationBar == true) then
@@ -1468,18 +1434,20 @@ local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
         return
     end
     size = math.max(1, tonumber(size) or 1)
-    M.PreviewHelpers.PaintPreviewDurationBar(bar, icon, cfg, size, size, auraState)
+    PaintDurationBar(bar, icon, cfg, size, size, auraState)
 end
---- Animation tick for one aura lane: timers, stacks, swipes and duration bars
---- of the icons the last layout placed (Stage.LayoutAuraGroup records it).
-local function AnimateGroupAuraLane(box, previewAnimation, handle)
+--- Animation tick for one aura lane at the box's animation time: timers,
+--- stacks, swipes and duration bars of the icons the last layout placed
+--- (Stage.LayoutAuraGroup records it). Each icon keeps its own sample scratch,
+--- so a tick allocates nothing.
+local function AnimateGroupAuraLane(elapsed, handle)
     local anim = handle and handle._msufGFAuraAnim
     if not anim then return end
     local icons, rects = handle._icons, handle._previewRects
     for i = 1, anim.maxIcons do
         local tex = icons and icons[i]
         if tex and rects and rects[i] then
-            local auraState = GroupPreviewAuraState(box, previewAnimation, anim.groupKey, i, handle, anim.cfg)
+            local auraState = AuraState(tex, anim.groupKey, i, anim.cfg, elapsed)
             local swipe = handle._iconSwipes and handle._iconSwipes[i]
             if swipe and anim.swipe then
                 GroupAuraPreviewSwipe(swipe, tex, anim.size, auraState and auraState.remainingFrac, anim.swipeReverse)
@@ -1574,28 +1542,7 @@ local function RuntimeAuraTextAnchor(anchor, fallback)
     end
     return fallback or "CENTER"
 end
-local function PlaceAuraPreviewText(fs, relativeTo, anchor, x, y)
-    if not (fs and relativeTo) then return end
-    anchor = RuntimeAuraTextAnchor(anchor, "CENTER")
-    fs:ClearAllPoints()
-    fs:SetPoint(anchor, relativeTo, anchor, x or 0, y or 0)
-    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-        fs:SetJustifyH("LEFT")
-    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
-        fs:SetJustifyH("RIGHT")
-    else
-        fs:SetJustifyH("CENTER")
-    end
-    if fs.SetJustifyV then
-        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
-            fs:SetJustifyV("TOP")
-        elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-            fs:SetJustifyV("BOTTOM")
-        else
-            fs:SetJustifyV("MIDDLE")
-        end
-    end
-end
+local PlaceAuraPreviewText = AuraPainter.PlaceText
 local function BuildAuraLaneHelpers(st, RenderState)
     local mock = RenderState.mock
     local GF_PREVIEW_ANCHOR_FRAC = RenderState.GF_PREVIEW_ANCHOR_FRAC
@@ -1616,31 +1563,7 @@ local function BuildAuraLaneHelpers(st, RenderState)
         fallback = tostring(fallback or "CENTER"):upper()
         return GF_PREVIEW_ANCHOR_FRAC[fallback] and fallback or "CENTER"
     end
-    local function LayoutAuraPreviewBorder(border, icon, size, mode, shape, index)
-        local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
-        local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.ApplyAuraDispelPreview) == "function"
-            and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape,
-                a3.PreviewDispelTypeForIndex(index)) then
-            return
-        end
-        if not (border and icon and atlas and border.SetAtlas) then
-            if border then border:Hide() end
-            return
-        end
-        local pad = a3 and type(a3.NativeAuraDispelBorderPadding) == "function"
-            and a3.NativeAuraDispelBorderPadding(size)
-            or max(1, floor((tonumber(size) or 24) / 6 + 0.5))
-        border:ClearAllPoints()
-        border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-        border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-        border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-        border:Show()
-    end
-    local function PreviewAuraState(groupKey, index, handle, cfg)
-        local scene = st.scene
-        return GroupPreviewAuraState(scene.box, scene.previewAnimation, groupKey, index, handle, cfg)
-    end
+    local LayoutAuraPreviewBorder = AuraPainter.DispelBorder
     local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
         count = max(Round(count), 1)
         perRow = max(Round(perRow), 1)
@@ -1652,7 +1575,7 @@ local function BuildAuraLaneHelpers(st, RenderState)
     end
     return {
         st = st, S = RenderState, LayoutHandle = LayoutHandle, RuntimeAuraAnchor = RuntimeAuraAnchor,
-        LayoutAuraPreviewBorder = LayoutAuraPreviewBorder, PreviewAuraState = PreviewAuraState,
+        LayoutAuraPreviewBorder = LayoutAuraPreviewBorder,
         RuntimeAuraGridShape = RuntimeAuraGridShape,
     }
 end
@@ -1675,14 +1598,14 @@ function Stage.PrepareAuraLanes(st)
         self._msufGFAuraLaneHelpers = helpers
     end
     local LayoutHandle, RuntimeAuraAnchor = helpers.LayoutHandle, helpers.RuntimeAuraAnchor
-    local LayoutAuraPreviewBorder, PreviewAuraState = helpers.LayoutAuraPreviewBorder, helpers.PreviewAuraState
+    local LayoutAuraPreviewBorder = helpers.LayoutAuraPreviewBorder
     local RuntimeAuraGridShape = helpers.RuntimeAuraGridShape
     local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale
         and gf.GetPreviewDynamicScale(conf, kind)) or 1
     local NormalizeDispelBorderMode = _G.MSUF_NormalizeLegacyDispelBorderMode
     local LayoutAuraPreviewSwipe, LayoutAuraDurationBar = GroupAuraPreviewSwipe, GroupAuraDurationBar
     st.AddIconPool, st.AuraGrowth, st.ConfigToOffset, st.GF_AURA_MOCK_ICON_IDS, st.GF_PREVIEW_ANCHOR_FRAC, st.Int, st.LayoutAuraDurationBar, st.LayoutAuraPreviewBorder = AddIconPool, AuraGrowth, ConfigToOffset, GF_AURA_MOCK_ICON_IDS, GF_PREVIEW_ANCHOR_FRAC, Int, LayoutAuraDurationBar, LayoutAuraPreviewBorder
-    st.LayoutAuraPreviewSwipe, st.LayoutHandle, st.MockSpellTexture, st.NormalizeDispelBorderMode, st.PlaceAuraPreviewText, st.PreviewAuraState, st.Round, st.RuntimeAuraAnchor = LayoutAuraPreviewSwipe, LayoutHandle, MockSpellTexture, NormalizeDispelBorderMode, PlaceAuraPreviewText, PreviewAuraState, Round, RuntimeAuraAnchor
+    st.LayoutAuraPreviewSwipe, st.LayoutHandle, st.MockSpellTexture, st.NormalizeDispelBorderMode, st.PlaceAuraPreviewText, st.Round, st.RuntimeAuraAnchor = LayoutAuraPreviewSwipe, LayoutHandle, MockSpellTexture, NormalizeDispelBorderMode, PlaceAuraPreviewText, Round, RuntimeAuraAnchor
     st.RuntimeAuraGridShape, st.RuntimeAuraGrowth, st.RuntimeAuraTextAnchor, st.ScaleValue, st.SetPreviewFont, st.auraDynamicScale, st.buffCfg, st.buffHandle = RuntimeAuraGridShape, RuntimeAuraGrowth, RuntimeAuraTextAnchor, ScaleValue, SetPreviewFont, auraDynamicScale, buffCfg, buffHandle
     st.debuffCfg, st.debuffHandle, st.externalCfg, st.externalHandle, st.max, st.min, st.mock, st.previewScale = debuffCfg, debuffHandle, externalCfg, externalHandle, max, min, mock, previewScale
     st.trackedBuffCfg, st.trackedBuffHandle = trackedBuffCfg, trackedBuffHandle
@@ -1693,7 +1616,7 @@ end
 --- bars and the lane handle.
 function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
     local AddIconPool, AuraGrowth, ConfigToOffset, GF_AURA_MOCK_ICON_IDS, GF_PREVIEW_ANCHOR_FRAC, Int, LayoutAuraDurationBar, LayoutAuraPreviewBorder = st.AddIconPool, st.AuraGrowth, st.ConfigToOffset, st.GF_AURA_MOCK_ICON_IDS, st.GF_PREVIEW_ANCHOR_FRAC, st.Int, st.LayoutAuraDurationBar, st.LayoutAuraPreviewBorder
-    local LayoutAuraPreviewSwipe, MockSpellTexture, NormalizeDispelBorderMode, PlaceAuraPreviewText, PreviewAuraState, Round, RuntimeAuraAnchor, RuntimeAuraGridShape = st.LayoutAuraPreviewSwipe, st.MockSpellTexture, st.NormalizeDispelBorderMode, st.PlaceAuraPreviewText, st.PreviewAuraState, st.Round, st.RuntimeAuraAnchor, st.RuntimeAuraGridShape
+    local LayoutAuraPreviewSwipe, MockSpellTexture, NormalizeDispelBorderMode, PlaceAuraPreviewText, Round, RuntimeAuraAnchor, RuntimeAuraGridShape = st.LayoutAuraPreviewSwipe, st.MockSpellTexture, st.NormalizeDispelBorderMode, st.PlaceAuraPreviewText, st.Round, st.RuntimeAuraAnchor, st.RuntimeAuraGridShape
     local RuntimeAuraGrowth, RuntimeAuraTextAnchor, ScaleValue, SetPreviewFont, auraDynamicScale, max, min, mock = st.RuntimeAuraGrowth, st.RuntimeAuraTextAnchor, st.ScaleValue, st.SetPreviewFont, st.auraDynamicScale, st.max, st.min, st.mock
     local previewScale, scene = st.previewScale, st.scene
         cfg = cfg or {}
@@ -1853,7 +1776,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
                         handle._auraStyleOwners[i] = styleOwner
                     end
                 end
-                local auraState = PreviewAuraState(groupKey, i, handle, cfg)
+                local auraState = st.auraElapsed and AuraState(tex, groupKey, i, cfg, st.auraElapsed)
                 tex:SetTexture(ids[((i - 1) % #ids) + 1])
                 ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)
                 if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
@@ -1950,6 +1873,8 @@ local function RenderAuras(scene)
         box._msufGFAuraState = st
     end
     st.scene = scene
+    -- Aura samples follow the box's animation time; a static preview has none.
+    st.auraElapsed = box._animationEnabled == true and (tonumber(box._animationElapsed) or 0) or nil
     Stage.PrepareAuraLanes(st)
     local LayoutAuraDurationBar, LayoutAuraPreviewSwipe, LayoutHandle, PlaceAuraPreviewText, RuntimeAuraTextAnchor, buffCfg, buffHandle = st.LayoutAuraDurationBar, st.LayoutAuraPreviewSwipe, st.LayoutHandle, st.PlaceAuraPreviewText, st.RuntimeAuraTextAnchor, st.buffCfg, st.buffHandle
     local debuffCfg, debuffHandle, externalCfg, externalHandle, trackedBuffCfg, trackedBuffHandle = st.debuffCfg, st.debuffHandle, st.externalCfg, st.externalHandle, st.trackedBuffCfg, st.trackedBuffHandle
@@ -2104,7 +2029,6 @@ function Render.Install(box, ctx, deps)
         ApplyBoundsGuide = ApplyBoundsGuide,
         ConfigToOffset = ConfigToOffset,
         ResolvePreviewStatusbarTexture = ResolvePreviewStatusbarTexture,
-        DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS,
         PREVIEW_UNITFRAME_STRATA = PREVIEW_UNITFRAME_STRATA,
         NormalizeFrameStrata = NormalizeFrameStrata,
         FrameStrataRank = FrameStrataRank,
@@ -2274,8 +2198,9 @@ function Stage.Animate(env, self)
     Stage.PaintPowerTexts(st, env)
     PlaceTextHandles(scene)
     local RenderState = scene.S
+    local auraElapsed = tonumber(self._animationElapsed) or 0
     for i = 1, #GROUP_AURA_LANE_HANDLES do
-        AnimateGroupAuraLane(self, previewAnimation, RenderState[GROUP_AURA_LANE_HANDLES[i]])
+        AnimateGroupAuraLane(auraElapsed, RenderState[GROUP_AURA_LANE_HANDLES[i]])
     end
     return true
 end

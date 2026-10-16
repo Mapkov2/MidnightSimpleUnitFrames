@@ -9,36 +9,14 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 A3.EditModeModules = A3.EditModeModules or {}
---- Places a preview aura's duration bar inside icon: height px tall on the
---- configured edge (TOP, else bottom), inset px in. With a fill share it
---- covers that share of the inner width from the left edge, otherwise all of
---- it. The Edit Mode and the menu previews share it.
-function A3.LayoutPreviewDurationBar(bar, icon, position, height, inset, width, frac)
-    bar:ClearAllPoints()
-    bar:SetHeight(height)
-    if frac then
-        bar:SetWidth(math.max(1, math.floor(math.max(1, width - inset * 2) * frac + 0.5)))
-        if position == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif position == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
-end
+local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Auras3/EditMode_Preview").MockAuraPainter, "MSUF: missing core mock aura painter")
 
 A3.EditModeModules.Preview = function(config, layout, drag, IsBossScope, ForEachBossUnit, EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)
+local PaintSwipe, AuraState, PlaceText = AuraPainter.Swipe, AuraPainter.AuraState, AuraPainter.PlaceText
+local DispelBorder, LayoutDurationBar = AuraPainter.DispelBorder, AuraPainter.LayoutDurationBar
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor, math_min, math_max = math.floor, math.min, math.max
-local CreateFrame = _G.CreateFrame
-local UIParent = _G.UIParent
-local TextureKitConstants = _G.TextureKitConstants
+local CreateFrame, UIParent = _G.CreateFrame, _G.UIParent
 local EM = A3.EditMode
 local function IsArenaScope(unit)
     return tostring(unit or ""):lower() == "arena"
@@ -49,13 +27,7 @@ local function ForEachArenaUnit(fn)
     for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do fn("arena" .. i) end
 end
 
-
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
-local function AuraDurationBarColor()
-    local resolver = A3.GetDurationBarColor
-    if type(resolver) == "function" then return resolver() end
-    return 1, 1, 1
-end
 local Clamp = config.Clamp
 local Round = config.Round
 local NormalizeKind = config.NormalizeKind
@@ -70,7 +42,6 @@ local ReadTextConfig = config.ReadTextConfig
 local ReadGroupConfig = config.ReadGroupConfig
 local AURA_UNITS = config.AURA_UNITS
 local GROUPS = config.GROUPS
-local AURA_TEXT_ANCHOR_OK = config.AURA_TEXT_ANCHOR_OK
 local GetFrame = layout.GetFrame
 local FrameScaleRelativeToUIParent = layout.FrameScaleRelativeToUIParent
 local ApplyGroupScaleForFrame = layout.ApplyGroupScaleForFrame
@@ -86,10 +57,6 @@ local EndAuraGroupDrag = drag.EndAuraGroupDrag
 local SetRuntimeAuraHidden = drag.SetRuntimeAuraHidden
 local BeginAuraGroupDrag = drag.BeginAuraGroupDrag
 local W8 = "Interface\\Buttons\\WHITE8X8"
-local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
-    BORDER = "ui-debuff-border-magic-noicon",
-    SYMBOL = "ui-debuff-border-magic-icon",
-}
 local HEADER_H = 18
 local PREVIEW_ICONS = 4
 local function ApplyGlobalFont(fs, size)
@@ -110,49 +77,6 @@ local function ApplyGlobalFont(fs, size)
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then
         if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
-    end
-end
-
-local function PlaceStackText(fs, owner, cfg)
-    if not fs or not owner or not cfg then return end
-    fs:ClearAllPoints()
-    if cfg.stackAnchor == "TOPLEFT" then
-        fs:SetPoint("TOPLEFT", owner, "TOPLEFT", cfg.stackX, cfg.stackY)
-        fs:SetJustifyH("LEFT")
-        fs:SetJustifyV("TOP")
-    elseif cfg.stackAnchor == "BOTTOMLEFT" then
-        fs:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", cfg.stackX, cfg.stackY)
-        fs:SetJustifyH("LEFT")
-        fs:SetJustifyV("BOTTOM")
-    elseif cfg.stackAnchor == "BOTTOMRIGHT" then
-        fs:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", cfg.stackX, cfg.stackY)
-        fs:SetJustifyH("RIGHT")
-        fs:SetJustifyV("BOTTOM")
-    else
-        fs:SetPoint("TOPRIGHT", owner, "TOPRIGHT", cfg.stackX, cfg.stackY)
-        fs:SetJustifyH("RIGHT")
-        fs:SetJustifyV("TOP")
-    end
-end
-
-local function PlaceCooldownText(fs, owner, cfg)
-    if not fs or not owner or not cfg then return end
-    fs:ClearAllPoints()
-    local anchor = AURA_TEXT_ANCHOR_OK[cfg.cooldownAnchor] and cfg.cooldownAnchor or "CENTER"
-    fs:SetPoint(anchor, owner, anchor, cfg.cooldownX or 0, cfg.cooldownY or 0)
-    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-        fs:SetJustifyH("LEFT")
-    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
-        fs:SetJustifyH("RIGHT")
-    else
-        fs:SetJustifyH("CENTER")
-    end
-    if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
-        fs:SetJustifyV("TOP")
-    elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-        fs:SetJustifyV("BOTTOM")
-    else
-        fs:SetJustifyV("MIDDLE")
     end
 end
 
@@ -187,18 +111,8 @@ local function EnsureIcon(group, index)
 
     -- Preview-only deterministic swipe. The shared preview animation advances
     -- its width; no native Cooldown state survives an Off -> On transition.
-    local swipe = PixelLayoutRegion(icon:CreateTexture(nil, "ARTWORK", nil, 1))
-    swipe:SetTexture(W8)
-    swipe:SetVertexColor(0, 0, 0, 0.58)
-    swipe:Hide()
-    icon.Swipe = swipe
-
-    local durationBar = PixelLayoutRegion(icon:CreateTexture(nil, "OVERLAY"))
-    durationBar:SetTexture(W8)
-    local durationR, durationG, durationB = AuraDurationBarColor()
-    durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
-    durationBar:Hide()
-    icon.DurationBar = durationBar
+    icon.Swipe = AuraPainter.NewSwipe(icon)
+    icon.DurationBar = AuraPainter.NewDurationBar(icon)
 
     local dispelBorder = PixelLayoutRegion(icon:CreateTexture(nil, "OVERLAY", nil, 2))
     dispelBorder:Hide()
@@ -226,58 +140,17 @@ local function EnsureIcon(group, index)
 end
 
 local function LayoutPreviewSwipe(icon, cfg, remainingFrac)
-    local swipe = icon and icon.Swipe
-    local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
-    if not (swipe and cfg and cfg.showCooldownSwipe ~= false and not barOnly) then
+    local swipe = icon.Swipe
+    if not (swipe and cfg.showCooldownSwipe ~= false and not (cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY")) then
         if swipe then swipe:Hide() end
         return
     end
     local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 1)
-    -- Keep the preview legible at both ends of its loop while preserving the
-    -- configured direction and the existing event-driven animation cadence.
-    local frac = math_max(0.08, math_min(0.92, tonumber(remainingFrac) or 0.48))
-    swipe:ClearAllPoints()
-    swipe:SetWidth(math_max(1, math_floor(size * frac + 0.5)))
-    swipe:SetHeight(size)
-    if cfg.cooldownSwipeReverse == true then
-        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT")
-        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT")
-    else
-        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT")
-        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT")
-    end
+    PaintSwipe(swipe, icon, size, size, remainingFrac, cfg.cooldownSwipeReverse == true)
     swipe:Show()
 end
 
-local function LayoutPreviewDispelBorder(icon, cfg, index)
-    local border = icon and icon.DispelBorder
-    local atlas = cfg and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode]
-    local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
-    local size = math_max(1, (icon and icon.GetWidth and icon:GetWidth()) or 24)
-    if not barOnly and type(A3.ApplyAuraDispelPreview) == "function"
-        and A3.ApplyAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode,
-            cfg and cfg.iconShape, A3.PreviewDispelTypeForIndex(index)) then
-        return
-    end
-    if not (border and atlas and border.SetAtlas and not barOnly) then
-        if border then border:Hide() end
-        return
-    end
-    local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
-        and A3.NativeAuraDispelBorderPadding(size)
-        or math_max(1, math_floor(size / 6 + 0.5))
-    border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-    border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-    border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-    border:Show()
-end
-
-local function ApplyIconZoom(texture, zoom, width, height)
-    if not (texture and texture.SetTexCoord) then return end
-    zoom = Clamp(zoom, 100, 100, 200)
-    texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, width, height))
-end
+local ApplyIconZoom = AuraPainter.IconZoom
 
 local function ApplyPreviewIconText(icon, unit, cfg, index)
     cfg = cfg or ReadTextConfig(unit)
@@ -286,63 +159,32 @@ local function ApplyPreviewIconText(icon, unit, cfg, index)
     if icon.Shade then icon.Shade:SetShown(not barOnly) end
     if icon.Count then
         ApplyGlobalFont(icon.Count, cfg.stackSize)
-        PlaceStackText(icon.Count, icon, cfg)
+        local anchor = cfg.stackAnchor
+        if anchor ~= "TOPLEFT" and anchor ~= "BOTTOMLEFT" and anchor ~= "BOTTOMRIGHT" then anchor = "TOPRIGHT" end
+        PlaceText(icon.Count, icon, anchor, cfg.stackX, cfg.stackY)
         icon.Count:SetShown(cfg.showStackCount ~= false)
     end
     if icon.CooldownText then
         ApplyGlobalFont(icon.CooldownText, cfg.cooldownSize)
-        PlaceCooldownText(icon.CooldownText, icon, cfg)
+        PlaceText(icon.CooldownText, icon, cfg.cooldownAnchor, cfg.cooldownX or 0, cfg.cooldownY or 0)
         icon.CooldownText:SetShown(cfg.showCooldownText ~= false)
     end
     LayoutPreviewSwipe(icon, cfg)
-    LayoutPreviewDispelBorder(icon, cfg, index)
+    DispelBorder(icon.DispelBorder, icon, math_max(1, (icon.GetWidth and icon:GetWidth()) or 24),
+        not barOnly and cfg.debuffBorderMode or "OFF", cfg.iconShape, index)
     if icon.DurationBar then
         if cfg.showDurationBar == true then
-            local height = Clamp(cfg.durationBarHeight, 2, 1, 16)
-            local inset = 1
-            icon.DurationBar:ClearAllPoints()
-            icon.DurationBar:SetHeight(height)
-            if cfg.durationBarPosition == "TOP" then
-                icon.DurationBar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-                icon.DurationBar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-            else
-                icon.DurationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-                icon.DurationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-            end
-            local r, g, b = AuraDurationBarColor()
-            icon.DurationBar:SetVertexColor(r, g, b, 0.92)
-            icon.DurationBar:Show()
+            LayoutDurationBar(icon.DurationBar, icon, cfg.durationBarPosition,
+                Clamp(cfg.durationBarHeight, 2, 1, 16), 1)
         else
             icon.DurationBar:Hide()
         end
     end
 end
 
-local function PreviewAuraState(kind, index, icon, cfg, elapsed)
-    local previewAnimation = MSUF and MSUF.PreviewAnimation
-    local fn = elapsed ~= nil and (previewAnimation and previewAnimation.BuildAuraState
-        or _G.MSUF_BuildPreviewAnimationAuraState)
-        or _G.MSUF_GetPreviewAnimationAuraState
-    if type(fn) ~= "function" then return nil end
-    icon._msufA3PreviewAuraScratch = icon._msufA3PreviewAuraScratch or {}
-    local options = icon._msufA3PreviewAuraOptions
-    if not options then
-        options = {}
-        icon._msufA3PreviewAuraOptions = options
-    end
-    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
-    if elapsed ~= nil then
-        return fn(kind, index, icon._msufA3PreviewAuraScratch, options, elapsed)
-    end
-    return fn(kind, index, icon._msufA3PreviewAuraScratch, options)
-end
-
 local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
-    local bar = icon and icon.DurationBar
-    if not (bar and cfg and cfg.showDurationBar == true) then
-        if bar then bar:Hide() end
-        return
-    end
+    local bar = icon.DurationBar
+    if not bar then return end
     local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 1)
     local height = Clamp(cfg.durationBarHeight, 2, 1, math_max(1, size))
     local inset = math_max(1, math_floor(size / 32 + 0.5))
@@ -352,10 +194,8 @@ local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
     else
         frac = auraState and auraState.remainingFrac or 1
     end
-    local r, g, b = AuraDurationBarColor()
-    bar:SetVertexColor(r, g, b, 0.92)
     frac = math_max(0.02, math_min(1, tonumber(frac) or 1))
-    A3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, height, inset, size, auraState and frac or nil)
+    LayoutDurationBar(bar, icon, cfg.durationBarPosition, height, inset, size, auraState and frac or nil)
 end
 
 local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elapsed)
@@ -364,11 +204,12 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elaps
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
-            local auraState = PreviewAuraState(kind, i, icon, textCfg, elapsed)
+            local auraState = AuraState(icon, kind, i, textCfg, elapsed)
             if icon.Count then icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "") end
             if icon.CooldownText then icon.CooldownText:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "") end
             LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
-            ApplyPreviewDurationBarProgress(icon, textCfg, auraState)
+            -- The lane's bar was hidden by the layout that recorded this config.
+            if textCfg.showDurationBar == true then ApplyPreviewDurationBarProgress(icon, textCfg, auraState) end
         end
     end
 end
@@ -638,10 +479,10 @@ function EM.RefreshUnit(unit)
     SetRuntimeAuraHidden(unit, true)
     local frameSig = FrameRefreshSignature(frame)
 
-    local chrome = EditPreviewActive()
+    local chrome, runtimeConfig = EditPreviewActive(), type(A3.ResolveUnitFrameConfig) == "function" and A3.ResolveUnitFrameConfig(unit) or nil
     for kind, spec in pairs(GROUPS) do
         local cfg = ReadGroupConfig(unit, kind)
-        local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, kind) or nil
+        local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(runtimeConfig or unit, kind) or nil
         local group = CreateGroup(unit, kind)
         SyncPreviewGroupStrata(group)
         local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
