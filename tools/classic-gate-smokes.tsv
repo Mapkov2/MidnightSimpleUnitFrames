@@ -786,7 +786,7 @@ clients+Forever	lua	tools/tests/preview_render_oracle_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/preview_oracle_contract_smoke.lua	{root}	Preview observation semantic roles and native-state contract
 -	python	tools/tests/preview_oracle_mutation_smoke.py	{root}	Known actual preview output mutations must fail comparison
 -	python	tools/tests/preview_oracle_corpus_smoke.py	{root}	Frozen legacy preview fixture inventory and byte integrity
-clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter import repair preserves explicit selections: {flavor}
+clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter tables import unchanged, without a prompt, as 6.21 showed them: {flavor}
 clients+Forever	lua	tools/tests/aura_mock_painter_smoke.lua	{root} {flavor}	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: {flavor}
 -	lua	tools/tests/aura_mock_painter_contract_smoke.lua	{root}	Shared mock aura painter touched a secure, event or script surface, or broke a geometry, text, bar or sample-state contract
 clients+Forever	lua	tools/tests/editmode_aura_tick_idle_regions_smoke.lua	{root} {flavor}	Edit Mode aura tick touched an idle duration bar or stopped following the sample state: {flavor}

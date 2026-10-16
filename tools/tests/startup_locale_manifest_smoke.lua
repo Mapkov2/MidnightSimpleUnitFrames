@@ -70,7 +70,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- five copies; it adds 1,983 LF bytes to core startup on every client (Mainline/ruRU
         -- 9,973,605 -> 9,975,588) while the Options addon shrinks by 323 lines. The Mainline
         -- ceiling rises by exactly that, 9,974,598 -> 9,976,581; the Classic ceiling is unchanged.
-        assert(bytes < (suffix == "Mainline" and 9976581 or 7856000),
+        -- 2026-10-16: legacy group filter tables read as 6.21 did; the import confirmation, its
+        -- format stamp and its four translated keys are retired. That frees 5,753 LF bytes in the
+        -- worst (ruRU) selection of every client: Mainline 9,975,537 -> 9,969,784, TBC 7,851,659
+        -- -> 7,845,906. The Mainline ceiling falls by exactly that, 9,976,581 -> 9,970,828; the
+        -- Classic ceiling never rose for the confirmation and is unchanged.
+        assert(bytes < (suffix == "Mainline" and 9970828 or 7856000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
