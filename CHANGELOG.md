@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.503-beta1 - 2026-10-16
+
+### Bug Fixes
+
+- Fixed extra or doubled stage markers on Evoker Empower castbars after a channeled spell, including Fire Breath and Eternity Surge.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.show.channel.ticks","settingKey":"general.castbarShowChannelTicks","prepareKind":"","prepareValue":"","query":"spell specific channel tick markers","label":"Player castbar settings"} -->
+- Restored the player castbar channel-selection behavior from before 6.502.
+<!-- msuf-menu-link: none -->
+
 ## 6.502 - 2026-10-15
 
 Stable maintenance release for all supported clients.

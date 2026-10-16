@@ -8,12 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "4D79617E637CD375BE651CEF3FF5243790ACF2EB26C7029972E70DA7B9E75D59",
-    currentVersion = "6.502",
+    sourceSha256 = "344FC56942AEA8A3366E339FC31D2405A9583D82A4B80147F1522C797BDF6130",
+    currentVersion = "6.503-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.502",
+    previousVersion = "6.502",
+    rangeLabel = "6.502 -> 6.503-beta1",
     entries = {
+        {
+            version = "6.503-beta1",
+            date = "2026-10-16",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed extra or doubled stage markers on Evoker Empower castbars after a channeled spell, including Fire Breath and Eternity Surge.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "spell specific channel tick markers",
+                                label = "Player castbar settings",
+                                sectionId = "castbar_behavior",
+                                controlId = "menu2.opt.castbar.global.behavior.castbar.show.channel.ticks",
+                                settingKey = "general.castbarShowChannelTicks",
+                            },
+                        },
+                        {
+                            text = "Restored the player castbar channel-selection behavior from before 6.502.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.502",
             date = "2026-10-15",
