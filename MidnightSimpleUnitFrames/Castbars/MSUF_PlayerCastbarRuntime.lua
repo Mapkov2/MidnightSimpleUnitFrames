@@ -339,27 +339,27 @@ local function InvalidateCastState(unit)
     end
 end
 
-local function BuildCastState(unit, frame, channelOnly)
+local function BuildCastState(unit, frame)
     local engine = CastbarEngine()
     if engine and type(engine.BuildState) == "function" then
-        return engine:BuildState(unit, frame and frame._msufPlayerState or frame, channelOnly)
+        return engine:BuildState(unit, frame and frame._msufPlayerState or frame)
     end
     return nil
 end
 
-local function GetEffectiveUnit(frame, channelOnly)
+local function GetEffectiveUnit(frame)
     local unit = (frame and frame.unit) or "player"
     if unit == "player"
         and type(UnitHasVehicleUI) == "function"
         and UnitHasVehicleUI("player")
         and type(UnitExists) == "function"
         and UnitExists("vehicle") then
-        local vehicleState = BuildCastState("vehicle", frame, channelOnly)
+        local vehicleState = BuildCastState("vehicle", frame)
         if vehicleState and vehicleState.active == true then
             return "vehicle", vehicleState
         end
     end
-    return unit, BuildCastState(unit, frame, channelOnly)
+    return unit, BuildCastState(unit, frame)
 end
 
 local function ClearActiveCastIdentity(frame)
@@ -740,16 +740,7 @@ local function UnhaltedUpdate(frame, event)
     if not frame or not frame.unit or not frame.statusBar then return end
     if frame.isEmpower then return end
 
-    -- Keep channel refreshes on their event-selected API during cast handoff.
-    local channelOnly = event == "UNIT_SPELLCAST_CHANNEL_START"
-        or ((event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
-            and frame.MSUF_castActive == true and frame.MSUF_isChanneled == true) or nil
-    local unit, state = GetEffectiveUnit(frame, channelOnly)
-    -- STOP can precede the next cast's START. An interruptibility event in
-    -- that gap must still discover the new normal cast if the channel ended.
-    if channelOnly and event ~= "UNIT_SPELLCAST_CHANNEL_START" and not (state and state.active == true) then
-        unit, state = GetEffectiveUnit(frame)
-    end
+    local unit, state = GetEffectiveUnit(frame)
     if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
         frame.isNotInterruptible = false
     elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
@@ -762,22 +753,22 @@ local function UnhaltedUpdate(frame, event)
 
     if CAST_START_EVENTS[event] then
         if not state or state.unit ~= unit then
-            state = BuildCastState(unit, frame, channelOnly)
+            state = BuildCastState(unit, frame)
         end
         if ApplyCastState(frame, state) then
             return
         end
-        return StopPlayerCastbar(frame)
+        return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
     end
 
     if CHANNEL_START_EVENTS[event] then
         if not state or state.unit ~= unit then
-            state = BuildCastState(unit, frame, channelOnly)
+            state = BuildCastState(unit, frame)
         end
         if ApplyCastState(frame, state) then
             return
         end
-        return StopPlayerCastbar(frame)
+        return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
     end
 
     if CAST_STOP_EVENTS[event] then
@@ -785,21 +776,21 @@ local function UnhaltedUpdate(frame, event)
     end
 end
 
-local function CastPlayerCastbar(frame, channelOnly)
+local function CastPlayerCastbar(frame)
     if not frame or not frame.unit or not frame.statusBar then return end
     if frame.isEmpower then return end
     if frame.MSUF_testMode then return end
 
     InvalidateCastState("player")
     InvalidateCastState("vehicle")
-    local unit, state = GetEffectiveUnit(frame, channelOnly)
+    local unit, state = GetEffectiveUnit(frame)
     if not state or state.unit ~= unit then
-        state = BuildCastState(unit, frame, channelOnly)
+        state = BuildCastState(unit, frame)
     end
     if ApplyCastState(frame, state) then
         return
     end
-    StopPlayerCastbar(frame)
+    UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
 end
 
 local function ScheduleSoftResync(frame)
@@ -966,6 +957,11 @@ end
 
 local function HandleEmpowerEvent(frame, event, ...)
     if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        -- A preceding channel's deferred stop yields to Empower. Release its
+        -- textures once, including recovery through an Empower update.
+        if frame._msufPlayerChannelTickRuntimeActive == true then
+            HideChannelHasteMarkers(frame)
+        end
         if event == "UNIT_SPELLCAST_EMPOWER_START" then
             ClearPendingPlayerInterrupt(frame)
         end
@@ -1080,11 +1076,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             if not ActiveUnitMatches(frame, eventUnit) then return end
             local castBarID = select(4, ...)
             if not ActiveCastBarIDMatches(frame, castBarID) then return end
-            -- Legacy events have no castBarID: a late channel update must
-            -- leave an already displayed normal cast on its existing path.
-            local channelOnly = event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
-                and (frame.MSUF_isChanneled == true or not HasActivePlayerCast(frame)) or nil
-            CastPlayerCastbar(frame, channelOnly)
+            CastPlayerCastbar(frame)
             return
         elseif event == "UNIT_SPELLCAST_STOP" then
             if frame.interruptFeedbackEndTime

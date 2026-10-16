@@ -602,7 +602,8 @@ clients+Forever	lua	tools/tests/preview_layer_rail_smoke.lua	{root} {flavor}	Pre
 clients+Forever	lua	tools/tests/power_event_identity_smoke.lua	{root} {flavor}	Power event identity smoke failed
 clients+Forever	lua	tools/tests/group_raid_identity_smoke.lua	{root} {flavor}	Raid roster occupant name and class-color regression: {flavor}
 -	lua	tools/tests/group_raid_identity_smoke.lua	{root} Mainline mythicraid	Mythic raid roster occupant identity regression
--	lua	tools/tests/player_channel_transition_smoke.lua	{root}	Player cast-to-channel selection and transition regression
+-	lua	tools/tests/player_channel_transition_smoke.lua	{root}	Player legacy cast-first selection and lifecycle regression
 clients+Forever	python	tools/tests/group_page_reset_smoke.py	{root} {flavor}	Group Reset Page restores the complete factory and survives pending edits: {flavor}
 clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter import repair preserves explicit selections: {flavor}
 clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavor}	Raid combat slot and geometry freeze regression: {flavor}
+-	lua	tools/tests/player_empower_cleanup_smoke.lua	{root}	Player Empower releases preceding channel ticks and preserves stage timing
