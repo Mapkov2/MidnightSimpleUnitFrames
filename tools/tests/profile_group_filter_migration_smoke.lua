@@ -206,6 +206,9 @@ for _, portable in ipairs({ false, true }) do
     Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "modern reimport refused")
     Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, { true, true, true }), "modern reimport widened selection")
     Check(prompt == nil, "modern export offered an ambiguous old-format repair")
+    -- The second 6.50 report: an own 6.502+ export of a 4.x selection must show groups 4-8.
+    Check(GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4)
+        and GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 8), "stamped export hid groups 4-8")
 end
 -- A partial group-aura import opts in only when no backend was supplied.
 for _, renderer in ipairs({ "missing", "NATIVE_12_1", "CUSTOM" }) do
@@ -256,9 +259,11 @@ source.payload.profileVariants = { version = 1, entries = {
 Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "whole-filter variant import refused")
 Check(prompt ~= nil, "whole-filter variant base did not offer repair")
 prompt.onAccept()
-Check(not GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4), "whole-filter selection widened")
+-- The variant keeps its stored table, which shows every subgroup as through 6.21.
+Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, { true, true, true })
+    and GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4), "whole-filter variant changed")
 env.MSUF_EnsureDB(true)
-Check(not GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4), "forced defaults widened variant")
+Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, { true, true, true }), "forced defaults changed variant")
 local baseSnapshot = assert(V.BaseSnapshot(env.MSUF_DB, true))
 Check(baseSnapshot.gf_raid.groupFilter == nil, "variant leaked into migrated base")
 Check(env.MSUF_ExportSelectionToString("all") ~= nil, "variant export failed")
@@ -269,7 +274,7 @@ V.ResolveCurrent()
 Check(GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4), "leaving variant did not restore repaired base")
 env.IsInInstance = function() return false, "none" end
 V.ResolveCurrent()
-Check(not GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, 4), "returning widened variant")
+Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, { true, true, true }), "returning lost variant filter")
 -- The pure variant API also accepts a still-unmigrated base. Forced defaults
 -- must not reinterpret its materialized intentional override as legacy data.
 V.Restore()

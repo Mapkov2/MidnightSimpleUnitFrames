@@ -20,11 +20,13 @@ assert(GF.GetLayoutGroupCount("raid")==10)
 assert(GF.GetLayoutTier("raid")=="tier10")
 local w,h=GF.GetScaledFrameMetrics("raid"); assert(w==130 and h==50,"concrete tier must override proportional scale")
 assert(GF.ResolveLayoutGrowth("raid",conf)=="DOWN")
--- A table holding a true is an allow-list (the native header shows only group 5),
--- any other table a deny-list: one reading for the grid and the header.
+-- A table hides only the subgroups it marks false; a true entry hides nothing
+-- (the 4.x buttons stored true on an off/on toggle): one reading for the grid and the header.
 conf.groupFilter[5]=true; GF.InvalidateLayoutRoster()
-assert(GF.GetLayoutGroupCount("raid")==10,"an allow-list must size the grid for its own subgroups")
-conf.groupFilter[5]=nil; GF.InvalidateLayoutRoster()
+assert(GF.GetLayoutGroupCount("raid")==20,"a true entry must not shrink the grid")
+conf.groupFilter={true,true,true,true,false,true,true,true}; GF.InvalidateLayoutRoster()
+assert(GF.GetLayoutGroupCount("raid")==10,"a full table must size the grid for the subgroups it keeps")
+conf.groupFilter={}; GF.InvalidateLayoutRoster()
 assert(GF.GetLayoutGroupCount("raid")==20 and GF.GetLayoutTier("raid")=="tier20")
 w,h=GF.GetScaledFrameMetrics("raid"); assert(w==90 and h==30)
 assert(GF.ResolveLayoutGrowth("raid",conf)=="LEFT")
