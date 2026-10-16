@@ -156,9 +156,14 @@ ns.MSUF2 = {
         ReadNumber = function(unit, key, default) return tonumber(profile[unit][key]) or default end,
         SetBool = Write, SetNumber = Write, SetString = Write,
         GetConf = function(unit) return profile[unit] end,
-        SettingMeta = function(_, path, unit, key) return { path = path, settingKey = unit .. "." .. key } end,
+        SettingMeta = function(_, path, unit, key)
+            return { path = path, controlId = "menu2.uf_" .. unit .. ".unit." .. path, settingKey = unit .. "." .. key }
+        end,
     },
 }
+-- The section declares its controls through the control schema; the bindings below stay fakes.
+ns.CPBuilders = { ExtraAuraDefaults = {} }
+Load(OPTIONS .. "Shell/Menu2/MSUF_Menu2_ControlSchema.lua")
 Load(OPTIONS .. "Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua")
 local M = ns.MSUF2
 
@@ -324,24 +329,40 @@ else
             if target then return target() end
         end
     end
-    M.BindToggleAt = function(_, _, label, _, _, _, get, set, meta)
-        controls[#controls + 1] = { label = label, get = get, set = set, meta = meta }
-        return env.CreateFrame("CheckButton")
+    W.ToggleAt = function(_, label)
+        local widget = env.CreateFrame("CheckButton")
+        widget.label = label
+        return widget
     end
-    M.BindSliderAt = function(_, _, label, _, _, low, high, _, _, get, set, meta)
-        controls[#controls + 1] = { label = label, get = get, set = set, meta = meta, low = low, high = high }
-        return env.CreateFrame("Slider")
+    W.Slider = function(_, label, low, high)
+        local widget = env.CreateFrame("Slider")
+        widget.label, widget.low, widget.high = label, low, high
+        return widget
     end
-    M.BindDropdownAt = function(_, _, label, _, _, values, _, get, set, meta)
-        controls[#controls + 1] = { label = label, get = get, set = set, meta = meta, values = values }
-        return env.CreateFrame("Frame")
+    W.Dropdown = function(_, label, values)
+        local widget = env.CreateFrame("Frame")
+        widget.label, widget.values = label, values
+        return widget
     end
+    W.MoveWidget = function() end
+    local function Record(widget, get, set, meta)
+        controls[#controls + 1] = { label = widget.label, get = get, set = set, meta = meta, low = widget.low,
+            high = widget.high, values = widget.values }
+        return widget
+    end
+    M.BindBoolWidget = function(_, widget, get, set, meta) return Record(widget, get, set, meta) end
+    M.BindNumberWidget = function(_, widget, get, set, _, meta) return Record(widget, get, set, meta) end
+    M.BindDropdownWidget = function(_, widget, get, set, meta) return Record(widget, get, set, meta) end
     M.BindGateGroup = function(_, source, entries)
         gate = { source = source, entries = entries }
         return function() end
     end
     M.AddTooltip = function() end
     local section = env.CreateFrame("Frame", nil, env.UIParent)
+    local header = env.CreateFrame("Frame", nil, section)
+    header._msuf2RuntimeControlRecord = { controlId = "menu2.uf_arena.section.pvp_trinket.expanded", kind = "button",
+        label = "PvP Trinket" }
+    section._msuf2CollapsibleEntry = { header = header }
     registered.build({ width = 720 }, { CollapsibleSection = function() return section end }, "arena")
     local byKey = {}
     for _, control in ipairs(controls) do byKey[control.meta and control.meta.settingKey or "?"] = control end

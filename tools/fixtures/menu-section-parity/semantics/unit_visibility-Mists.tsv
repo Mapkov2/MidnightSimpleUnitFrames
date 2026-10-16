@@ -1,0 +1,1350 @@
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_boss	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_focus	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_focustarget	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_pet	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_pettarget	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_player	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_target	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	zero	true	0
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	absent	false	<nil>
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	false	false	false
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	invalid	true	invalid
+default	uf_targettarget	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	zero	true	0
+intent	uf_arena	cold	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-customized:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:after:load_conditions	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	reset-missing:before:load_conditions	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-customized:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:after:load_conditions	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	reset-missing:before:load_conditions	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	cold	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	edited	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-customized:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:after:load_conditions	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	reset-missing:before:load_conditions	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focus	warm	menu2.uf_focus.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	cold	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	edited	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-customized:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:after:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	reset-missing:before:load_conditions	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_focustarget	warm	menu2.uf_focustarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	cold	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	edited	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-customized:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:after:load_conditions	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	reset-missing:before:load_conditions	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pet	warm	menu2.uf_pet.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	cold	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	edited	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-customized:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:after:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	reset-missing:before:load_conditions	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_pettarget	warm	menu2.uf_pettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	cold	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	edited	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-customized:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:after:load_conditions	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	reset-missing:before:load_conditions	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_player	warm	menu2.uf_player.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	cold	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	edited	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-customized:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:after:load_conditions	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	reset-missing:before:load_conditions	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_target	warm	menu2.uf_target.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	cold	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	edited	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-customized:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:after:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	reset-missing:before:load_conditions	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.section.load_conditions.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideincombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideingroup	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideinhousing	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideininstance	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideinvehicle	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhidemounted	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhidenotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombat	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideoutofcombatnotarget	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhideresting	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhidesolo	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondhidestealthed	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_targettarget	warm	menu2.uf_targettarget.unit.load_condition.loadcondshowwheninjured	toggle		<nil>	<nil>	<nil>	false	<nil>

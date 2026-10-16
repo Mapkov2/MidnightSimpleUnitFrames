@@ -169,3 +169,21 @@ The lifecycle smoke tests real mark/profile/reopen/refusal/undo/redo state and
 counts, Totem Reset history, and every declared pilot button with late scripts
 and hooks. Passing these offline models does not prove live WoW rendering,
 combat/taint or the engine's callback return policy.
+
+
+## Unit sections (batch 1)
+
+PvP Trinket, Dispel Overlay, Dispel Symbol, Visibility, Boss/Arena Layout and
+Boss target highlight declare their rows through the same renderer. A row with
+`unit` set reads and writes through the UnitPage adapters (`Schema.SetUnit`, new
+`arenaTrinket` and `layout` apply flags); rows with their own `get`/`set` keep the
+old owner's fallback rules (Dispel reads the stored value, then `general`). Toggles
+with `view = "at"` are created at their position. `roundStep` derives the old
+`step`/`roundStep` metadata from the range. Section headers declare in `prepareShell`
+and again inside the build, so hidden search-index builds are covered.
+
+`tools/fixtures/menu-section-parity` holds receipts captured from the pre-schema
+builders (base 32ee2629). `menu_section_parity_world.lua` replays them per section,
+client and unit scope: control records, tooltip text, a layout digest of every owned
+widget, and inputs with their profile diffs, apply requests, enabled states, undo/redo,
+combat refusal and Reset section. Offline checks do not establish live rendering.

@@ -33,6 +33,9 @@ local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
 local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
 local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
 local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
+local Schema = M.ControlSchema
+-- Lazy shells declare their header before the body builds, as the pilot sections do.
+local function DeclareSection(_, section, unit) Schema.Section(section, unit) end
 local UNIT_ANCHOR_SECTION_HEIGHT = 306
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player pet target focus boss arena"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
@@ -1393,46 +1396,29 @@ local function BuildStatus(ctx, builder, unit)
     end
 end
 local function BuildLoadConditions(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("load_conditions", "Visibility", 210, false)
-    local colW = math.floor(((ctx.width or 720) - 42) / 3)
-    for i = 1, #LOAD_CONDITIONS do
-        local spec = LOAD_CONDITIONS[i]
-        local col = (i - 1) % 3
-        local row = math.floor((i - 1) / 3)
-        local toggle
-        if W.ToggleAt then
-            toggle = W.ToggleAt(sec, spec.label, 14 + col * colW, -42 - row * 30, colW - 34)
-        else
-            toggle = W.Toggle(sec, spec.label)
-        end
-        M.BindBoolWidget(ctx, toggle,
-            function() return ReadBool(unit, spec.key, false) end,
-            function(v)
-                local conf = GetConf(unit)
-                conf[spec.key] = v and true or false
-                UpdateLoadActive(unit)
-                M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
-            end,
-            SettingMeta(ctx, "load_condition." .. tostring(spec.key), unit, spec.key))
-    end
-    do
-        local key = "loadCondShowWhenInjured"
-        local label = "Show only below 100% health"
-        local toggle = W.ToggleAt and W.ToggleAt(sec, label, 14, -166, (ctx.width or 720) - 70)
-            or W.Toggle(sec, label)
-        M.BindBoolWidget(ctx, toggle,
-            function() return ReadBool(unit, key, false) end,
-            function(v)
+    local sec = Schema.Section(builder:CollapsibleSection("load_conditions", "Visibility", 210, false), unit)
+    local function Row(key, label)
+        local meta = SettingMeta(ctx, "load_condition." .. tostring(key), unit, key)
+        return { id = meta.controlId, kind = "toggle", view = "at", labelKey = label, key = key, meta = meta,
+            scope = unit, applyDomain = "loadCondition", settingPath = unit .. "." .. key,
+            defaultSource = function() return false end,
+            get = function() return ReadBool(unit, key, false) end,
+            set = function(v)
                 GetConf(unit)[key] = v and true or false
                 UpdateLoadActive(unit)
                 M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
-            end,
-            SettingMeta(ctx, "load_condition." .. key, unit, key))
-        if M.AddTooltip then
-            M.AddTooltip(toggle, label,
-                "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
-                { hook = true, owner = "ANCHOR_RIGHT" })
-        end
+            end }
+    end
+    local rows = {}
+    for i = 1, #LOAD_CONDITIONS do rows[i] = Row(LOAD_CONDITIONS[i].key, LOAD_CONDITIONS[i].label) end
+    local colW = math.floor(((ctx.width or 720) - 42) / 3)
+    Schema.Flow(ctx, sec, rows, { columns = 3, x = 14, y = -42, width = colW - 34, gap = 34, rowHeight = 30 })
+    local label = "Show only below 100% health"
+    local toggle = Schema.Render(ctx, sec, Row("loadCondShowWhenInjured", label), { x = 14, y = -166, width = (ctx.width or 720) - 70 })
+    if M.AddTooltip then
+        M.AddTooltip(toggle, label,
+            "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local function RefreshLoadConditionState()
         SetSectionHeaderStatus(sec, nil)
@@ -1560,40 +1546,45 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     control:SetValue("VERTICAL_DOWN")
     return control
 end
-local function BuildBossLayout(ctx, builder, unit)
-    if unit ~= "boss" then return end
-    local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 150, false)
+-- Boss and Arena stack their frames with the same model: a spacing slider and a layout tile picker.
+local function BuildStackedLayout(ctx, builder, unit, def)
+    local sec = Schema.Section(builder:CollapsibleSection(def.id, def.title, def.height, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)
     local sliderW = math.min(300, math.max(220, rightX - leftX - 68))
-    local spacing = W.Slider(sec, "Boss spacing", -400, 0, 1, 300)
-    W.MoveWidget(spacing, sec, leftX, -42, sliderW, "CENTER")
-    M.BindNumberWidget(ctx, spacing,
-        function() return ReadNumber(unit, "spacing", -36) end,
-        function(v) SetNumber(unit, "spacing", v, "MSUF2_BOSS_SPACING", { preview = true }) end,
-        -36, (function()
-            local meta = SettingMeta(ctx, "boss_layout.spacing", unit, "spacing")
-            meta.step, meta.roundStep = 1, true
-            return meta
-        end)())
-    local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8)
-    M.BindSegment(ctx, layout,
-        function()
+    local spacing = SettingMeta(ctx, def.id .. ".spacing", unit, "spacing")
+    Schema.Render(ctx, sec, {
+        id = spacing.controlId, kind = "slider", labelKey = def.spacingLabel, key = "spacing", meta = spacing,
+        scope = unit, unit = unit, applyDomain = "layout", reason = def.spacingReason, range = { -400, 0, 1 },
+        roundStep = true, defaultSource = function() return def.spacingDefault end,
+    }, { x = leftX, y = -42, width = 300, moveWidth = sliderW, align = "CENTER" })
+    local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8, def.tilesTitle)
+    local meta = SettingMeta(ctx, def.id .. ".mode", unit, "bossLayoutMode")
+    Schema.Bind(ctx, layout, {
+        id = meta.controlId, kind = "segment", labelKey = layout._msuf2SearchText, meta = meta, scope = unit,
+        applyDomain = "layout",
+        get = function()
             local conf = GetConf(unit)
-            return NormalizeBossLayoutMode(conf.bossLayoutMode, conf.invertBossOrder)
+            return NormalizeBossLayoutMode(conf.bossLayoutMode, def.legacyInvert and conf.invertBossOrder)
         end,
-        function(v)
+        set = function(v)
             local conf = GetConf(unit)
             conf.bossLayoutMode = NormalizeBossLayoutMode(v)
-            conf.invertBossOrder = nil
-            M.RequestUnitDomains(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
+            if def.legacyInvert then conf.invertBossOrder = nil end
+            M.RequestUnitDomains(unit, def.modeReason, { preview = true })
         end,
-        SettingMeta(ctx, "boss_layout.mode", unit, "bossLayoutMode"))
+    })
+end
+local function BuildBossLayout(ctx, builder, unit)
+    if unit ~= "boss" then return end
+    BuildStackedLayout(ctx, builder, unit, { id = "boss_layout", title = "Boss Layout", height = 150,
+        spacingLabel = "Boss spacing", spacingDefault = -36, spacingReason = "MSUF2_BOSS_SPACING",
+        modeReason = "MSUF2_BOSS_LAYOUT_MODE", legacyInvert = true })
 end
 local function BuildBossTargetHighlight(ctx, builder, unit)
     if unit ~= "boss" then return end
-    local sec = builder:CollapsibleSection("boss_target_highlight", "Boss target highlight", 450, false)
+    local sec = Schema.Section(builder:CollapsibleSection("boss_target_highlight", "Boss target highlight", 450, false), unit)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(sec, { "highlight.boss_target" }, {
             title = "Boss Target Highlight Color", historySource = "menu:unit-boss-target-highlight-color",
@@ -1609,10 +1600,46 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
         { value = "DIAMOND", text = "Diamond" }, { value = "CROSS", text = "Cross" },
         { value = "BORDER_ARROW", text = "Border and arrow" },
     }
-    local style = W.Dropdown(sec, "Highlight style", styles, 270)
-    UnitSectionShared.PlaceDropdown(sec, style, 14, -42, 270)
-    M.BindDropdownWidget(ctx, style,
-        function()
+    local anchors = {
+        { value = "LEFT", text = "Left" }, { value = "RIGHT", text = "Right" },
+        { value = "TOP", text = "Top" }, { value = "BOTTOM", text = "Bottom" },
+        { value = "CENTER", text = "Center" },
+        { value = "TOPLEFT", text = "Top left" }, { value = "TOPRIGHT", text = "Top right" },
+        { value = "BOTTOMLEFT", text = "Bottom left" }, { value = "BOTTOMRIGHT", text = "Bottom right" },
+    }
+    local directions = {
+        { value = "RIGHT", text = "Right" }, { value = "LEFT", text = "Left" },
+        { value = "UP", text = "Up" }, { value = "DOWN", text = "Down" },
+    }
+    local layouts = {
+        { value = "SINGLE", text = "Single marker" },
+        { value = "BOTH_IN", text = "Both sides: > frame <" },
+        { value = "BOTH_OUT", text = "Both sides: < frame >" },
+    }
+    local function Row(kind, label, key, default, x, y, extra)
+        local meta = SettingMeta(ctx, "boss_target_highlight." .. key, unit, key)
+        local row = { id = meta.controlId, kind = kind, labelKey = label, key = key, meta = meta, scope = unit,
+            applyDomain = "bossHighlight", settingPath = unit .. "." .. key, defaultSource = function() return default end,
+            get = function() return kind == "slider" and ReadNumber(unit, key, default) or GetConf(unit)[key] or default end,
+            set = function(v)
+                GetConf(unit)[key] = v
+                Apply()
+            end, x = x, y = y }
+        for field, value in pairs(extra) do row[field] = value end
+        return row
+    end
+    local rows = {
+        Row("dropdown", "Marker anchor", "bossTargetIndicatorAnchor", "LEFT", 350, -42, { values = anchors }),
+        Row("dropdown", "Arrow direction", "bossTargetIndicatorDirection", "RIGHT", 14, -112, { values = directions }),
+        Row("slider", "Marker size", "bossTargetIndicatorSize", 24, 350, -112, { range = { 8, 96, 1 } }),
+        Row("slider", "Marker X offset", "bossTargetIndicatorOffsetX", -28, 14, -188, { range = { -500, 500, 1 } }),
+        Row("slider", "Marker Y offset", "bossTargetIndicatorOffsetY", 0, 350, -188, { range = { -500, 500, 1 } }),
+        Row("dropdown", "Marker layout", "bossTargetIndicatorLayout", "SINGLE", 14, -264, { values = layouts }),
+    }
+    local styleMeta = SettingMeta(ctx, "boss_target_highlight.style", "general", "bossTargetHighlightStyle")
+    table.insert(rows, 1, { id = styleMeta.controlId, kind = "dropdown", labelKey = "Highlight style",
+        meta = styleMeta, scope = unit, applyDomain = "bossHighlight", values = styles, x = 14, y = -42,
+        get = function()
             local g = GetGeneral()
             local conf = GetConf(unit)
             local mode = conf.hlOverride == true and conf.bossTargetOutlineMode or nil
@@ -1620,56 +1647,37 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
             if mode == 0 or (mode == nil and g.bossTargetHighlightEnabled == false) then return "OFF" end
             return MSUF.BossTargetIndicator.Style(g)
         end,
-        function(v)
+        set = function(v)
             local g = GetGeneral()
             g.bossTargetHighlightEnabled = v ~= "OFF"
             g.bossTargetOutlineMode = v ~= "OFF" and 1 or 0
             GetConf(unit).bossTargetOutlineMode = nil
             if v ~= "OFF" then g.bossTargetHighlightStyle = v end
             Apply()
-        end,
-        SettingMeta(ctx, "boss_target_highlight.style", "general", "bossTargetHighlightStyle"))
-    local function Dropdown(label, key, values, default, x, y)
-        local widget = W.Dropdown(sec, label, values, 270)
-        UnitSectionShared.PlaceDropdown(sec, widget, x, y, 270)
-        M.BindDropdownWidget(ctx, widget, function() return GetConf(unit)[key] or default end,
-            function(v) GetConf(unit)[key] = v; Apply() end,
-            SettingMeta(ctx, "boss_target_highlight." .. key, unit, key))
+        end })
+    for _, row in ipairs(rows) do
+        row.roundStep = row.kind == "slider"
+        local x, y = row.x, row.y
+        if row.kind == "dropdown" then
+            row.beforeBind = function(widget) UnitSectionShared.PlaceDropdown(sec, widget, x, y, 270) end
+            Schema.Render(ctx, sec, row, { width = 270 })
+        else
+            Schema.Render(ctx, sec, row, { x = x, y = y, width = 270, moveWidth = 270, align = "CENTER" })
+        end
     end
-    Dropdown("Marker anchor", "bossTargetIndicatorAnchor", {
-        { value = "LEFT", text = "Left" }, { value = "RIGHT", text = "Right" },
-        { value = "TOP", text = "Top" }, { value = "BOTTOM", text = "Bottom" },
-        { value = "CENTER", text = "Center" },
-        { value = "TOPLEFT", text = "Top left" }, { value = "TOPRIGHT", text = "Top right" },
-        { value = "BOTTOMLEFT", text = "Bottom left" }, { value = "BOTTOMRIGHT", text = "Bottom right" },
-    }, "LEFT", 350, -42)
-    Dropdown("Arrow direction", "bossTargetIndicatorDirection", {
-        { value = "RIGHT", text = "Right" }, { value = "LEFT", text = "Left" },
-        { value = "UP", text = "Up" }, { value = "DOWN", text = "Down" },
-    }, "RIGHT", 14, -112)
-    local function Slider(label, key, default, low, high, x, y)
-        local widget = W.Slider(sec, label, low, high, 1, 270)
-        W.MoveWidget(widget, sec, x, y, 270, "CENTER")
-        local meta = SettingMeta(ctx, "boss_target_highlight." .. key, unit, key)
-        meta.step, meta.roundStep = 1, true
-        M.BindNumberWidget(ctx, widget, function() return ReadNumber(unit, key, default) end,
-            function(v) GetConf(unit)[key] = v; Apply() end, default, meta)
-    end
-    Slider("Marker size", "bossTargetIndicatorSize", 24, 8, 96, 350, -112)
-    Slider("Marker X offset", "bossTargetIndicatorOffsetX", -28, -500, 500, 14, -188)
-    Slider("Marker Y offset", "bossTargetIndicatorOffsetY", 0, -500, 500, 350, -188)
-    Dropdown("Marker layout", "bossTargetIndicatorLayout", {
-        { value = "SINGLE", text = "Single marker" },
-        { value = "BOTH_IN", text = "Both sides: > frame <" },
-        { value = "BOTH_OUT", text = "Both sides: < frame >" },
-    }, "SINGLE", 14, -264)
     W.Text(sec, "Both sides mirror the X offset. Y moves both markers together. Drag the left marker to adjust the pair.", 350, -264, 280, T.colors.muted)
     W.Text(sec, "Drag the marker in either boss preview to position it. Boss 1 shows the selected target.", 14, -340, 630, T.colors.muted)
-    local multiple = W.ToggleAt(sec, "Only highlight with multiple boss frames", 14, -390, 500)
-    M.BindBoolWidget(ctx, multiple,
-        function() return GetConf(unit).bossTargetMultipleOnly == true end,
-        function(v) GetConf(unit).bossTargetMultipleOnly = v == true; Apply() end,
-        SettingMeta(ctx, "boss_target_highlight.multiple_only", unit, "bossTargetMultipleOnly"))
+    local multipleMeta = SettingMeta(ctx, "boss_target_highlight.multiple_only", unit, "bossTargetMultipleOnly")
+    local multiple = Schema.Render(ctx, sec, {
+        id = multipleMeta.controlId, kind = "toggle", view = "at", labelKey = "Only highlight with multiple boss frames",
+        key = "bossTargetMultipleOnly", meta = multipleMeta, scope = unit, applyDomain = "bossHighlight",
+        settingPath = unit .. ".bossTargetMultipleOnly", defaultSource = function() return false end,
+        get = function() return GetConf(unit).bossTargetMultipleOnly == true end,
+        set = function(v)
+            GetConf(unit).bossTargetMultipleOnly = v == true
+            Apply()
+        end,
+    }, { x = 14, y = -390, width = 500 })
     M.AddTooltip(multiple, "Only highlight with multiple boss frames",
         "Requires at least two existing boss units, not two bosses taking damage. Updates during combat. Previews remain visible.")
 end
@@ -1677,33 +1685,9 @@ end
 --- (spacing/bossLayoutMode), so the same tile control edits the arena scope.
 local function BuildArenaLayout(ctx, builder, unit)
     if unit ~= "arena" then return end
-    local sec = builder:CollapsibleSection("arena_layout", "Arena Layout", 160, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = math.max(350, floor(sectionW * 0.50) + 8)
-    local sliderW = math.min(300, math.max(220, rightX - leftX - 68))
-    local spacing = W.Slider(sec, "Arena spacing", -400, 0, 1, 300)
-    W.MoveWidget(spacing, sec, leftX, -42, sliderW, "CENTER")
-    M.BindNumberWidget(ctx, spacing,
-        function() return ReadNumber(unit, "spacing", -96) end,
-        function(v) SetNumber(unit, "spacing", v, "MSUF2_ARENA_SPACING", { preview = true }) end,
-        -96, (function()
-            local meta = SettingMeta(ctx, "arena_layout.spacing", unit, "spacing")
-            meta.step, meta.roundStep = 1, true
-            return meta
-        end)())
-    local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8, "Arena frame layout")
-    M.BindSegment(ctx, layout,
-        function()
-            local conf = GetConf(unit)
-            return NormalizeBossLayoutMode(conf.bossLayoutMode)
-        end,
-        function(v)
-            local conf = GetConf(unit)
-            conf.bossLayoutMode = NormalizeBossLayoutMode(v)
-            M.RequestUnitDomains(unit, "MSUF2_ARENA_LAYOUT_MODE", { preview = true })
-        end,
-        SettingMeta(ctx, "arena_layout.mode", unit, "bossLayoutMode"))
+    BuildStackedLayout(ctx, builder, unit, { id = "arena_layout", title = "Arena Layout", height = 160,
+        spacingLabel = "Arena spacing", spacingDefault = -96, spacingReason = "MSUF2_ARENA_SPACING",
+        modeReason = "MSUF2_ARENA_LAYOUT_MODE", tilesTitle = "Arena frame layout" })
 end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
     if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
@@ -1797,14 +1781,17 @@ local function BuildUnitPage(info)
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 150 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 150,
+                prepareShell = DeclareSection })
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossTargetHighlight, { sectionId = "boss_target_highlight",
-                title = "Boss target highlight", height = 450 })
+                title = "Boss target highlight", height = 450, prepareShell = DeclareSection })
         end
         if info.unit == "arena" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160,
+                prepareShell = DeclareSection })
         end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Visibility", height = 210 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Visibility", height = 210,
+            prepareShell = DeclareSection })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
         AttachUnitSectionUX(ctx, info.unit)
         M.TrackRefresh(ctx, function()

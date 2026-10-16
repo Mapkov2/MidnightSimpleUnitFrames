@@ -760,3 +760,15 @@ clients+Forever	lua	tools/tests/preview_family_sampler_controls_smoke.lua	{root}
 clients+Forever	lua	tools/tests/editmode_preview_frozen_trace_smoke.lua	{root} {flavor}	Edit Mode preview behaviour drifted from the frozen parent: {flavor}
 clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavor}	Raid combat slot and geometry freeze regression: {flavor}
 clients+Forever	lua	tools/tests/group_role_overlay_secret_roster_smoke.lua	{root} {flavor}	Role-dependent power ownership with secret roster identities: {flavor}
+clients+Forever	lua	tools/tests/menu_pvp_trinket_inventory_smoke.lua	{root} {flavor}	PvP Trinket section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+clients+Forever	lua	tools/tests/menu_dispel_overlay_inventory_smoke.lua	{root} {flavor}	Dispel Overlay section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+clients+Forever	lua	tools/tests/menu_dispel_symbol_inventory_smoke.lua	{root} {flavor}	Dispel Symbol section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+clients+Forever	lua	tools/tests/menu_unit_visibility_inventory_smoke.lua	{root} {flavor}	Unit Visibility section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+clients+Forever	lua	tools/tests/menu_boss_arena_layout_inventory_smoke.lua	{root} {flavor}	Boss and Arena Layout section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+clients+Forever	lua	tools/tests/menu_boss_target_highlight_inventory_smoke.lua	{root} {flavor}	Boss target highlight section controls, layout and inputs drifted from the pre-schema receipt: {flavor}
+-	python	tools/tests/menu_section_provenance_smoke.py	{root}	Section receipt source or fixture provenance changed
+-	python	tools/tests/menu_section_mutations_smoke.py	{root}	Section defaults reset alignment mutation survived
+-	python	tools/tests/menu_section_parent_mutations_smoke.py	{root}	Actual-parent storage reset or numeric fallback owner mutation survived
+-	python	tools/tests/menu_section_capture_environment_smoke.py	{root}	Section capture accepted interpreter startup contamination
+-	python	tools/tests/menu_section_shell_boundary_smoke.py	{root}	Section source authentication command failed its native shell boundary
+-	python	tools/tests/menu_section_proof_contract_smoke.py	{root}	Historical source ancestry receipt authenticity or native test runtime contract failed

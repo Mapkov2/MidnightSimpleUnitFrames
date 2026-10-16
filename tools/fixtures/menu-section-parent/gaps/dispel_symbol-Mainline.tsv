@@ -1,0 +1,740 @@
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	1	1
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	1	1
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	8	8
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	8	8
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	14	14
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	14	14
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	2	2
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	2	2
+command-set	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	1	1
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	1	1
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	8	8
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	8	8
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	14	14
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	14	14
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	2	2
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	2	2
+command-set	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	1	1
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	1	1
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	8	8
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	8	8
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	14	14
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	14	14
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	2	2
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	2	2
+command-set	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	1	1
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	1	1
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	8	8
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	8	8
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	14	14
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	14	14
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	2	2
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	2	2
+command-set	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	1	1
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	1	1
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	8	8
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	8	8
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	14	14
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	14	14
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	2	2
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	2	2
+command-set	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	1
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	false	1
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	invalid	1
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	8
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	false	8
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	invalid	8
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	14
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	false	14
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	invalid	14
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	2
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	false	2
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	invalid	2
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	1
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	false	1
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	invalid	1
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	8
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	false	8
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	invalid	8
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	14
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	false	14
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	invalid	14
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	2
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	false	2
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	invalid	2
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	1
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	false	1
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	invalid	1
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	8
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	false	8
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	invalid	8
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	14
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	false	14
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	invalid	14
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	2
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	false	2
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	invalid	2
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	0	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	false	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	invalid	<nil>
+default	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	1
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	false	1
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	invalid	1
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	8
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	false	8
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	invalid	8
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	14
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	false	14
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	invalid	14
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	2
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	false	2
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	invalid	2
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	0	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	false	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	invalid	<nil>
+default	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	1
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	false	1
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	invalid	1
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	0	1
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	8
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	false	8
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	invalid	8
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	0	8
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	14
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	false	14
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	invalid	14
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	0	14
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	2
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	false	2
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	invalid	2
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	0	2
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	0	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	false	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	invalid	<nil>
+default	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	0	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	<nil>	0
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	<nil>	false
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_arena	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	<nil>	0
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	<nil>	false
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_boss	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	<nil>	0
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	<nil>	false
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_focus	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	<nil>	0
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	<nil>	false
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_player	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	absent	false	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	invalid	false	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	zero	false	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	absent	1	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	false	1	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	invalid	1	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	absent	TOPRIGHT	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	absent	RIGHT	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	absent	8	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	false	8	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	invalid	8	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	absent	ALL	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	absent	14	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	false	14	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	invalid	14	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	absent	2	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	false	2	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	invalid	2	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	absent	AUTO	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	absent	BLIZZARD	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	zero	0	<nil>	0
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	absent	BORDER	<nil>	<nil>
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	false	false	<nil>	false
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	invalid	invalid	<nil>	invalid
+legacy-fallback	uf_target	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	zero	0	<nil>	0
+reset-redo	uf_arena	customized	unit_dispel_symbol	false
+reset-redo	uf_arena	missing	unit_dispel_symbol	false
+reset-redo	uf_boss	customized	unit_dispel_symbol	false
+reset-redo	uf_boss	missing	unit_dispel_symbol	false
+reset-redo	uf_focus	customized	unit_dispel_symbol	false
+reset-redo	uf_focus	missing	unit_dispel_symbol	false
+reset-redo	uf_player	customized	unit_dispel_symbol	false
+reset-redo	uf_player	missing	unit_dispel_symbol	false
+reset-redo	uf_target	customized	unit_dispel_symbol	false
+reset-redo	uf_target	missing	unit_dispel_symbol	false
+reset-undo	uf_arena	customized	unit_dispel_symbol	false	false	{arena.unitDispelSymbolAlpha=1,arena.unitDispelSymbolAnchor=TOPRIGHT,arena.unitDispelSymbolEnabled=false,arena.unitDispelSymbolGrowth=RIGHT,arena.unitDispelSymbolLayer=8,arena.unitDispelSymbolMode=ALL,arena.unitDispelSymbolSize=14,arena.unitDispelSymbolSpacing=2,arena.unitDispelSymbolStrata=AUTO,arena.unitDispelSymbolStyle=BLIZZARD,arena.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_arena	missing	unit_dispel_symbol	false	false	{arena.unitDispelSymbolAlpha=1,arena.unitDispelSymbolAnchor=TOPRIGHT,arena.unitDispelSymbolEnabled=false,arena.unitDispelSymbolGrowth=RIGHT,arena.unitDispelSymbolLayer=8,arena.unitDispelSymbolMode=ALL,arena.unitDispelSymbolSize=14,arena.unitDispelSymbolSpacing=2,arena.unitDispelSymbolStrata=AUTO,arena.unitDispelSymbolStyle=BLIZZARD,arena.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_boss	customized	unit_dispel_symbol	false	false	{boss.unitDispelSymbolAlpha=1,boss.unitDispelSymbolAnchor=TOPRIGHT,boss.unitDispelSymbolEnabled=false,boss.unitDispelSymbolGrowth=RIGHT,boss.unitDispelSymbolLayer=8,boss.unitDispelSymbolMode=ALL,boss.unitDispelSymbolSize=14,boss.unitDispelSymbolSpacing=2,boss.unitDispelSymbolStrata=AUTO,boss.unitDispelSymbolStyle=BLIZZARD,boss.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_boss	missing	unit_dispel_symbol	false	false	{boss.unitDispelSymbolAlpha=1,boss.unitDispelSymbolAnchor=TOPRIGHT,boss.unitDispelSymbolEnabled=false,boss.unitDispelSymbolGrowth=RIGHT,boss.unitDispelSymbolLayer=8,boss.unitDispelSymbolMode=ALL,boss.unitDispelSymbolSize=14,boss.unitDispelSymbolSpacing=2,boss.unitDispelSymbolStrata=AUTO,boss.unitDispelSymbolStyle=BLIZZARD,boss.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_focus	customized	unit_dispel_symbol	false	false	{focus.unitDispelSymbolAlpha=1,focus.unitDispelSymbolAnchor=TOPRIGHT,focus.unitDispelSymbolEnabled=false,focus.unitDispelSymbolGrowth=RIGHT,focus.unitDispelSymbolLayer=8,focus.unitDispelSymbolMode=ALL,focus.unitDispelSymbolSize=14,focus.unitDispelSymbolSpacing=2,focus.unitDispelSymbolStrata=AUTO,focus.unitDispelSymbolStyle=BLIZZARD,focus.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_focus	missing	unit_dispel_symbol	false	false	{focus.unitDispelSymbolAlpha=1,focus.unitDispelSymbolAnchor=TOPRIGHT,focus.unitDispelSymbolEnabled=false,focus.unitDispelSymbolGrowth=RIGHT,focus.unitDispelSymbolLayer=8,focus.unitDispelSymbolMode=ALL,focus.unitDispelSymbolSize=14,focus.unitDispelSymbolSpacing=2,focus.unitDispelSymbolStrata=AUTO,focus.unitDispelSymbolStyle=BLIZZARD,focus.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_player	customized	unit_dispel_symbol	false	false	{player.unitDispelSymbolAlpha=1,player.unitDispelSymbolAnchor=TOPRIGHT,player.unitDispelSymbolEnabled=false,player.unitDispelSymbolGrowth=RIGHT,player.unitDispelSymbolLayer=8,player.unitDispelSymbolMode=ALL,player.unitDispelSymbolSize=14,player.unitDispelSymbolSpacing=2,player.unitDispelSymbolStrata=AUTO,player.unitDispelSymbolStyle=BLIZZARD,player.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_player	missing	unit_dispel_symbol	false	false	{player.unitDispelSymbolAlpha=1,player.unitDispelSymbolAnchor=TOPRIGHT,player.unitDispelSymbolEnabled=false,player.unitDispelSymbolGrowth=RIGHT,player.unitDispelSymbolLayer=8,player.unitDispelSymbolMode=ALL,player.unitDispelSymbolSize=14,player.unitDispelSymbolSpacing=2,player.unitDispelSymbolStrata=AUTO,player.unitDispelSymbolStyle=BLIZZARD,player.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_target	customized	unit_dispel_symbol	false	false	{target.unitDispelSymbolAlpha=1,target.unitDispelSymbolAnchor=TOPRIGHT,target.unitDispelSymbolEnabled=false,target.unitDispelSymbolGrowth=RIGHT,target.unitDispelSymbolLayer=8,target.unitDispelSymbolMode=ALL,target.unitDispelSymbolSize=14,target.unitDispelSymbolSpacing=2,target.unitDispelSymbolStrata=AUTO,target.unitDispelSymbolStyle=BLIZZARD,target.unitDispelSymbolTrigger=BORDER}
+reset-undo	uf_target	missing	unit_dispel_symbol	false	false	{target.unitDispelSymbolAlpha=1,target.unitDispelSymbolAnchor=TOPRIGHT,target.unitDispelSymbolEnabled=false,target.unitDispelSymbolGrowth=RIGHT,target.unitDispelSymbolLayer=8,target.unitDispelSymbolMode=ALL,target.unitDispelSymbolSize=14,target.unitDispelSymbolSpacing=2,target.unitDispelSymbolStrata=AUTO,target.unitDispelSymbolStyle=BLIZZARD,target.unitDispelSymbolTrigger=BORDER}
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_arena	reset-customized:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	true	false	true	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	2	1	2	1
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	customized	TOPRIGHT	customized	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	customized	RIGHT	customized	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	9	8	9	8
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	customized	ALL	customized	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	15	14	15	14
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	3	2	3	2
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	customized	AUTO	customized	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	customized	BLIZZARD	customized	<nil>
+storage	uf_arena	reset-customized:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	customized	BORDER	customized	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_arena	reset-missing:after:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	<nil>	false	false	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	<nil>	1	1	1
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	<nil>	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	<nil>	RIGHT	RIGHT	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	<nil>	8	8	8
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	<nil>	ALL	ALL	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	<nil>	14	14	14
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	<nil>	2	2	2
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	<nil>	AUTO	AUTO	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	<nil>	BLIZZARD	BLIZZARD	<nil>
+storage	uf_arena	reset-missing:before:unit_dispel_symbol	menu2.uf_arena.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	<nil>	BORDER	BORDER	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_boss	reset-customized:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	true	false	true	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	2	1	2	1
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	customized	TOPRIGHT	customized	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	customized	RIGHT	customized	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	9	8	9	8
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	customized	ALL	customized	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	15	14	15	14
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	3	2	3	2
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	customized	AUTO	customized	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	customized	BLIZZARD	customized	<nil>
+storage	uf_boss	reset-customized:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	customized	BORDER	customized	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_boss	reset-missing:after:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	<nil>	false	false	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	<nil>	1	1	1
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	<nil>	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	<nil>	RIGHT	RIGHT	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	<nil>	8	8	8
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	<nil>	ALL	ALL	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	<nil>	14	14	14
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	<nil>	2	2	2
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	<nil>	AUTO	AUTO	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	<nil>	BLIZZARD	BLIZZARD	<nil>
+storage	uf_boss	reset-missing:before:unit_dispel_symbol	menu2.uf_boss.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	<nil>	BORDER	BORDER	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_focus	reset-customized:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	true	false	true	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	2	1	2	1
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	customized	TOPRIGHT	customized	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	customized	RIGHT	customized	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	9	8	9	8
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	customized	ALL	customized	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	15	14	15	14
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	3	2	3	2
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	customized	AUTO	customized	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	customized	BLIZZARD	customized	<nil>
+storage	uf_focus	reset-customized:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	customized	BORDER	customized	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_focus	reset-missing:after:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	<nil>	false	false	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	<nil>	1	1	1
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	<nil>	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	<nil>	RIGHT	RIGHT	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	<nil>	8	8	8
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	<nil>	ALL	ALL	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	<nil>	14	14	14
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	<nil>	2	2	2
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	<nil>	AUTO	AUTO	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	<nil>	BLIZZARD	BLIZZARD	<nil>
+storage	uf_focus	reset-missing:before:unit_dispel_symbol	menu2.uf_focus.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	<nil>	BORDER	BORDER	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_player	reset-customized:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	true	false	true	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	2	1	2	1
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	customized	TOPRIGHT	customized	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	customized	RIGHT	customized	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	9	8	9	8
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	customized	ALL	customized	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	15	14	15	14
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	3	2	3	2
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	customized	AUTO	customized	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	customized	BLIZZARD	customized	<nil>
+storage	uf_player	reset-customized:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	customized	BORDER	customized	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_player	reset-missing:after:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	<nil>	false	false	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	<nil>	1	1	1
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	<nil>	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	<nil>	RIGHT	RIGHT	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	<nil>	8	8	8
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	<nil>	ALL	ALL	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	<nil>	14	14	14
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	<nil>	2	2	2
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	<nil>	AUTO	AUTO	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	<nil>	BLIZZARD	BLIZZARD	<nil>
+storage	uf_player	reset-missing:before:unit_dispel_symbol	menu2.uf_player.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	<nil>	BORDER	BORDER	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_target	reset-customized:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	true	false	true	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	2	1	2	1
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	customized	TOPRIGHT	customized	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	customized	RIGHT	customized	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	9	8	9	8
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	customized	ALL	customized	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	15	14	15	14
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	3	2	3	2
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	customized	AUTO	customized	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	customized	BLIZZARD	customized	<nil>
+storage	uf_target	reset-customized:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	customized	BORDER	customized	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	false	false	false	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	1	1	1	1
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	TOPRIGHT	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	RIGHT	RIGHT	RIGHT	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	8	8	8	8
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	ALL	ALL	ALL	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	14	14	14	14
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	2	2	2	2
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	AUTO	AUTO	AUTO	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	BLIZZARD	BLIZZARD	BLIZZARD	<nil>
+storage	uf_target	reset-missing:after:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	BORDER	BORDER	BORDER	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.enabled	unitDispelSymbolEnabled	<nil>	false	false	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolalpha	unitDispelSymbolAlpha	<nil>	1	1	1
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolanchor	unitDispelSymbolAnchor	<nil>	TOPRIGHT	TOPRIGHT	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolgrowth	unitDispelSymbolGrowth	<nil>	RIGHT	RIGHT	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbollayer	unitDispelSymbolLayer	<nil>	8	8	8
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolmode	unitDispelSymbolMode	<nil>	ALL	ALL	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolsize	unitDispelSymbolSize	<nil>	14	14	14
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolspacing	unitDispelSymbolSpacing	<nil>	2	2	2
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstrata	unitDispelSymbolStrata	<nil>	AUTO	AUTO	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymbolstyle	unitDispelSymbolStyle	<nil>	BLIZZARD	BLIZZARD	<nil>
+storage	uf_target	reset-missing:before:unit_dispel_symbol	menu2.uf_target.unit.dispel.symbol.unitdispelsymboltrigger	unitDispelSymbolTrigger	<nil>	BORDER	BORDER	<nil>

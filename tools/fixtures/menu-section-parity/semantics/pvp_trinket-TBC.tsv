@@ -1,0 +1,96 @@
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	absent	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	invalid	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	zero	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	absent	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	invalid	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	zero	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	absent	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	invalid	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	zero	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	absent	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	invalid	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	zero	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	absent	RIGHT	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	false	RIGHT	false
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	invalid	invalid	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	zero	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	absent	10	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	false	10	false
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	invalid	10	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	zero	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	absent	4	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	false	4	false
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	invalid	4	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	zero	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	absent	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	false	0	false
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	invalid	0	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	zero	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.show	absent	true	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.show	false	false	false
+default	uf_arena	menu2.uf_arena.unit.trinket.show	invalid	true	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.show	zero	true	0
+default	uf_arena	menu2.uf_arena.unit.trinket.size	absent	20	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.size	false	20	false
+default	uf_arena	menu2.uf_arena.unit.trinket.size	invalid	20	invalid
+default	uf_arena	menu2.uf_arena.unit.trinket.size	zero	0	0
+intent	uf_arena	cold	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	true
+intent	uf_arena	cold	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+intent	uf_arena	disabled	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	false	false
+intent	uf_arena	disabled	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+intent	uf_arena	edited	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	true
+intent	uf_arena	edited	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	true
+intent	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	11	11
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	5	5
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	1	1
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	false	false
+intent	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	21	21
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	true
+intent	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	<nil>
+intent	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	<nil>
+intent	uf_arena	warm	menu2.uf_arena.section.pvp_trinket.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.anchor	dropdown		<nil>	<nil>	<nil>	RIGHT	RIGHT
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.layer	slider	0	<nil>	LEFT	LEFT	10	10
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.offset_x	slider	0	<nil>	LEFT	LEFT	4	4
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.offset_y	slider	0	<nil>	LEFT	LEFT	0	0
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.show	toggle		<nil>	<nil>	<nil>	true	true
+intent	uf_arena	warm	menu2.uf_arena.unit.trinket.size	slider	0	<nil>	LEFT	LEFT	20	20
+reset-redo	uf_arena	customized	pvp_trinket	false
+reset-redo	uf_arena	missing	pvp_trinket	false
+reset-undo	uf_arena	customized	pvp_trinket	false	false	{arena.showTrinket=true,arena.trinketLayer=10,arena.trinketOffsetX=4,arena.trinketOffsetY=0,arena.trinketSize=20}
+reset-undo	uf_arena	missing	pvp_trinket	false	false	{arena.showTrinket=true,arena.trinketAnchor=RIGHT,arena.trinketLayer=10,arena.trinketOffsetX=4,arena.trinketOffsetY=0,arena.trinketSize=20}

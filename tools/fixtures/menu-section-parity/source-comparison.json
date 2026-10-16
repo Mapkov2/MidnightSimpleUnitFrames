@@ -1,0 +1,122 @@
+{
+  "original_base": "32ee2629aa5216687992130b904d6def80a357b3",
+  "parent_base": "3feb8c771f6d2f32d3fd8a475a0134faf40beb4f",
+  "original_source_manifest": "4d29e37aa17209f60620c96b0c45ebbfe6dc91a25aed405bf6134eb29edd2b94",
+  "parent_source_manifest": "1b3042a9f4a2177885307588153bab30027eedd33927791b30bf4e145e6872d7",
+  "original_receipts": {
+    "pvp_trinket-Mainline.tsv": "b3ca43bb0aea1ad456bbf42675351188f03e0184102108770e1878839d8ef8d0",
+    "dispel_overlay-Mainline.tsv": "18b9e2010f30bb728a197bc3aa12df238282450a91752c4f93c764fbb12456db",
+    "dispel_symbol-Mainline.tsv": "4632b65c176597c7cc0330e2d218147d5973519495fc40c78f90e8a7f8ac8460",
+    "unit_visibility-Mainline.tsv": "f12781a95f7e9a3754ecc9f3bbe1899ec6485d1d3549f64132a71f7a283bbb84",
+    "boss_arena_layout-Mainline.tsv": "598e75cefef4a940f094cbea7729592071d66f48e35fca985b3afdf804e015e5",
+    "boss_target_highlight-Mainline.tsv": "739d0a0ca67e485600504293865919e08da5818db948f13b5e78756a7057ea47",
+    "pvp_trinket-Forever.tsv": "7baf2da82586526c9049868d23f3d2bfd4f14ea3b29519661fef633cae614296",
+    "dispel_overlay-Forever.tsv": "b29a867802bc3775880a7143524df1f2a4833ee0c60c2bc0ee12063d46370d9d",
+    "dispel_symbol-Forever.tsv": "c03623ea0fca2b5a3281f0656528846b9584d4860dfa4d4e4fbff99ee41e5c02",
+    "unit_visibility-Forever.tsv": "29b790dc50e135628bc207dc14522b8bb2301ba05eb4159062a395bcab3ce095",
+    "boss_arena_layout-Forever.tsv": "d4ace2e6745bb272a7c189cc807d23cba0a756d5ce171db62bf37c1174961919",
+    "boss_target_highlight-Forever.tsv": "bc079e335ae39cfc840bd31a4af2e4cc88195dc17554f117f88d12bfbf63d100",
+    "pvp_trinket-Vanilla.tsv": "7baf2da82586526c9049868d23f3d2bfd4f14ea3b29519661fef633cae614296",
+    "dispel_overlay-Vanilla.tsv": "0f9e7621f92e6fc6373f90f699ef89026add6ebd6c1113b0e27be447ce88fac5",
+    "dispel_symbol-Vanilla.tsv": "299f283e986a1653535d6a2d2df447c3bd315b3e1abab829782f725714f5d0d5",
+    "unit_visibility-Vanilla.tsv": "d789c03af68203c9fff03cb136aa811fc8abedabfd65a9e1dda2ac98bad340c1",
+    "boss_arena_layout-Vanilla.tsv": "fd8f726f4cf211464a04d8f33b72e92c31a030e52fb11d126ce78d97c4d2bacf",
+    "boss_target_highlight-Vanilla.tsv": "51df3ab9d5532a9bbc3ba961f78e26b2e1206315615419a2b72d0767ba97f47d",
+    "pvp_trinket-TBC.tsv": "d6518efe31e5e54a429f741c6c455b52d0c51a5e358e2a22bd9a19736676d8ee",
+    "dispel_overlay-TBC.tsv": "ecf352903b0ed362867604238ff6038f6547c03d3548b11b07ff3d7189836bb6",
+    "dispel_symbol-TBC.tsv": "3f2ea4fc97717f7f4d5bcd5007e3cca4c8f5c3a199c698fef3ad2fe528736ec6",
+    "unit_visibility-TBC.tsv": "8dce0e045577bc0cc68424e9b3ba066ae800fce92c159a29baf9f20095ca4ec7",
+    "boss_arena_layout-TBC.tsv": "c4f1776faaab9d6db3d7d59906a7a79998c19c4a8fe29b4ee844637be524fdbc",
+    "boss_target_highlight-TBC.tsv": "51df3ab9d5532a9bbc3ba961f78e26b2e1206315615419a2b72d0767ba97f47d",
+    "pvp_trinket-Mists.tsv": "b3ca43bb0aea1ad456bbf42675351188f03e0184102108770e1878839d8ef8d0",
+    "dispel_overlay-Mists.tsv": "18b9e2010f30bb728a197bc3aa12df238282450a91752c4f93c764fbb12456db",
+    "dispel_symbol-Mists.tsv": "4632b65c176597c7cc0330e2d218147d5973519495fc40c78f90e8a7f8ac8460",
+    "unit_visibility-Mists.tsv": "f12781a95f7e9a3754ecc9f3bbe1899ec6485d1d3549f64132a71f7a283bbb84",
+    "boss_arena_layout-Mists.tsv": "598e75cefef4a940f094cbea7729592071d66f48e35fca985b3afdf804e015e5",
+    "boss_target_highlight-Mists.tsv": "739d0a0ca67e485600504293865919e08da5818db948f13b5e78756a7057ea47"
+  },
+  "parent_receipts": {
+    "pvp_trinket-Mainline.tsv": "b3ca43bb0aea1ad456bbf42675351188f03e0184102108770e1878839d8ef8d0",
+    "dispel_overlay-Mainline.tsv": "18b9e2010f30bb728a197bc3aa12df238282450a91752c4f93c764fbb12456db",
+    "dispel_symbol-Mainline.tsv": "4632b65c176597c7cc0330e2d218147d5973519495fc40c78f90e8a7f8ac8460",
+    "unit_visibility-Mainline.tsv": "f12781a95f7e9a3754ecc9f3bbe1899ec6485d1d3549f64132a71f7a283bbb84",
+    "boss_arena_layout-Mainline.tsv": "598e75cefef4a940f094cbea7729592071d66f48e35fca985b3afdf804e015e5",
+    "boss_target_highlight-Mainline.tsv": "739d0a0ca67e485600504293865919e08da5818db948f13b5e78756a7057ea47",
+    "pvp_trinket-Forever.tsv": "7baf2da82586526c9049868d23f3d2bfd4f14ea3b29519661fef633cae614296",
+    "dispel_overlay-Forever.tsv": "b29a867802bc3775880a7143524df1f2a4833ee0c60c2bc0ee12063d46370d9d",
+    "dispel_symbol-Forever.tsv": "c03623ea0fca2b5a3281f0656528846b9584d4860dfa4d4e4fbff99ee41e5c02",
+    "unit_visibility-Forever.tsv": "29b790dc50e135628bc207dc14522b8bb2301ba05eb4159062a395bcab3ce095",
+    "boss_arena_layout-Forever.tsv": "d4ace2e6745bb272a7c189cc807d23cba0a756d5ce171db62bf37c1174961919",
+    "boss_target_highlight-Forever.tsv": "bc079e335ae39cfc840bd31a4af2e4cc88195dc17554f117f88d12bfbf63d100",
+    "pvp_trinket-Vanilla.tsv": "7baf2da82586526c9049868d23f3d2bfd4f14ea3b29519661fef633cae614296",
+    "dispel_overlay-Vanilla.tsv": "0f9e7621f92e6fc6373f90f699ef89026add6ebd6c1113b0e27be447ce88fac5",
+    "dispel_symbol-Vanilla.tsv": "299f283e986a1653535d6a2d2df447c3bd315b3e1abab829782f725714f5d0d5",
+    "unit_visibility-Vanilla.tsv": "d789c03af68203c9fff03cb136aa811fc8abedabfd65a9e1dda2ac98bad340c1",
+    "boss_arena_layout-Vanilla.tsv": "fd8f726f4cf211464a04d8f33b72e92c31a030e52fb11d126ce78d97c4d2bacf",
+    "boss_target_highlight-Vanilla.tsv": "51df3ab9d5532a9bbc3ba961f78e26b2e1206315615419a2b72d0767ba97f47d",
+    "pvp_trinket-TBC.tsv": "d6518efe31e5e54a429f741c6c455b52d0c51a5e358e2a22bd9a19736676d8ee",
+    "dispel_overlay-TBC.tsv": "ecf352903b0ed362867604238ff6038f6547c03d3548b11b07ff3d7189836bb6",
+    "dispel_symbol-TBC.tsv": "3f2ea4fc97717f7f4d5bcd5007e3cca4c8f5c3a199c698fef3ad2fe528736ec6",
+    "unit_visibility-TBC.tsv": "8dce0e045577bc0cc68424e9b3ba066ae800fce92c159a29baf9f20095ca4ec7",
+    "boss_arena_layout-TBC.tsv": "c4f1776faaab9d6db3d7d59906a7a79998c19c4a8fe29b4ee844637be524fdbc",
+    "boss_target_highlight-TBC.tsv": "51df3ab9d5532a9bbc3ba961f78e26b2e1206315615419a2b72d0767ba97f47d",
+    "pvp_trinket-Mists.tsv": "b3ca43bb0aea1ad456bbf42675351188f03e0184102108770e1878839d8ef8d0",
+    "dispel_overlay-Mists.tsv": "18b9e2010f30bb728a197bc3aa12df238282450a91752c4f93c764fbb12456db",
+    "dispel_symbol-Mists.tsv": "4632b65c176597c7cc0330e2d218147d5973519495fc40c78f90e8a7f8ac8460",
+    "unit_visibility-Mists.tsv": "f12781a95f7e9a3754ecc9f3bbe1899ec6485d1d3549f64132a71f7a283bbb84",
+    "boss_arena_layout-Mists.tsv": "598e75cefef4a940f094cbea7729592071d66f48e35fca985b3afdf804e015e5",
+    "boss_target_highlight-Mists.tsv": "739d0a0ca67e485600504293865919e08da5818db948f13b5e78756a7057ea47"
+  },
+  "product_differences": {
+    "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua": {
+      "original": "6949ac3d106afc48d2c46f6901a939c2870d012aa10652c7d0e46a5c72bb1dd1",
+      "parent": "168fd41e1385edf9503bcfcdb5e515917c0d2c426cde5d63e11dc514016a2d22"
+    },
+    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua": {
+      "original": "196adb315c71b9de606d2166ff96a6047ea4b3ed31f7676d5e96d75e5416f58d",
+      "parent": "24f7739bace397a42de923c6ed8ed7ec177b83bc94f1a200eaa98a6f19e099aa"
+    },
+    "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua": {
+      "original": "83efb868460f4d41fe16d7a00b6caa222de868d2b275b2ec44a00606926b1336",
+      "parent": "2df19a116e2b32ddd3bec27aa3566173364f2088295c6013f11d4e05083b59e2"
+    },
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua": {
+      "original": "f879dc9f14ba51d694f8a0391fe239ff8c7f0a694807691f5881099ac8b5a22a",
+      "parent": "19caba59ae19668f18494a350424ba55ebd9a52ff5324db593add28ad93b6e20"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua": {
+      "original": "67dba7e34d504c2d66d0805e5e53b4c5f64b0d3eaf1bc36b1e5277a37f4f773c",
+      "parent": "109951344c1c566772109bdbae27f03d3df914424d4c48b3c58a04dac87c5f2f"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua": {
+      "original": "d30f5cd33308a42dfba819c7ecd274e0e0652655f38e1c1c2257b49176b1165a",
+      "parent": "f4430ea294a4017a9a1caec52d83e599d22fedb4342697e42d54392f6b0eca94"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua": {
+      "original": "7a919341d9e4454d289f270f7c0d1526245b92dc3df8bb745b145d6234ed6e16",
+      "parent": "a5a957226902b50b85b746400b27f3ac206524067325664b0d7a8efe11080b95"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua": {
+      "original": "7e2f69844a98bf5eccd2ca0d5b67e493576fbe599465a3dbbc7b8ad5cd2eac4b",
+      "parent": "c591417cb2325992d912aefd5819d1be181c44f0bfd7c862f0045381b110f48c"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group_SpellModel.lua": {
+      "original": "46561dc426850dd95af1d5c12d631108d4119d23c32794407d264cbde5b1ee63",
+      "parent": "37627954d42e59e61dea4eb4405c7de2b83766c9646d1e67e93192e0081ad79d"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua": {
+      "original": "69c3076dda8360f65b636d2c0f84197f230b064980cc0e4eac3da95f60af59da",
+      "parent": "32e8c2591909aa2c2ca04ca9735560db6114fad3ba0533cf5014a7480079b3e2"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua": {
+      "original": "0b40f97a6c05c4c53dd7998e31b54122ca36bd1fbc6d9f15e3e94f87921bdef4",
+      "parent": "da004f32cc2418d69c67446fbb25ffc6ddec90609bbdb8036c3775cd4b368854"
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua": {
+      "original": "1275027e9eac41291c4d0e709807b758f8f6c8d576c88b2afc1b4d8badb06ce9",
+      "parent": "4253a361577c307e77e77ad4f7db8a9f78d1de4187318cfa9f0c133fb7253d0f"
+    }
+  },
+  "semantic_differences": {},
+  "reason": "Original receipt bytes retained. Add defaults, raw reset values, native undo/redo results, numeric command fallback and dropdown placement/alignment intent only from genuine committed old-builder replay."
+}

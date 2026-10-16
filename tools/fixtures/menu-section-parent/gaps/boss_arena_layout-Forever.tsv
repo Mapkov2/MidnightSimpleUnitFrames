@@ -1,0 +1,12 @@
+absent	uf_arena
+command-set	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	absent	-36	-36	-36
+command-set	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	invalid	-36	-36	-36
+command-set	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	zero	0	0	-36
+default	uf_boss	menu2.uf_boss.unit.boss_layout.mode	bossLayoutMode	absent	VERTICAL_DOWN	<nil>	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_layout.mode	bossLayoutMode	false	VERTICAL_DOWN	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_layout.mode	bossLayoutMode	invalid	VERTICAL_DOWN	invalid	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_layout.mode	bossLayoutMode	zero	VERTICAL_DOWN	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	absent	-36	<nil>	-36
+default	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	false	-36	false	-36
+default	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	invalid	-36	invalid	-36
+default	uf_boss	menu2.uf_boss.unit.boss_layout.spacing	spacing	zero	0	0	-36

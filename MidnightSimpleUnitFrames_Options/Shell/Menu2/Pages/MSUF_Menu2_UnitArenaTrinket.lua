@@ -8,7 +8,7 @@ local _, MSUF = ...
 -- The Options bootstrap links this namespace to the core one and creates MSUF2;
 -- the unit page registry (Pages/MSUF_Menu2_UnitLazy.lua) loads before this file.
 local M = MSUF.MSUF2
-local W, UP = M.Widgets, M.UnitPage
+local W, UP, Schema = M.Widgets, M.UnitPage, M.ControlSchema
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua")
 local floor = math.floor
 
@@ -34,51 +34,46 @@ UP.ARENA_TRINKET_FIELDS = "showTrinket trinketSize trinketAnchor trinketOffsetX 
 local function BuildArenaTrinket(ctx, builder, unit)
     local runtime = MSUF.ArenaTrinkets
     local defaults, limits = runtime.DEFAULTS, runtime.LIMITS
-    local ReadBool, SetBool, ReadNumber, SetNumber = UP.ReadBool, UP.SetBool, UP.ReadNumber, UP.SetNumber
-    local GetConf, SetString, SettingMeta = UP.GetConf, UP.SetString, UP.SettingMeta
-    local sec = builder:CollapsibleSection(SECTION_ID, "PvP Trinket", SECTION_HEIGHT, false)
+    local sec = Schema.Section(builder:CollapsibleSection(SECTION_ID, "PvP Trinket", SECTION_HEIGHT, false), unit)
     local width = math.max(340, ((sec and sec._msuf2Width) or (ctx and ctx.width) or 720) - 40)
     local half = floor((width - 16) / 2)
-    local iconCard = W.ControlCard(sec, "Icon", nil, 20, -38, half, CARD_HEIGHT)
-    local placeCard = W.ControlCard(sec, "Position", nil, 36 + half, -38, width - half - 16, CARD_HEIGHT)
+    local cards = {
+        icon = W.ControlCard(sec, "Icon", nil, 20, -38, half, CARD_HEIGHT),
+        place = W.ControlCard(sec, "Position", nil, 36 + half, -38, width - half - 16, CARD_HEIGHT),
+    }
     local controlW = half - 32
-    local opts = { preview = true }
-
-    local function Meta(path, key)
-        local meta = SettingMeta(ctx, CONTROL_PATH .. path, unit, key)
-        meta.step, meta.roundStep = 1, true
-        return meta
-    end
-    local function NumberRow(card, label, key, low, high, fallback, y, path)
-        return M.BindSliderAt(ctx, card, label, 16, y, low, high, 1, controlW,
-            function() return ReadNumber(unit, key, fallback) end,
-            function(value) SetNumber(unit, key, value, APPLY_REASON, opts) end,
-            Meta(path, key))
-    end
-
     local RefreshGate = M.RefreshProxy()
-    local shown = M.BindToggleAt(ctx, iconCard, "Show PvP trinket", 16, -54, controlW,
-        function() return ReadBool(unit, "showTrinket", true) end,
-        function(value)
-            SetBool(unit, "showTrinket", value, APPLY_REASON, opts)
-            RefreshGate()
-        end,
-        SettingMeta(ctx, CONTROL_PATH .. "show", unit, "showTrinket"))
-    M.AddTooltip(shown, "Show PvP trinket",
+    local offset = limits.offset
+    local rows = {
+        { card = "icon", y = -54, kind = "toggle", path = "show", key = "showTrinket", labelKey = "Show PvP trinket",
+            default = true, after = RefreshGate },
+        { card = "icon", y = -100, kind = "slider", path = "size", key = "trinketSize", labelKey = "Size",
+            range = { limits.sizeMin, limits.sizeMax, 1 }, default = defaults.size },
+        { card = "icon", y = -154, kind = "slider", path = "layer", key = "trinketLayer", labelKey = "Layer",
+            range = { 0, 30, 1 }, default = defaults.layer },
+        { card = "place", y = -54, kind = "dropdown", path = "anchor", key = "trinketAnchor", labelKey = "Anchor",
+            values = SIDE_CHOICES, default = defaults.anchor },
+        { card = "place", y = -112, kind = "slider", path = "offset_x", key = "trinketOffsetX", labelKey = "X offset",
+            range = { -offset, offset, 1 }, default = defaults.x },
+        { card = "place", y = -166, kind = "slider", path = "offset_y", key = "trinketOffsetY", labelKey = "Y offset",
+            range = { -offset, offset, 1 }, default = defaults.y },
+    }
+    local controls = {}
+    for _, row in ipairs(rows) do
+        local meta = UP.SettingMeta(ctx, CONTROL_PATH .. row.path, unit, row.key)
+        controls[row.key] = Schema.Render(ctx, cards[row.card], {
+            id = meta.controlId, kind = row.kind, labelKey = row.labelKey, key = row.key, meta = meta, view = "at",
+            scope = unit, unit = unit, settingPath = unit .. "." .. row.key, applyDomain = "arenaTrinket",
+            reason = APPLY_REASON, range = row.range, values = row.values, roundStep = row.kind == "slider", numberFallback = 0,
+            after = row.after, defaultSource = function() return row.default end,
+        }, { x = 16, y = row.y, width = controlW, moveWidth = controlW })
+    end
+    M.AddTooltip(controls.showTrinket, "Show PvP trinket",
         "Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too.",
         { hook = true, owner = "ANCHOR_RIGHT" })
-    local size = NumberRow(iconCard, "Size", "trinketSize", limits.sizeMin, limits.sizeMax, defaults.size, -100, "size")
-    local layer = NumberRow(iconCard, "Layer", "trinketLayer", 0, 30, defaults.layer, -154, "layer")
-
-    local side = M.BindDropdownAt(ctx, placeCard, "Anchor", 16, -54, SIDE_CHOICES, controlW,
-        function() return GetConf(unit).trinketAnchor or defaults.anchor end,
-        function(value) SetString(unit, "trinketAnchor", value, APPLY_REASON, opts) end,
-        SettingMeta(ctx, CONTROL_PATH .. "anchor", unit, "trinketAnchor"))
-    local offsetX = NumberRow(placeCard, "X offset", "trinketOffsetX", -limits.offset, limits.offset, defaults.x, -112, "offset_x")
-    local offsetY = NumberRow(placeCard, "Y offset", "trinketOffsetY", -limits.offset, limits.offset, defaults.y, -166, "offset_y")
-
-    RefreshGate(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
-        { on = function(conf) return conf.showTrinket ~= false end, controls = { size, layer, side, offsetX, offsetY } },
+    RefreshGate(M.BindGateGroup(ctx, function() return UP.GetConf(unit) end, {
+        { on = function(conf) return conf.showTrinket ~= false end, controls = { controls.trinketSize, controls.trinketLayer,
+            controls.trinketAnchor, controls.trinketOffsetX, controls.trinketOffsetY } },
     }))
 end
 
@@ -90,6 +85,7 @@ UP.RegisterSection({
     placement = "after_inline_text",
     order = 40,
     units = { arena = true },
+    prepareShell = function(_, section, unit) Schema.Section(section, unit) end,
     build = BuildArenaTrinket,
 })
 

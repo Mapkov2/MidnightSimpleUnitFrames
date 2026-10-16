@@ -1,0 +1,21 @@
+absent	uf_boss
+default	uf_arena	menu2.uf_arena.unit.arena_layout.mode	absent	VERTICAL_DOWN	<nil>
+default	uf_arena	menu2.uf_arena.unit.arena_layout.mode	false	VERTICAL_DOWN	false
+default	uf_arena	menu2.uf_arena.unit.arena_layout.mode	invalid	VERTICAL_DOWN	invalid
+default	uf_arena	menu2.uf_arena.unit.arena_layout.mode	zero	VERTICAL_DOWN	0
+default	uf_arena	menu2.uf_arena.unit.arena_layout.spacing	absent	-96	<nil>
+default	uf_arena	menu2.uf_arena.unit.arena_layout.spacing	false	-96	false
+default	uf_arena	menu2.uf_arena.unit.arena_layout.spacing	invalid	-96	invalid
+default	uf_arena	menu2.uf_arena.unit.arena_layout.spacing	zero	0	0
+intent	uf_arena	cold	menu2.uf_arena.section.arena_layout.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	cold	menu2.uf_arena.unit.arena_layout.mode	segment		<nil>	<nil>	<nil>	VERTICAL_DOWN	VERTICAL_DOWN
+intent	uf_arena	cold	menu2.uf_arena.unit.arena_layout.spacing	slider		CENTER	LEFT	LEFT	-96	-96
+intent	uf_arena	edited	menu2.uf_arena.section.arena_layout.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	edited	menu2.uf_arena.unit.arena_layout.mode	segment		<nil>	<nil>	<nil>	VERTICAL_DOWN	VERTICAL_DOWN
+intent	uf_arena	edited	menu2.uf_arena.unit.arena_layout.spacing	slider		CENTER	LEFT	LEFT	-120	-120
+intent	uf_arena	legacy-invert	menu2.uf_arena.section.arena_layout.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	legacy-invert	menu2.uf_arena.unit.arena_layout.mode	segment		<nil>	<nil>	<nil>	VERTICAL_DOWN	<nil>
+intent	uf_arena	legacy-invert	menu2.uf_arena.unit.arena_layout.spacing	slider		CENTER	LEFT	LEFT	-96	-96
+intent	uf_arena	warm	menu2.uf_arena.section.arena_layout.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_arena	warm	menu2.uf_arena.unit.arena_layout.mode	segment		<nil>	<nil>	<nil>	VERTICAL_DOWN	VERTICAL_DOWN
+intent	uf_arena	warm	menu2.uf_arena.unit.arena_layout.spacing	slider		CENTER	LEFT	LEFT	-96	-96

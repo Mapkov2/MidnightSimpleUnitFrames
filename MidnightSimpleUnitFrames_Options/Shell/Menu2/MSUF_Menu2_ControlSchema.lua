@@ -47,6 +47,8 @@ local UNIT_DOMAINS = {
     powerAlpha = { power = true, preview = true },
     oocAlpha = { alpha = true },
     range = { preview = true },
+    arenaTrinket = { preview = true },
+    layout = { preview = true },
 }
 function Schema.SetUnit(domain, unit, key, value, reason, kind)
     local flags = assert(UNIT_DOMAINS[domain], "unknown pilot unit apply domain")
@@ -63,10 +65,27 @@ local function Metadata(spec)
     if spec.settingPath then meta.settingKey = spec.settingPath end
     if spec.help then meta.help = spec.help end
     if spec.keywords then meta.keywords = spec.keywords end
+    if spec.roundStep then meta.step, meta.roundStep = spec.range[3], true end
     return meta
+end
+-- Unit rows read and write through the UnitPage adapters, as the old section
+-- binders did; `after` runs once the setter returns.
+local function UnitAccessors(spec)
+    local unit, key, owner = spec.unit, spec.key, M.UnitPage
+    local function Get()
+        if spec.kind == "toggle" then return owner.ReadBool(unit, key, spec.defaultSource()) end
+        if spec.kind == "slider" then return owner.ReadNumber(unit, key, spec.defaultSource()) end
+        return owner.GetConf(unit)[key] or spec.defaultSource()
+    end
+    local function Set(value)
+        Schema.SetUnit(spec.applyDomain, unit, key, value, spec.reason, spec.kind)
+        if spec.after then spec.after(value) end
+    end
+    return Get, Set
 end
 local function Accessors(spec)
     if spec.get then return spec.get, assert(spec.set, "schema custom setter missing") end
+    if spec.unit then return UnitAccessors(spec) end
     local source = assert(spec.source, "schema setting source missing")
     local key = assert(spec.key, "schema setting key missing")
     local function Get()
@@ -93,7 +112,7 @@ function Schema.Bind(ctx, widget, spec)
         M.ClassPowerWorkspace.Bind(spec.kind, ctx, widget, get, set, fallback, meta)
     elseif spec.kind == "slider" then
         assert(spec.range and spec.defaultSource, "schema slider range/default source missing")
-        M.BindNumberWidget(ctx, widget, get, set, spec.defaultSource(), meta)
+        M.BindNumberWidget(ctx, widget, get, set, spec.numberFallback or spec.defaultSource(), meta)
     elseif spec.kind == "toggle" then
         M.BindBoolWidget(ctx, widget, get, set, meta)
     elseif spec.kind == "dropdown" then
@@ -181,6 +200,7 @@ function Schema.Render(ctx, parent, spec, layout)
     elseif spec.kind == "toggle" then
         if spec.view == "header" then widget = W.SectionSwitch(parent, label)
         elseif spec.view == "switch" then widget = W.SwitchAt(parent, label, layout.x, layout.y, width)
+        elseif spec.view == "at" then widget = W.ToggleAt(parent, label, layout.x, layout.y, width)
         else widget = W.Toggle(parent, label) end
     elseif spec.kind == "dropdown" then widget = W.Dropdown(parent, label, spec.values, width)
     elseif spec.kind == "segment" then widget = W.Segment(parent, label, spec.values, width)
@@ -188,7 +208,8 @@ function Schema.Render(ctx, parent, spec, layout)
     else error("schema custom widget must be supplied to Bind") end
     if spec.beforeBind then spec.beforeBind(widget) end
     Schema.Bind(ctx, widget, spec)
-    if layout.x and spec.view ~= "switch" then
+    -- Toggles created at a position are already placed.
+    if layout.x and not (spec.kind == "toggle" and (spec.view == "switch" or spec.view == "at")) then
         W.MoveWidget(widget, parent, layout.x, layout.y, layout.moveWidth, layout.align)
     end
     return widget

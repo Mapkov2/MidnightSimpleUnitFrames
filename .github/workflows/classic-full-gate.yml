@@ -35,6 +35,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+          fetch-depth: 0
 
       # The environment steps of the self-contained gate, pinned the same way.
       - name: Set up Python for the Classic gate

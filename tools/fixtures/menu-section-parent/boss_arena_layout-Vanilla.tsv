@@ -1,0 +1,4 @@
+absent	uf_arena	arena
+absent	uf_boss	boss
+state	uf_arena:page	1
+state	uf_boss:page	2

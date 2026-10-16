@@ -1,0 +1,64 @@
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	absent	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	invalid	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	zero	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	absent	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	invalid	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	zero	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	absent	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	invalid	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	zero	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	absent	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	invalid	0	0	0
+command-set	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	zero	0	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	absent	RIGHT	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	false	RIGHT	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	invalid	invalid	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	zero	0	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	absent	10	<nil>	0
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	false	10	false	0
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	invalid	10	invalid	0
+default	uf_arena	menu2.uf_arena.unit.trinket.layer	trinketLayer	zero	0	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	absent	4	<nil>	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	false	4	false	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	invalid	4	invalid	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	zero	0	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	absent	0	<nil>	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	false	0	false	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	invalid	0	invalid	0
+default	uf_arena	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	zero	0	0	0
+default	uf_arena	menu2.uf_arena.unit.trinket.show	showTrinket	absent	true	<nil>	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.show	showTrinket	false	false	false	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.show	showTrinket	invalid	true	invalid	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.show	showTrinket	zero	true	0	<nil>
+default	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	absent	20	<nil>	0
+default	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	false	20	false	0
+default	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	invalid	20	invalid	0
+default	uf_arena	menu2.uf_arena.unit.trinket.size	trinketSize	zero	0	0	0
+reset-redo	uf_arena	customized	pvp_trinket	false
+reset-redo	uf_arena	missing	pvp_trinket	false
+reset-undo	uf_arena	customized	pvp_trinket	false	false	{arena.showTrinket=true,arena.trinketAnchor=RIGHT,arena.trinketLayer=10,arena.trinketOffsetX=4,arena.trinketOffsetY=0,arena.trinketSize=20}
+reset-undo	uf_arena	missing	pvp_trinket	false	false	{arena.showTrinket=true,arena.trinketAnchor=RIGHT,arena.trinketLayer=10,arena.trinketOffsetX=4,arena.trinketOffsetY=0,arena.trinketSize=20}
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	RIGHT	<nil>	RIGHT	<nil>
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.layer	trinketLayer	10	<nil>	10	0
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	4	<nil>	4	0
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	0	<nil>	0	0
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.show	showTrinket	true	<nil>	true	<nil>
+storage	uf_arena	reset-customized:after:pvp_trinket	menu2.uf_arena.unit.trinket.size	trinketSize	20	<nil>	20	0
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	customized	<nil>	customized	<nil>
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.layer	trinketLayer	11	<nil>	11	0
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	5	<nil>	5	0
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	1	<nil>	1	0
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.show	showTrinket	false	<nil>	false	<nil>
+storage	uf_arena	reset-customized:before:pvp_trinket	menu2.uf_arena.unit.trinket.size	trinketSize	21	<nil>	21	0
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	RIGHT	<nil>	RIGHT	<nil>
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.layer	trinketLayer	10	<nil>	10	0
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	4	<nil>	4	0
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	0	<nil>	0	0
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.show	showTrinket	true	<nil>	true	<nil>
+storage	uf_arena	reset-missing:after:pvp_trinket	menu2.uf_arena.unit.trinket.size	trinketSize	20	<nil>	20	0
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.anchor	trinketAnchor	<nil>	<nil>	RIGHT	<nil>
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.layer	trinketLayer	<nil>	<nil>	10	0
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_x	trinketOffsetX	<nil>	<nil>	4	0
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.offset_y	trinketOffsetY	<nil>	<nil>	0	0
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.show	showTrinket	<nil>	<nil>	true	<nil>
+storage	uf_arena	reset-missing:before:pvp_trinket	menu2.uf_arena.unit.trinket.size	trinketSize	<nil>	<nil>	20	0

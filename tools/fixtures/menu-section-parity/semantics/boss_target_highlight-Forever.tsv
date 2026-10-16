@@ -1,0 +1,59 @@
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	absent	LEFT	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	false	LEFT	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	invalid	invalid	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	absent	RIGHT	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	false	RIGHT	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	invalid	invalid	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	absent	SINGLE	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	false	SINGLE	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	invalid	invalid	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	absent	-28	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	false	-28	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	invalid	-28	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	absent	0	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	false	0	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	invalid	0	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	absent	24	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	false	24	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	invalid	24	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	zero	0	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.multiple_only	absent	false	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.multiple_only	false	false	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.multiple_only	invalid	false	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.multiple_only	zero	false	0
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.style	absent	BORDER	<nil>
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.style	false	BORDER	false
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.style	invalid	BORDER	invalid
+default	uf_boss	menu2.uf_boss.unit.boss_target_highlight.style	zero	BORDER	0
+intent	uf_boss	cold	menu2.uf_boss.section.boss_target_highlight.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	dropdown		LEFT	LEFT	LEFT	LEFT	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	dropdown		LEFT	LEFT	LEFT	RIGHT	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	dropdown		LEFT	LEFT	LEFT	SINGLE	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	slider		CENTER	LEFT	LEFT	-28	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	slider		CENTER	LEFT	LEFT	0	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	slider		CENTER	LEFT	LEFT	24	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.multiple_only	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	cold	menu2.uf_boss.unit.boss_target_highlight.style	dropdown		LEFT	LEFT	LEFT	BORDER	<nil>
+intent	uf_boss	edited	menu2.uf_boss.section.boss_target_highlight.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	dropdown		LEFT	LEFT	LEFT	TOP	TOP
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	dropdown		LEFT	LEFT	LEFT	UP	UP
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	dropdown		LEFT	LEFT	LEFT	BOTH_IN	BOTH_IN
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	slider		CENTER	LEFT	LEFT	-10	-10
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	slider		CENTER	LEFT	LEFT	12	12
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	slider		CENTER	LEFT	LEFT	40	40
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.multiple_only	toggle		<nil>	<nil>	<nil>	false	false
+intent	uf_boss	edited	menu2.uf_boss.unit.boss_target_highlight.style	dropdown		LEFT	LEFT	LEFT	BORDER_ARROW	BORDER_ARROW
+intent	uf_boss	warm	menu2.uf_boss.section.boss_target_highlight.expanded	toggle		<nil>	<nil>	<nil>	<nil>	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoranchor	dropdown		LEFT	LEFT	LEFT	LEFT	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatordirection	dropdown		LEFT	LEFT	LEFT	RIGHT	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorlayout	dropdown		LEFT	LEFT	LEFT	SINGLE	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsetx	slider		CENTER	LEFT	LEFT	-28	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatoroffsety	slider		CENTER	LEFT	LEFT	0	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.bosstargetindicatorsize	slider		CENTER	LEFT	LEFT	24	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.multiple_only	toggle		<nil>	<nil>	<nil>	false	<nil>
+intent	uf_boss	warm	menu2.uf_boss.unit.boss_target_highlight.style	dropdown		LEFT	LEFT	LEFT	BORDER	<nil>
