@@ -314,10 +314,13 @@ if ($LASTEXITCODE -eq 0) {
 # camelot (WoW Forever), wowlabs and IsSDHDToggleEnabled were pinned when
 # upstream/forever 1.60.1.69876 appeared (2026-09-16).
 $knownGameTypeTokens = @("camelot", "cata", "classic", "mainline", "mists", "plunderstorm", "standard", "tbc", "vanilla", "wowhack", "wowlabs", "wrath")
+# PTR b87363e0 (2026-10-15): QuickKeybind.lua checks account-wide bindings;
+# Shared/GameMenuFrame.lua checks Rewards Shop visibility. Both gate existing
+# settings/menu UI, not a new client or game mode; the tripwire stays strict.
 $knownGameRuleFunctions = @(
-    "IsCharacterlessLoginActive", "IsClassAllowedForGameMode", "IsGameModeEnabled", "IsGameRuleActive",
+    "IsAccountKeyBindingsEnabled", "IsCharacterlessLoginActive", "IsClassAllowedForGameMode", "IsGameModeEnabled", "IsGameRuleActive",
     "IsHardcoreActive", "IsMultiActionBarVisibilityForced", "IsPersonalResourceDisplayEnabled",
-    "IsPlunderstorm", "IsSDHDToggleEnabled", "IsSelfFoundAllowed", "IsStandard", "IsWoWHack"
+    "IsPlunderstorm", "IsRewardsShopEnabled", "IsSDHDToggleEnabled", "IsSelfFoundAllowed", "IsStandard", "IsWoWHack"
 )
 $tripwireRefs = [Collections.Generic.List[string]]::new()
 foreach ($client in $clientMatrix) {
