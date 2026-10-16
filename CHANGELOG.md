@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.503-beta2 - 2026-10-16
+
+### Bug Fixes
+
+- Fixed raid and Mythic raid frames showing only groups 1-3 with profiles carried over from older versions. Old profile strings import correctly again without a page reset.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"scaling","controlId":"menu2.gf_layout.group.field.excludehiddengroups","settingKey":"gf_raid.excludeHiddenGroups","prepareKind":"groupScope","prepareValue":"raid","query":"exclude hidden groups group size","label":"Raid group layout"} -->
+- Removed the group selection repair prompt after profile imports; it is no longer needed.
+<!-- msuf-menu-link: none -->
+
 ## 6.503-beta1 - 2026-10-16
 
 ### Bug Fixes

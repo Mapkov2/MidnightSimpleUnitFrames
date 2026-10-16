@@ -8,32 +8,34 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "344FC56942AEA8A3366E339FC31D2405A9583D82A4B80147F1522C797BDF6130",
-    currentVersion = "6.503-beta1",
+    sourceSha256 = "3966765BE48590799AF0720A4F28662585347954B2A7BB627F2F0FACE6468526",
+    currentVersion = "6.503-beta2",
     historyFromVersion = "6.50",
     previousVersion = "6.502",
-    rangeLabel = "6.502 -> 6.503-beta1",
+    rangeLabel = "6.502 -> 6.503-beta2",
     entries = {
         {
-            version = "6.503-beta1",
+            version = "6.503-beta2",
             date = "2026-10-16",
             sections = {
                 {
                     title = "Bug Fixes",
                     bullets = {
                         {
-                            text = "Fixed extra or doubled stage markers on Evoker Empower castbars after a channeled spell, including Fire Breath and Eternity Surge.",
+                            text = "Fixed raid and Mythic raid frames showing only groups 1-3 with profiles carried over from older versions. Old profile strings import correctly again without a page reset.",
                             link = {
-                                pageKey = "opt_castbar",
-                                query = "spell specific channel tick markers",
-                                label = "Player castbar settings",
-                                sectionId = "castbar_behavior",
-                                controlId = "menu2.opt.castbar.global.behavior.castbar.show.channel.ticks",
-                                settingKey = "general.castbarShowChannelTicks",
+                                pageKey = "gf_layout",
+                                query = "exclude hidden groups group size",
+                                label = "Raid group layout",
+                                sectionId = "scaling",
+                                controlId = "menu2.gf_layout.group.field.excludehiddengroups",
+                                settingKey = "gf_raid.excludeHiddenGroups",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
                             },
                         },
                         {
-                            text = "Restored the player castbar channel-selection behavior from before 6.502.",
+                            text = "Removed the group selection repair prompt after profile imports; it is no longer needed.",
                             linkless = true,
                         },
                     },
