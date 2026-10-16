@@ -187,19 +187,71 @@ end
 
 -- Entering the world. PLAYER_ENTERING_WORLD carries no unit token: its first
 -- payload argument is isInitialLogin and its second is isReloadingUi, both
--- booleans. The driver must take its forced refresh on both, and the forced
--- one at the initial login especially: it is the only pass that seeds the PvP
--- context before the first frame apply. Reading that boolean as a unit used to
--- return from the Classic driver at exactly that login.
-for _, login in ipairs({ { true, false, "the initial login" }, { false, true, "a UI reload" },
-    { false, false, "a zone transition" } }) do
-    ResetPvP()
-    Context()
+-- booleans (SystemDocumentation.lua). Reading that boolean as a unit used to
+-- return from the Classic driver at exactly the initial login.
+-- Classic: every entry forces one refresh; at the initial login it is the only
+-- pass that seeds the context before the indicators' first repaint.
+-- Mainline: a zone transition forces one recompile. A login or a UI reload
+-- enters the world right after the PLAYER_LOGIN build compiled every spec
+-- against the cached context, so it recompiles only when that context changed.
+-- A context no spec has read (no PvP indicator configured) is in no spec: the
+-- entry seeds it without a recompile.
+-- The login/reload rule trusts one invariant: every spec reads the context
+-- through this cache and only the context refresh itself invalidates it. A
+-- second invalidator could leave specs compiled against two values that no
+-- later login repairs, so no other loaded file may call it.
+for _, list in ipairs({ world.corePaths, world.optionsPaths }) do
+    for _, path in ipairs(list) do
+        local handle = assert(io.open(path, "rb"), path)
+        local text = handle:read("*a")
+        handle:close()
+        Check(not text:find("InvalidatePVPIndicatorContext", 1, true)
+            or path:find("/UnitFrames/Engine/MSUF_UF_Config_Status%.lua$") ~= nil,
+            path .. " invalidates the PvP context outside its refresh")
+    end
+end
+local LOGINS = { { true, false, "the initial login" }, { false, true, "a UI reload" } }
+local function EnterWorld(login)
     refreshes = 0
     handler(driver, "PLAYER_ENTERING_WORLD", login[1], login[2])
-    Check(refreshes == 1, login[3] .. " (isInitialLogin = " .. tostring(login[1])
-        .. ", isReloadingUi = " .. tostring(login[2])
-        .. ") must force one PvP context refresh, counted " .. refreshes)
+    return login[3] .. " (isInitialLogin = " .. tostring(login[1])
+        .. ", isReloadingUi = " .. tostring(login[2]) .. ")"
+end
+local ZONE = { false, false, "a zone transition" }
+if classic then
+    for _, login in ipairs({ LOGINS[1], LOGINS[2], ZONE }) do
+        ResetPvP()
+        Context()
+        local label = EnterWorld(login)
+        Check(refreshes == 1, label .. " must force one PvP context refresh, counted " .. refreshes)
+    end
+else
+    ResetPvP()
+    Context()
+    local zoneLabel = EnterWorld(ZONE)
+    Check(refreshes == 1, zoneLabel .. " must force one PvP context recompile, counted " .. refreshes)
+    for _, login in ipairs(LOGINS) do
+        ResetPvP()
+        Context()
+        local label = EnterWorld(login)
+        Check(refreshes == 0 and UF.PVPIndicatorContextActive() == false,
+            label .. " must not recompile an unchanged PvP context, counted " .. refreshes)
+
+        ResetPvP()
+        Context()
+        pvp.warMode = true
+        label = EnterWorld(login)
+        Check(refreshes == 1 and UF.PVPIndicatorContextActive() == true,
+            label .. " must recompile a PvP context that changed since the build, counted " .. refreshes)
+
+        ResetPvP()
+        UF.InvalidatePVPIndicatorContext()
+        pvp.warMode = true
+        label = EnterWorld(login)
+        pvp.warMode = false
+        Check(refreshes == 0 and UF.PVPIndicatorContextActive() == true,
+            label .. " must seed an unread PvP context without a recompile, counted " .. refreshes)
+    end
 end
 -- Every other event keeps its unit filter: only the player matters.
 if classic then

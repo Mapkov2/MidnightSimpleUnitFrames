@@ -136,7 +136,11 @@ local PVP_CONTEXT_FORCE_EVENTS = {
   WAR_MODE_STATUS_UPDATE = true,
 }
 
-function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
+--- startupEntry: the PLAYER_ENTERING_WORLD of a login or UI reload. Every spec
+--- reads the context through this cache and only this function invalidates it
+--- (uf_engine_client_gates_smoke pins that), so an unread context is in no spec
+--- and an unchanged one needs no recompile.
+function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride, startupEntry)
   local oldKnown, oldActive = _pvpContextKnown, _pvpContextActive
   local active
   if warModeOverride ~= nil then
@@ -146,6 +150,9 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
   else
     UF.InvalidatePVPIndicatorContext()
     active = UF.PVPIndicatorContextActive()
+  end
+  if startupEntry == true and (not oldKnown or oldActive == active) then
+    return false
   end
   if force ~= true and oldKnown and oldActive == active then
     return false
@@ -250,7 +257,7 @@ end
 
 if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
-  pvpDriver:SetScript("OnEvent", function(_, event, arg1)
+  pvpDriver:SetScript("OnEvent", function(_, event, arg1, arg2)
     -- This driver owns cold recompilation only. PvP textures already have their
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
@@ -262,12 +269,17 @@ if not UF.pvpIndicatorContextDriver then
     if event == "WAR_MODE_STATUS_UPDATE" then
       warModeOverride = PlainTrue(arg1) == true
     end
+    -- A login or UI reload (isInitialLogin, isReloadingUi) enters the world
+    -- right after the PLAYER_LOGIN build compiled every spec against the cached
+    -- context: recompile only for a changed context. Zone transitions still force.
+    local startupEntry = event == "PLAYER_ENTERING_WORLD" and (arg1 == true or arg2 == true)
     -- This is a compile boundary, not just a repaint: false disables the
     -- cached UF status path and the GF runtime/event path before both refresh.
     UF.RefreshPVPIndicatorContext(
       "MSUF_PVP_CONTEXT_" .. tostring(event),
       force,
-      warModeOverride
+      warModeOverride,
+      startupEntry
     )
   end)
   RegisterPVPContextEvent(pvpDriver, "ACTIVE_GAME_MODE_UPDATED")
