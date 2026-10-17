@@ -85,7 +85,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-15 (group import compatibility): all clients +17,910 exact LF bytes
         -- for cold import confirmation/format handling, reset safety and four
         -- translated keys in twelve packs. No Options code or catalog is added.
-        assert(bytes < (suffix == "Mainline" and 16922910 or 14802910),
+        -- 2026-10-17 (group filter prompt retired): 2c745df1 removed the import
+        -- confirmation, its format stamp and the four keys in twelve packs: all
+        -- clients -14,966 exact LF bytes (largest selections Mainline/koKR
+        -- 16,910,006 -> 16,895,040, TBC/enUS 14,792,734 -> 14,777,768). Both
+        -- ceilings fall by exactly that; the reset-safety share stays.
+        assert(bytes < (suffix == "Mainline" and 16907944 or 14787944),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

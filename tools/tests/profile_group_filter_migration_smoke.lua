@@ -181,6 +181,13 @@ Check(env.MSUF_ImportExternal("MSUF3:migration", "LegacyExternal") == true, "ext
 Imported(env.MSUF_GlobalDB.profiles.LegacyExternal.gf_raid, LEGACY, "external import")
 Check(#prompts == 0, "the external import asked " .. tostring(prompts[1]))
 Check(F.Equal(env.MSUF_DB, activeBeforeExternal), "the external import changed the active profile")
+-- Only a partial Group Frames import opts in; other kinds keep the supplied backend choice.
+for _, kind in ipairs({ "all", "unitframe", "groupframe" }) do
+    local profile = { gf_raid = { auras = { profileModelRevision = 1, buff = { size = 31 } } } }
+    N.PrepareGroupFrameImport(profile, kind)
+    Check(profile.gf_raid.auras.renderer == (kind == "groupframe" and "CUSTOM" or nil),
+        kind .. " import changed the renderer opt-in")
+end
 -- A partial group-aura import opts in only when no backend was supplied.
 for _, renderer in ipairs({ "missing", "NATIVE_12_1", "CUSTOM" }) do
     source = { addon = "MSUF", fmt = 2, schema = 600, kind = "groupframe",

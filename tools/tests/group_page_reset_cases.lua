@@ -93,7 +93,7 @@ end
 local function Dirty()
     for _, key in ipairs(ROOTS) do
         Poison(db[key])
-        db[key].groupFilter = { true, true, true }
+        db[key].groupFilter = { true, true, true, false }
         db[key].raidLayouts = { mythic = { maxColumns = 1, offsetX = 10000 } }
         db[key]._activeRaidLayout = "mythic"
         db[key].anchorToFrame = "LegacyRaidAnchor"
