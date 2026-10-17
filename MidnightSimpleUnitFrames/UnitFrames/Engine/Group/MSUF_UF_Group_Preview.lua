@@ -36,6 +36,7 @@ GF._previewLayoutFrame = GF._previewLayoutFrame or {}
 GF._previewBuildSerial = GF._previewBuildSerial or {}
 GF._previewFreeFrames = GF._previewFreeFrames or {}
 GF._previewFrameSerial = tonumber(GF._previewFrameSerial) or 0
+GF._previewOrder = GF._previewOrder or {}
 
 local PREVIEW_BUILD_SLICE_COUNT = 2
 local PREVIEW_BUILD_SLICE_THRESHOLD = 8
@@ -991,8 +992,11 @@ end
 --- blocks the preview by exactly that (SetPreservedPreviewPoint derives its
 --- block from floor((index - 1) / 5)). Deriving the label from the same term is
 --- what keeps the printed number on the block the geometry actually drew; the
---- roster position inside the group is not the group. Clamp at the eight groups
---- a raid can hold so an oversized preview count cannot print a fake "(9)".
+--- roster position inside the group is not the group. A sorted preview passes
+--- the member's roster index, so the label stays the member's own subgroup, as
+--- the live indicator does (group orders keep it on its block). Clamp at the
+--- eight groups a raid can hold so an oversized preview count cannot print a
+--- fake "(9)".
 local function PreviewSubgroup(index)
   local subgroup = floor((index - 1) / 5) + 1
   return subgroup > 8 and 8 or subgroup
@@ -1231,20 +1235,52 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   SetShown(frame.statusAFKTimerText, false)
 end
 
+--- The fake member at one roster index; index 1 is the player.
+local function PreviewIdentity(index)
+  local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
+  local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
+  local playerName
+  if index == 1 and UnitName then playerName = UnitName("player") end
+  -- Preview identities are synthetic; an unreadable player name uses the same
+  -- sample as an unavailable name, before shortening, caching or sorting it.
+  if issecretvalue(playerName) then playerName = nil end
+  return class, role, playerName or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+end
+
+--- Preview slot -> fake member. Sort mode, role order and class priority order
+--- the fake roster through the runtime's own comparator (GF.SortRosterEntries),
+--- so the dummies stand where real members would; name, class, role, icons and
+--- subgroup label move with the member. Nil keeps the index order, and scopes
+--- that show index order build no entries at all.
+local function BuildPreviewOrder(kind, count)
+  local conf = GF.GetConf and GF.GetConf(kind) or nil
+  local key = kind == "party" and "party" or "raid"
+  if type(conf) ~= "table" or count < 2 or GF.RosterOrderIsIndex(key, conf) then return nil end
+  local entries = {}
+  for i = 1, count do
+    local class, role, name = PreviewIdentity(i)
+    entries[i] = { index = i, player = i == 1, group = PreviewSubgroup(i), class = class, role = role, name = name }
+  end
+  GF.SortRosterEntries(key, conf, entries)
+  local order, moved = {}, false
+  for slot = 1, count do
+    local index = entries[slot].index
+    order[slot] = index
+    moved = moved or index ~= slot
+  end
+  return moved and order or nil
+end
+
 --- Seed fake unit state into one preview frame after UF.ApplySpec has built the
 --- regions. Keep this data fake/local; live group frames own real roster state.
-local function ApplyPreviewData(frame, index, kind)
+local function ApplyPreviewData(frame, slot, kind)
   if InCombat() then return false end
   if not frame then return false end
   if not frame.MSUFSpec then return false end
   kind = NormalizeKind(kind) or "party"
-  local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
-  local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
-  local playerName = UnitName and UnitName("player")
-  -- Preview identities are synthetic; an unreadable player name uses the same
-  -- sample as an unavailable name, before shortening or caching it.
-  if issecretvalue(playerName) then playerName = nil end
-  local name = (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+  local order = GF._previewOrder[kind]
+  local index = order and order[slot] or slot
+  local class, role, name = PreviewIdentity(index)
 
   frame._msufGFPreviewActive = true
   frame._msufGFPreviewIndex = index
@@ -1690,6 +1726,7 @@ function GF.ShowPreview(kind, count, opts)
   GF._previewActive[kind] = true
   if GF.ShowAdditionalGroupPreview then GF.ShowAdditionalGroupPreview(kind, count) end
   GF._previewShownCounts[kind] = count
+  GF._previewOrder[kind] = BuildPreviewOrder(kind, visibleCount)
   local serial = BumpPreviewBuildSerial(kind)
 
   local container, layout, w, h, spacing, growth, upc, primary, blockW, blockH = PositionContainer(kind, count)
@@ -1736,6 +1773,7 @@ function GF.HidePreview(kind)
   BumpPreviewBuildSerial(kind)
   GF._previewActive[kind] = nil
   GF._previewShownCounts[kind] = nil
+  GF._previewOrder[kind] = nil
   if frames then
     for i = #frames, 1, -1 do
       ReleasePreviewFrame(frames, i)

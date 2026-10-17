@@ -167,15 +167,14 @@ local function MatchStateEventSupported()
   return client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
 end
 
---- Only a Party ROLE sort with Player-first emits MSUF's native nameList.
---- Keep its identity catch-up completely absent from PvE and from Arena
+--- Only a Party header sorted by MSUF's own nameList (player first or class
+--- priority; GF.PartyUsesNameList decides with the header's own rules) needs
+--- this identity catch-up. Keep it completely absent from PvE and from Arena
 --- configurations that stay on SecureGroupHeader's ordinary roster path.
 local function ArenaPartyNameListActive()
   if not ArenaPartyHeaderActive() then return false end
   local conf = Conf("party")
-  if not (conf and conf.playerFirstInRole == true) then return false end
-  local mode = conf.sortMode
-  return mode == "ROLE" or (mode == nil and conf.sortByRole == true)
+  return conf ~= nil and GF.PartyUsesNameList(conf) == true
 end
 
 local function PriorityNameRefreshActive()

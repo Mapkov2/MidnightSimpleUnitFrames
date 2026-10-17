@@ -44,6 +44,7 @@ clients	lua	tools/tests/group_headers_secret_identity_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/group_text_secret_percent_smoke.lua	{root}	Group text secret percent smoke failed
 clients+Forever	lua	tools/tests/group_preview_combat_restore_smoke.lua	{root} {flavor}	Group preview combat restore smoke failed: {flavor}
 clients+Forever	lua	tools/tests/group_preview_aura_config_share_smoke.lua	{root} {flavor}	Group preview rows recompile one aura config per row: {flavor}
+clients+Forever	lua	tools/tests/group_sort_preview_smoke.lua	{root} {flavor}	Group preview ignores the group sort order or Arena class priority loses its name catch-up: {flavor}
 -	lua	tools/tests/group_editmode_labels_locale_smoke.lua	{root}	Group Edit Mode label locale smoke failed
 -	lua	tools/tests/group_quality_contract_smoke.lua	{root}	Group quality contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
@@ -424,6 +425,7 @@ clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults p
 -	lua	tools/tests/color_power_token_contexts_smoke.lua	{root}	Group power color contexts drifted from the Colors page power list
 -	lua	tools/tests/deprecated_aliases_smoke.lua	{root}	Deprecated alias smoke failed
 clients+Forever	lua	tools/tests/bugreport_layout_smoke.lua	{root} {flavor}	Bug report menu geometry regression: {flavor}
+clients+Forever	lua	tools/tests/group_class_priority_drag_smoke.lua	{root} {flavor}	Class priority drag no longer inserts the dropped class: {flavor}
 clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game menu cold Options open boundary: {flavor}
 -	lua	tools/tests/aura_icon_zoom_smoke.lua	{root}	Aura icon baked border crop regression
 -	lua	tools/tests/combat_regen_edge_smoke.lua	{root}	Combat regen edge smoke failed

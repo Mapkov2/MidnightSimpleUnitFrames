@@ -473,8 +473,10 @@ local function BuildClassPriorityRows(ctx, parent, width, topY)
         for i = 1, #rows do order[i] = rows[i].key end
         Set(CurrentScope(), "classOrder", table.concat(order, ","), "rebuild")
     end
+    -- Up to thirteen rows: a drop inserts the class at that place instead of
+    -- swapping it with the class that stood there.
     holder = Shared.MakeDragSortRows(parent, definitions, {
-        x = 16, y = topY, width = width - 32, rowHeight = 22, gap = 4,
+        x = 16, y = topY, width = width - 32, rowHeight = 22, gap = 4, insertOnDrop = true,
         controlDomain = "group", controlPageKey = ctx.key, controlPath = "sorting.class_priority",
         controlClassification = "setting", onReorder = function()
             M.RunWithHistory("Class priority order", "group:classOrder:" .. CurrentScope(), Save)

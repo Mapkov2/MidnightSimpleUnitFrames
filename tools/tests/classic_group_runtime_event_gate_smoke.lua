@@ -56,6 +56,9 @@ local function NewRuntimeGF(arena)
   function runtimeGF.ScheduleScan() return false end
   function runtimeGF.RetireHeader() return true end
   function runtimeGF.IsArenaPartyContext() return arena == true end
+  -- Headers.lua owns this decision; the Party conf above (player first, ROLE)
+  -- is one that sorts by a nameList there.
+  function runtimeGF.PartyUsesNameList(conf) return conf.playerFirstInRole == true end
   return runtimeGF
 end
 

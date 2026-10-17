@@ -832,6 +832,51 @@ local function ClassPriority(conf)
   return result
 end
 
+local function EntryRolePriority(entry, priority)
+  return priority and priority[entry and entry.role] or 999
+end
+
+--- The one order MSUF builds itself: the raid and party name lists, and the
+--- group preview through GF.SortRosterEntries. GROUP modes sort by subgroup,
+--- role modes by the role order with the player first inside a role (the party
+--- list keeps the player first in every mode), then class priority, then names
+--- (NAME, or alphabetical within roles) or roster index. The same keys are what
+--- SecureGroupHeader shows for the native orders: a GROUP, CLASS or
+--- ASSIGNEDROLE groupingOrder, then INDEX or NAME.
+local function RosterComparator(conf, mode, playerFirstAnyMode, alphabeticalInRole)
+  local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
+  local byGroup = mode == "GROUP" or mode == "GROUP_ROLE"
+  local playerFirst = conf.playerFirstInRole == true and (priority ~= nil or playerFirstAnyMode == true)
+  local classes = ClassPriority(conf)
+  local byName = mode == "NAME" or (alphabeticalInRole == true and priority ~= nil)
+  return function(a, b)
+    if byGroup then
+      local ag, bg = a.group or 0, b.group or 0
+      if ag ~= bg then return ag < bg end
+    end
+    if priority then
+      local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
+      if ar ~= br then return ar < br end
+    end
+    if playerFirst and a.player ~= b.player then return a.player == true end
+    if classes then
+      local ac, bc = classes[a.class] or 999, classes[b.class] or 999
+      if ac ~= bc then return ac < bc end
+    end
+    if byName and a.name ~= b.name then return a.name < b.name end
+    return (a.index or 0) < (b.index or 0)
+  end
+end
+
+--- Every comparator above ends on the unique roster index, so reversing the
+--- sorted run is exactly the descending order.
+local function ReverseEntries(entries, first, last)
+  while first < last do
+    entries[first], entries[last] = entries[last], entries[first]
+    first, last = first + 1, last - 1
+  end
+end
+
 --- SecureGroupHeader's nameList attribute for sorted entries: each name once,
 --- in entry order; nil when no entry has a name.
 local function NameListFromEntries(entries)
@@ -888,27 +933,8 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
     return nil
   end
 
-  local priority = mode == "ROLE" and RolePriority(conf) or {}
-  local classes = ClassPriority(conf)
-  table_sort(entries, function(a, b)
-    local ar = priority[a.role] or 999
-    local br = priority[b.role] or 999
-    if ar ~= br then
-      return ar < br
-    end
-    if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
-    if classes then
-      local ac, bc = classes[a.class] or 999, classes[b.class] or 999
-      if ac ~= bc then return ac < bc end
-    end
-    if mode == "NAME" and a.name ~= b.name then return a.name < b.name end
-    return (a.index or 0) < (b.index or 0)
-  end)
+  table_sort(entries, RosterComparator(conf, mode, true, false))
   return NameListFromEntries(entries)
-end
-
-local function EntryRolePriority(entry, priority)
-  return priority and priority[entry and entry.role] or 999
 end
 
 local function SmallRaidParty(kind)
@@ -956,38 +982,8 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
     end
   end
 
-  local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
-  local alphabeticalInRole = conf.sortAlphabeticalWithinRole == true
-  local classes = ClassPriority(conf)
-  local function SortBefore(a, b)
-    if mode == "ROLE" then
-      local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
-      if ar ~= br then return ar < br end
-      if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
-    elseif mode == "GROUP" or mode == "GROUP_ROLE" then
-      local ag, bg = a.group or 0, b.group or 0
-      if ag ~= bg then return ag < bg end
-      if mode == "GROUP_ROLE" then
-        local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
-        if ar ~= br then return ar < br end
-        if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
-      end
-    end
-    if classes then
-      local ac, bc = classes[a.class] or 999, classes[b.class] or 999
-      if ac ~= bc then return ac < bc end
-    end
-    if (mode == "NAME" or alphabeticalInRole and (mode == "ROLE" or mode == "GROUP_ROLE")) and a.name ~= b.name then
-      return a.name < b.name
-    end
-    return (a.index or 0) < (b.index or 0)
-  end
-  table_sort(entries, function(a, b)
-    if descending == true then
-      return SortBefore(b, a)
-    end
-    return SortBefore(a, b)
-  end)
+  table_sort(entries, RosterComparator(conf, mode, false, conf.sortAlphabeticalWithinRole == true))
+  if descending == true then ReverseEntries(entries, 1, #entries) end
   return entries, groupCount
 end
 
@@ -1030,6 +1026,36 @@ local function ResolveSortMode(key, conf)
     mode = (mode == "GROUP_ROLE" or conf.sortByRole == true) and "ROLE" or "INDEX"
   end
   return mode
+end
+
+--- True when this scope shows its members in roster index order, so the group
+--- preview can keep its fake roster as it is without building sort entries.
+function GF.RosterOrderIsIndex(key, conf)
+  return ResolveSortMode(key, conf) == "INDEX" and conf.sortClassPriority ~= true and conf.sortDescending ~= true
+end
+
+--- The group preview's order (MSUF_UF_Group_Preview.lua): synthetic entries
+--- ({ name, role, class, group, index, player }) sorted as this scope's live
+--- header shows real ones. Descending reverses the whole list, or for preserved
+--- raid groups each subgroup's run, because those blocks keep their place.
+function GF.SortRosterEntries(key, conf, entries)
+  local mode = ResolveSortMode(key, conf)
+  local party = key == "party"
+  table_sort(entries, RosterComparator(conf, mode, party, not party and conf.sortAlphabeticalWithinRole == true))
+  if conf.sortDescending ~= true then return entries end
+  if party or mode == "ROLE" or conf.preserveRaidGroups ~= true then
+    ReverseEntries(entries, 1, #entries)
+    return entries
+  end
+  local first = 1
+  for i = 1, #entries do
+    local following = entries[i + 1]
+    if not following or following.group ~= entries[i].group then
+      ReverseEntries(entries, first, i)
+      first = i + 1
+    end
+  end
+  return entries
 end
 
 local function BuildPreservedRaidSortSnapshot(kind, conf)
@@ -1153,6 +1179,14 @@ local function NeedsNameList(mode, conf, smallRaidParty)
   if mode == "GROUP_ROLE" then return true end
   if conf.sortClassPriority == true and (mode == "ROLE" or mode == "GROUP" or mode == "GROUP_ROLE") then return true end
   return conf.showPlayer == false
+end
+
+--- True when the Party header sorts by MSUF's own name list (player first or
+--- class priority, BuildPlayerFirstRoleNameList). The runtime's Arena name
+--- catch-up follows exactly these configurations.
+function GF.PartyUsesNameList(conf)
+  return (conf.playerFirstInRole == true or conf.sortClassPriority == true)
+    and NeedsNameList(ResolveSortMode("party", conf), conf, false)
 end
 
 local function NativeSortState(key, mode, conf)

@@ -918,7 +918,21 @@ function Shared.MakeDragSortRows(parent, defs, opts)
             end
         end
         local changed = row.slotIndex ~= bestSlot
-        if changed then
+        if changed and opts.insertOnDrop then
+            -- Insert: the rows between the old and the new slot close up by one,
+            -- so every other row keeps its relative order.
+            local from = row.slotIndex
+            for i = 1, #holder.rows do
+                local other = holder.rows[i]
+                local slot = other.slotIndex
+                if other ~= row and from < bestSlot and slot > from and slot <= bestSlot then
+                    other.slotIndex = slot - 1
+                elseif other ~= row and from > bestSlot and slot >= bestSlot and slot < from then
+                    other.slotIndex = slot + 1
+                end
+            end
+            row.slotIndex = bestSlot
+        elseif changed then
             for i = 1, #holder.rows do
                 if holder.rows[i] ~= row and holder.rows[i].slotIndex == bestSlot then
                     holder.rows[i].slotIndex = row.slotIndex
