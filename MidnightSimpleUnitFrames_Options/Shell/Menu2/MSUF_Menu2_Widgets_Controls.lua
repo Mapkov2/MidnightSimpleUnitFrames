@@ -344,6 +344,19 @@ local SWITCH_LABEL_HOOKS = {
         if btn.UnlockHighlight then btn:UnlockHighlight() end
     end,
 }
+local function CreateControlLabelHit(section, btn, ownerKey, hooks)
+    local labelHit = PixelLayoutRegion(CreateFrame("Button", nil, section))
+    labelHit:EnableMouse(true)
+    if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
+    labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
+    labelHit[ownerKey] = btn
+    for script, handler in pairs(hooks) do labelHit:SetScript(script, handler) end
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
+    else labelHit._msuf2ControlPartOf = btn end
+    btn._msuf2LabelHit = labelHit
+    btn._msuf2UseProxyMouse = true
+    if btn.EnableMouse then btn:EnableMouse(false) end
+end
 local function CreateToggle(section, label, x, y, labelWidth)
     local btn = PixelLayoutRegion(CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate"))
     btn._msuf2ControlKind = "toggle"
@@ -452,17 +465,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         RefreshToggleFeedback(self, self._msuf2ToggleHovered, self._msuf2TogglePressed)
     end
     for script, handler in pairs(TOGGLE_CONTROL_HOOKS) do btn:HookScript(script, handler) end
-    local labelHit = PixelLayoutRegion(CreateFrame("Button", nil, section))
-    labelHit:EnableMouse(true)
-    if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
-    labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
-    labelHit._msuf2ToggleOwner = btn
-    for script, handler in pairs(TOGGLE_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
-    else labelHit._msuf2ControlPartOf = btn end
-    btn._msuf2LabelHit = labelHit
-    btn._msuf2UseProxyMouse = true
-    if btn.EnableMouse then btn:EnableMouse(false) end
+    CreateControlLabelHit(section, btn, "_msuf2ToggleOwner", TOGGLE_LABEL_HOOKS)
     btn:SetChecked(false)
     SyncCheckedTexture(btn, false, true)
     UpdateToggleProxyBounds(btn)
@@ -529,17 +532,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide, literal)
     btn.SetChecked = SetSwitchChecked
     for script, handler in pairs(SWITCH_CONTROL_HOOKS) do btn:HookScript(script, handler) end
     if side ~= "HIDDEN" then
-        local labelHit = PixelLayoutRegion(CreateFrame("Button", nil, section))
-        labelHit:EnableMouse(true)
-        if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
-        labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
-        labelHit._msuf2SwitchOwner = btn
-        for script, handler in pairs(SWITCH_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
-        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
-        else labelHit._msuf2ControlPartOf = btn end
-        btn._msuf2LabelHit = labelHit
-        btn._msuf2UseProxyMouse = true
-        if btn.EnableMouse then btn:EnableMouse(false) end
+        CreateControlLabelHit(section, btn, "_msuf2SwitchOwner", SWITCH_LABEL_HOOKS)
     end
     btn:SetChecked(false)
     UpdateToggleProxyBounds(btn)

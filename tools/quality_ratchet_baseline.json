@@ -395,7 +395,7 @@
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua": [605, 49, 51, 18, 11, 51, 9, 9, 1, 0, 0, 3, 0, 3],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Buttons.lua": [317, 90, 29, 29, 7, 35, 1, 0, 1, 0, 0, 1, 0, 6],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_ContextColors.lua": [419, 86, 20, 16, 10, 21, 1, 15, 1, 0, 0, 1, 0, 0],
-  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua": [1225, 289, 63, 34, 15, 64, 5, 20, 1, 0, 9, 2, 1, 8],
+  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua": [1218, 289, 64, 34, 15, 65, 5, 20, 1, 0, 9, 2, 1, 6],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Gates.lua": [415, 48, 22, 14, 4, 23, 3, 1, 1, 0, 0, 1, 0, 5],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PageBuilder.lua": [1223, 224, 43, 45, 22, 43, 5, 8, 1, 0, 0, 1, 2, 1],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua": [834, 303, 14, 25, 15, 29, 2, 20, 1, 0, 0, 1, 2, 0],
