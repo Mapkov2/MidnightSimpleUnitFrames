@@ -239,7 +239,9 @@ surface shares. Client-neutral on purpose: the kit reads no addon setting, knows
 unit-frame concept and registers no event or OnUpdate script of its own. A change signal
 calls `host:Request` while the host is active; the owner subscribes to the signal in its
 `activate` hook and drops it in `deactivate`, so a closed preview costs nothing. The one
-timer is a single-shot `C_Timer.After` per coalesced repaint request.
+repaint timer is a single-shot `C_Timer.After` per coalesced repaint request.
+An animated castbar uses the elapsed time handed over by `root:SetClock(elapsed)`.
+Passing nil restores its static sample; inactive or combat-suspended surfaces do no work.
 
 ```
 Host (Kit.NewHost(parent, opts)):
@@ -252,13 +254,73 @@ Host (Kit.NewHost(parent, opts)):
   opts.after(delay, fn)        timer (default C_Timer.After)
 host:Activate() / host:Deactivate()     build once, hide and release on Deactivate, no timers while closed
 host:Acquire(kind) / host:Release(kind, object) / host:ReleaseAll(kind)     frame pools
-host:Request(reason)                    coalesced repaint on the next frame; ignored while inactive
+host:Request(reason)                    coalesced repaint on the next frame; ignored while inactive or disallowed
 host:Refresh(reason)                    repaint now; same gate
 ```
 
-The kit ships only what its current consumers use. A handle controller (select, drag, arrow-key nudge) and a
-throttled animation ticker belong to the first surface that needs them and arrive with
-it. Rules for that code: an arrow-key handler does nothing under lockdown (neither a
+The kit ships only what its current consumers use. A handle controller (select, drag, arrow-key nudge)
+belongs to the first surface that needs it. An arrow-key handler does nothing under lockdown (neither a
 nudge nor a `SetPropagateKeyboardInput` call, which is blocked in combat), and a host
 `Deactivate` cancels a running drag and deselects, so a closed preview holds no key
 script and no keyboard capture.
+
+## Standalone castbar and ClassPower scenes
+
+Use the existing `GF.NewPreviewScene(parent)` root. Creating the root or asking for a
+surface while it is closed allocates no frame. Activate it when the page opens,
+deactivate it when it closes, and retain it for pool reuse. Release is terminal.
+
+```lua
+local root = GF.NewPreviewScene(parent)
+local cast = root:Castbar("player", {
+  sample = { class = "MAGE", name = "Frostbolt", icon = 136048,
+    kind = "CAST", duration = 4, progress = .6, notInterruptible = false },
+  animate = false,
+})
+local resource = root:ClassPower({
+  sample = { class = "ROGUE", spec = 1, count = 3, maximum = 5 },
+  playerWidth = 275,
+})
+root:Activate()
+-- Both: SetOptions(fullReplacement), Refresh, Show, Hide, Frame, IsActive.
+root:Deactivate()
+```
+
+Both options tables accept `point`, `x`, `y`, and `scale`; all inputs are copied plain
+data. Secret inputs are rejected before indexing or comparison. Castbars accept
+`width`/`height` overrides (otherwise the core size rule), `CHANNEL` or `EMPOWER`
+samples where the client supports them, cumulative `stages`, `spellID`, `knownSpells`,
+`latency` as a fraction, `targetName`/`targetClass`, `kickReady`, `kickRecovery`
+(an array of recovery fractions on the cast interval), and `interrupted`/`interruptLabel`. Progress is
+static unless `animate` is true. No live cast acquisition, event registration, native
+duration bindings, or runtime-manager registration belongs to these surfaces.
+
+ClassPower uses a second instance of the core build/layout/presentation/mode factories,
+the shared config/slot/full-colour resolvers, and the same class/spec routing. Optional
+sample fields include `primaryPower`, `formID`, `modifier`, `partial`, `charged`,
+`predicted`, `knownSpells`, `auras`, `runes`, `runeTypes`, `ironfur`, and `time`.
+`playerWidth`/`playerHeight` describe the player surface. `cooldowns` is a map keyed by
+EssentialCooldownViewer, UtilityCooldownViewer, or BuffIconCooldownViewer, each with
+plain `width`, `height`, `scale`, `x`, `y`. The core computes its width and anchor from
+these projected rectangles, including the full 275-pixel Player width. These proxy
+frames and all controller caches belong to that scene. No live cooldown anchor moves.
+Out-of-combat auto-hide is ignored; configured full/empty and feature visibility remain.
+Ebon Might belongs to the Player Power surface, not the standalone Essence surface.
+
+The root subscribes only while active. Combat suspends surfaces and cancels their
+clocks without requesting a live-header rebuild; regen repaints wanted surfaces.
+Each class's painters and each root's frames are retained independently. Static
+native-aura samples use the core native slot's regions/style with plain sample values.
+
+The Options switch must replace the painters in UnitPreview_Castbar,
+GlobalCastbars_Preview, ClassPowerPreview, and the cast/resource parts of
+UnitPreview_Render/PreviewHelpers with these scene calls. Preserve the selection,
+zoom, viewport, help, replay, animation and layer controls; feed changed options to the
+active root. Unit-scene attachment is a separate package. Existing Options painters
+remain intact here, and their historical render oracle is not repinned.
+
+The new smokes compare native visual properties and resolved screen rectangles with
+real core castbar/controller surfaces. They cover all five graphs, supported resources,
+width sources, colour rules, pools, closure, combat and a whole-family unit-API spy.
+This is offline contract evidence; live WoW pixels, combat/taint and GPU rendering
+still require in-client verification.

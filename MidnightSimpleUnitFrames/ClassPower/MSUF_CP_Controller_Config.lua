@@ -47,7 +47,8 @@ local function NewConfigCache()
             comboPointColorMode = "default", slotColorModes = nil, fullColorEnabled = nil,
     }
 end
-local function _CP_RefreshConfig()
+local function CreateConfigCompiler(_cpDB)
+return function()
     local db = MSUF_DB
     if not db then return end
     local b = db.bars or {}
@@ -76,6 +77,9 @@ local function _CP_RefreshConfig()
     _cpDB.slotColorModes    = (type(b.classPowerSlotColorModes) == "table") and b.classPowerSlotColorModes or nil
     _cpDB.fullColorEnabled  = (type(b.classPowerFullColorEnabled) == "table") and b.classPowerFullColorEnabled or nil
 end
+
+end
+MSUF.ClassPowerConfig = { CreateCompiler = CreateConfigCompiler }
 
 local function CP_ConfigClassPowerEnabled()
     local b = _cpDB.bars
@@ -255,7 +259,9 @@ end
 --- routing; a client provider (Forever, the Classic flavors) replaces it
 --- through E.GetClassPowerType.
 local GetClassPowerType
-local function MainlineClassPowerType()
+local function CreateClassPowerType(PLAYER_CLASS, GetSpec, UnitPowerType, C_SpellBook, _cpDB,
+    UnitHasVehicleUI, GetShapeshiftFormID)
+return function()
     --- Vehicle override: always combo points.
     if UnitHasVehicleUI and UnitHasVehicleUI("player") then
         local hasCP = PlayerVehicleHasComboPoints and PlayerVehicleHasComboPoints()
@@ -376,6 +382,11 @@ local function MainlineClassPowerType()
     end
     return nil, CPK.MODE.NONE, false
 end
+end
+function MSUF.ClassPowerConfig.CreateSampleResolver(sample)
+    return CreateClassPowerType(sample.class, sample.GetSpec, sample.PrimaryPower, sample.SpellBook,
+        sample.config, nil, sample.GetForm)
+end
 
 --- Per-mode event profile: which runtime events the active mode needs.
 local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
@@ -450,6 +461,9 @@ local function CP_ResolveClassPowerHeight(b)
     return cpHeight
 end
 
+MSUF.ClassPowerConfig.ResolveTexture = CP_ResolveTexture
+MSUF.ClassPowerConfig.ResolveHeight = CP_ResolveClassPowerHeight
+
 --- CONTROLLER_CONFIG is built once at controller load. E carries the values the
 --- controller resolves itself (constants, player class, spec API, secret guard)
 --- plus a getter for the AltMana builder binding, which the controller rebinds
@@ -461,10 +475,11 @@ builders.CONTROLLER_CONFIG = function(boundE)
     PLAYER_CLASS, GetSpec, NotSecret = E.PLAYER_CLASS, E.GetSpec, E.NotSecret
     NeedsAltManaBar = E.NeedsAltManaBar
     _cpDB = NewConfigCache()
-    GetClassPowerType = E.GetClassPowerType or MainlineClassPowerType
+    GetClassPowerType = E.GetClassPowerType or CreateClassPowerType(PLAYER_CLASS, GetSpec, UnitPowerType,
+        C_SpellBook, _cpDB, UnitHasVehicleUI, GetShapeshiftFormID)
     return {
         _cpDB = _cpDB,
-        RefreshConfig = _CP_RefreshConfig,
+        RefreshConfig = CreateConfigCompiler(_cpDB),
         ClassPowerEnabled = CP_ConfigClassPowerEnabled,
         PlayerHPBarEnabled = CP_ConfigPlayerHPBarEnabled,
         PlayerManaOverrideEnabled = CP_ConfigPlayerManaOverrideEnabled,
@@ -476,4 +491,22 @@ builders.CONTROLLER_CONFIG = function(boundE)
         ResolveTexture = CP_ResolveTexture,
         ResolveClassPowerHeight = CP_ResolveClassPowerHeight,
     }
+end
+
+function MSUF.ClassPowerConfig.CreatePowerTextLevel(CP)
+local math_floor = math.floor
+return function()
+    local host = CP.ebonHost
+    local p = MSUF_DB and MSUF_DB.player or nil
+    local textLayer = tonumber(p and p.powerTextLayer) or 2
+    if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
+    textLayer = math_floor(textLayer + 0.5)
+    if host and host.GetFrameLevel then
+        return (host:GetFrameLevel() or 0) + 1 + textLayer
+    end
+    local layers = MSUF.UF and MSUF.UF.Layers
+    return layers and layers.TextLevel and layers.TextLevel(CP.container, textLayer, 5)
+        or (layers and layers.ElementLevel and layers.ElementLevel(textLayer, 5, 8))
+        or ((CP.container and CP.container.GetFrameLevel and CP.container:GetFrameLevel() or 0) + 10)
+end
 end

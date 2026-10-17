@@ -149,7 +149,8 @@ local function PlayerKnowsSpell(spellID)
     return issecretvalue(known) ~= true and known == true
 end
 
-local function AutomaticMarkerLayout(frame)
+local function CreateAutomaticMarkerLayout(PlayerKnowsSpell)
+return function(frame)
     local tickData = CHANNEL_TICK_DATA[ActiveSpellID(frame)]
     if not tickData then
         return DEFAULT_MARKER_COUNT, DEFAULT_MARKER_COUNT + 1
@@ -178,8 +179,11 @@ local function AutomaticMarkerLayout(frame)
     if tickCount > MAX_AUTO_TICK_COUNT then tickCount = MAX_AUTO_TICK_COUNT end
     return math.max(0, tickCount - 1), tickCount
 end
+end
+local AutomaticMarkerLayout = CreateAutomaticMarkerLayout(PlayerKnowsSpell)
 
-local function TickConfig(frame)
+local function CreateTickConfig(AutomaticMarkerLayout)
+return function(frame)
     local db = Config.Read()
     local general = db and db.general or nil
     local playerCastbar = db and db.player and db.player.castbar or nil
@@ -211,6 +215,8 @@ local function TickConfig(frame)
 
     return tickCount > 0, tickCount, playerCastbar.channelTickPosPct, true, tickCount + 1
 end
+end
+local TickConfig = CreateTickConfig(AutomaticMarkerLayout)
 
 local UpdatePlayerChannelHasteMarkers
 
@@ -292,7 +298,8 @@ local function HidePlayerChannelTickMarkers(frame)
     end
 end
 
-UpdatePlayerChannelHasteMarkers = function(frame, force)
+local function CreateMarkerPainter(TickConfig)
+return function(frame, force)
     if not (frame and frame.unit == "player") then
         return
     end
@@ -419,6 +426,11 @@ UpdatePlayerChannelHasteMarkers = function(frame, force)
             end
         end
     end
+end
+end
+UpdatePlayerChannelHasteMarkers = CreateMarkerPainter(TickConfig)
+function ChannelTicks.CreateSamplePainter(PlayerKnowsSpell)
+    return CreateMarkerPainter(CreateTickConfig(CreateAutomaticMarkerLayout(PlayerKnowsSpell)))
 end
 
 local function UpdateCastbarChannelTicks()

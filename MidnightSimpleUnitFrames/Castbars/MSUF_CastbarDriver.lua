@@ -933,6 +933,7 @@ local function ResolveCastTargetInfo(state)
     return targetName, targetClass, true
 end
 
+function Driver.CreateTargetPainter(ResolveCastTargetInfo, CastStateHasSpell)
 local function UpdateCastTargetText(frame, state)
     local fs = frame and frame.castTargetText
     if not fs then return end
@@ -957,6 +958,9 @@ local function UpdateCastTargetText(frame, state)
     ApplyCastTargetTextColor(frame, targetClass, state.spellSequenceID, identity and identity.generation)
     fs:Show()
 end
+return UpdateCastTargetText
+end
+local UpdateCastTargetText = Driver.CreateTargetPainter(ResolveCastTargetInfo, CastStateHasSpell)
 
 local function RefreshCastTargetText(frame)
     if not (frame and frame.castTargetText) then return end

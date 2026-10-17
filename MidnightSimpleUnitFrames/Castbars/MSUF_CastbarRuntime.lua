@@ -1004,7 +1004,8 @@ end
 --- the same frame so range alpha, outlines, and kick-ready state remain aligned.
 --- Internal live callers use positional values so an interrupt does not need a
 --- disposable options table. ApplyInterrupt below preserves the public table API.
-function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, colorR, colorG, colorB, skipShake)
+function Runtime.CreateInterruptPainter(_G)
+local function ApplyInterruptValues(self, frame, barValue, reverseFill, label, colorR, colorG, colorB, skipShake)
     if not frame then
         return
     end
@@ -1061,6 +1062,9 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         PlayCastbarShake(frame)
     end
 end
+return ApplyInterruptValues
+end
+Runtime.ApplyInterruptValues = Runtime.CreateInterruptPainter(_G)
 
 --- Public table-argument form. It only unpacks the options table; every
 --- default (barValue 1, the INTERRUPTED label, resolved feedback color, shake

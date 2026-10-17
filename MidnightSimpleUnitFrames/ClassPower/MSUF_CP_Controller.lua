@@ -244,7 +244,8 @@ local CPAuras = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_AURAS, {
 
 ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
-local function CP_CompileVisual(powerType, renderMode, maxP)
+function MSUF.ClassPowerConfig.CreateVisualCompiler(CP, _cpDB, CPColors)
+return function(powerType, renderMode, maxP)
     local b = _cpDB.bars or {}
     local visual = CP.visual
     if not visual then
@@ -307,6 +308,8 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
 
     return visual
 end
+end
+local CP_CompileVisual = MSUF.ClassPowerConfig.CreateVisualCompiler(CP, _cpDB, CPColors)
 
 local CP_EnsureBars
 local CP_Create
@@ -932,7 +935,8 @@ end
 --- full refresh and of the light refresh (RUNTIME's GetResolvedVisibleMax).
 --- fallbackMax answers a segmented resource whose maximum is secret or
 --- missing: the full refresh guesses 5, a light refresh keeps its count.
-function Refresh.ResolveMaxPower(powerType, renderMode, fallbackMax)
+function MSUF.ClassPowerConfig.CreateMaxResolver(UnitPowerMax, C_Spell, ClassicSpellMaxApplications)
+return function(powerType, renderMode, fallbackMax)
     local descriptor = CPConst.ModeDescriptors[renderMode]
     local maxP
     if descriptor and descriptor.barCount then
@@ -977,6 +981,8 @@ function Refresh.ResolveMaxPower(powerType, renderMode, fallbackMax)
     if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
     return maxP
 end
+end
+Refresh.ResolveMaxPower = MSUF.ClassPowerConfig.CreateMaxResolver(UnitPowerMax, C_Spell, ClassicSpellMaxApplications)
 
 --- Active branch: build, lay out, compile and dispatch the first update.
 function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode, isAuraPower)

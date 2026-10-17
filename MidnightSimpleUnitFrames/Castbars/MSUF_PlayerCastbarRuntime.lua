@@ -253,6 +253,7 @@ end
 -- Player-only tint: honours the player color override and nameplate-derived
 -- interruptibility. The target/focus/boss frame method of the same name in
 -- MSUF_CastbarDriver.lua does neither; the two are intentionally separate.
+function Player.CreateColorPainter(UnitClass, C_NamePlate)
 local function UpdateColorForInterruptible(frame)
     if not frame or not frame.statusBar then return end
 
@@ -339,6 +340,9 @@ local function UpdateColorForInterruptible(frame)
     -- Castbars/MSUF_CastbarUtils.lua (loads first) owns the colour write.
     Utils.SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
 end
+return UpdateColorForInterruptible
+end
+local UpdateColorForInterruptible = Player.CreateColorPainter(UnitClass, C_NamePlate)
 
 local function InvalidateCastState(unit)
     if not unit then return end
@@ -1220,6 +1224,7 @@ function Player.ToggleCastDebug()
     return castDebug
 end
 
+Player.ApplyLatencySample = ApplyLatencyBar
 Player.PlayerCastbar_UpdateLatencyZone = UpdateLatencyZone
 Publish("MSUF_PlayerCastbar_UpdateLatencyZone", Player.PlayerCastbar_UpdateLatencyZone)
 Player.PlayerCastbar_UpdateColorForInterruptible = UpdateColorForInterruptible

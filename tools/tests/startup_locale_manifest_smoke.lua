@@ -99,7 +99,21 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- core startup on every client (Mainline/ruRU 10,008,089 -> 10,039,474, TBC/ruRU 7,884,211 -> 7,915,596) while the
         -- menu keeps drawing its own unit cell until it is switched over (Options code removed: none). Both ceilings
         -- rise by exactly that delta: Mainline 10,008,377 -> 10,039,762, Classic 7,893,549 -> 7,924,934.
-        assert(bytes < (suffix == "Mainline" and 10039762 or 7924934),
+        -- 2026-10-17: standalone castbar/ClassPower scenes reuse core builders and painters.
+        -- LF startup: Mainline/ruRU 10,039,474 -> 10,069,019 (+29,545); TBC/ruRU
+        -- 7,915,596 -> 7,943,322 (+27,726). These are the largest selections per ceiling.
+        -- Ceilings rise by exactly those deltas: 10,039,762 -> 10,069,307 and
+        -- 7,924,934 -> 7,952,660. Mists adds 27,914; its total is 7,914,755.
+        -- 2026-10-18: scene collaborators bind at construction; live colour API exists at load.
+        -- LF startup Mainline/ruRU 10,069,019 -> 10,073,781 (+4,762);
+        -- TBC/ruRU 7,943,322 -> 7,948,487 (+5,165). Ceilings change by exactly those bytes:
+        -- 10,069,307 -> 10,074,069; 7,952,660 -> 7,957,825. Runtime cost pins are unchanged.
+        -- 2026-10-19: review cleanup uses the owner clock and removes duplicate combat tracking.
+        -- LF startup Mainline/ruRU 10,073,781 -> 10,073,032 (-749);
+        -- TBC/ruRU 7,948,487 -> 7,947,738 (-749). Mists drops 884 bytes.
+        -- Both ceilings fall by exactly 749: 10,074,069 -> 10,073,320;
+        -- 7,957,825 -> 7,957,076. Runtime cost pins are unchanged.
+        assert(bytes < (suffix == "Mainline" and 10073320 or 7957076),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

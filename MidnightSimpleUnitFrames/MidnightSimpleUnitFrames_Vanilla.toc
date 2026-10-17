@@ -194,7 +194,13 @@ Game\Shared\ClassPower\MSUF_CP_TargetCombo.lua
 Game\Vanilla\ClassPower.lua
 Game\Classic\ClassPower\MSUF_CP_ClassicRouting.lua
 ClassPower\MSUF_CP_Modes.lua
+ClassPower\MSUF_CP_Segmented.lua
+ClassPower\MSUF_CP_Rune.lua
+ClassPower\MSUF_CP_Aura.lua
 ClassPower\MSUF_CP_Core.lua
+ClassPower\MSUF_CP_Build.lua
+ClassPower\MSUF_CP_Layout.lua
+ClassPower\MSUF_CP_Presentation.lua
 ClassPower\MSUF_CP_AltMana.lua
 ClassPower\MSUF_CP_PlayerHP.xml
 ClassPower\MSUF_CP_Controller_Config.lua

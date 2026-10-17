@@ -817,3 +817,13 @@ clients+Forever	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} {f
 clients+Forever	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} {flavor}	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: {flavor}
 -	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} Mainline	Group layout and priority replacing rows preserve parent input DB apply refresh history and combat: Mainline
 classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavor}	Group layout and priority replacing rows preserve parent input DB apply refresh history and combat: {flavor}	nightly
+-	lua	tools/tests/castbar_preview_scene_smoke.lua	{root} Mainline	Core castbar scene twin geometry, isolation and lifecycle: Mainline	push
+-	lua	tools/tests/castbar_preview_scene_smoke.lua	{root} Forever	Core castbar scene twin geometry, isolation and lifecycle: Forever	nightly
+-	lua	tools/tests/castbar_preview_scene_smoke.lua	{root} Vanilla	Core castbar scene twin geometry, isolation and lifecycle: Vanilla	nightly
+-	lua	tools/tests/castbar_preview_scene_smoke.lua	{root} TBC	Core castbar scene twin geometry, isolation and lifecycle: TBC	nightly
+-	lua	tools/tests/castbar_preview_scene_smoke.lua	{root} Mists	Core castbar scene twin geometry, isolation and lifecycle: Mists	nightly
+-	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Mainline	Core classpower scene twin geometry, isolation and lifecycle: Mainline	push
+-	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Forever	Core classpower scene twin geometry, isolation and lifecycle: Forever	nightly
+-	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Vanilla	Core classpower scene twin geometry, isolation and lifecycle: Vanilla	nightly
+-	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} TBC	Core classpower scene twin geometry, isolation and lifecycle: TBC	nightly
+-	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Mists	Core classpower scene twin geometry, isolation and lifecycle: Mists	nightly

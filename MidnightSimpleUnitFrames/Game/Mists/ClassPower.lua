@@ -24,6 +24,7 @@ local AFFLICTION_SHARD_SPELL = 117198
 
 local Provider = {
     Flavor = "Mists",
+    SampleRuneColors = { { 1, 0, 0 }, { 0, 1, 1 }, { 0, 0.5, 0 }, { 0.8, 0.1, 1 } },
 }
 
 --- MoP combo points are target-owned, like every other client that has them.
@@ -54,7 +55,8 @@ function Provider.UnitPowerMax(unit, powerType, unmodified)
     return NativeUnitPowerMax(unit, powerType, unmodified)
 end
 
-function Provider.Resolve(env)
+local function CreateResolver(SetComboUnit, _G)
+return function(env)
     local class = env.playerClass
     local spec = env.spec
     SetComboUnit("player")
@@ -109,6 +111,17 @@ function Provider.Resolve(env)
     return true, nil, MODE.NONE, false
 end
 
+end
+Provider.Resolve = CreateResolver(SetComboUnit, _G)
+local function IgnoreSampleComboUnit() end
+function Provider.CreateSampleResolver(sample)
+    local resolve = CreateResolver(IgnoreSampleComboUnit, _G)
+    return function()
+        local _, power, mode, aura = resolve(sample)
+        return power, mode, aura
+    end
+end
+
 function Provider.UseFrequentPower(powerType, mode)
     if powerType == PT.HolyPower then return false end
     if powerType == PT.ComboPoints or powerType == PT.SoulShards
@@ -152,12 +165,7 @@ elseif playerClass == "DEATHKNIGHT" then
         Provider.RuneTypes = {
             Get = getRuneType,
             event = "RUNE_TYPE_UPDATE",
-            colors = {
-                { 1, 0, 0 },
-                { 0, 1, 1 },
-                { 0, 0.5, 0 },
-                { 0.8, 0.1, 1 },
-            },
+            colors = Provider.SampleRuneColors,
         }
     end
 elseif playerClass == "PALADIN" then

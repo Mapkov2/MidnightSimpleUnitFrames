@@ -3,4 +3,7 @@
   <Script file="MSUF_UF_Preview.lua"/>
   <Script file="MSUF_UF_PreviewKit.lua"/>
   <Script file="MSUF_UF_UnitScene.lua"/>
+  <Script file="MSUF_UF_PreviewSurfaces.lua"/>
+  <Script file="MSUF_UF_CastbarScene.lua"/>
+  <Script file="MSUF_UF_ClassPowerScene.lua"/>
 </Ui>

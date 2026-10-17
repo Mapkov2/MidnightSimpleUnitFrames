@@ -6,10 +6,13 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_NativeAuras.lua")
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
+function MSUF.CPBuilders.NativeAuras(E)
+local _G = E.globals or _G
+local C_Secrets, C_Spell, C_StringUtil = E.C_Secrets or C_Secrets, E.C_Spell or C_Spell, E.C_StringUtil or C_StringUtil
 -- Bound by MSUF.CPBuilders.NativeAuras: the controller's environment (its
 -- state, profile, texture resolver and text level) and the slot states and
 -- formatters of the one native display the controller builds per session.
-local E, CP, db
+local CP, db
 local states, pending
 local spells = { WHIRLWIND = 85739, SWEEPING_STRIKES = 260708 }
 local formatters
@@ -201,8 +204,6 @@ local function Disable()
     CP.nativeAuraPending = nil
 end
 
-function MSUF.CPBuilders.NativeAuras(boundE)
-    E = boundE
     CP, db = E.CP, E.db
     states, pending = {}, false
     formatters = {}

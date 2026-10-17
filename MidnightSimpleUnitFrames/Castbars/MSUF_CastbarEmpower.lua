@@ -186,7 +186,23 @@ local function IsEmpowerStageBlinkEnabled()
     return blinkEnabled
 end
 
-local function EnsureEmpowerTicks(frame, count)
+local function AnimateTickFlash(tick, flash)
+    local group = flash:CreateAnimationGroup()
+    local alpha = group:CreateAnimation("Alpha")
+    alpha:SetFromAlpha(1.0)
+    alpha:SetToAlpha(0.0)
+    alpha:SetDuration(GetEmpowerStageBlinkTime())
+    tick.MSUF_flashAnim = alpha
+    group:SetScript("OnFinished", function()
+        if flash then
+            flash:Hide()
+            flash:SetAlpha(0.0)
+        end
+    end)
+    tick.MSUF_flashGroup = group
+end
+local function CreateTickBuilder(AnimateFlash)
+return function(frame, count)
     if not frame or not frame.statusBar then return end
 
     frame.empowerTicks = frame.empowerTicks or {}
@@ -215,19 +231,7 @@ local function EnsureEmpowerTicks(frame, count)
             flash:Hide()
             tick.MSUF_flash = flash
 
-            local group = flash:CreateAnimationGroup()
-            local alpha = group:CreateAnimation("Alpha")
-            alpha:SetFromAlpha(1.0)
-            alpha:SetToAlpha(0.0)
-            alpha:SetDuration(GetEmpowerStageBlinkTime())
-            tick.MSUF_flashAnim = alpha
-            group:SetScript("OnFinished", function()
-                if flash then
-                    flash:Hide()
-                    flash:SetAlpha(0.0)
-                end
-            end)
-            tick.MSUF_flashGroup = group
+            AnimateFlash(tick, flash)
         end
 
         if tick.MSUF_flash then
@@ -247,6 +251,8 @@ local function EnsureEmpowerTicks(frame, count)
         end
     end
 end
+end
+local EnsureEmpowerTicks = CreateTickBuilder(AnimateTickFlash)
 
 local function EnsureEmpowerStageSegments(frame, count)
     if not frame or not frame.statusBar then return end
@@ -440,6 +446,7 @@ local function BlinkEmpowerTick(frame, index)
     C_Timer.After(GetEmpowerStageBlinkTime(), tick.MSUF_blinkReset or TickBlinkReset(tick))
 end
 
+local function CreateTickLayout(EnsureEmpowerTicks)
 local function LayoutEmpowerTicks(frame)
     if not frame or not frame.isEmpower or not frame.statusBar then return end
     if not frame.empowerStageEnds or not frame.empowerTotalWithGrace then return end
@@ -490,6 +497,13 @@ local function LayoutEmpowerTicks(frame)
     end
 
     frame.MSUF_empowerLayoutPending = false
+end
+return LayoutEmpowerTicks
+end
+local LayoutEmpowerTicks = CreateTickLayout(EnsureEmpowerTicks)
+local function NoSampleAnimation() end
+function Empower.CreateSampleLayout()
+    return CreateTickLayout(CreateTickBuilder(NoSampleAnimation))
 end
 
 local function PlayerCastbarEmpowerStart(frame)

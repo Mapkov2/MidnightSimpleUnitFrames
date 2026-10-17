@@ -111,6 +111,7 @@ local SPECIALIZATION_KEYS = {
 local state = {}
 local slots = { {}, {} }
 local slotCount = 0
+local UpdateProjectionSlots
 local spellSetGeneration = 0
 local cooldownWakeUnsupported = false
 local cooldownTimerGeneration = 0
@@ -321,6 +322,7 @@ local function ResolveInterruptSpellID()
     state.secondarySpellID = secondarySpellID
     slots[1].spellID, slots[2].spellID = spellID, secondarySpellID
     slotCount = secondarySpellID and 2 or (spellID and 1 or 0)
+    UpdateProjectionSlots(slotCount)
 
     return spellID
 end
@@ -1053,6 +1055,8 @@ end
 -- keeps its own marker; two restricted cooldowns are never sorted in Lua.
 -- Only the three value sinks are written per refresh; anchors, colours and
 -- masks are rewritten when the direction, options or ready colour change.
+local function CreateProjectionPainter(SlotCooldown, slots, state)
+local slotCount = 0
 local function RefreshTimeProjection(frame, castState, general, active)
     if not active or frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false
         or (castState and castState.isNotInterruptible == true) or not ShouldShow(general, frame.unit)
@@ -1130,6 +1134,10 @@ local function RefreshTimeProjection(frame, castState, general, active)
     end
     for index = slotCount + 1, #list do HideProjection(list[index]) end
 end
+return RefreshTimeProjection, function(count) slotCount = count end
+end
+local RefreshTimeProjection
+RefreshTimeProjection, UpdateProjectionSlots = CreateProjectionPainter(SlotCooldown, slots, state)
 
 -- A cooldown reset or reduction moves the recovery point without changing
 -- the displayed readiness; re-seat the projections of active casts only.
@@ -1153,6 +1161,8 @@ end
 
 --- Per-frame decorator entry. It never starts or stops casts; it only shows,
 --- hides, or recolors the indicator on frames that are already active.
+local function CreateFramePainter(MarkActiveIndicatorFrame, MarkInactiveIndicatorFrame,
+    MarkActiveFillFrame, MarkInactiveFillFrame, HideIndicator, RefreshTimeProjection)
 local function RefreshFrame(frame, castState, status, general, updateFillColor)
     if not frame then
         return
@@ -1270,6 +1280,34 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     box:Show()
     box._kickReadyShown = true
     frame._msufKickReadyVisualKey = remember or nil
+end
+return RefreshFrame
+end
+local RefreshFrame = CreateFramePainter(MarkActiveIndicatorFrame, MarkInactiveIndicatorFrame,
+    MarkActiveFillFrame, MarkInactiveFillFrame, HideIndicator, RefreshTimeProjection)
+local function SampleCooldown(cooldown) return cooldown end
+local function IgnoreSampleRegistration() end
+function KickReady.CreateSamplePainter(status)
+    local projection = status.projection
+    local project, setCount = CreateProjectionPainter(SampleCooldown, projection.cooldowns, { spellsResolved = true })
+    local function HideSample(frame)
+        HideTimeProjection(frame)
+        HideIndicatorVisual(frame)
+    end
+    local function FillSample(frame)
+        local general = GeneralDB()
+        if UnitSupportsFillStyle(general, frame.unit) then
+            local r, g, b, a = EvaluateIndicatorRGBA(status.ready, false, general)
+            Castbars.Utils.SetStatusBarColorIfChanged(frame.statusBar, r, g, b, a)
+        end
+    end
+    local paint = CreateFramePainter(IgnoreSampleRegistration, IgnoreSampleRegistration,
+        FillSample, IgnoreSampleRegistration, HideSample, project)
+    return function(frame, castState, general)
+        setCount(#projection.cooldowns)
+        frame.MSUF_durationObj = projection.duration
+        return paint(frame, castState, status, general)
+    end
 end
 
 --- PERF: RefreshAll/RefreshActive/KickReady.KickReady_RefreshFrame run per cooldown or

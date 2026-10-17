@@ -210,8 +210,7 @@ local function InitializeExistingPlayerCast()
     if active then PlayerCastbarCast(playerFrame) end
 end
 
-local function CreatePlayerCastbarFrame()
-    local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent))
+local function BuildPlayerCastbarElements(frame)
     -- Native pixel rounding for the castbar rect (12.1.5). Root only: the
     -- rounded-corner art below deliberately runs with pixel snapping off.
     local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
@@ -320,6 +319,12 @@ local function CreatePlayerCastbarFrame()
         tick:Hide()
     end
 
+end
+Frames.BuildPlayerCastbarElements = BuildPlayerCastbarElements
+
+local function CreatePlayerCastbarFrame()
+    local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent))
+    BuildPlayerCastbarElements(frame)
     SetPlayerCastbarEventsRegistered(frame, true)
     local runtime = Castbars.Runtime
     if runtime and runtime.PrewarmNativeTimeText then

@@ -18,6 +18,7 @@ local type, tonumber, tostring = type, tonumber, tostring
 local OverrideRGB = CPConst.OverrideRGB
 local CPK = CPConst.CPK
 
+builders.CONTROLLER_COLORS = function()
 --- Bound by CONTROLLER_COLORS: the shared cached config table and the
 --- power-type token map.
 local _cpDB, POWER_TYPE_TOKENS
@@ -226,7 +227,7 @@ end
 
 -- Plain settings can describe a second surface without changing controller
 -- caches. The live compiler and both menu surfaces call these same resolvers.
-MSUF.ClassPowerColors = {
+local shared = {
     OverrideRGB = OverrideRGB,
     ResolveSlotColorMode = ResolveSlotColorMode,
     ResolveSlotColor = ResolveSlotColor,
@@ -246,7 +247,7 @@ end
 
 --- CONTROLLER_COLORS is built once at controller load. It binds the cached
 --- config, starts the caches empty and publishes the Colors panel hook.
-builders.CONTROLLER_COLORS = function(E)
+return function(E)
     _cpDB = E._cpDB
     POWER_TYPE_TOKENS = E.POWER_TYPE_TOKENS
     _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
@@ -255,7 +256,9 @@ builders.CONTROLLER_COLORS = function(E)
     _cachedChargedR, _cachedChargedG, _cachedChargedB = nil, nil, nil
     _mwAbove5R, _mwAbove5G, _mwAbove5B = nil, nil, nil
     _mwAbove5Resolved = false
-    ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColors)
+    if not E.scene then
+        ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColors)
+    end
     return {
         ResolveMWAbove5Color = ResolveMWAbove5Color,
         ResolveClassPowerColor = ResolveClassPowerColor,
@@ -267,4 +270,16 @@ builders.CONTROLLER_COLORS = function(E)
         ResolveSlotColor = ResolveSlotColor,
         ResolveFullResourceColor = ResolveFullResourceColor,
     }
+end, shared
+end
+
+local CreateColorBuilder = builders.CONTROLLER_COLORS
+local BuildLiveColors, liveShared = CreateColorBuilder()
+MSUF.ClassPowerColors = liveShared
+builders.CONTROLLER_COLORS = function(E)
+    if E.scene then
+        local build = CreateColorBuilder()
+        return build(E)
+    end
+    return BuildLiveColors(E)
 end

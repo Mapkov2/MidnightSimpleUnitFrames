@@ -84,20 +84,7 @@ local function CP_ResolveEbonHost()
     return bar or CP.ebonHost
 end
 
-local function GetEbonTextLevel()
-    local host = CP.ebonHost
-    local p = MSUF_DB and MSUF_DB.player or nil
-    local textLayer = tonumber(p and p.powerTextLayer) or 2
-    if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
-    textLayer = math_floor(textLayer + 0.5)
-    if host and host.GetFrameLevel then
-        return (host:GetFrameLevel() or 0) + 1 + textLayer
-    end
-    local layers = MSUF.UF and MSUF.UF.Layers
-    return layers and layers.TextLevel and layers.TextLevel(CP.container, textLayer, 5)
-        or (layers and layers.ElementLevel and layers.ElementLevel(textLayer, 5, 8))
-        or ((CP.container and CP.container.GetFrameLevel and CP.container:GetFrameLevel() or 0) + 10)
-end
+local GetEbonTextLevel
 
 --- Ebon Might is the Player Power bar's content, so its media, alpha and text
 --- style come from the ordinary Player Power configuration. Only the fill colour
@@ -316,6 +303,7 @@ builders.CONTROLLER_SURFACE = function(E)
     CP_Create, CP_EnsureBars, CP_Layout = E.CP_Create, E.CP_EnsureBars, E.CP_Layout
     CP.runeMap = { 1, 2, 3, 4, 5, 6 }
     _runeAppliedSortOrder = "natural"
+    GetEbonTextLevel = MSUF.ClassPowerConfig.CreatePowerTextLevel(CP)
     CP.GetEbonTextLevel = GetEbonTextLevel
     ExportPublic("MSUF_ClassPower_MountEbonMight", CP_MountEbonMight)
     CP._cdmWidthSig = CP._cdmWidthSig or {}

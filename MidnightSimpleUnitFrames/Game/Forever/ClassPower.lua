@@ -47,7 +47,8 @@ local supportsEvent = Client.SupportsEvent
 Provider.comboTargetEvent = type(supportsEvent) == "function"
     and supportsEvent("COMBO_TARGET_CHANGED") == true
 
-function Provider.GetClassPowerType()
+local function CreateClassPowerType(PLAYER_CLASS, UnitPowerType, GetShapeshiftFormID)
+return function()
     if PLAYER_CLASS == "ROGUE" then
         return PT.ComboPoints, MODE.SEGMENTED, false
     end
@@ -61,6 +62,11 @@ function Provider.GetClassPowerType()
         end
     end
     return nil, MODE.NONE, false
+end
+end
+Provider.GetClassPowerType = CreateClassPowerType(PLAYER_CLASS, UnitPowerType, GetShapeshiftFormID)
+function Provider.CreateSampleResolver(sample)
+    return CreateClassPowerType(sample.class, sample.PrimaryPower, sample.GetForm)
 end
 
 MSUF.CPClient = Provider

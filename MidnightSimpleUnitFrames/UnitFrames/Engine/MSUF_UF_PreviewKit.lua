@@ -63,6 +63,14 @@ function Host:Deactivate()
   return true
 end
 
+function Kit.CopyPlain(value)
+  assert(not (issecretvalue and issecretvalue(value)), "preview input must be public")
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for key, child in pairs(value) do copy[Kit.CopyPlain(key)] = Kit.CopyPlain(child) end
+  return copy
+end
+
 function Host:Refresh(reason)
   if not self.active then return false end
   local allowed = self.opts.allowed
@@ -73,6 +81,7 @@ end
 
 function Host:Request(reason)
   if not self.active then return false end
+  if self.opts.allowed and not self.opts.allowed(self) then return false end
   if reason ~= nil then self.reason = reason end
   if self.queued then return true end
   self.queued = true

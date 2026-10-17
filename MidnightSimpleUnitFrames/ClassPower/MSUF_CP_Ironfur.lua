@@ -19,10 +19,11 @@ local MOTION_INTERVAL = 1 / 30
 local MAX_TRACKED_CASTS = 32
 local HASH_WIDTH = 2
 
+modeBuilders.IRONFUR = function(E)
 --- Bound by IRONFUR (Druids only, built on the first Guardian refresh): the
 --- controller's state and helpers.
 local CP, CPK, CP_CheckAutoHide, EnsureMainText, ApplyFont, _cpDB
-local GetTime, C_SpellBook = GetTime, C_SpellBook
+local GetTime, C_SpellBook = E.GetTime or GetTime, E.C_SpellBook or C_SpellBook
 local tostring, type = tostring, type
 
 --- Tracker state. ResetTrackerState gives every build a fresh copy.
@@ -354,7 +355,21 @@ local function RefreshVisibility()
     if CP_CheckAutoHide then CP_CheckAutoHide(tickCount > 0 and 1 or 0, 1) end
 end
 
+local function PaintSample(sample)
+    active = true
+    layoutDirty, staticDirty, configDirty = true, true, true
+    tickCount = math.min(MAX_TRACKED_CASTS, sample.count or 3)
+    local now = GetTime()
+    for i = 1, tickCount do
+        local tick = sample.ironfur and sample.ironfur[i]
+        tickDurations[i] = tick and tick.duration or 7
+        tickEnds[i] = tick and tick.expires or (now + tickDurations[i] * i / (tickCount + 1))
+    end
+    return Update()
+end
+
 local API = {
+    PaintSample = PaintSample,
     Update = Update,
     SetActive = SetActive,
     InvalidateLayout = InvalidateLayout,
@@ -363,13 +378,16 @@ local API = {
     IsActive = IsActive,
 }
 
-modeBuilders.IRONFUR = function(E)
     if E.PLAYER_CLASS ~= "DRUID" then return nil end
     CP, CPK, _cpDB = E.CP, E.CPK, E._cpDB
     GetTime = E.GetTime or GetTime
     CP_CheckAutoHide, EnsureMainText = E.CP_CheckAutoHide, E.EnsureMainText
     ApplyFont = E.ApplyFont
     ResetTrackerState()
+    if E.sample then
+        motionFrame = E.motionFrame
+        return API
+    end
     eventFrame = CreateFrame("Frame")
     motionFrame = CreateFrame("Frame")
     motionFrame:Hide()
