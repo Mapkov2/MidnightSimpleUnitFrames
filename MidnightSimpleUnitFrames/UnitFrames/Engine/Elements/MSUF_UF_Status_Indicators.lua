@@ -665,6 +665,90 @@ function Runtime.UpdatePVP(frame, status)
   end
 end
 
+local SAMPLE_ELITE_STATE = { worldboss = "BOSS", rareelite = "RAREELITE", rare = "RARE", elite = "ELITE" }
+
+--- Scene form of the indicator updates: the sample's flags into the regions StatusIndicators laid out, behind the live gates.
+function Runtime.PaintSampleIndicators(frame, status, sample)
+  if not status then return end
+  local cfg, tex = status.raidMarker, frame.raidTargetIcon
+  if tex then
+    local index = cfg and cfg.enabled and sample.raidTarget or nil
+    if index then
+      if not ApplyStatusIconPackTexture(tex, cfg, status, "raidMarker", index) then
+        ApplyDefaultRaidMarkerTexture(tex, index)
+      end
+      tex._msufRaidMarkerIndex = nil
+    end
+    SetShown(tex, index ~= nil)
+  end
+  local leaderCfg, assistCfg = status.leader, status.assist
+  local leaderTex, assistTex = frame.leaderIcon or frame.LeaderIndicator, frame.assistIcon
+  local leader = sample.player == true and sample.leader == true
+  local assist = sample.player == true and not leader and sample.assist == true
+  if leaderTex then
+    local show = leaderCfg and leaderCfg.enabled and leader
+    if show then ApplyLeaderTexture(leaderTex, leaderCfg, status, false) end
+    SetShown(leaderTex, show and true or false)
+  end
+  if assistTex then
+    local show = assistCfg and assistCfg.enabled and assist
+    if show then ApplyLeaderTexture(assistTex, assistCfg, status, true) end
+    SetShown(assistTex, show and true or false)
+  end
+  cfg, tex = status.elite, frame.eliteIcon
+  if tex then
+    local state = cfg and cfg.enabled and sample.player ~= true and SAMPLE_ELITE_STATE[sample.classification or ""] or nil
+    if state == nil and cfg and cfg.enabled and sample.player ~= true and sample.level == -1 then state = "BOSS" end
+    if state then
+      if not ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
+        if tex.SetAtlas then
+          SetAtlas(tex, EliteAtlas(state))
+        else
+          SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
+          SetTexCoord(tex, 0, 1, 0, 1)
+        end
+      end
+    end
+    SetShown(tex, state ~= nil)
+  end
+  cfg, tex = status.combat, frame.combatStateIndicatorIcon
+  if tex then
+    local active = cfg and cfg.enabled and sample.combat == true
+    if active then ApplyStateOrPackIconTexture(tex, "combat", cfg, status, "combat") end
+    SetShown(tex, active and true or false)
+  end
+  cfg, tex = status.resting, frame.restingIndicatorIcon
+  if tex then
+    local active = cfg and cfg.enabled and sample.resting == true and frame.MSUFUnitKey == "player"
+    if active then
+      SetShown(tex, true)
+      ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting", true)
+    else
+      StopRestingFlipbook(tex)
+      SetShown(tex, false)
+    end
+  end
+  SetShown(frame.incomingResIndicatorIcon, false)
+  cfg, tex = status.pvp, frame.pvpIndicatorIcon
+  if tex then
+    local faction = cfg and cfg.enabled and sample.pvp or nil
+    local atlas = faction == "FFA" and Media.PVP_FFA_ATLAS or faction and PVPAtlasForFaction(faction) or nil
+    local shown = false
+    if atlas then
+      shown = ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) or ApplyPVPTexture(tex, atlas)
+    end
+    SetShown(tex, shown and true or false)
+  end
+  cfg, tex = status.raidGroup, frame.raidGroupNameText
+  if tex then
+    local subgroup = cfg and cfg.enabled and sample.player == true and sample.raidGroup or nil
+    if subgroup then SetText(tex, Runtime.RaidGroupText(cfg.style, subgroup)) end
+    SetShown(tex, subgroup ~= nil)
+  end
+  local statusText = frame.statusIndicatorText
+  if statusText then ClearStatusText(frame, statusText) end
+end
+
 local function BindStatusIndicatorArt(values)
   ApplyDefaultRaidMarkerTexture = values.ApplyDefaultRaidMarkerTexture
 end

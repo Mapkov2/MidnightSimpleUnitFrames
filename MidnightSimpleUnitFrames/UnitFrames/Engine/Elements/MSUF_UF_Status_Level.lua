@@ -169,6 +169,38 @@ function Runtime.UpdateIdentityTexts(frame, status)
   if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
 end
 
+--- Is the identity text `field` switched on in `cfg` and built on the frame?
+local function IdentityWanted(frame, cfg, field)
+  return cfg and cfg.enabled == true and frame[field] ~= nil
+end
+
+--- Scene form of UpdateIdentityTexts: the sample's level (graded by its tier), race and class texts.
+function Runtime.PaintSampleIdentityTexts(frame, status, sample)
+  local levelCfg = status and status.level
+  local showLevel = IdentityWanted(frame, levelCfg, "levelText")
+  local showRace = IdentityWanted(frame, status and status.race, "raceText")
+  local showClass = IdentityWanted(frame, status and status.classText, "classStatusText")
+  if not (showLevel or showRace or showClass) then
+    HideField(frame, IDENTITY_TEXT_FIELDS)
+    return
+  end
+  local level = showLevel and tonumber(sample.level) or nil
+  if level then
+    SetText(frame.levelText, level == -1 and "??" or tostring(level))
+    if levelCfg.difficultyColor == true then
+      Runtime.ApplyLevelDifficultyColor(frame.levelText, frame, nil, nil, levelCfg, level == -1 and 1 or sample.levelTier or 3)
+    end
+  end
+  SetShown(frame.levelText, level ~= nil)
+  Runtime.SetForeverLevelBadgeShown(frame, level ~= nil and levelCfg.foreverBadge == true)
+  local race = showRace and sample.race or nil
+  if race then SetText(frame.raceText, race) end
+  SetShown(frame.raceText, race ~= nil)
+  local className = showClass and sample.className or nil
+  if className then SetText(frame.classStatusText, className) end
+  SetShown(frame.classStatusText, className ~= nil)
+end
+
 local function BindStatusLevelBadge(values)
   HideField = values.HideField
 end

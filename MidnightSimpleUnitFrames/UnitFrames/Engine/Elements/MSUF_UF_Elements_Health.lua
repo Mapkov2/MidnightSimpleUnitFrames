@@ -1091,6 +1091,31 @@ end
 
 ExportPublic("MSUF_UFCore_RefreshHealthBarColor", Health.RefreshColor)
 
+--- Scene form: the health values, background and colours from a sample, with no client query.
+function Health.PaintSample(frame, unit, hp, hpMax)
+  local bar = frame and frame.hpBar
+  if not bar then return false end
+  UpdateAbsoluteValues(frame, unit, hp, hpMax, true, false)
+  if frame._msufHealthBackgroundNeedsValue == true then
+    SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, false)
+  end
+  local health = frame.MSUFSpec and frame.MSUFSpec.health
+  if frame._msufHealthRuntimeGradient == true and health then
+    local r, g, b = C.PreviewHealthGradientColor(health, hp / hpMax)
+    C.ApplyStatusColor(bar, r, g, b)
+    frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB = r, g, b
+    frame._msufGradStashAt = GetTime and GetTime() or 0
+    local enabled = frame._msufHealthRuntimeColorEnabled
+    frame._msufHealthRuntimeColorEnabled = false
+    ApplyRuntimeColor(frame, "MSUF_SAMPLE", unit, hp, hpMax, true, nil, true)
+    frame._msufHealthRuntimeColorEnabled = enabled
+  else
+    ApplyRuntimeColor(frame, "MSUF_SAMPLE", unit, hp, hpMax, true, nil, true)
+  end
+  if ApplyBackgrounds then ApplyBackgrounds(frame, true, false, true) end
+  return true
+end
+
 Health.Routes = { basic = true, identityBar = true }
 Health.Routes.SelectNeeds = Health.SelectGroupHealthUpdater
 UF.RegisterElement("Health", Health)

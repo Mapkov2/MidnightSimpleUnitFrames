@@ -2378,6 +2378,16 @@ function Prediction.ApplyPreview(frame, healthValue, incoming, absorb, healAbsor
 end
 UF.ApplyPredictionPreview = Prediction.ApplyPreview
 
+--- Scene form: incoming heal, absorb and heal absorb from a sample, as percents of the health maximum.
+function Prediction.PaintSample(frame, healthValue, incoming, absorb, healAbsorb)
+  local cfg = frame and frame._msufPredictionRuntimeCfg
+  if not (cfg and cfg.enabled == true) then return false end
+  frame._msufPredictionDisabled = nil
+  ApplyPreviewValues(frame, cfg, frame.MSUFUnitKey, cfg.heal == true, cfg.absorb == true, cfg.healAbsorb == true,
+    healthValue, incoming, absorb, healAbsorb)
+  return true
+end
+
 UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedActive)
   if boundUnit == true then
     unit = frame.MSUFUnitKey

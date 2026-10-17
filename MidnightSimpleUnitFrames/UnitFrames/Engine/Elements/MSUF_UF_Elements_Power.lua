@@ -1328,6 +1328,36 @@ local function PowerValuePlan(frame)
   return POWER_PLAN_PERCENT
 end
 
+--- Scene form: the class colour mode asks the unit's class, so the apply takes the type colours and PaintSample colours.
+function Power.SceneApply(frame, spec)
+  local power = spec and spec.power
+  local mode = power and power.mode
+  if mode == "class" then power.mode = "power" end
+  Power.Apply(frame, spec)
+  if power then power.mode = mode end
+end
+
+--- Scene form: the bar values and the sample power type's colour, with no client query.
+function Power.PaintSample(frame, unit, value, maxValue, powerType, token)
+  local bar = frame and frame.targetPowerBar
+  if not bar then return false end
+  if bar._msufMinMax ~= maxValue then
+    bar:SetMinMaxValues(0, maxValue)
+    bar._msufMinMax = maxValue
+  end
+  bar:SetValue(value)
+  bar._msufInterpolating = nil
+  bar._msufPowerValue = value
+  bar._msufPowerValueUnit = unit
+  bar._msufPowerMax = maxValue
+  bar._msufPowerMaxUnit = unit
+  bar._msufPowerMaxReady = true
+  bar._msufPowerMaxType = powerType
+  bar._msufPowerPercentValue = nil
+  SetColor(frame, true, powerType, token, true)
+  return true
+end
+
 function Power.Update(frame, event, unit, eventPowerToken)
   if frame and frame._msufPowerEbonMight == true then return end
   local spec = frame and frame.MSUFSpec

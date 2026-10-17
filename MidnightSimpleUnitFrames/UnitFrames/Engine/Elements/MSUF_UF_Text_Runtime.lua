@@ -760,6 +760,28 @@ function Text.UpdateInline(frame, event, unit)
   ApplyInlineTextColor(frame, inlineUnit, inline)
 end
 
+--- Scene form: the inline target-of-target text from a sample name, in the frame's own text colour.
+function Text.PaintSampleInline(frame, name)
+  local rt = frame and frame._msufTextRuntime
+  local inline = rt and rt.inlineToT
+  if not (inline and frame.totInlineSep and frame.totInlineText) then return end
+  if type(name) ~= "string" or name == "" then
+    SetShownCached(frame.totInlineSep, false)
+    SetShownCached(frame.totInlineText, false)
+    SetShownCached(frame._msufInlineDotsFS, false)
+    frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+    return
+  end
+  SetTextCached(frame.totInlineSep, inline.separator)
+  frame._msufInlineStamp = inline.stamp
+  SetTextCached(frame.totInlineText, name)
+  if AnchorInlineToName then AnchorInlineToName(frame) end
+  SetShownCached(frame.totInlineSep, true)
+  SetShownCached(frame.totInlineText, true)
+  local color = frame.MSUFSpec and frame.MSUFSpec.textColor
+  Text.SetInlineTextColor(frame, color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1)
+end
+
 function Text.UpdateName(frame, event, unit)
   local frameUnit = frame and frame.MSUFUnitKey
   unit = unit or frameUnit

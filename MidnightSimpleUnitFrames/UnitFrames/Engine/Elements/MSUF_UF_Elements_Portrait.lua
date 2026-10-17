@@ -1822,13 +1822,33 @@ function Portrait.SceneApply(frame, spec)
   ApplyPortraitBackground(holder, p)
   Details.ApplyShadow(holder, p)
   local class = frame._msufPortraitSampleClass
-  LayoutPortraitBorder(holder, p, BorderStyleColor(p.border, class, 5))
+  LayoutPortraitBorder(holder, p, BorderStyleColor(p.border, class, frame._msufSampleReaction or 5))
   UpdatePortraitClassification(frame, p)
   SetShown(holder, true)
   SetShown(frame.portrait, true)
-  if type(class) == "string" then
+  local art = frame._msufSamplePortraitArt
+  if art and p.render ~= "CLASS" then
+    local l, r, t, b = Get2DPortraitTexCoords(p)
+    ClearClassPortraitCache(frame.portrait)
+    SetTextureCached(frame.portrait, art)
+    SetTexCoordCached(frame.portrait, l, r, t, b)
+    SetVertexColorCached(frame.portrait, 1, 1, 1, 1)
+  elseif type(class) == "string" then
     ApplyClassPortrait(frame.portrait, nil, p, class, frame)
   end
+end
+
+--- Scene form: the dragon / elite dressing from the sample's classification.
+function Portrait.PaintSample(frame, sample)
+  local p = frame._msufPortraitRuntimeCfg
+  if not (p and p.enabled == true and frame.MSUFPortraitHolder) then return end
+  local unit = frame.MSUFUnitKey
+  local enabled = true
+  if p.dragonArtwork ~= true then
+    enabled = p.shape == "BLIZZARD" and p.blizzardElite == true and Details.DragonAllowed(p, unit)
+  end
+  local classification = enabled and p.dragonArtwork ~= true and unit and sample.classification or nil
+  Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification, nil, nil, nil, p, unit)
 end
 
 function Portrait.Disable(frame)

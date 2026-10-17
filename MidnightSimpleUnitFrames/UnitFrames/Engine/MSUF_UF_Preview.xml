@@ -2,4 +2,5 @@
   <Script file="..\..\Libs\MSUFUnitFrames\MSUF_UF_Secrets.lua"/>
   <Script file="MSUF_UF_Preview.lua"/>
   <Script file="MSUF_UF_PreviewKit.lua"/>
+  <Script file="MSUF_UF_UnitScene.lua"/>
 </Ui>

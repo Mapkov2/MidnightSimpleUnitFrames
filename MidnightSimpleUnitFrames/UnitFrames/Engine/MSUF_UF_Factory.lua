@@ -422,7 +422,11 @@ end
 
 local function IsBossFrame(frame)
   local unit = frame and frame.MSUFUnitKey
-  if type(unit) ~= "string" then return false end
+  if type(unit) ~= "string" then
+    -- A unit preview scene frame holds no unit but is laid out like its unit's frame (MSUF_UF_UnitScene.lua).
+    unit = frame and frame._msufSceneUnit
+    if type(unit) ~= "string" then return false end
+  end
   -- Arena frames share the boss stacked-container model, so they inherit the
   -- same physical pixel-snap geometry to keep odd/even stacks phase-identical.
   return unit:match("^boss%d+$") ~= nil or unit:match("^arena%d+$") ~= nil

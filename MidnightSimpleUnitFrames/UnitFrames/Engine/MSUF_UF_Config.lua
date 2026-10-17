@@ -1916,6 +1916,12 @@ function Config.RefreshUnit(unit)
   return Config.specs[unit]
 end
 
+--- The saved settings of one unit resolved now into the caller's own table (a preview scene's private spec).
+function Config.CompileSpec(unit, out)
+  if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
+  return ResolveUnit(EnsureDB(), unit, out)
+end
+
 function Config.GetSpec(unit)
   if Config.dirty == true and not ConfigInCombat() then
     Config.Refresh()

@@ -698,28 +698,12 @@ local function PreviewAuraConfigSpec(frame, compiledSpec)
   return base
 end
 
-function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiledSpec)
-  if InCombat() then return false end
-  local spec = frame and frame.MSUFSpec
-  local auras = compiledAuras or (spec and spec.auras)
-  if not (auras and auras.enabled == true) then
-    GF.HideFrameAuras(frame)
-    return false
-  end
-
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
-    and A3.ResolveAuraPreviewConfig(frame, frame.MSUFUnitKey or "player", PreviewAuraConfigSpec(frame, compiledSpec)) or nil
-  local lanes = runtimeConfig and runtimeConfig.lanes
-  if not lanes then
-    GF.HideFrameAuras(frame)
-    return false
-  end
-
+--- Lay out and paint the stand-ins of the lanes `descriptors` names that `lanes` enables; true when any icon shows.
+local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex)
   local used = 0
   previewIndex = max(1, floor((tonumber(previewIndex) or 1) + 0.5))
-  for laneIndex = 1, #PREVIEW_AURA_LANES do
-    local descriptor = PREVIEW_AURA_LANES[laneIndex]
+  for laneIndex = 1, #descriptors do
+    local descriptor = descriptors[laneIndex]
     local lane = lanes[descriptor.key]
     local maxCount = max(0, floor((tonumber(lane and lane.max) or 0) + 0.5))
     local host = EnsureFrameAuraLaneHost(frame, descriptor.key)
@@ -750,6 +734,47 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
   local pool = frame._msufGFFrameAuraPreviews
   for i = used + 1, pool and #pool or 0 do HideFrameAuraPreview(pool[i]) end
   return used > 0
+end
+
+function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiledSpec)
+  if InCombat() then return false end
+  local spec = frame and frame.MSUFSpec
+  local auras = compiledAuras or (spec and spec.auras)
+  if not (auras and auras.enabled == true) then
+    GF.HideFrameAuras(frame)
+    return false
+  end
+
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
+    and A3.ResolveAuraPreviewConfig(frame, frame.MSUFUnitKey or "player", PreviewAuraConfigSpec(frame, compiledSpec)) or nil
+  local lanes = runtimeConfig and runtimeConfig.lanes
+  if not lanes then
+    GF.HideFrameAuras(frame)
+    return false
+  end
+  return PaintFrameAuraLanes(frame, kind, lanes, PREVIEW_AURA_LANES, previewIndex)
+end
+
+local PREVIEW_UNIT_AURA_LANES = { PREVIEW_AURA_LANES[1], PREVIEW_AURA_LANES[3] }
+
+--- Aura stand-ins of a unit scene frame: the buff and debuff lanes of the unit's compiled aura configuration, painted
+--- like a group frame's. The layer filter of the on-screen previews is lifted for the call.
+function GF.PreviewUnitFrameAuras(frame, unit, spec, previewIndex)
+  if InCombat() then return false end
+  local auras = spec and spec.auras
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  local config = auras and auras.enabled == true and A3 and A3.ResolveAuraPreviewConfig(frame, unit, spec)
+  local lanes = config and config.lanes
+  if not lanes then
+    GF.HideFrameAuras(frame)
+    return false
+  end
+  local heldVisible, heldSolo = previewLayerVisible, previewLayerSolo
+  previewLayerVisible, previewLayerSolo = nil, nil
+  local shown = PaintFrameAuraLanes(frame, "unit", lanes, PREVIEW_UNIT_AURA_LANES, previewIndex)
+  previewLayerVisible, previewLayerSolo = heldVisible, heldSolo
+  return shown
 end
 
 --- Refresh only the pooled Aura stand-ins on active Edit Mode group dummies.
@@ -1999,12 +2024,13 @@ end
 --- that owns the isolated group scenes of one surface. root:Group(kind, count) makes (or re-shows) the group
 --- scene of that kind: `count` plain Buttons laid out like the live grid and painted with static sample data
 --- (the Edit Mode dummies' fake roster, no unit query), parented to `parent`. Whoever owns `parent` places and
---- scales it.
+--- scales it. root:Unit(unitKey) makes the static scene of one unit frame the same way (MSUF_UF_UnitScene.lua).
 ---
---- Lifecycle: nothing shows or listens until root:Activate(). While active the root listens for CONFIG_APPLIED
---- and PLAYER_REGEN_ENABLED and answers either with one coalesced repaint (root:Request) on the next frame.
---- root:Deactivate() hides every group (keeping what each wants) and drops both subscriptions. Combat hides the
---- groups (GF.HidePreviewsForCombat) like every other preview and the regen repaint brings them back.
+--- Lifecycle: nothing shows or listens until root:Activate(). While active the root listens for CONFIG_APPLIED,
+--- PLAYER_REGEN_ENABLED and PLAYER_REGEN_DISABLED. The first two answer with one coalesced repaint (root:Request) on
+--- the next frame; the third hides the unit scenes. root:Deactivate() hides every scene (keeping what each wants)
+--- and drops the three subscriptions. Combat hides the groups (GF.HidePreviewsForCombat) like every other preview
+--- and the regen repaint brings the scenes back.
 local SceneRoot = {}
 SceneRoot.__index = SceneRoot
 local rootSerial = 0
@@ -2019,6 +2045,9 @@ local function RootPaint(host, reason)
     local want = group.want
     if want then group:Show(want, { reason = reasonText }) end
   end
+  for _, unitScene in pairs(host.root.units) do
+    if unitScene.want then unitScene:Show() end
+  end
 end
 
 local function RootActivate(host)
@@ -2027,6 +2056,7 @@ local function RootActivate(host)
   local key = root.eventKey
   bus:Register("CONFIG_APPLIED", key, root.onConfig)
   bus:Register("PLAYER_REGEN_ENABLED", key, root.onRegen)
+  bus:Register("PLAYER_REGEN_DISABLED", key, root.onCombat)
 end
 
 local function RootDeactivate(host)
@@ -2034,14 +2064,16 @@ local function RootDeactivate(host)
   local bus = MSUF.EventBus
   bus:Unregister("CONFIG_APPLIED", root.eventKey)
   bus:Unregister("PLAYER_REGEN_ENABLED", root.eventKey)
+  bus:Unregister("PLAYER_REGEN_DISABLED", root.eventKey)
   for _, group in pairs(root.groups) do HideScene(group) end
+  for _, unitScene in pairs(root.units) do unitScene:Conceal() end
 end
 
 function GF.NewPreviewScene(parent)
   rootSerial = rootSerial + 1
   local Kit = Dep("MSUF").UF.PreviewKit
   assert(Kit, "MSUF: missing required dependency 'UF.PreviewKit' required by UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
-  local root = setmetatable({ parent = parent, groups = {}, eventKey = "MSUF.GF.PreviewScene." .. rootSerial }, SceneRoot)
+  local root = setmetatable({ parent = parent, groups = {}, units = {}, eventKey = "MSUF.GF.PreviewScene." .. rootSerial }, SceneRoot)
   root.host = Kit.NewHost(parent, {
     activate = RootActivate, deactivate = RootDeactivate, paint = RootPaint, allowed = RootAllowed,
   })
@@ -2049,6 +2081,10 @@ function GF.NewPreviewScene(parent)
   -- One closure per root, registered only while the root is active.
   root.onConfig = function() root.host:Request("config") end
   root.onRegen = function() root.host:Request("regen") end
+  -- Combat hides the unit scenes at once; the regen repaint brings the wanted ones back.
+  root.onCombat = function()
+    for _, unitScene in pairs(root.units) do unitScene:Conceal() end
+  end
   return root
 end
 
@@ -2067,6 +2103,25 @@ function SceneRoot:Group(kind, count, opts)
     if self.host.active then group:Show(count, opts) end
   end
   return group
+end
+
+--- The static unit scene of a unit key (docs/PREVIEW_RUNTIME_RULES.md, "Unit preview scenes"); nil when this client has
+--- no such frame. opts.sample overrides fields of the unit's sample, opts.show shows it at once.
+function SceneRoot:Unit(unitKey, opts)
+  local UnitScene = Dep("MSUF").UF.UnitScene
+  assert(UnitScene, "MSUF: missing required dependency 'UF.UnitScene' required by UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
+  local unit = UnitScene.Normalize(unitKey)
+  if not unit then return nil end
+  opts = type(opts) == "table" and opts or nil
+  local scene = self.units[unit]
+  if not scene then
+    scene = UnitScene.New(self, unit, opts and opts.sample)
+    self.units[unit] = scene
+  elseif opts and opts.sample ~= nil then
+    scene:SetSample(opts.sample)
+  end
+  if opts and opts.show == true then scene:Show() end
+  return scene
 end
 
 function SceneRoot:Activate() return self.host:Activate() end
@@ -2093,6 +2148,7 @@ end
 function SceneRoot:SetParent(parent)
   self.parent = parent
   for _, group in pairs(self.groups) do group:SetParent(parent) end
+  for _, unitScene in pairs(self.units) do unitScene:SetParent(parent) end
 end
 
 function SceneRoot:SetLayerFilter(visible, solo)
@@ -2106,6 +2162,10 @@ function SceneRoot:Release()
     isolatedScenes[group] = nil
     isolatedSceneCount = isolatedSceneCount - 1
     self.groups[kind] = nil
+  end
+  for unit, unitScene in pairs(self.units) do
+    unitScene:Release()
+    self.units[unit] = nil
   end
 end
 

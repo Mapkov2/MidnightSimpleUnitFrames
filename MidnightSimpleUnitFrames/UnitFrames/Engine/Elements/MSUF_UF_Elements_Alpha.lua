@@ -561,6 +561,17 @@ function Alpha.Apply(frame, spec)
   ApplyAlpha(frame, frame and frame._msufAlphaRuntimeCfg, true)
 end
 
+--- Scene form: the layers' opacity without the out-of-combat fade, its registry and the range lane.
+function Alpha.SceneApply(frame, spec)
+  local cfg = spec and spec.alpha or nil
+  frame._msufAlphaRuntimeCfg = cfg
+  frame._msufAlphaRangeActive, frame._msufAlphaRangeHealthLayer = false, false
+  local held = cfg and cfg.externalOoc
+  if cfg then cfg.externalOoc = true end
+  ApplyAlpha(frame, cfg, true)
+  if cfg then cfg.externalOoc = held end
+end
+
 function Alpha.Update(frame, event)
   local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE"
     or event == "MSUF_VISUALS" or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"

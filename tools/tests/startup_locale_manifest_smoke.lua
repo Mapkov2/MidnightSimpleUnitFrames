@@ -94,7 +94,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- reads instead of an extra term in that live function: +1,115 LF bytes on every client (Mainline/ruRU
         -- 10,006,974 -> 10,008,089, TBC/ruRU 7,883,096 -> 7,884,211). Both ceilings rise by exactly that:
         -- Mainline 10,007,262 -> 10,008,377, Classic 7,892,434 -> 7,893,549.
-        assert(bytes < (suffix == "Mainline" and 10008377 or 7893549),
+        -- 2026-10-17: the static unit preview scenes (MSUF_UF_UnitScene.lua, the scene forms of the health, power,
+        -- prediction, portrait, opacity, status and text elements, the shared aura lane painter) add 31,385 LF bytes to
+        -- core startup on every client (Mainline/ruRU 10,008,089 -> 10,039,474, TBC/ruRU 7,884,211 -> 7,915,596) while the
+        -- menu keeps drawing its own unit cell until it is switched over (Options code removed: none). Both ceilings
+        -- rise by exactly that delta: Mainline 10,008,377 -> 10,039,762, Classic 7,893,549 -> 7,924,934.
+        assert(bytes < (suffix == "Mainline" and 10039762 or 7924934),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

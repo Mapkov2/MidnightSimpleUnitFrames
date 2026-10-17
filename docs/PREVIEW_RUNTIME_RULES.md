@@ -147,6 +147,85 @@ preview aura painters remain scene-specific. Their region ownership, rounding, a
 interactions need scene integration before their larger render blocks can be deleted safely.
 Moving those blocks into another helper would retain their independent rendering rules.
 
+## Unit preview scenes
+
+`root:Unit(unitKey, opts)` on a scene root (the root `GF.NewPreviewScene` returns) makes the static scene of one unit
+frame: player, target, focus, targettarget, focustarget, pet, pettarget, boss1..5 and arena1..N, as far as the client has
+them (`root:Unit` answers nil for a frame the client lacks; "boss" and "arena" mean their first slot). `opts.sample`
+overrides fields of the unit's sample, `opts.show` shows it at once. The scene object has `Show`, `Hide`, `Frame()`,
+`Refresh` (spec and paint), `RefreshData` (paint only), `SetSample(sample)` (merged over the unit's own, nil restores it)
+and `IsActive`. The frame is a plain Button parented to the root's parent, centred on it once; whoever owns the parent
+places and scales it, and may move the frame, which a repaint does not re-anchor.
+
+A scene frame is a paint target, like a group scene frame, with the same rules: it is in no registry, the unit index,
+click casting or event route, installs no secure attribute, event or script of its own (the portrait's inert repaint-on-show
+hook is the one script it carries), and no engine cache or driver holds it. It is applied by `UF.ApplySceneSpec(frame,
+spec, mask, "single", unit)` with a **private** spec: `UF.Config.CompileSpec(unit, out)` resolves the saved settings now into
+the scene's own table, so a preview never wipes a live spec and never lags behind a pending apply. The mask names the unit
+elements a scene paints; the castbar and the class power are not among them (the next scene package paints those), the
+auras are drawn as stand-ins (below), and the load conditions and the range fade drive live visibility and range.
+
+**The frame holds no unit.** `MSUFUnitKey` is nil while the elements apply, so no element's apply can ask the client about
+a unit; the unit token reaches only an element's `IsEnabled` (which decides, for example, that the resting icon is the
+player's). An element whose apply still reads the unit names a scene form: `Power.SceneApply` (class colour mode),
+`Alpha.SceneApply` (the opacity of the layers **without the out-of-combat fade**, which a menu preview is always inside of,
+and without the fade registry). The shared inline target-of-target driver is a registry of one live frame; a scene
+never claims it because its apply runs without the unit it is keyed on, and the isolation smoke would find it if it did.
+
+**The mock source.** `MSUF_UF_UnitScene.lua` carries one static sample per unit family (name, class or NPC reaction and
+type, level, health and power fractions, power type, classification, absorb, status flags, the picture an NPC portrait
+stands in with). A sample is data only; its fields are `player` (true for a player: class colour and icon; nil for an
+NPC), `class` (token), `reaction` (friendly, neutral or enemy), `npcKind` (the NPC type the type colour mode grades by:
+npcRegular, npcCaster, npcMelee, npcBoss; none for a rare, which keeps its reaction colour), `level` (a number, -1 for
+"??"), `levelTier`, `hp` and `power` (fractions of the nominal maxima, `UnitScene.HEALTH_MAX` and the sample's
+`powerMax`), `incoming`, `absorb`, `healAbsorb` (fractions of the health maximum), `reducedMax` (the temporary
+maximum-health bar), `classification` (elite, rareelite, rare, worldboss), `leader`, `assist`, `raidTarget` (1..8),
+`raidGroup`, `pvp` (Alliance, Horde, FFA), `resting`, `combat`, `inline` (the target-of-target name of a target frame's
+inline text) and `portrait` (the picture an NPC stands in with in a 2D portrait). The paint opens a *window* around the frame: the frame stands for its unit and its identity state
+(`_msufUnitState`, the cache every identity reader of the engine consults first: exists, dead, connected, player, class,
+NPC kind, tapped, boss disposition) is the sample, with a dispatch token the readers accept. Inside the window the
+engine's own routines run on the sample: the health colour pass (`Health.PaintSample`, whose gradient takes the sample's
+fraction), the power colour, the name and its colour, the text slots and their colours, the portrait art and its border
+(`Portrait.SceneApply`, `Portrait.PaintSample` for the classification art), the prediction bars
+(`Prediction.PaintSample`), the status icons and identity texts (`Runtime.PaintSampleIndicators`,
+`Runtime.PaintSampleIdentityTexts`, the live textures, packs and symbols), and the elements that have a sample mode of
+their own (threat percent, pet happiness, pet experience: their `status.testMode`, set on the private spec for the length of
+the update). No unit API is called inside or outside the window. A new element that reads a unit in its apply or update
+needs a scene form, and `unit_preview_scene_isolation_smoke` fails on the first client call.
+
+A few reads of the *local player's own class* are settings, not paint, and stay: the pet colour of the unit health
+compile, the defensive spell hash of the Classic aura compile and the custom aura container compile, each once per
+configuration revision, and the class background's once-per-session fallback token for NPC units. The isolation smoke
+lets exactly `UnitClass("player")` under those four named functions through; any other API, argument or caller counts,
+including an API the sandbox has no entry for and the functions of `C_UnitAuras` and `C_PlayerInfo`.
+
+**Auras** are the shared stand-ins: `GF.PreviewUnitFrameAuras` lays the buff and debuff lanes of the unit's compiled aura
+configuration out and paints them with the same regions and the same `MockAuraPainter` as a group scene frame.
+
+**Intended differences from a live frame** (pinned by the smokes): the portrait draws the sample's picture (a player's class
+icon, an NPC's own picture in a 2D portrait) where a live frame draws the client's bust; the out-of-combat fade is ignored;
+the colour-by-health text and the difficulty-graded level colour use the sample's fraction and tier (`levelTier`, default
+the standard band; "??" is the top band), where a live frame reads the client's colour curves. Nothing else differs: the
+twin comparison in the isolation smoke covers every named region in text, colour, state and resolved geometry. A boss or
+arena scene is snapped to physical pixels like its live frame (the frame carries its unit token as `_msufSceneUnit`, which
+the boss bar geometry reads in place of the unit it does not hold), so those bars and borders follow the scene's real
+position; a repaint re-snaps them, a move by the owner is picked up by the next repaint.
+
+**Lifecycle.** Nothing is created at file load and a scene object builds no frame until it shows or `Frame()` is asked. The
+root is the host: a closed root holds no timer and no subscription and a scene asked to show only remembers it; an open root
+repaints every wanted scene once per burst of `CONFIG_APPLIED` signals, on the next frame. Combat hides every unit scene at once
+(the root's own `PLAYER_REGEN_DISABLED` subscription; the group runtime's `GF.HidePreviewsForCombat` hides the group scenes),
+touches no live header or frame, and the scenes do no work in combat; `PLAYER_REGEN_ENABLED` brings back the scenes that were wanted. Pools are per scene: the
+frame, its regions and the aura stand-ins are reused by every repaint and by close and reopen. Nothing in the addon
+catches an error inside a paint (no protected call), so a paint that fails leaves its window open until the next one;
+every full refresh closes a stale window before it applies the spec.
+
+The unit/group body renderers, class-resource surface construction, castbar page
+layout and preview aura painters remain scene-specific. Their region ownership,
+rounding, animation and interactions need scene integration before their larger
+render blocks can be deleted safely. Moving those blocks into another helper
+would retain their independent rendering rules.
+
 `runtime_preview_shared_rules_smoke.lua` boots the shipped graphs, checks live
 and preview call identity, changed shared assets, fixed geometry/colour samples,
 hide/restore transitions and mock inputs. Existing portrait, drift, repaint,
