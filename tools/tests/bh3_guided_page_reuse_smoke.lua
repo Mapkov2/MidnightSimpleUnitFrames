@@ -51,6 +51,33 @@ Start()
 local stages = { "menu_basics", "unit_intro", "edit_mode", "group_intro", "group_edit_mode", "class_intro", "power_moves", "final_review" }
 local views = {}
 for _, key in ipairs(stages) do views[key] = Stage(key) end
+local function CheckAction(suffix, height, labelTop)
+    local button
+    for _, frame in ipairs(mw.world.widgets.frames) do
+        if frame._msuf2RuntimeControlId == "menu2.guided_setup." .. suffix then button = frame end
+    end
+    assert(button, "missing guided action " .. suffix)
+    local action = button:GetParent()
+    assert(action:GetHeight() == height, "guided action height changed: " .. suffix)
+    local point, owner, relativePoint, x, y = button:GetPoint()
+    assert(point == "RIGHT" and owner == action and relativePoint == "RIGHT" and x == -16 and y == 0,
+        "guided action button anchor changed: " .. suffix)
+    local label, copy
+    for _, region in ipairs(action.regions or {}) do
+        local p, anchor, rp, dx, dy = region:GetPoint()
+        if p == "TOPLEFT" and anchor == action and rp == "TOPLEFT" and dx == 16 and dy == labelTop then label = region end
+    end
+    assert(label and label:GetWidth() == math.max(120, action:GetWidth() - 252), "guided action label changed: " .. suffix)
+    for _, region in ipairs(action.regions or {}) do
+        local p, anchor, rp, dx, dy = region:GetPoint()
+        if p == "TOPLEFT" and anchor == label and rp == "BOTTOMLEFT" and dx == 0 and dy == -8 then copy = region end
+    end
+    assert(copy and copy:GetWidth() == label:GetWidth(), "guided action copy changed: " .. suffix)
+    assert(type(button:GetScript("OnClick")) == "function", "guided action click handler lost: " .. suffix)
+    assert(button._msuf2Primary == true and button._msuf2Role == "primary", "guided action button lost its primary style: " .. suffix)
+end
+CheckAction("edit_mode_toggle", 84, -20)
+CheckAction("group_edit_mode_toggle", 92, -22)
 assert(Stage("menu_basics") == views.menu_basics, "returning to a special stage discarded its frame tree")
 mw:Select("home")
 assert(M.cache.home == home, "starting setup discarded the Dashboard frame tree")

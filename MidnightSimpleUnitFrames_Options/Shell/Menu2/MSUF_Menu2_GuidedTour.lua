@@ -17,7 +17,7 @@ local CreateFrame = _G.CreateFrame
 local C_Timer = M.MenuTimer or _G.C_Timer
 local ceil, floor, max, min = math.ceil, math.floor, math.max, math.min
 local format = string.format
-local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
+local pairs, type, tostring = pairs, type, tostring
 local sort = table.sort
 
 local function Tr(text)
@@ -3096,6 +3096,24 @@ local function CreateEditModeClick(Refresh)
     end
 end
 
+local function CreateEditModeAction(b, T, height, labelTop)
+    local action = b:Section("", height)
+    if action.title then action.title:SetText("") end
+    local stateLabel = T.Font(action, "GameFontNormal", "", T.colors.text)
+    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, labelTop)
+    stateLabel:SetWidth(max(120, b.width - 252))
+    stateLabel:SetJustifyH("LEFT")
+    local stateCopy = T.Font(action, "GameFontDisableSmall", "", T.colors.muted)
+    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
+    stateCopy:SetWidth(max(120, b.width - 252))
+    stateCopy:SetJustifyH("LEFT")
+    local button = T.Button(action, "Open MSUF Edit Mode", min(210, max(150, floor(b.width * 0.30))), 28)
+    button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
+    if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
+    if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
+    return stateLabel, stateCopy, button
+end
+
 local function BuildEditModePage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "edit_mode", groups = {} }
     local b = W.PageBuilder(ctx)
@@ -3122,20 +3140,7 @@ local function BuildEditModePage(ctx, T, W)
     InfoCard(b, T, "Two different actions", "DRAG = move the whole frame. CLICK = open its size and detail popup. Arrow keys nudge; Undo stays available.",
         "uf_player", 82)
 
-    local action = b:Section("", 84)
-    if action.title then action.title:SetText("") end
-    local stateLabel = T.Font(action, "GameFontNormal", "", T.colors.text)
-    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -20)
-    stateLabel:SetWidth(max(120, b.width - 252))
-    stateLabel:SetJustifyH("LEFT")
-    local stateCopy = T.Font(action, "GameFontDisableSmall", "", T.colors.muted)
-    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
-    stateCopy:SetWidth(max(120, b.width - 252))
-    stateCopy:SetJustifyH("LEFT")
-    local button = T.Button(action, "Open MSUF Edit Mode", min(210, max(150, floor(b.width * 0.30))), 28)
-    button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
-    if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
-    if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
+    local stateLabel, stateCopy, button = CreateEditModeAction(b, T, 84, -20)
 
     local function Refresh()
         local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
@@ -3223,20 +3228,7 @@ local function BuildGroupEditModePage(ctx, T, W)
     InfoCard(b, T, "Practice the real workflow", "DRAG the green-marked Party Frames mover once. CLICK the mover to inspect its geometry popup.", "gf_layout",
         86)
 
-    local action = b:Section("", 92)
-    if action.title then action.title:SetText("") end
-    local stateLabel = T.Font(action, "GameFontNormal", "", T.colors.text)
-    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -22)
-    stateLabel:SetWidth(max(120, b.width - 252))
-    stateLabel:SetJustifyH("LEFT")
-    local stateCopy = T.Font(action, "GameFontDisableSmall", "", T.colors.muted)
-    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
-    stateCopy:SetWidth(max(120, b.width - 252))
-    stateCopy:SetJustifyH("LEFT")
-    local button = T.Button(action, "Open MSUF Edit Mode", min(210, max(150, floor(b.width * 0.30))), 28)
-    button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
-    if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
-    if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
+    local stateLabel, stateCopy, button = CreateEditModeAction(b, T, 92, -22)
 
     local function Refresh()
         local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}

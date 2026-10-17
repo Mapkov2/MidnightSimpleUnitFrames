@@ -373,7 +373,7 @@
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua": [162, 55, 10, 22, 5, 21, 1, 1, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua": [1261, 114, 99, 49, 40, 100, 18, 13, 1, 1, 0, 1, 0, 4],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_FirstLoad.lua": [635, 134, 37, 50, 21, 50, 4, 27, 1, 0, 0, 1, 0, 7],
-  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua": [3440, 150, 160, 48, 44, 165, 15, 108, 1, 1, 0, 12, 0, 18],
+  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua": [3432, 150, 160, 48, 44, 165, 15, 106, 1, 1, 0, 12, 0, 4],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua": [202, 17, 7, 8, 3, 9, 0, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua": [1705, 201, 66, 54, 13, 69, 11, 25, 1, 0, 0, 3, 1, 14],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_NavRail.lua": [962, 121, 76, 21, 18, 68, 10, 5, 1, 0, 0, 1, 0, 0],
