@@ -88,7 +88,13 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 10,006,974 and TBC 7,872,659 -> 7,883,096. The Options addon loses MSUF_Menu2_GroupPreview_Rounded.lua and
         -- about 1,300 net lines, which do not count toward core startup. Both ceilings rise by exactly the measured
         -- delta: Mainline 9,996,825 -> 10,007,262, Classic 7,881,997 -> 7,892,434.
-        assert(bytes < (suffix == "Mainline" and 10007262 or 7892434),
+        -- 2026-10-18: the Options group preview scene fits its container to the one frame it shows (Raid and Mythic
+        -- Raid kept the cell at the corner of a whole group column, outside the preview), lays out the configured
+        -- group count instead of reading the roster, and shifts its element levels through the base ElementLevel
+        -- reads instead of an extra term in that live function: +1,115 LF bytes on every client (Mainline/ruRU
+        -- 10,006,974 -> 10,008,089, TBC/ruRU 7,883,096 -> 7,884,211). Both ceilings rise by exactly that:
+        -- Mainline 10,007,262 -> 10,008,377, Classic 7,892,434 -> 7,893,549.
+        assert(bytes < (suffix == "Mainline" and 10008377 or 7893549),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

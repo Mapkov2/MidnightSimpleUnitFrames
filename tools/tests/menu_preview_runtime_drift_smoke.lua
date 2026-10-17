@@ -706,6 +706,98 @@ Section("12 group text drag follows the zoomed cell", function()
     box:Hide()
 end)
 
+-- 13. Every preview kind keeps its body ------------------------------------------
+-- The engine cell of the Options group preview must sit inside the mock frame and draw its health fill, health
+-- background and border for every kind the engine previews, also with the raid setting that keeps the groups apart
+-- (its grid footprint is a whole group column, so a cell placed by the grid alone lands outside the mock).
+local function PreviewKinds()
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua", "rb"))
+    local source = file:read("*a")
+    file:close()
+    local list = assert(source:match("local PREVIEW_KINDS = (%b{})"), "harness: the engine preview kind list moved")
+    local kinds = {}
+    for kind in list:gmatch('"([%w_]+)"') do kinds[#kinds + 1] = kind end
+    assert(#kinds >= 3, "harness: the engine previews fewer than three kinds")
+    return kinds
+end
+-- Rectangle of a frame in the mock's own units (origin: the mock's centre), following each first anchor point up to
+-- the mock; offsets and sizes are scaled by the effective scale ratio.
+local function RectInMock(mock, frame)
+    local mockScale = mock:GetEffectiveScale()
+    local function Corner(rect, point)
+        local x = point:find("LEFT") and rect[1] or point:find("RIGHT") and rect[3] or (rect[1] + rect[3]) / 2
+        local y = point:find("TOP") and rect[4] or point:find("BOTTOM") and rect[2] or (rect[2] + rect[4]) / 2
+        return x, y
+    end
+    local function RectOf(f)
+        if f == mock then
+            local w, h = f:GetWidth(), f:GetHeight()
+            return { -w / 2, -h / 2, w / 2, h / 2 }
+        end
+        local k = f:GetEffectiveScale() / mockScale
+        local w, h = f:GetWidth() * k, f:GetHeight() * k
+        local point, rel, relPoint, x, y = f:GetPoint(1)
+        local ax, ay = Corner(RectOf(rel or f:GetParent()), relPoint or point)
+        local px, py = ax + (x or 0) * k, ay + (y or 0) * k
+        local left = point:find("LEFT") and px or point:find("RIGHT") and px - w or px - w / 2
+        local bottom = point:find("BOTTOM") and py or point:find("TOP") and py - h or py - h / 2
+        return { left, bottom, left + w, bottom + h }
+    end
+    return RectOf(frame)
+end
+local function EffectiveAlpha(region)
+    local alpha, node = 1, region
+    while node do
+        if node.IsShown and node:IsShown() == false then return 0 end
+        alpha = alpha * (node.GetAlpha and node:GetAlpha() or 1)
+        node = node.GetParent and node:GetParent() or nil
+    end
+    return alpha
+end
+Section("13 every group preview kind keeps its body", function()
+    local problems = {}
+    for _, kind in ipairs(PreviewKinds()) do
+        local conf = env.MSUF_DB["gf_" .. kind]
+        local variants = { { "default" } }
+        if kind ~= "party" then variants[#variants + 1] = { "groups kept apart", true } end
+        for _, variant in ipairs(variants) do
+            local saved = conf.preserveRaidGroups
+            if variant[2] ~= nil then conf.preserveRaidGroups = variant[2] end
+            core.GF.InvalidateCompiledSpecs(kind)
+            M.gfScope = kind
+            local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
+            box:Show()
+            box._stage:SetSize(600, 220)
+            box:Refresh("SETTINGS")
+            local label = kind .. " (" .. variant[1] .. ")"
+            local mock, cell = box._mock, box._mock._cell
+            if not cell then
+                problems[#problems + 1] = label .. ": no cell"
+            else
+                local regions = { { "health fill", cell.hpBar and cell.hpBar:GetStatusBarTexture() },
+                    { "health background", cell.hpBarBG }, { "border", cell.MSUFBorderOverlay } }
+                for _, item in ipairs(regions) do
+                    local region = item[2]
+                    local w = region and region.GetWidth and region:GetWidth() or 0
+                    local h = region and region.GetHeight and region:GetHeight() or 0
+                    if not region or EffectiveAlpha(region) <= 0 or (item[1] ~= "health fill" and (w <= 0 or h <= 0)) then
+                        problems[#problems + 1] = label .. ": " .. item[1] .. " is not drawn"
+                    end
+                end
+                local rect, frame = RectInMock(mock, cell), { -mock:GetWidth() / 2, -mock:GetHeight() / 2, mock:GetWidth() / 2, mock:GetHeight() / 2 }
+                if rect[1] < frame[1] - 0.5 or rect[2] < frame[2] - 0.5 or rect[3] > frame[3] + 0.5 or rect[4] > frame[4] + 0.5 then
+                    problems[#problems + 1] = string.format("%s: the cell lies outside the preview frame (cell %.1f..%.1f x %.1f..%.1f, frame %.1f..%.1f x %.1f..%.1f)",
+                        label, rect[1], rect[3], rect[2], rect[4], frame[1], frame[3], frame[2], frame[4])
+                end
+            end
+            box:Hide()
+            conf.preserveRaidGroups = saved
+            core.GF.InvalidateCompiledSpecs(kind)
+        end
+    end
+    Check(#problems == 0, table.concat(problems, "; "))
+end)
+
 if #failures > 0 then
     error(table.concat(failures, "\n"), 0)
 end

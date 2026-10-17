@@ -2568,7 +2568,7 @@ local function AliasCell(mock, frame)
         if not region and item[1]:sub(-2) == "FS" then
             local standIn = mock._cellStandInFS
             if not standIn then
-                standIn = mock:CreateFontString(nil, "OVERLAY")
+                standIn = PixelLayoutRegion(mock:CreateFontString(nil, "OVERLAY"))
                 standIn:Hide()
                 mock._cellStandInFS = standIn
             end
@@ -2615,7 +2615,7 @@ function Stage.RenderCell(st, env)
         cell:Configure({
             scale = st.previewScale, level = mock._msufPreviewElementLevelBias, role = scene.previewRole,
             sample = sample, bodyOnly = true, layerVisible = scene.layerVisible, layerSolo = scene.soloLayer or false,
-            ignoreOocFade = true,
+            ignoreOocFade = true, fit = true,
         })
         root:SetClock(self._animationEnabled == true and self._animationElapsed or nil, true)
         cell:Show(1, { immediate = true, reason = st.reason })

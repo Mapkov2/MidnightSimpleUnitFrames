@@ -711,6 +711,47 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 7g. A raid layout that keeps the groups apart lays one frame out in a whole group column; an owner that shows one
+-- frame and centres the container itself asks it to fit: the container is then the frame.
+---------------------------------------------------------------------------
+do
+    local fitHost = env.CreateFrame("Frame", nil, env.UIParent)
+    fitHost:SetSize(400, 300)
+    local fitRoot = GF.NewPreviewScene(fitHost)
+    fitRoot:Activate()
+    local savedPreserve = raid.preserveRaidGroups
+    for _, kind in ipairs({ "raid", "mythicraid" }) do
+        local conf = GF.GetConf(kind)
+        local saved = conf.preserveRaidGroups
+        conf.preserveRaidGroups = true
+        GF.InvalidateCompiledSpecs(kind)
+        local group = fitRoot:Group(kind)
+        group:Show(1, { immediate = true })
+        h:RunTimers()
+        local frame = group:Frames()[1]
+        local container = group:Container()
+        Check(container:GetHeight() > frame:GetHeight(), kind .. ": harness: the grouped layout is not a whole column (" .. container:GetHeight() .. " vs " .. frame:GetHeight() .. ")")
+        group:Configure({ fit = true })
+        group:Show(1, { immediate = true })
+        h:RunTimers()
+        Check(container:GetWidth() == frame:GetWidth() and container:GetHeight() == frame:GetHeight(),
+            kind .. ": a fitted container is not the size of its frame (" .. container:GetWidth() .. "x" .. container:GetHeight() .. ")")
+        local layout = group:Layout()
+        Check(layout:GetWidth() == frame:GetWidth() and layout:GetHeight() == frame:GetHeight(), kind .. ": a fitted layout is not the size of its frame")
+        group:Configure({ fit = false })
+        group:Show(1, { immediate = true })
+        h:RunTimers()
+        Check(container:GetHeight() > frame:GetHeight(), kind .. ": withdrawing fit did not bring the grid footprint back")
+        group:Hide()
+        conf.preserveRaidGroups = saved
+        GF.InvalidateCompiledSpecs(kind)
+    end
+    raid.preserveRaidGroups = savedPreserve
+    fitRoot:Release()
+    h:RunTimers()
+end
+
+---------------------------------------------------------------------------
 -- 8. The spy saw nothing.
 ---------------------------------------------------------------------------
 armed = false

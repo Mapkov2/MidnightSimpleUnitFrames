@@ -102,7 +102,7 @@ carry, `group:SetLayerFilter(visible, solo)` for the layer chips and `group:SetR
 to lay the frames out for one role.
 
 An owner embeds a scene in its own window: `group:Configure({ scale, level, role, sample,
-bodyOnly, layerVisible, layerSolo, ignoreOocFade })` sets, without a repaint, the zoom of the whole
+bodyOnly, layerVisible, layerSolo, ignoreOocFade, fit })` sets, without a repaint, the zoom of the whole
 container (`SetScale`: the frames keep their spec size), the frame level the scene sits at
 (`SetLevel`: container, layout and frames take the one base, and every element level is
 shifted by the same bias, `Layers.SetLevelBias`), the role the row lays out for, one pinned
@@ -121,7 +121,10 @@ always open out of combat: the scene shows no out-of-combat fade (`GF.ApplyScene
 gives the scene frame an alpha lane of its own that inherits every other alpha setting from
 the shared compiled one, so the health bar opacity and the text and portrait exclusions stay
 live, the compiled spec stays shared, and the live Alpha and range fade elements know
-nothing of it).
+nothing of it). `fit` makes the container the size of the one frame the owner shows: a layout
+that keeps the raid groups apart sizes its grid as a whole group column and puts the lone frame
+at its corner, away from the owner's centre (the Raid and Mythic Raid previews lost their body
+that way). A scene lays such a grid out for the configured number of groups, never the roster's.
 
 The Options group preview is such an owner. Its mock frame keeps the container, pan/zoom and
 handles; the engine scene paints the cell, so the cell looks like a live group frame (the

@@ -324,18 +324,28 @@ end
 local function PositionContainer(scene, count)
   local kind, isolated = scene.kind, not scene.default
   local conf = GF.GetConf and GF.GetConf(kind) or {}
+  -- A layout that keeps the raid groups apart sizes itself by the groups the live roster fills unless it is told how
+  -- many there are; a scene reads no roster, so it lays out the configured number.
+  local groups
+  if isolated then
+    groups = floor((tonumber(conf.maxColumns) or 8) + 0.5)
+    if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+  end
   local posCount = GetPositionCount(scene) or DefaultPreviewCount(kind)
   -- The saved grid position is the on-screen preview's; an isolated scene never reads or migrates it.
   if GF.EnsureStableGridPosition and not isolated then
     GF.EnsureStableGridPosition(kind, posCount, conf)
   end
-  local _, _, posW, posH = GF.GetGridMetrics(kind, posCount)
-  local _, _, _, _, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
+  local _, _, posW, posH = GF.GetGridMetrics(kind, posCount, groups)
+  local _, _, _, _, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count, groups)
   local parent = scene.t.anchor[kind]
   if isolated then parent = parent or UIParent end
   local container, layout = EnsureContainer(scene, parent or UIParent)
 
   local containerW, containerH = max(posW or w or 1, 1), max(posH or h or 1, 1)
+  -- An owner that shows one frame asks the container to hug it: the grid footprint of a layout that keeps the raid
+  -- groups apart is a whole group column, and the lone frame sits at its corner, away from the owner's centre.
+  if isolated and scene.fit == true then containerW, containerH = max(w or 1, 1), max(h or 1, 1) end
   local point, relativePoint, relative, x, y
   if parent then
     point, relativePoint, relative, x, y = "CENTER", "CENTER", parent, 0, 0
@@ -2194,8 +2204,10 @@ function Scene:SetLevel(base)
 end
 
 --- Several settings in one call, without a repaint: the next Show or Refresh paints them. Fields: scale, level,
---- role, sample, bodyOnly, layerVisible, layerSolo (see the setters of the same names) and ignoreOocFade (the owner's
---- window is always open out of combat, so the scene shows no out-of-combat fade; every other alpha setting stays).
+--- role, sample, bodyOnly, layerVisible, layerSolo (see the setters of the same names), ignoreOocFade (the owner's
+--- window is always open out of combat, so the scene shows no out-of-combat fade; every other alpha setting stays) and
+--- fit (the container is the size of one frame instead of the layout's grid footprint, for an owner that shows a
+--- single frame and centres the container itself).
 function Scene:Configure(opts)
   if opts.scale ~= nil then self:SetScale(opts.scale) end
   if opts.level ~= nil then self:SetLevel(opts.level) end
@@ -2209,6 +2221,7 @@ function Scene:Configure(opts)
     end
   end
   if opts.sample ~= nil then self.sample = type(opts.sample) == "table" and opts.sample or nil end
+  if opts.fit ~= nil then self.fit = opts.fit == true or nil end
   if opts.ignoreOocFade ~= nil then
     local ignore = opts.ignoreOocFade == true or nil
     if self.ignoreOocFade ~= ignore then
