@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "51EA4D3856817AD871F4C3559F6EB486C8215097535E1EF416EADF1EC7676CF9",
+    sourceSha256 = "7F55BD4413A35ECD17421EDE331EC5F362E6AFDB90D3049715EE04680725319A",
     currentVersion = "6.503",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
@@ -43,7 +43,16 @@ local data = {
                         },
                         {
                             text = "Dragging a class in the class priority list now inserts it at the drop position instead of swapping it with the class there.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "class priority sorting",
+                                label = "Use class priority",
+                                sectionId = "sorting",
+                                controlId = "menu2.gf_layout.group.field.sortclasspriority",
+                                settingKey = "gf_raid.sortClassPriority",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
+                            },
                         },
                         {
                             text = "Arena party frames sorted by class priority within roles now update when a teammate's name arrives late.",

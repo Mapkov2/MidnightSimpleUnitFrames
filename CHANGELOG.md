@@ -17,7 +17,7 @@ Stable maintenance release for all supported clients.
 - The group frame preview now follows the sort settings, including sort mode, role order and class priority.
 <!-- msuf-menu-link: none -->
 - Dragging a class in the class priority list now inserts it at the drop position instead of swapping it with the class there.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortclasspriority","settingKey":"gf_raid.sortClassPriority","prepareKind":"groupScope","prepareValue":"raid","query":"class priority sorting","label":"Use class priority"} -->
 - Arena party frames sorted by class priority within roles now update when a teammate's name arrives late.
 <!-- msuf-menu-link: none -->
 
