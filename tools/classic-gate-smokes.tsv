@@ -794,3 +794,4 @@ clients+Forever	lua	tools/tests/editmode_aura_tick_idle_regions_smoke.lua	{root}
 clients+Forever	lua	tools/tests/group_preview_scene_isolation_smoke.lua	{root} {flavor}	Group preview scenes shared state, reached the live registry, unit index, click casting, events or secure attributes, painted differently from the on-screen dummy, or ignored combat or their layer filter: {flavor}
 -	lua	tools/tests/preview_kit_smoke.lua	{root}	The preview kit lost its closed-host silence, request coalescing or frame pools contract
 clients+Forever	lua	tools/tests/group_preview_scene_lifecycle_smoke.lua	{root} {flavor}	A preview scene root listened or showed while closed, ignored combat, followed the shared preview animation, or called a unit API: {flavor}
+clients+Forever	python	tools/tests/menu_group_indicators_parity_smoke.py	{root} {flavor}	Complete group indicator controls and every status or spell selection preserve original full-page observations: {flavor}	nightly

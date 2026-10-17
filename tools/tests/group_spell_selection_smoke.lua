@@ -19,6 +19,8 @@ local registry = {
 }
 local M = {
     Widgets = {}, Theme = {}, WordList = function() return {} end,
+    -- This callback-only fixture imports the row owner without building widgets.
+    ControlSchema = { GroupBinding = Nop, GroupOptions = function() return { bind = Nop } end },
     Assign = function(target, values) for key, value in pairs(values) do target[key] = value end end,
     GroupPage = {
         GF = function() return { SpellIndicators = registry } end,
@@ -45,9 +47,9 @@ local page = Read(base .. "MSUF_Menu2_GroupIndicators.lua")
 local prefixEnd = assert(page:find("local function IconPackValues(", 1, true))
 local clickStart = assert(page:find("function SpellTileGrid:OnMouseUp(", 1, true))
 local clickEnd = assert(page:find("local function SpellTileOnEnter(", clickStart, true))
-local dropdownStart = assert(page:find("local auraDrop = W.Dropdown(", 1, true))
-local setterStart = assert(page:find("function(value)", dropdownStart, true))
-local setterEnd = assert(page:find("\n        end,", setterStart, true)) + #"\n        end" - 1
+local dropdownStart = assert(page:find('path = "spell.selected_aura"', 1, true))
+local setterStart = assert(page:find("set = function(value)", dropdownStart, true)) + #"set = "
+local setterEnd = assert(page:find("\n            end }", setterStart, true)) + #"\n            end" - 1
 local callbacks = page:sub(1, prefixEnd - 1)
     .. "\nlocal SpellTileGrid = {}\n" .. page:sub(clickStart, clickEnd - 1)
     .. "\nlocal RefreshSpellIndicatorState = M.Refresh\nlocal RequestSpellControlRefresh = function() end\n"

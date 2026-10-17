@@ -1362,10 +1362,12 @@ do
             .. '                        and M._threatCurveColorReferences and #M._threatCurveColorReferences > 0 then\n'
             .. '                        return M._threatCurveColorReferences\n',
         '    if MSUF.Client and MSUF.Client.SupportsThreatText == true then\n'
-            .. '        threatColorCurve = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by threat", 16, -106, siconLeftW - 32), "threatTextColorCurve", true, "visual")\n',
+            .. '        local threatRows = Schema.Build(ctx, selectedCard, {\n'
+            .. '            { "toggle", "threatTextColorCurve", true, { "Color by threat", 16, -106, siconLeftW - 32 },\n',
         '            conf.threatTextColorCurve = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextColorCurve") or nil\n',
         '            W.SetControlShown(threatColorCurve, isThreatText)\n',
-        '        threatBackground = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Background", 16, -136, siconLeftW - 32), "threatTextBackground", false, "visual")\n',
+        '            { "toggle", "threatTextBackground", false, { "Background", 16, -136, siconLeftW - 32 },\n',
+        '        threatColorCurve, threatBackground = threatRows.threatTextColorCurve, threatRows.threatTextBackground\n',
         '            conf.threatTextBackground = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextBackground")\n',
         '            W.SetControlShown(threatBackground, isThreatText)\n',
         '        SetOptionEnabled(threatBackground, isThreatText and enabled)\n',

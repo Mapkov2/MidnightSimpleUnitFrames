@@ -228,3 +228,258 @@ function Schema.Flow(ctx, parent, rows, layout)
     end
     return controls
 end
+
+-- Replacing rows hold kind, key, UI default, native constructor arguments and
+-- optional placement arguments.
+local ROW_CREATORS = {
+    switch = "SwitchAt", toggle = "ToggleAt",
+    slider = "Slider", dropdown = "Dropdown",
+    textinput = "TextInput", color = "Color",
+}
+local ROW_KINDS = { switch = "toggle", toggle = "toggle",
+    slider = "slider", dropdown = "dropdown", textinput = "textinput", color = "color" }
+local function PlaceRow(widget, parent, row)
+    local p = row[5]
+    if not p then return end
+    W.MoveWidget(widget, parent, p[1], p[2], p[3], p[4])
+end
+local function RowFlags(widget, flags)
+    if not flags then return end
+    for key, value in pairs(flags) do widget[key] = value end
+end
+function Schema.Build(ctx, parent, rows, opts, refs)
+    opts, refs = opts or {}, refs or {}
+    for _, row in ipairs(rows) do
+        local widget, args = nil, row[4]
+        if row[1] == "button" then widget = M.Theme.Button(parent, unpack(args))
+        else widget = assert(W[ROW_CREATORS[row[1]]], "unsupported replacing row")(parent, unpack(args)) end
+        refs[row[2]] = widget
+        if row.anchor then widget:SetPoint(unpack(row.anchor)) end
+        if row.center then M.Theme.CenterButtonLabel(widget) end
+        RowFlags(widget, row.flagsBefore)
+        if opts.beforeBind then opts.beforeBind(widget, row) end
+        if row.beforeBind then row.beforeBind(widget, row) end
+        if ROW_KINDS[row[1]] then opts.bind(ctx, widget, row, ROW_KINDS[row[1]]) end
+        RowFlags(widget, row.flagsAfter)
+        if row.tip and M.AddTooltip then M.AddTooltip(widget, unpack(row.tip)) end
+        if row.action then widget:SetScript("OnClick", row.action) end
+        if row.register then assert(opts.register, "schema row registry missing")(ctx, widget, row) end
+        PlaceRow(widget, parent, row)
+    end
+    return refs
+end
+
+-- Shared column arithmetic keeps each page's existing inset, ratio and caps.
+function Schema.Columns(parent, width, inset, gap, ratio, leftLow, leftHigh, rightLow, rightHigh)
+    width = parent._msuf2Width or width or 720
+    local inner = math.max(320, width - inset * 2)
+    local left = math.floor((inner - gap) * ratio)
+    if leftLow then left = math.max(leftLow, math.min(leftHigh, left)) end
+    local right = inner - left - gap
+    if rightLow then right = math.max(rightLow, math.min(rightHigh, right)) end
+    return inset, left, inset + left + gap, right, inner, width
+end
+
+-- Named color options retain the exact existing shortcut/reference owner.
+function Schema.Colors(parent, references, opts)
+    local create = references and W.AttachContextColorReferences or W.AttachContextColorShortcut
+    if not create then return end
+    if references then return create(parent, references, opts) end
+    return create(parent, opts)
+end
+
+-- Group scope resolves at input time. The existing group and central bindings
+-- retain sole ownership of history, combat refusal, rounding and apply requests.
+function Schema.GroupBinding(ctx, widget, row, kind)
+    local gp = M.GroupPage
+    local key, default, domain = row[2], row[3], row.domain or "visual"
+    local meta = gp.ControlMeta(ctx, row.path or "field." .. tostring(key), row.classification)
+    local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1],
+        scope = "group", applyDomain = domain, meta = meta }
+    local bind = kind == "toggle" and gp.BindScopeToggle or kind == "slider" and gp.BindScopeSlider or gp.BindScopeDropdown
+    bind(ctx, widget, key, default, domain, meta)
+    local command = widget._msuf2CommandAction
+    spec.get, spec.set = command and command.get, command and command.set
+    Schema.Custom(widget, spec)
+end
+
+-- Record rows retain the selected scope and nested-record owners at input time.
+-- A missing record differs from a missing toggle field; false subtypes disable it.
+local function CommandAccessors(owner, row, kind, widget, ctx)
+    local command = row.lifecycle and row.lifecycle(widget, ctx, row) or owner.commands[row[2]]
+    local fallback = command.default
+    if fallback == nil then fallback = row[3] end
+    return command.get, command.set, fallback, command.afterBind
+end
+local function RecordAccessors(owner, row, kind, widget, ctx)
+    if row.lifecycle then return CommandAccessors(owner, row, kind, widget, ctx) end
+    if row.set then return assert(row.get, "record row getter missing"), row.set, row[3] end
+    local config, scope, key, default = row.source or owner.config, owner.scope, row[2], row[3]
+    local function Get()
+        local record = config(scope(), false)
+        if kind == "color" then
+            local fields = row.channels
+            return (record and record[fields[1]]) or default[1],
+                (record and record[fields[2]]) or default[2], (record and record[fields[3]]) or default[3]
+        end
+        local value = record and record[key]
+        if row.subtype then return type(value) == "table" and value.type or "none" end
+        if kind == "toggle" then
+            if not record then return false end
+            if value == nil then return default and true or false end
+            if owner.strictToggles then return value == true end
+            return value and true or false
+        end
+        if kind == "slider" then return tonumber(value) or default end
+        return value or default
+    end
+    local function Set(value, green, blue)
+        if row.accept and not row.accept(value) then return end
+        local record = config(scope(), true)
+        if kind == "color" then
+            if record then record[row.channels[1]], record[row.channels[2]], record[row.channels[3]] = value, green, blue end
+        elseif row.subtype then
+            if not record then return end
+            if value == "none" then record[key] = false
+            else
+                record[key] = type(record[key]) == "table" and record[key] or {}
+                record[key].type = value
+                if row.defaults then row.defaults(record[key]) end
+            end
+        elseif not record and row.requireRecord then return
+        elseif record then
+            if row.convert then
+                local converted = row.convert(value)
+                record[key] = converted
+                if row.afterWrite then row.afterWrite(record, converted) end
+            elseif kind == "toggle" then
+                if row.uncheckedNil then record[key] = value and true or nil
+                elseif owner.strictToggles then record[key] = value == true
+                else record[key] = value and true or false end
+            elseif kind == "slider" then
+                local number = tonumber(value) or default
+                record[key] = owner.rawNumber and number or math.floor(number + 0.5)
+            else record[key] = value or default end
+        end
+        owner.changed(scope())
+        local afterSet = row.afterSet or (kind == "toggle" and owner.afterToggle)
+        if afterSet then afterSet() end
+    end
+    return row.get or Get, Set, row[3]
+end
+local function GroupBindingOptions(owner, accessors)
+    return { bind = function(ctx, widget, row, kind)
+        if row.bind then
+            row.bind(ctx, widget, row)
+            Schema.Owned(widget, "group", row.domain or "visual")
+            return
+        end
+        local get, set, fallback, afterBind = accessors(owner, row, kind, widget, ctx)
+        local path = row.path or owner.path .. tostring(row[2])
+        if row.identitySuffix then path = path .. "." .. row.identitySuffix end
+        local meta = kind == "slider" and owner.stepMeta(ctx, path, row[4][4]) or owner.meta(ctx, path, row.classification)
+        local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
+            scope = "group", applyDomain = row.domain or "visual", meta = meta, get = get, set = set,
+            commitOnBlur = row.commitOnBlur }
+        if kind == "slider" then
+            spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, function() return fallback end
+        end
+        Schema.Bind(ctx, widget, spec)
+        if afterBind then afterBind() end
+        local command = widget._msuf2CommandAction
+        spec.get, spec.set = command and command.get, command and command.set
+    end }
+end
+
+function Schema.GroupRecordOptions(owner)
+    return GroupBindingOptions(owner, RecordAccessors)
+end
+
+-- Selected-field rows use the existing scope readers and writes. The selected
+-- provider and callable default are resolved anew for every read and input.
+local function SelectedAccessors(owner, row, kind)
+    local selected, scope, default = owner.selected, owner.scope, owner.default
+    local field, valueDefault, domain = row[2], row[3], row.domain or "visual"
+    local low, high = row[4][2], row[4][3]
+    local reader = kind == "toggle" and owner.bool or owner.number
+    local fallback
+    if kind == "slider" then fallback = default(selected(), valueDefault) end
+    local function Get()
+        local spec = selected()
+        if kind == "dropdown" then
+            local key = spec and spec[field]
+            return key and owner.value(scope(), key, default(spec, valueDefault)) or default(spec, valueDefault)
+        end
+        local value = reader(scope(), spec[field], default(spec, valueDefault))
+        if row.clamp then
+            if value < low then value = low elseif value > high then value = high end
+        end
+        return value
+    end
+    local function Set(value)
+        local spec = selected()
+        if kind == "dropdown" then
+            local key = spec and spec[field]
+            if not key then return end
+            owner.write(scope(), key, value or default(spec, valueDefault), domain)
+        else
+            if kind == "toggle" then value = value and true or false
+            else value = math.floor((tonumber(value) or default(spec, valueDefault)) + 0.5) end
+            if row.clamp then
+                if value < low then value = low elseif value > high then value = high end
+            end
+            owner.write(scope(), spec[field], value, domain)
+        end
+        if row.afterSet then row.afterSet() end
+    end
+    return row.get or Get, Set, fallback
+end
+function Schema.GroupSelectedOptions(owner)
+    return GroupBindingOptions(owner, SelectedAccessors)
+end
+
+-- Typed policies supply business operations; central Bind retains input/history/combat ownership.
+function Schema.GroupCommands(commands, meta, stepMeta)
+    return GroupBindingOptions({ commands = commands, path = "", meta = meta, stepMeta = stepMeta }, CommandAccessors)
+end
+local function ScopeMeta(ctx, path, step)
+    local meta = M.GroupPage.ControlMeta(ctx, path, type(step) == "string" and step or nil)
+    if type(step) == "number" then meta.step, meta.roundStep = step, true end
+    return meta
+end
+local function ScopeAccessors(owner, row, kind)
+    local gp, key, default = M.GroupPage, row[2], row[3]
+    local function Target()
+        if row.target then return row.target() end
+        return key, default
+    end
+    local function Get()
+        local field, fallback = Target()
+        local value = (kind == "slider" and gp.Num or gp.Val)(gp.CurrentScope(), field, fallback)
+        if row.scale then return math.floor(value * row.scale + 0.5) end
+        return value
+    end
+    local function Set(value)
+        local field = Target()
+        if row.select then M.SetMenuStateValue(row.select[1], row.select[2]) end
+        if row.scale then value = (tonumber(value) or row.fallback) / row.scale
+        else
+            local fallback = row.writeDefault
+            if fallback == nil then fallback = default end
+            value = value or fallback
+        end
+        gp.Set(gp.CurrentScope(), field, value, row.domain or "visual")
+        if row.afterSet then row.afterSet() end
+    end
+    return Get, Set, row.fallback or default
+end
+local SCOPE_OPTIONS = GroupBindingOptions({ path = "field.", meta = ScopeMeta, stepMeta = ScopeMeta }, ScopeAccessors)
+function Schema.GroupOptions()
+    return { bind = function(ctx, widget, row, kind)
+        if row.binding == "scopeValue" then SCOPE_OPTIONS.bind(ctx, widget, row, kind)
+        else Schema.GroupBinding(ctx, widget, row, kind) end
+    end }
+end
+function Schema.GroupNestedBinding(ctx, widget, row)
+    M.GroupPage.BindNestedSlider(ctx, widget, row.source, row[2], row[3], row.domain or "visual", row.path)
+end

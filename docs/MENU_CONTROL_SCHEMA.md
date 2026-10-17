@@ -187,3 +187,89 @@ builders (base 32ee2629). `menu_section_parity_world.lua` replays them per secti
 client and unit scope: control records, tooltip text, a layout digest of every owned
 widget, and inputs with their profile diffs, apply requests, enabled states, undo/redo,
 combat refusal and Reset section. Offline checks do not establish live rendering.
+
+## Replacing rows for new pages
+
+New page migrations use `Schema.Build(ctx, parent, rows, opts, refs)` with ordered
+rows. `Schema.Render` and `Schema.Flow` retain their existing named declarations
+for the already converted pilot sections; new pages do not mix the two formats.
+Additional row kinds must arrive with an actual page consumer and its tests.
+
+The replacing tuple is `{ kind, key, UI fallback, { native arguments }, placement }`.
+The optional placement is `{ x, y, width, alignment }`; absence keeps native placement.
+Native argument and tooltip arrays are ordinary dense Lua arrays, without an `n` field.
+Normal kinds are switch/toggle, slider, dropdown, textinput and color; buttons use
+the existing theme constructor and their declared action. Labels, tooltips, flags,
+input, history and combat refusal stay in the row and its typed binding adapter.
+
+`GroupOptions` delegates ordinary rows to the existing GroupPage scope binders,
+including toggle context refresh and slider integer rounding. Explicit
+`binding = "scopeValue"` selects the original corner opacity/selected-field scalar
+policy. `GroupRecordOptions`, `GroupSelectedOptions` and `GroupCommands` resolve
+the current scope and selected record at input time; they keep the existing
+false/zero/nil, raw-number and companion-write policies.
+
+Record, selected-field and `scopeValue` adapters use ONE `afterSet()` signature:
+no arguments, synchronously after the existing write/apply request. Ordinary
+scope rows retain their GroupPage binder refresh and do not consume `afterSet`. A callback reads
+current scope or selection through its existing owner closure rather than receiving
+cached input or selection arguments. The record owner's `afterToggle()` fallback
+has the same zero-argument contract. This is distinct from the older named-row
+`spec.after(value)` interface retained by Render/Flow's unit adapters.
+
+Scope, preview and spell-tile factories are called directly with their existing
+arguments. They keep their own controllers and lifecycle; there is no host row,
+`factory` field or `opts.builder`. Build's fifth argument may be an existing refs
+collector, as used by the Style owner's dependent-control refresh.
+
+### Replacing row and owner options
+
+| Field | Existing owner or order preserved |
+| --- | --- |
+| Row positions 1/2/3 | Native control type, stable field/ref key, UI read fallback. |
+| Row position 4 | Dense native label/values/range/size arguments. |
+| Row position 5 | Optional x/y/width/alignment passed to MoveWidget. |
+| anchor, center | Native SetPoint tuple and button-label centering. |
+| flagsBefore, flagsAfter | Widget flags before/after central binding. |
+| beforeBind | Existing widget lifecycle preparation before binding. |
+| tip | Dense AddTooltip arguments, including its optional options table. |
+| action | Button OnClick callback, before placement. |
+| register | Calls the page's opts.register(ctx, widget, row). |
+| opts.bind | Typed binding function: ctx, widget, row, normalized kind. |
+| opts.beforeBind | Owner preparation before the row's beforeBind hook. |
+| opts.register | Page-owned registry; Build has no implicit group registry. |
+| path, classification, exact | Group metadata identity/classification/navigation. |
+| domain | Existing apply domain; group helpers default to visual. |
+| binding = scopeValue | Explicit corner scalar getter/setter policy. |
+| target, writeDefault | Selected corner field and original commit fallback. |
+| scale, fallback, select, afterSet | Scaling, state selection and ordered zero-argument callback. |
+| bind | GroupRecord/Selected/Commands special owner, including GroupNestedBinding; never rebound. |
+| lifecycle | Widget-dependent factory for an existing command tuple. |
+| source | Existing record provider; otherwise the record owner's config. |
+| get/set, convert, afterWrite | Exceptional accessors or conversion and companion write. |
+| accept, requireRecord | Input refusal and missing-record refusal. |
+| subtype, defaults | False-or-record subtype and default initializer. |
+| channels, uncheckedNil | RGB named fields and unchecked-to-nil policy. |
+| identitySuffix, clamp, commitOnBlur | Metadata suffix, range clamp, text commit. |
+
+Record owners supply config, scope, changed, path, meta and stepMeta, with optional
+strictToggles/rawNumber/afterToggle. Selected owners supply selected, scope, default,
+bool, number, value and write. GroupCommands receives the actual commands table
+plus meta/stepMeta providers; rows do not carry a separate command object.
+GroupNestedBinding delegates to the existing nested-number binder. Colors forwards
+named title/note/historyLabel/historySource/offsetX/textSettings options unchanged
+to the original shortcut/reference controller, without a second binding owner.
+
+### Verification tiers
+
+The existing full `menu_group_indicators_parity_smoke.py` is NIGHTLY ONLY. Its
+unchanged authentic fixture covers all five clients, two widths, three profile
+states, every selected status/spec, inputs, history, combat refusal, tooltips,
+section reset and scoped copy. The previous lead run cost 3,260 seconds at Jobs 1;
+it is intentionally excluded by `-SkipTier nightly` on normal push/focused runs.
+Normal push coverage keeps the existing typed input/DB/apply/refresh/history/combat
+and section-inventory smokes. A focused correction run uses those changed contracts;
+it does not repeat the unchanged full matrix. The train's full/nightly run retains
+all existing cases and digests; no parity assertion or feature coverage is removed.
+See tools/fixtures/menu-group-indicators/README.md for the full replay's cost.
+Offline checks do not establish live WoW rendering, taint, engine timing or CPU cost.

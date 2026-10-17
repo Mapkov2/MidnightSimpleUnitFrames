@@ -60,7 +60,7 @@ local WIDGET_GAPS = {
     { file = "Pages/MSUF_Menu2_GroupAuras.lua", source = 'W.Text(section, M.Format("Ordering and individual Style are edited here.' },
     { file = "Pages/MSUF_Menu2_GroupBars.lua", source = 'W.Text(stripeCard, M.Format("Color and opacity are in %s."' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'W.Text(section, M.Format("Shape, border and shadow: %s.' },
-    { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'W.Dropdown(corners, M.Format("%s Indicator"' },
+    { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'local assignmentDrop = Schema.Build(ctx, corners, {' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'local highlightCard = W.ControlCard(indicators, "Target Highlight",' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'W.Text(focusCard, M.Format("Focus color is in %s."' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'W.Text(groupBorderCard, M.Format("Border color and opacity are in %s."' },

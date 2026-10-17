@@ -1,0 +1,125 @@
+{
+  "baseline": "76eb2c69ba22d15201df07eb863241666ed69b63",
+  "cases": {
+    "Forever-1040-default": {
+      "sha256": "fb35644a4fc01713a6fc1d90058eee06e2b1303ecdad6a748fa1fe2fbef6a970",
+      "rows": 60621
+    },
+    "Forever-1040-edge": {
+      "sha256": "e71ebdc58b85e3162d8217f883337b1312c7c01a6dfd7e25a75bfbf8ff4745bb",
+      "rows": 60621
+    },
+    "Forever-1040-general": {
+      "sha256": "a508fa51153f5aa2a0903e020198f93772cefe47d5919383457fc402bf087ad0",
+      "rows": 60621
+    },
+    "Forever-720-default": {
+      "sha256": "0f7decbf848baa5f4af376d93c829daf92d25c6e56e072bf18a28911bae1b4df",
+      "rows": 60621
+    },
+    "Forever-720-edge": {
+      "sha256": "5a3d4f4aa7b97ac41ebf70531bafbb8031a7794885c8313a3a0ea6a8c242639f",
+      "rows": 60621
+    },
+    "Forever-720-general": {
+      "sha256": "a0cc3fbc004e6f8eac9d16af7a92c22fcbaaeca4b4f73a7346268577a56d7a87",
+      "rows": 60621
+    },
+    "Mainline-1040-default": {
+      "sha256": "7e2f29867a07e7e0e29521dbbde148bb32ebb571848fd729ce64e6ac9739c93c",
+      "rows": 114414
+    },
+    "Mainline-1040-edge": {
+      "sha256": "9e0bc9d78f501a8c9a75217a3d17b3cf9a8e575826ae163b5af4baa1a427173b",
+      "rows": 114414
+    },
+    "Mainline-1040-general": {
+      "sha256": "f7959bb07298e973e7082fcd396d57489482ea8b8d49f4deb52979d35625437e",
+      "rows": 114414
+    },
+    "Mainline-720-default": {
+      "sha256": "7efd6a9758097cbf91bf136031dcf40430c7d912b2178ce0bfca2de739a03f85",
+      "rows": 114414
+    },
+    "Mainline-720-edge": {
+      "sha256": "7f071b8d0fd3f3c0c24cfda31559ab65512e66acfef4f624c2e351de97373362",
+      "rows": 114414
+    },
+    "Mainline-720-general": {
+      "sha256": "6bccc449c3c9ab00199599e5e943adfcc33e5e785d9d5e9ab203dd6f30db7b47",
+      "rows": 114414
+    },
+    "Mists-1040-default": {
+      "sha256": "7451b4299c62564b83d0b2b7773b49359edd74184af8875a5c3d32b0a32dfafd",
+      "rows": 70131
+    },
+    "Mists-1040-edge": {
+      "sha256": "5965b807e2842c5384392439a56b5308a905a776b2bcc182e7048f93c120f62b",
+      "rows": 70131
+    },
+    "Mists-1040-general": {
+      "sha256": "251f95799d58d642b0cc40bfdb4f9d859b22b1e85c34560d04a24c1000f7cb13",
+      "rows": 70131
+    },
+    "Mists-720-default": {
+      "sha256": "9e30cf7f8b51ffce0c027ea925df1a115476118c18383021ce99e38c9db1c377",
+      "rows": 70131
+    },
+    "Mists-720-edge": {
+      "sha256": "41d227271bae75e021c7211d08c27cf33d222772c408ff439e5f284a6a961886",
+      "rows": 70131
+    },
+    "Mists-720-general": {
+      "sha256": "3cec86d4c45427cb3d9329bc0062c33ab8074f535ace0800d531220cbe771daa",
+      "rows": 70131
+    },
+    "TBC-1040-default": {
+      "sha256": "5c22fe8aedc045e7e17f5d5f5ddca61edee8806ac4e5e2cf7d11d0509b6bcb4d",
+      "rows": 70335
+    },
+    "TBC-1040-edge": {
+      "sha256": "a8768e1f13ba54dc71a2f99634804413c4bdbc40d6206889e4b3abe94583682c",
+      "rows": 70335
+    },
+    "TBC-1040-general": {
+      "sha256": "61e458955b8e2d6b49c7d9808c19b239b07f3768cf7639955569a17df77d2bae",
+      "rows": 70335
+    },
+    "TBC-720-default": {
+      "sha256": "5f375eed98a4c325526d2b500c8e4f08160f7358bf0e5bae65fec2b7313e274a",
+      "rows": 70335
+    },
+    "TBC-720-edge": {
+      "sha256": "996f1fb21a5644efb1d872e0d72600f625d3a40569b5b140954e919a73ce7087",
+      "rows": 70335
+    },
+    "TBC-720-general": {
+      "sha256": "7ecb52aacfbfdad9f0fc9c99b6f0adb6850ddcd2dc849e6423cfcff1fdd70eeb",
+      "rows": 70335
+    },
+    "Vanilla-1040-default": {
+      "sha256": "a4d0c992270d3e696cfd562fd1e24e2c80e94dc3724c54d379556ba1baa7282e",
+      "rows": 60525
+    },
+    "Vanilla-1040-edge": {
+      "sha256": "72c46e951af51421a1f128d6554e8f1d27a5a2be139c2ec58c93ad79beaa4c27",
+      "rows": 60525
+    },
+    "Vanilla-1040-general": {
+      "sha256": "43bc5f485a6bd379fa7a53b0ce38e64e675bd98af5fd4a3bdff5649c131fde34",
+      "rows": 60525
+    },
+    "Vanilla-720-default": {
+      "sha256": "fd7bcbfe891e01ec1f13aed259bf5dba39afe2623d48cece959ffa78cf80f389",
+      "rows": 60525
+    },
+    "Vanilla-720-edge": {
+      "sha256": "99ace52e510aa23d189c05ba249475db8a8730085b15ba7890f65b777531fb04",
+      "rows": 60525
+    },
+    "Vanilla-720-general": {
+      "sha256": "abeb13696c9c0f7c9aedf2620210a3d9a4d4864a6b901b9992885c38f6cabcfb",
+      "rows": 60525
+    }
+  }
+}

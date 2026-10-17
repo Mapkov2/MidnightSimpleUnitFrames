@@ -1,6 +1,7 @@
 -- Real pilot controls: central input bindings, exact navigation and diff history.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2])
+local priorSchemaPath = arg[3]
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local OwnerAssert = assert(loadfile(root .. "/tools/tests/menu_button_owner_assert.lua"))()
 local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCore = function(world)
@@ -9,6 +10,19 @@ local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCor
     world.env.C_SpecializationInfo = {
         GetSpecialization = function() return 1 end, GetSpecializationInfo = function() return 62 end,
     }
+    -- Optional authentic prior schema is used only for the callback-contract red probe.
+    if priorSchemaPath then
+        local load = world.LoadFile
+        world.LoadFile = function(self, path, ...)
+            if path:sub(-#"MSUF_Menu2_ControlSchema.lua") == "MSUF_Menu2_ControlSchema.lua" then path = priorSchemaPath end
+            return load(self, path, ...)
+        end
+    end
+    -- Spell tiles use native FlipBook setters; retain their actual assigned state.
+    for _, name in ipairs({ "Rows", "Columns", "Frames", "FrameWidth", "FrameHeight" }) do
+        local field = "flipBook" .. name
+        world.widgets.Methods["SetFlipBook" .. name] = function(frame, value) frame[field] = value end
+    end
     world.widgets.Methods.GetCenter = function(frame)
         return (tonumber(frame.left) or 0) + (tonumber(frame.width) or 0) / 2,
             (tonumber(frame.bottom) or 0) + (tonumber(frame.height) or 0) / 2
@@ -215,4 +229,113 @@ Check(M.ResetPageToDefaults("uf_target"), "unit reset failed")
 Check(env.MSUF_DB.target.hpBarAlpha == factory.target.hpBarAlpha, "unit reset omitted alpha schema setting")
 Check(M.Undo() and F.Equal(resetBefore, env.MSUF_DB), "unit reset undo changed ownership")
 Check(refreshes > 0, "no central refresh was exercised")
+-- Group record rows resolve the current scope at input time, even on an existing widget.
+M.SetMenuStateValue("gfScope", "party")
+local GP = M.GroupPage
+for _, scope in ipairs({ "party", "raid" }) do
+    GP.Set(scope, "enabled", true, "visual")
+    local spells = GP.SpellIndicators(scope)
+    spells.enabled = true
+    if type(spells.style) ~= "table" then spells.style = {} end
+end
+Check(mw:Select("gf_auras"), "group aura page missing")
+Expand("gf_auras")
+local function GroupControl(suffix)
+    local found
+    for _, record in ipairs(M.RuntimeControlCatalog.GetRecords()) do
+        if record.pageKey == "gf_auras" and record.controlId:sub(-#suffix) == suffix then
+            Check(not found, "ambiguous group control: " .. suffix)
+            found = M.RuntimeControlCatalog.Get(record.controlId).widget
+        end
+    end
+    return Check(found, "group control missing: " .. suffix)
+end
+-- Real master inputs must refresh the retained Style collector's dependants.
+for _, pair in ipairs({
+    { "showcooldownswipe", "cooldownswipereverse" },
+    { "showcooldowntext", "cooldownsize" },
+    { "showstacks", "stacksize" },
+    { "showdurationbar", "durationbarheight" },
+}) do
+    local master = GroupControl("spell.style." .. pair[1])
+    local dependant = GroupControl("spell.style." .. pair[2])
+    if not master._msuf2CommandAction.get() then Input(master, true) end
+    Check(master._msuf2CommandAction.get() == true, "Style master on preparation failed: " .. pair[1])
+    Input(master, false)
+    Check(master._msuf2CommandAction.get() == false, "Style master off input failed: " .. pair[1])
+    Check(not dependant:IsEnabled(), "Style master left dependant enabled: " .. pair[2])
+    Input(master, true)
+    Check(master._msuf2CommandAction.get() == true, "Style master on input failed: " .. pair[1])
+    Check(dependant:IsEnabled(), "Style master left dependant disabled: " .. pair[2])
+end
+local tooltip = GroupControl("spell.style.showtooltip")
+local offset = GroupControl("spell.style.cooldownx")
+GP.SpellIndicators("party").style.showTooltip = 0
+GP.SpellIndicators("party").style.cooldownX = false
+M.Refresh(M.cache.gf_auras.ctx)
+Check(tooltip:IsEnabled() and offset:IsEnabled(), "group controls unexpectedly disabled")
+Check(tooltip._msuf2CommandAction.get() == false, "strict group toggle treated numeric zero as true")
+Check(offset._msuf2CommandAction.get() == 0, "legacy false number did not use the UI fallback")
+Check(GP.SpellIndicators("party").style.showTooltip == 0
+    and GP.SpellIndicators("party").style.cooldownX == false, "group read materialized legacy field values")
+M.ClearHistory()
+Input(tooltip, true)
+Check(GP.SpellIndicators("party").style.showTooltip == true, "group toggle write drift")
+Check(M.Undo() and GP.SpellIndicators("party").style.showTooltip == 0, "group toggle undo erased original numeric zero")
+GP.SpellIndicators("party").style.cooldownX = 2
+GP.SpellIndicators("raid").style.cooldownX = 9
+M.SetMenuStateValue("gfScope", "raid")
+M.Refresh(M.cache.gf_auras.ctx)
+M.ClearHistory()
+Input(offset, 13)
+Check(GP.SpellIndicators("raid").style.cooldownX == 13
+    and GP.SpellIndicators("party").style.cooldownX == 2, "group input wrote the widget's former scope")
+Check(M.Undo() and GP.SpellIndicators("raid").style.cooldownX == 9
+    and GP.SpellIndicators("party").style.cooldownX == 2, "group scope undo drift")
+Check(M.Redo() and GP.SpellIndicators("raid").style.cooldownX == 13, "group scope redo drift")
+M.ClearHistory()
+core.Util.InCombat("PLAYER_REGEN_DISABLED")
+env.InCombatLockdown = function() return true end
+Input(offset, 17)
+Check(GP.SpellIndicators("raid").style.cooldownX == 13
+    and GP.SpellIndicators("party").style.cooldownX == 2, "combat refusal allowed a group record write")
+core.Util.InCombat("PLAYER_REGEN_ENABLED")
+env.InCombatLockdown = function() return false end
+mw:Fire("PLAYER_REGEN_ENABLED")
+mw:RunTimers()
+
+-- Replacing-row callback API: all three owners invoke afterSet with zero arguments.
+-- Only the central bind boundary is stubbed here; the real adapter setters run.
+local Schema, callbacks = M.ControlSchema, 0
+local oldBool = M.BindBoolWidget
+M.BindBoolWidget = function(_, widget, get, set) widget.probeSet = set end
+local function Meta() return { controlId = "menu2.schema.callback.probe" } end
+local function AfterSet(...)
+    Check(select("#", ...) == 0, "afterSet received owner-specific arguments")
+    callbacks = callbacks + 1
+end
+local function Probe(options, key, binding)
+    local widget = {}
+    options.bind(M.cache.gf_auras.ctx, widget, {
+        "toggle", key, false, { "Callback probe" }, afterSet = AfterSet, binding = binding,
+    }, "toggle")
+    Check(widget.probeSet, "callback owner did not bind its setter")(true)
+end
+local values = { flag = false }
+Probe(Schema.GroupRecordOptions({ config = function() return values end,
+    scope = function() return "party" end, changed = function() end,
+    path = "probe.", meta = Meta, stepMeta = Meta }), "flag")
+Check(values.flag == true, "record callback did not follow its write")
+values.flag = false
+Probe(Schema.GroupSelectedOptions({ selected = function() return { enabled = "flag" } end,
+    scope = function() return "party" end, default = function(_, value) return value end,
+    bool = function(_, key) return values[key] end, number = function(_, key) return values[key] end,
+    value = function(_, key) return values[key] end,
+    write = function(_, key, value) values[key] = value end,
+    path = "probe.", meta = Meta, stepMeta = Meta }), "enabled")
+Check(values.flag == true, "selected callback did not follow its write")
+Probe(Schema.GroupOptions(), "ciEnabled", "scopeValue")
+M.BindBoolWidget = oldBool
+Check(callbacks == 3, "not every replacing callback owner ran")
+
 print("menu_control_schema_smoke " .. flavor .. ": input/DB/apply/refresh/combat/history/reset/exact navigation OK")
