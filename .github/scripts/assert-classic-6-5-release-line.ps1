@@ -22,12 +22,12 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # reporting "skipped": a mistyped version would otherwise pass every TOC,
 # contract and changelog check below without reading a single file. When the
 # Classic release line moves past 6.5, retarget this script deliberately.
-# 6.503 betas deliver the player Empower cleanup, revert the 6.502 channel experiment
-# and restore the 6.21 reading of legacy raid group filters.
+# 6.503 ships the fixes tested in its betas (player Empower cleanup, 6.502 channel
+# revert, 6.21 legacy raid group filters) and the group sort preview fixes.
 # 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
-# collides with 6.05 and ranks above 6.20). 6.501 and 6.502 are its maintenance releases.
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501', '6.502') -and $normalizedVersion -cnotmatch '^6\.(?:502|503)-beta[1-9][0-9]*$') {
-    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501/6.502 and 6.502/6.503 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
+# collides with 6.05 and ranks above 6.20). 6.501, 6.502 and 6.503 are its maintenance releases.
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501', '6.502', '6.503') -and $normalizedVersion -cnotmatch '^6\.(?:502|503)-beta[1-9][0-9]*$') {
+    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501/6.502/6.503 and 6.502/6.503 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()

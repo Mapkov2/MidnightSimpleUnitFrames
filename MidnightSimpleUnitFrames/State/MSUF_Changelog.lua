@@ -8,34 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3966765BE48590799AF0720A4F28662585347954B2A7BB627F2F0FACE6468526",
-    currentVersion = "6.503-beta2",
+    sourceSha256 = "51EA4D3856817AD871F4C3559F6EB486C8215097535E1EF416EADF1EC7676CF9",
+    currentVersion = "6.503",
     historyFromVersion = "6.50",
-    previousVersion = "6.502",
-    rangeLabel = "6.502 -> 6.503-beta2",
+    previousVersion = "6.50",
+    rangeLabel = "6.50 -> 6.503",
     entries = {
         {
-            version = "6.503-beta2",
-            date = "2026-10-16",
+            version = "6.503",
+            date = "2026-10-17",
             sections = {
                 {
                     title = "Bug Fixes",
                     bullets = {
                         {
+                            text = "Fixed extra or doubled stage markers on Evoker Empower castbars after a channeled spell, including Fire Breath and Eternity Surge.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Restored the player castbar channel-selection behavior from before 6.502.",
+                            linkless = true,
+                        },
+                        {
                             text = "Fixed raid and Mythic raid frames showing only groups 1-3 with profiles carried over from older versions. Old profile strings import correctly again without a page reset.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "exclude hidden groups group size",
-                                label = "Raid group layout",
-                                sectionId = "scaling",
-                                controlId = "menu2.gf_layout.group.field.excludehiddengroups",
-                                settingKey = "gf_raid.excludeHiddenGroups",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
+                            linkless = true,
                         },
                         {
                             text = "Removed the group selection repair prompt after profile imports; it is no longer needed.",
+                            linkless = true,
+                        },
+                        {
+                            text = "The group frame preview now follows the sort settings, including sort mode, role order and class priority.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Dragging a class in the class priority list now inserts it at the drop position instead of swapping it with the class there.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Arena party frames sorted by class priority within roles now update when a teammate's name arrives late.",
                             linkless = true,
                         },
                     },
