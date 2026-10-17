@@ -296,111 +296,31 @@ local function HistoryTooltipText(kind)
     if kind == "undo" and s.canResetAll then text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.") end
     return text
 end
-local function CreateHistoryControls(parent)
-    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
-    local rowW = NavItemWidth(0)
-    row:SetSize(rowW, 60)
-    local buttonGap = 8
-    local buttonW = floor((rowW - buttonGap) * 0.5)
-    local function StyleHistoryButton(btn, label, texture)
-        btn._msuf2SolidPill = true
-        if btn._msuf2Label then
-            btn._msuf2Label:ClearAllPoints()
-            btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 32, 0)
-            btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
-            btn._msuf2Label:SetJustifyH("LEFT")
-            btn._msuf2Label:SetText(label)
-            T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
-        end
-        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
-        icon:SetTexture(texture)
-        icon:SetSize(16, 16)
-        icon:SetPoint("LEFT", btn, "LEFT", 8, 0)
-        if icon.SetDesaturated then icon:SetDesaturated(true) end
-        icon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.92)
-        btn._msuf2HistoryIcon = icon
-        return icon
+local function StyleHistoryButton(btn, label, texture)
+    btn._msuf2SolidPill = true
+    if btn._msuf2Label then
+        btn._msuf2Label:ClearAllPoints()
+        btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 32, 0)
+        btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+        btn._msuf2Label:SetJustifyH("LEFT")
+        btn._msuf2Label:SetText(label)
+        T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
     end
-    local undo = T.Button(row, "", buttonW, 22)
-    undo._msuf2SkipHistoryCheckpoint = true
-    undo._msuf2HistorySource = "history:undo"
-    undo._msuf2HistoryLabel = "Undo"
-    undo:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-    StyleHistoryButton(undo, "Undo", T.media.historyUndo)
-    undo:SetScript("OnClick", function()
-        if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
-            M.ResetHistorySession()
-        elseif M.Undo then
-            M.Undo()
-        end
-    end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(undo, "history.undo", "Undo", "action", {
-            actionKey = "menu_history_undo",
-            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
-                return M.Undo and M.Undo() or false
-            end },
-        })
-    end
-    local redo = T.Button(row, "", buttonW, 22)
-    redo._msuf2SkipHistoryCheckpoint = true
-    redo._msuf2HistorySource = "history:redo"
-    redo._msuf2HistoryLabel = "Redo"
-    redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
-    StyleHistoryButton(redo, "Redo", T.media.historyRedo)
-    redo:SetScript("OnClick", function()
-        M.Redo()
-    end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
-            actionKey = "menu_history_redo",
-            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
-                return M.Redo and M.Redo() or false
-            end },
-        })
-    end
-    AttachHistoryTooltip(undo, function()
-        local s = M.GetHistoryState and M.GetHistoryState() or {}
-        return s.undoLabel and M.Format("Undo: %s", ShortLabel(s.undoLabel, 28)) or "Undo"
-    end, function() return HistoryTooltipText("undo") end)
-    AttachHistoryTooltip(redo, function()
-        local s = M.GetHistoryState and M.GetHistoryState() or {}
-        return s.redoLabel and M.Format("Redo: %s", ShortLabel(s.redoLabel, 28)) or "Redo"
-    end, function() return HistoryTooltipText("redo") end)
-    local function HistorySummaryText(label, count)
-        if not label then return "" end
-        count = tonumber(count) or 0
-        return (count > 1 and ("[" .. tostring(count) .. "] ") or "") .. ShortLabel(label, count > 1 and 15 or 18)
-    end
-    local undoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-    undoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -27)
-    undoSummary:SetSize(buttonW - 6, 13)
-    undoSummary:SetJustifyH("LEFT")
-    if undoSummary.SetWordWrap then undoSummary:SetWordWrap(false) end
-    local redoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-    redoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", buttonW + buttonGap + 3, -27)
-    redoSummary:SetSize(buttonW - 6, 13)
-    redoSummary:SetJustifyH("LEFT")
-    if redoSummary.SetWordWrap then redoSummary:SetWordWrap(false) end
-    local feedbackIcon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK", nil, 5))
-    feedbackIcon:SetTexture(T.media.checkTickMedium)
-    feedbackIcon:SetSize(9, 9)
-    feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -44)
-    feedbackIcon:SetVertexColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
-    feedbackIcon:SetAlpha(0)
-    local feedback = T.Font(row, "GameFontDisableSmall", "", T.colors.ok)
-    feedback:SetPoint("LEFT", feedbackIcon, "RIGHT", 4, 0)
-    feedback:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-    feedback:SetJustifyH("LEFT")
-    if feedback.SetWordWrap then feedback:SetWordWrap(false) end
-    feedback:SetAlpha(0)
-    row.undo = undo
-    row.redo = redo
-    row.undoSummary = undoSummary
-    row.redoSummary = redoSummary
-    row.feedback = feedback
-    row.feedbackIcon = feedbackIcon
-    M.historyControls = row
+    local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
+    icon:SetTexture(texture)
+    icon:SetSize(16, 16)
+    icon:SetPoint("LEFT", btn, "LEFT", 8, 0)
+    if icon.SetDesaturated then icon:SetDesaturated(true) end
+    icon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.92)
+    btn._msuf2HistoryIcon = icon
+    return icon
+end
+local function HistorySummaryText(label, count)
+    if not label then return "" end
+    count = tonumber(count) or 0
+    return (count > 1 and ("[" .. tostring(count) .. "] ") or "") .. ShortLabel(label, count > 1 and 15 or 18)
+end
+local function InstallHistoryFeedback(row, feedback, feedbackIcon)
     -- The fade-out runs on a MenuTimer task; when the menu quiesces (or the
     -- task is refused in combat) the message is cleared at once instead.
     local function ClearHistoryFeedback()
@@ -454,6 +374,89 @@ local function CreateHistoryControls(parent)
         end)
         if not fade and controls == row then ClearHistoryFeedback() end
     end
+end
+local function CreateHistoryControls(parent)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    local rowW = NavItemWidth(0)
+    row:SetSize(rowW, 60)
+    local buttonGap = 8
+    local buttonW = floor((rowW - buttonGap) * 0.5)
+    local undo = T.Button(row, "", buttonW, 22)
+    undo._msuf2SkipHistoryCheckpoint = true
+    undo._msuf2HistorySource = "history:undo"
+    undo._msuf2HistoryLabel = "Undo"
+    undo:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    StyleHistoryButton(undo, "Undo", T.media.historyUndo)
+    undo:SetScript("OnClick", function()
+        if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
+            M.ResetHistorySession()
+        elseif M.Undo then
+            M.Undo()
+        end
+    end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(undo, "history.undo", "Undo", "action", {
+            actionKey = "menu_history_undo",
+            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
+                return M.Undo and M.Undo() or false
+            end },
+        })
+    end
+    local redo = T.Button(row, "", buttonW, 22)
+    redo._msuf2SkipHistoryCheckpoint = true
+    redo._msuf2HistorySource = "history:redo"
+    redo._msuf2HistoryLabel = "Redo"
+    redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
+    StyleHistoryButton(redo, "Redo", T.media.historyRedo)
+    redo:SetScript("OnClick", function()
+        M.Redo()
+    end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
+            actionKey = "menu_history_redo",
+            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
+                return M.Redo and M.Redo() or false
+            end },
+        })
+    end
+    AttachHistoryTooltip(undo, function()
+        local s = M.GetHistoryState and M.GetHistoryState() or {}
+        return s.undoLabel and M.Format("Undo: %s", ShortLabel(s.undoLabel, 28)) or "Undo"
+    end, function() return HistoryTooltipText("undo") end)
+    AttachHistoryTooltip(redo, function()
+        local s = M.GetHistoryState and M.GetHistoryState() or {}
+        return s.redoLabel and M.Format("Redo: %s", ShortLabel(s.redoLabel, 28)) or "Redo"
+    end, function() return HistoryTooltipText("redo") end)
+    local undoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    undoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -27)
+    undoSummary:SetSize(buttonW - 6, 13)
+    undoSummary:SetJustifyH("LEFT")
+    if undoSummary.SetWordWrap then undoSummary:SetWordWrap(false) end
+    local redoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    redoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", buttonW + buttonGap + 3, -27)
+    redoSummary:SetSize(buttonW - 6, 13)
+    redoSummary:SetJustifyH("LEFT")
+    if redoSummary.SetWordWrap then redoSummary:SetWordWrap(false) end
+    local feedbackIcon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK", nil, 5))
+    feedbackIcon:SetTexture(T.media.checkTickMedium)
+    feedbackIcon:SetSize(9, 9)
+    feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -44)
+    feedbackIcon:SetVertexColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
+    feedbackIcon:SetAlpha(0)
+    local feedback = T.Font(row, "GameFontDisableSmall", "", T.colors.ok)
+    feedback:SetPoint("LEFT", feedbackIcon, "RIGHT", 4, 0)
+    feedback:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    feedback:SetJustifyH("LEFT")
+    if feedback.SetWordWrap then feedback:SetWordWrap(false) end
+    feedback:SetAlpha(0)
+    row.undo = undo
+    row.redo = redo
+    row.undoSummary = undoSummary
+    row.redoSummary = redoSummary
+    row.feedback = feedback
+    row.feedbackIcon = feedbackIcon
+    M.historyControls = row
+    InstallHistoryFeedback(row, feedback, feedbackIcon)
     function M.RefreshHistoryControls()
         local controls = M.historyControls
         if not controls then return end
@@ -526,14 +529,7 @@ local function InstallSearchIntroHider(parent)
     end
     return HideSearchIntro
 end
-local function BuildNavRail(parent)
-    M.EnsurePersistentMenuState()
-    M.nav = parent
-    M.navButtons = {}
-    M.navHeaders = {}
-    M.navTitles = {}
-    M.navGroupForKey = {}
-    M.navHeaderState = M.navHeaderState or {}
+local function CreateNavBrand(parent)
     local brandIconFrame = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     brandIconFrame:SetSize(24, 24)
     brandIconFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -8)
@@ -573,6 +569,8 @@ local function BuildNavRail(parent)
     parent._msuf2BrandIconFrame = brandIconFrame
     parent._msuf2BrandIcon = brandIcon
     parent._msuf2BrandTitle = brand
+end
+local function CreateNavSearchBox(parent)
     -- The visual template supplies a bright native search atlas that covers the
     -- dark MSUF input surface. Keep its keyboard scripts without its artwork.
     local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxScriptTemplate"))
@@ -612,13 +610,9 @@ local function BuildNavRail(parent)
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search
-    local searchPalette = M.CreateNavSearchPalette(parent, search)
-    local function SchedulePaletteQuery(searchBox, query)
-        ScheduleSearchInputQuery(searchBox, query, false, function(latest)
-            if searchPalette then searchPalette:Refresh(latest, false) end
-        end)
-        if searchPalette then searchPalette:Refresh(query, M.searchResultsPending == true) end
-    end
+    return search
+end
+local function InstallNavSearchIntro(parent, search)
     local HideSearchIntro = InstallSearchIntroHider(parent)
     local function EnsureSearchIntro()
         local intro = parent._msuf2SearchIntro
@@ -678,6 +672,15 @@ local function BuildNavRail(parent)
     end
     M.HideNavSearchIntro = HideSearchIntro
     M.ShowNavSearchIntro = ShowSearchIntro
+    return HideSearchIntro, ShowSearchIntro
+end
+local function InstallNavSearchScripts(search, searchPalette, HideSearchIntro, ShowSearchIntro)
+    local function SchedulePaletteQuery(searchBox, query)
+        ScheduleSearchInputQuery(searchBox, query, false, function(latest)
+            if searchPalette then searchPalette:Refresh(latest, false) end
+        end)
+        if searchPalette then searchPalette:Refresh(query, M.searchResultsPending == true) end
+    end
     search:SetScript("OnMouseDown", function(self, button)
         if button == "LeftButton" then self:SetFocus() end
     end)
@@ -744,6 +747,8 @@ local function BuildNavRail(parent)
         BumpSearchInputSerial()
         RunSearchInputQuery("", true)
     end)
+end
+local function InstallNavSearchClear(parent, search, searchPalette, HideSearchIntro)
     local clear = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     clear:SetSize(16, 16)
     clear:SetFrameLevel(search:GetFrameLevel() + 1)
@@ -778,6 +783,67 @@ local function BuildNavRail(parent)
     parent:HookScript("OnHide", function()
         if searchPalette then searchPalette:Hide() end
     end)
+end
+local function InstallNavReflow(parent, listScroll, list, created)
+    -- A group title without visible pages stays hidden: Combat and Interface
+    -- without the Suite, or a group whose Suite addons are not installed.
+    local groupHasPages = {}
+    function parent:_msuf2NavReflow()
+        M.RefreshNavIconVisibility()
+        for group in pairs(groupHasPages) do groupHasPages[group] = nil end
+        for i = 1, #created do
+            local item = created[i]
+            if item.kind == "page" and item.group and not item.button._msuf2NavHidden then groupHasPages[item.group] = true end
+        end
+        local y = -4
+        local advancedHidden = IsAdvancedNavHidden()
+        for i = 1, #created do
+            local item = created[i]
+            local btn = item.button
+            if advancedHidden and (item.id == "modules" or item.group == "modules") then
+                if btn then btn:Hide() end
+                if item.frame then item.frame:Hide() end
+            elseif item.kind == "title" and not groupHasPages[item.id] then
+                item.frame:Hide()
+            elseif item.kind == "title" then
+                local frame = item.frame
+                frame:Show()
+                frame:ClearAllPoints()
+                if y < -4 then y = y - 8 else y = y - 4 end
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
+                ApplyNavHeaderVisual(frame, M.navHeaderState[item.id] ~= false)
+                y = y - 20
+            elseif item.kind == "header" then
+                btn:Show()
+                btn:ClearAllPoints()
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y)
+                ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
+                y = y - NAV_BUTTON_STEP
+            elseif item.kind == "history" then
+                local frame = item.frame
+                frame:Show()
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
+                y = y - 66
+            elseif item.kind == "page" and btn._msuf2NavHidden then
+                btn:Hide()
+            elseif not item.group or M.navHeaderState[item.group] ~= false then
+                btn:Show()
+                btn:ClearAllPoints()
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + (btn._msuf2NavIndent or 0), y)
+                y = y - NAV_BUTTON_STEP
+            else
+                if btn then btn:Hide() end
+                if item.frame then item.frame:Hide() end
+            end
+        end
+        local contentH = max(abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
+        list:SetSize(NAV_W - NAV_SCROLL_GUTTER, contentH)
+        if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
+        M.RefreshHistoryControls()
+    end
+end
+local function CreateNavList(parent)
     local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, parent))
     listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -76)
     listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -NAV_SCROLL_GUTTER, 8)
@@ -869,65 +935,25 @@ local function BuildNavRail(parent)
             if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
         end
     end
-    -- A group title without visible pages stays hidden: Combat and Interface
-    -- without the Suite, or a group whose Suite addons are not installed.
-    local groupHasPages = {}
-    function parent:_msuf2NavReflow()
-        M.RefreshNavIconVisibility()
-        for group in pairs(groupHasPages) do groupHasPages[group] = nil end
-        for i = 1, #created do
-            local item = created[i]
-            if item.kind == "page" and item.group and not item.button._msuf2NavHidden then groupHasPages[item.group] = true end
-        end
-        local y = -4
-        local advancedHidden = IsAdvancedNavHidden()
-        for i = 1, #created do
-            local item = created[i]
-            local btn = item.button
-            if advancedHidden and (item.id == "modules" or item.group == "modules") then
-                if btn then btn:Hide() end
-                if item.frame then item.frame:Hide() end
-            elseif item.kind == "title" and not groupHasPages[item.id] then
-                item.frame:Hide()
-            elseif item.kind == "title" then
-                local frame = item.frame
-                frame:Show()
-                frame:ClearAllPoints()
-                if y < -4 then y = y - 8 else y = y - 4 end
-                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
-                ApplyNavHeaderVisual(frame, M.navHeaderState[item.id] ~= false)
-                y = y - 20
-            elseif item.kind == "header" then
-                btn:Show()
-                btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y)
-                ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
-                y = y - NAV_BUTTON_STEP
-            elseif item.kind == "history" then
-                local frame = item.frame
-                frame:Show()
-                frame:ClearAllPoints()
-                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
-                y = y - 66
-            elseif item.kind == "page" and btn._msuf2NavHidden then
-                btn:Hide()
-            elseif not item.group or M.navHeaderState[item.group] ~= false then
-                btn:Show()
-                btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + (btn._msuf2NavIndent or 0), y)
-                y = y - NAV_BUTTON_STEP
-            else
-                if btn then btn:Hide() end
-                if item.frame then item.frame:Hide() end
-            end
-        end
-        local contentH = max(abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
-        list:SetSize(NAV_W - NAV_SCROLL_GUTTER, contentH)
-        if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
-        M.RefreshHistoryControls()
-    end
+    InstallNavReflow(parent, listScroll, list, created)
     parent:_msuf2NavReflow()
     M.RefreshNavAvailability()
+end
+local function BuildNavRail(parent)
+    M.EnsurePersistentMenuState()
+    M.nav = parent
+    M.navButtons = {}
+    M.navHeaders = {}
+    M.navTitles = {}
+    M.navGroupForKey = {}
+    M.navHeaderState = M.navHeaderState or {}
+    CreateNavBrand(parent)
+    local search = CreateNavSearchBox(parent)
+    local searchPalette = M.CreateNavSearchPalette(parent, search)
+    local HideSearchIntro, ShowSearchIntro = InstallNavSearchIntro(parent, search)
+    InstallNavSearchScripts(search, searchPalette, HideSearchIntro, ShowSearchIntro)
+    InstallNavSearchClear(parent, search, searchPalette, HideSearchIntro)
+    CreateNavList(parent)
 end
 M.BuildNavRail = BuildNavRail
 function M.RefreshAdvancedNavVisibility()
