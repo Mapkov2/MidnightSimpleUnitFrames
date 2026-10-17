@@ -76,6 +76,129 @@ local function SetRowBackground(row, selected, hovered)
     end
 end
 
+local function SearchBridge()
+    return M.SearchBridge or {}
+end
+
+local function RefreshRowVisuals(self)
+    for i = 1, #(self.rows or {}) do
+        local row = self.rows[i]
+        SetRowBackground(row, row:IsShown() and i == self.selectedIndex, row._msuf2PaletteHovered)
+    end
+end
+
+local function EnsurePalette(self, parent, searchBox)
+    if self.frame then return self.frame end
+    local popupParent = M.frame or parent
+    local bg = T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.985 }
+    local palette = T.Panel(popupParent, nil, bg, T.colors.accent)
+    T.ApplySurface(palette, { bg = bg, border = T.colors.accent, glass = "popup" })
+    palette:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -6)
+    palette:SetWidth(PALETTE_W)
+    palette:SetHeight(HEADER_H + ROW_H + FOOTER_H + PANEL_PAD * 2)
+    M.ApplyMenuPopupFramePriority(palette)
+    palette:SetClampedToScreen(true)
+    palette:EnableMouse(true)
+    palette:Hide()
+
+    local heading = T.Font(palette, "GameFontNormalSmall", "Best matches", T.colors.text)
+    T.StyleFontString(heading, T.colors.text, 2)
+    heading:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -9)
+
+    local keyHint = T.Font(palette, "GameFontDisableSmall", "Up/Down  Enter", T.colors.dim)
+    T.StyleFontString(keyHint, T.colors.dim, 2)
+    keyHint:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -12, -9)
+
+    local status = T.Font(palette, "GameFontDisableSmall", "Searching...", T.colors.muted)
+    T.StyleFontString(status, T.colors.muted, 2)
+    status:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -(HEADER_H + 10))
+    status:SetPoint("RIGHT", palette, "RIGHT", -12, 0)
+    status:SetJustifyH("LEFT")
+    status:Hide()
+
+    self.rows = {}
+    for i = 1, MAX_VISIBLE_RESULTS do
+        local rowIndex = i
+        local row = PixelLayoutRegion(CreateFrame("Button", nil, palette))
+        row:EnableMouse(true)
+        row:RegisterForClicks("LeftButtonUp")
+        row:SetFrameLevel(palette:GetFrameLevel() + 2)
+        row:SetHeight(ROW_H)
+        row:SetPoint("TOPLEFT", palette, "TOPLEFT", PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
+        row:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
+        local rowBg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
+        rowBg:SetAllPoints()
+        rowBg:SetColorTexture(0, 0, 0, 0)
+        row._msuf2PaletteBg = rowBg
+
+        local label = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        T.StyleFontString(label, T.colors.text, 2)
+        label:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -6)
+        label:SetPoint("TOPRIGHT", row, "TOPRIGHT", -70, -6)
+        label:SetJustifyH("LEFT")
+        label:SetWordWrap(false)
+
+        local kind = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
+        T.StyleFontString(kind, T.colors.accent, 2)
+        kind:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -6)
+        kind:SetJustifyH("RIGHT")
+
+        local breadcrumb = T.Font(row, "GameFontDisableSmall", "", T.colors.dim)
+        T.StyleFontString(breadcrumb, T.colors.dim, 2)
+        breadcrumb:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8, 6)
+        breadcrumb:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -8, 6)
+        breadcrumb:SetJustifyH("LEFT")
+        breadcrumb:SetWordWrap(false)
+
+        row._msuf2PaletteLabel = label
+        row._msuf2PaletteKind = kind
+        row._msuf2PaletteBreadcrumb = breadcrumb
+        row:SetScript("OnEnter", function(button)
+            button._msuf2PaletteHovered = true
+            self.selectedIndex = rowIndex
+            RefreshRowVisuals(self)
+        end)
+        row:SetScript("OnLeave", function(button)
+            button._msuf2PaletteHovered = nil
+            RefreshRowVisuals(self)
+        end)
+        row:SetScript("OnClick", function(button)
+            self:OpenResult(button._msuf2PaletteResult, TrimText(searchBox:GetText() or ""))
+        end)
+        row:Hide()
+        self.rows[i] = row
+    end
+
+    local moreResults = T.Button(palette, "More", PALETTE_W - PANEL_PAD * 2, 24)
+    moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
+    moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
+    moreResults:SetScript("OnClick", function()
+        local query = TrimText(searchBox:GetText() or "")
+        self:Hide()
+        if searchBox.ClearFocus then searchBox:ClearFocus() end
+        local bridge = SearchBridge()
+        if type(bridge.BumpSearchInputSerial) == "function" then bridge.BumpSearchInputSerial() end
+        if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery(query, true) end
+    end)
+
+    -- Match the standard dropdown/search lifecycle: close on a global mouse-down
+    -- only when the pointer is outside both the popup and its edit box.
+    -- Result rows activate on mouse-up, so an inside click remains alive
+    -- long enough to reach the row's OnClick handler.
+    local clickOff = CreateFrame("Frame")
+    clickOff:SetScript("OnEvent", function()
+        if not MouseOver(palette) and not MouseOver(searchBox) then self:Hide() end
+    end)
+    palette:HookScript("OnShow", function() clickOff:RegisterEvent("GLOBAL_MOUSE_DOWN") end)
+    palette:HookScript("OnHide", function() clickOff:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
+
+    self.frame = palette
+    self.status = status
+    self.moreResults = moreResults
+    self.clickOff = clickOff
+    return palette
+end
+
 -- The window hides the navigation palette when it closes. A standalone palette
 -- (the Dashboard search field) hides with its own owner and leaves that hook alone.
 local function CreatePaletteController(parent, searchBox, standalone)
@@ -87,10 +210,6 @@ local function CreatePaletteController(parent, searchBox, standalone)
         selectedIndex = 1,
         visibleResults = {},
     }
-
-    local function SearchBridge()
-        return M.SearchBridge or {}
-    end
 
     function controller:IsShown()
         return self.frame and self.frame:IsShown() or false
@@ -107,13 +226,6 @@ local function CreatePaletteController(parent, searchBox, standalone)
         local bridge = SearchBridge()
         if type(bridge.CancelSearchBackgroundIndex) == "function" then
             bridge.CancelSearchBackgroundIndex()
-        end
-    end
-
-    local function RefreshRowVisuals(self)
-        for i = 1, #(self.rows or {}) do
-            local row = self.rows[i]
-            SetRowBackground(row, row:IsShown() and i == self.selectedIndex, row._msuf2PaletteHovered)
         end
     end
 
@@ -145,118 +257,6 @@ local function CreatePaletteController(parent, searchBox, standalone)
         return true
     end
 
-    local function EnsurePalette(self)
-        if self.frame then return self.frame end
-        local popupParent = M.frame or parent
-        local bg = T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.985 }
-        local palette = T.Panel(popupParent, nil, bg, T.colors.accent)
-        T.ApplySurface(palette, { bg = bg, border = T.colors.accent, glass = "popup" })
-        palette:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -6)
-        palette:SetWidth(PALETTE_W)
-        palette:SetHeight(HEADER_H + ROW_H + FOOTER_H + PANEL_PAD * 2)
-        M.ApplyMenuPopupFramePriority(palette)
-        palette:SetClampedToScreen(true)
-        palette:EnableMouse(true)
-        palette:Hide()
-
-        local heading = T.Font(palette, "GameFontNormalSmall", "Best matches", T.colors.text)
-        T.StyleFontString(heading, T.colors.text, 2)
-        heading:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -9)
-
-        local keyHint = T.Font(palette, "GameFontDisableSmall", "Up/Down  Enter", T.colors.dim)
-        T.StyleFontString(keyHint, T.colors.dim, 2)
-        keyHint:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -12, -9)
-
-        local status = T.Font(palette, "GameFontDisableSmall", "Searching...", T.colors.muted)
-        T.StyleFontString(status, T.colors.muted, 2)
-        status:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -(HEADER_H + 10))
-        status:SetPoint("RIGHT", palette, "RIGHT", -12, 0)
-        status:SetJustifyH("LEFT")
-        status:Hide()
-
-        self.rows = {}
-        for i = 1, MAX_VISIBLE_RESULTS do
-            local rowIndex = i
-            local row = PixelLayoutRegion(CreateFrame("Button", nil, palette))
-            row:EnableMouse(true)
-            row:RegisterForClicks("LeftButtonUp")
-            row:SetFrameLevel(palette:GetFrameLevel() + 2)
-            row:SetHeight(ROW_H)
-            row:SetPoint("TOPLEFT", palette, "TOPLEFT", PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
-            row:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
-            local rowBg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
-            rowBg:SetAllPoints()
-            rowBg:SetColorTexture(0, 0, 0, 0)
-            row._msuf2PaletteBg = rowBg
-
-            local label = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-            T.StyleFontString(label, T.colors.text, 2)
-            label:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -6)
-            label:SetPoint("TOPRIGHT", row, "TOPRIGHT", -70, -6)
-            label:SetJustifyH("LEFT")
-            label:SetWordWrap(false)
-
-            local kind = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
-            T.StyleFontString(kind, T.colors.accent, 2)
-            kind:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -6)
-            kind:SetJustifyH("RIGHT")
-
-            local breadcrumb = T.Font(row, "GameFontDisableSmall", "", T.colors.dim)
-            T.StyleFontString(breadcrumb, T.colors.dim, 2)
-            breadcrumb:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8, 6)
-            breadcrumb:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -8, 6)
-            breadcrumb:SetJustifyH("LEFT")
-            breadcrumb:SetWordWrap(false)
-
-            row._msuf2PaletteLabel = label
-            row._msuf2PaletteKind = kind
-            row._msuf2PaletteBreadcrumb = breadcrumb
-            row:SetScript("OnEnter", function(button)
-                button._msuf2PaletteHovered = true
-                self.selectedIndex = rowIndex
-                RefreshRowVisuals(self)
-            end)
-            row:SetScript("OnLeave", function(button)
-                button._msuf2PaletteHovered = nil
-                RefreshRowVisuals(self)
-            end)
-            row:SetScript("OnClick", function(button)
-                self:OpenResult(button._msuf2PaletteResult, TrimText(searchBox:GetText() or ""))
-            end)
-            row:Hide()
-            self.rows[i] = row
-        end
-
-        local moreResults = T.Button(palette, "More", PALETTE_W - PANEL_PAD * 2, 24)
-        moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
-        moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
-        moreResults:SetScript("OnClick", function()
-            local query = TrimText(searchBox:GetText() or "")
-            self:Hide()
-            if searchBox.ClearFocus then searchBox:ClearFocus() end
-            local bridge = SearchBridge()
-            if type(bridge.BumpSearchInputSerial) == "function" then bridge.BumpSearchInputSerial() end
-            if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery(query, true) end
-        end)
-
-        -- Match the standard dropdown/search lifecycle: close on a global mouse-down
-        -- only when the pointer is outside both the popup and its edit box.
-        -- Result rows activate on mouse-up, so an inside click remains alive
-        -- long enough to reach the row's OnClick handler.
-        local clickOff = CreateFrame("Frame")
-        clickOff:SetScript("OnEvent", function()
-            if not MouseOver(palette) and not MouseOver(searchBox) then self:Hide() end
-        end)
-        palette:HookScript("OnShow", function() clickOff:RegisterEvent("GLOBAL_MOUSE_DOWN") end)
-        palette:HookScript("OnHide", function() clickOff:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
-
-        self.frame = palette
-        self.status = status
-        self.moreResults = moreResults
-        self.clickOff = clickOff
-        return palette
-    end
-
     function controller:Refresh(query, pending)
         query = TrimText(query)
         if (M.IsConfigCombatLocked and M.IsConfigCombatLocked())
@@ -265,7 +265,7 @@ local function CreatePaletteController(parent, searchBox, standalone)
             return false
         end
 
-        local palette = EnsurePalette(self)
+        local palette = EnsurePalette(self, parent, searchBox)
         local results = type(M.searchResults) == "table" and M.searchResults or {}
         if M.searchResultsQuery ~= query then results = {} end
         pending = pending == true or M.searchResultsPending == true

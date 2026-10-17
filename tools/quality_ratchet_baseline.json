@@ -384,7 +384,7 @@
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua": [3587, 332, 106, 43, 12, 93, 48, 57, 1, 2, 0, 6, 1, 11],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua": [673, 141, 29, 22, 10, 30, 3, 12, 1, 0, 0, 1, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua": [118, 29, 7, 10, 2, 14, 2, 5, 0, 0, 0, 0, 0, 0],
-  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchPalette.lua": [311, 229, 20, 19, 17, 24, 3, 6, 1, 0, 0, 1, 1, 1],
+  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchPalette.lua": [311, 111, 23, 21, 17, 26, 3, 6, 1, 0, 0, 1, 0, 1],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_State.lua": [133, 37, 12, 17, 8, 15, 4, 0, 0, 1, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua": [1574, 75, 55, 25, 10, 52, 67, 54, 1, 0, 2, 10, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_TextQuickSettings.lua": [806, 150, 57, 20, 28, 58, 8, 27, 0, 0, 1, 0, 0, 0],

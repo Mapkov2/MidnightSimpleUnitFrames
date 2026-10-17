@@ -267,7 +267,7 @@ Check(#editBoxes == 1 and (editBoxes[1]._width or 0) >= 120, "a narrow Dashboard
 -- 5. The real palette keeps the navigation hook
 ---------------------------------------------------------------------------
 local P = { Theme = T, TrimText = M.TrimText, Tr = M.Tr }
-assert(loadfile(MENU .. "MSUF_Menu2_SearchPalette.lua"))("MidnightSimpleUnitFrames_Options", { MSUF2 = P })
+assert(loadfile(arg[2] or (MENU .. "MSUF_Menu2_SearchPalette.lua")))("MidnightSimpleUnitFrames_Options", { MSUF2 = P })
 local nav = Check(P.CreateNavSearchPalette({}, {}), "the navigation palette must build")
 local navHide = Check(P.HideNavSearchPalette, "the navigation palette must publish its hide hook")
 nav.visibleResults = { "stale" }
@@ -275,6 +275,125 @@ Check(P.CreateNavSearchPalette({}, {}, true), "a standalone palette must build")
 Check(P.HideNavSearchPalette == navHide, "a standalone palette must leave the navigation hook alone")
 navHide()
 Check(#nav.visibleResults == 0, "the navigation hook must still close the navigation palette")
+
+-- Exercise the real palette's lazy construction, captured owners and retained callbacks.
+do
+    local previous = {}
+    local function Override(name, fn) previous[name] = methods[name] or false; methods[name] = fn end
+    Override("SetPoint", function(self, ...) self._points = self._points or {}; self._points[#self._points + 1] = { ... } end)
+    Override("SetWidth", function(self, width) self._width = width end)
+    Override("IsMouseOver", function(self) return self._over == true end)
+    Override("RegisterEvent", function(self, event) self._event = event end)
+    Override("UnregisterEvent", function(self, event) if self._event == event then self._event = nil end end)
+    Override("Show", function(self)
+        local changed = not self._shown
+        self._shown = true
+        if changed and self._hooks.OnShow then self._hooks.OnShow(self) end
+    end)
+    Override("Hide", function(self)
+        local changed = self._shown
+        self._shown = false
+        if changed and self._hooks.OnHide then self._hooks.OnHide(self) end
+    end)
+    Override("SetShown", function(self, shown) if shown then self:Show() else self:Hide() end end)
+    local parent, box = Fake("owner"), Fake("editbox", "  raid  ")
+    local controller = P.CreateNavSearchPalette(parent, box)
+    Check(controller.frame == nil, "constructing a controller must not build its popup")
+    local replacementBox = Fake("editbox", "replacement")
+    controller.parent, controller.searchBox = Fake("changed owner"), replacementBox
+    replacementBox._focused = true
+    local locked, canceled, opened, runs, bumps = false, 0, {}, {}, 0
+    P.IsConfigCombatLocked = function() return locked end
+    P.ApplyMenuPopupFramePriority = function(frame) frame._priorityApplied = true end
+    P.SearchBridge = { CancelSearchBackgroundIndex = function() canceled = canceled + 1 end }
+    P.searchResultsQuery = "raid"
+    P.searchResults = {
+        { key = "group", label = "Raid width", kind = "slider", hint = "Group > Bars",
+          anchorFallback = "width", anchor = "raid.width", route = "group", exactTarget = "width" },
+        { key = "help", label = "Help", kind = "faq", noOpen = true },
+    }
+    Check(controller:Refresh("  raid  ", false), "two-character queries must open the real palette")
+    local frame, rows, clickOff = controller.frame, controller.rows, controller.clickOff
+    Check(frame._parent == parent and frame._points[1][2] == box,
+        "lazy construction must retain the original parent and search box, not mutable controller fields")
+    Check(frame._width == 432 and frame:GetHeight() == 162 and #rows == 6 and frame._priorityApplied,
+        "palette width, result capacity, height and popup priority must stay exact")
+    Check(clickOff._event == "GLOBAL_MOUSE_DOWN", "show must register outside-click handling")
+    Check(rows[1]._msuf2PaletteLabel:GetText() == "Raid width"
+        and rows[1]._msuf2PaletteKind:GetText() == "Slider"
+        and rows[1]._msuf2PaletteBreadcrumb:GetText() == "Group > Bars",
+        "result title, kind and breadcrumb must render through the real palette")
+    Check(rows[1]:IsShown() and rows[2]:IsShown() and not rows[3]:IsShown(), "only available results may show")
+    Check(controller:MoveSelection(-1) and controller.selectedIndex == 2, "Up must wrap to the last result")
+    Check(controller:MoveSelection(1) and controller.selectedIndex == 1, "Down must wrap to the first result")
+    rows[2]._scripts.OnEnter(rows[2])
+    Check(controller.selectedIndex == 2 and rows[2]._msuf2PaletteHovered, "hover must select its own row")
+    rows[2]._scripts.OnLeave(rows[2])
+    Check(rows[2]._msuf2PaletteHovered == nil, "leave must clear hover state")
+    Check(controller:OpenSelected("raid") and not controller:IsShown() and #opened == 0,
+        "noOpen records must consume Enter without routing")
+    Check(clickOff._event == nil and #controller.visibleResults == 0 and controller.selectedIndex == 1,
+        "hide must clear results, selection and outside-click subscription")
+    -- The bridge may be replaced after both controller and popup were created.
+    P.SearchBridge = {
+        CancelSearchBackgroundIndex = function() canceled = canceled + 1 end,
+        OpenSearchTarget = function(...) opened[#opened + 1] = { ... } end,
+        BumpSearchInputSerial = function() bumps = bumps + 1 end,
+        RunSearchInputQuery = function(...) runs[#runs + 1] = { ... } end,
+    }
+    controller:Refresh("raid", false)
+    rows[1]._scripts.OnClick(rows[1])
+    local target = opened[1]
+    Check(target and target[1] == "group" and target[2] == "raid" and target[3] == "width"
+        and target[4] == "raid.width" and target[5] == "group" and target[6] == "width",
+        "retained row callbacks must use the original input and the current bridge with exact routing fields")
+    Check(replacementBox._focused == false, "OpenResult must still clear the current controller field's focus")
+    controller:Refresh("raid", false)
+    box._over = true
+    clickOff._scripts.OnEvent(clickOff)
+    Check(controller:IsShown(), "clicks over the original edit box must keep the popup alive")
+    box._over, frame._over = false, true
+    clickOff._scripts.OnEvent(clickOff)
+    Check(controller:IsShown(), "clicks inside the popup must remain alive until mouse-up")
+    frame._over = false
+    clickOff._scripts.OnEvent(clickOff)
+    Check(not controller:IsShown(), "outside clicks must close the popup")
+    controller:Refresh("raid", false)
+    controller.moreResults._scripts.OnClick(controller.moreResults)
+    Check(bumps == 1 and #runs == 1 and runs[1][1] == "raid" and runs[1][2] == true,
+        "More must use the original input and current bridge to open the full results page")
+    P.searchResultsQuery = "other"
+    controller:Refresh("raid", true)
+    Check(#controller.visibleResults == 0 and controller.status:GetText() == "Searching settings..."
+        and controller.status:IsShown() and not controller.moreResults:IsShown(), "pending queries must hide stale results")
+    controller:Refresh("raid", false)
+    Check(controller.status:GetText() == "No exact setting found." and controller.moreResults:IsShown(),
+        "completed empty queries must show their empty status and More")
+    locked = true
+    Check(not controller:Refresh("raid", false) and not controller:IsShown(), "combat must refuse the palette")
+    locked = false
+    Check(not controller:Refresh("r", false), "short queries must hide the palette")
+    P.frame = Fake("window")
+    P.frame:Hide()
+    Check(not controller:Refresh("raid", false), "a closed menu must refuse the palette")
+    P.frame:Show()
+    P.searchResultsQuery = "raid"
+    local hideNav = P.HideNavSearchPalette
+    local second = P.CreateNavSearchPalette(Fake("second owner"), Fake("editbox", "raid"), true)
+    Check(second:Refresh("raid", false) and second.frame._parent == P.frame,
+        "a standalone popup must prefer the current menu window when present")
+    Check(P.HideNavSearchPalette == hideNav and second.frame ~= frame and second.rows[1] ~= rows[1],
+        "controllers must keep separate frames and rows without replacing the navigation hook")
+    controller:Refresh("raid", false)
+    rows[2]._scripts.OnEnter(rows[2])
+    Check(controller.selectedIndex == 2 and second.selectedIndex == 1, "retained callbacks must not cross controller owners")
+    local fontCount, buttonCount = #fonts, #buttons
+    for _ = 1, 20 do controller:Hide(); controller:Refresh("raid", false) end
+    Check(controller.frame == frame and controller.rows == rows and #fonts == fontCount and #buttons == buttonCount,
+        "warm reopen must reuse the existing popup, rows, fonts and footer")
+    Check(canceled > 0, "hide must cancel background indexing through the late bridge")
+    for name, fn in pairs(previous) do methods[name] = fn or nil end
+end
 
 ---------------------------------------------------------------------------
 -- 6. Time-of-day greeting
