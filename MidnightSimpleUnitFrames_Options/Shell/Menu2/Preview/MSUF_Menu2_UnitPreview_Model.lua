@@ -16,8 +16,6 @@ local function TR(v)
 end
 local floor, max, min = math.floor, math.max, math.min
 local format = string.format
-local PreviewAbbreviateNumbers = _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
-local PreviewFullNumbers = _G.BreakUpLargeNumbers
 --- Mirrors the live abbreviation style so the preview shows what the frames
 --- will actually render (see Runtime/MSUF_NumberFormat.lua).
 local PreviewNumOpts = nil
@@ -176,11 +174,11 @@ local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = 
     arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local liveUnitDataCache = {}
 local function LiveNumber(value)
-    if value == nil or IsSecretValue(value) == true then return nil end
+    if IsSecretValue(value) == true or value == nil then return nil end
     return tonumber(value)
 end
 local function LivePlain(value)
-    if value == nil or IsSecretValue(value) == true then return nil end
+    if IsSecretValue(value) == true or value == nil then return nil end
     return value
 end
 --- Live snapshot of the unit behind a preview key so the preview mirrors the
@@ -226,6 +224,7 @@ local function LiveUnitData(key, playerManaSourceActive)
         or (classification == nil and mock.elite == true)
     local dead = _G.UnitIsDeadOrGhost and _G.UnitIsDeadOrGhost(unit)
     if IsSecretValue(dead) == true then dead = false end
+    d.dead = dead == true
     local reaction = _G.UnitReaction and LiveNumber(_G.UnitReaction(unit, "player"))
     if d.isPlayer or dead ~= true then
         if reaction and reaction >= 5 then
@@ -242,36 +241,26 @@ local function LiveUnitData(key, playerManaSourceActive)
     end
     local hpCur = _G.UnitHealth and LiveNumber(_G.UnitHealth(unit))
     local hpMax = _G.UnitHealthMax and LiveNumber(_G.UnitHealthMax(unit))
-    if hpCur and hpMax and hpMax > 0 then
-        if hpCur < 0 then hpCur = 0 elseif hpCur > hpMax then hpCur = hpMax end
-        d.hpCur, d.hpMax = hpCur, hpMax
-        d.hp = hpCur / hpMax
-    else
-        d.hpCur, d.hpMax = nil, nil
-        d.hp = mock.hp or 0.72
-    end
+    d.hpMax = hpMax and hpMax > 0 and hpMax or nil
+    d.hpCur = hpCur and max(0, min(d.hpMax or MSUF.UF.UnitScene.HEALTH_MAX, hpCur)) or nil
+    d.hp = d.hpCur and d.hpMax and d.hpCur / d.hpMax or mock.hp or 0.72
     local powerType = playerManaSourceActive == true
         and ((_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0) or nil
     local powerToken
     if powerType then
         powerToken = "MANA"
     elseif _G.UnitPowerType then
-        local _, token = _G.UnitPowerType(unit)
-        powerToken = LivePlain(token)
+        local id, token = _G.UnitPowerType(unit)
+        powerType, powerToken = LiveNumber(id), LivePlain(token)
     end
+    d.powerType = powerType
     d.powerToken = powerToken or mock.powerToken or "MANA"
     local powerCur = _G.UnitPower and LiveNumber(_G.UnitPower(unit, powerType))
     local powerMax = _G.UnitPowerMax and LiveNumber(_G.UnitPowerMax(unit, powerType))
-    if powerCur and powerMax and powerMax > 0 then
-        if powerCur < 0 then powerCur = 0 elseif powerCur > powerMax then powerCur = powerMax end
-        d.powerCur, d.powerMax = powerCur, powerMax
-        d.power = powerCur / powerMax
-    else
-        d.powerCur, d.powerMax = nil, nil
-        d.power = mock.power or 0.5
-    end
-    -- Absorb is exact only while one exists; a zero would blank the absorb
-    -- element preview, so the stylized sample backs the zero case.
+    d.powerMax = powerMax and powerMax > 0 and powerMax or nil
+    d.powerCur = powerCur and max(0, min(d.powerMax or 100, powerCur)) or nil
+    d.power = d.powerCur and d.powerMax and d.powerCur / d.powerMax or mock.power or 0.5
+    -- Keep the absorb element inspectable when the live unit has no shield.
     local absorb = _G.UnitGetTotalAbsorbs and LiveNumber(_G.UnitGetTotalAbsorbs(unit))
     d.absorb = (absorb and absorb > 0) and absorb or nil
     -- Type classification mirrors the live NPC tint decisions closely enough
@@ -286,6 +275,10 @@ local function LiveUnitData(key, playerManaSourceActive)
         d.npcKind = "npcRegular"
     else
         d.npcKind = mock.npcKind
+    end
+    local status = MSUF.UFStatusRuntime
+    if status and status.LevelDifficultyTier then
+        d.levelTier = status.LevelDifficultyTier(unit, d.level == "??" and -1 or tonumber(d.level))
     end
     d.portraitTexture = mock.portraitTexture
     return d
@@ -421,22 +414,6 @@ end
 --- per-frame alias and clamp; the inline target of target uses its own block
 --- (text.inlineToT). The cut counts characters, never bytes, so a Cyrillic or
 --- CJK name is never split inside a character.
-local function ShortenPreviewName(name, resolved, layoutConf)
-    name = tostring(name or "")
-    if name == "" or type(resolved) ~= "table" or resolved.nameShorten ~= true then return name end
-    local maxChars = tonumber(resolved.nameShortenMax) or 6
-    local _, chars = name:gsub("[^\128-\191]", "")
-    if chars <= maxChars then return name end
-    local showDots = resolved.nameShortenDots == true
-    local nameAnchor = tostring(layoutConf and layoutConf.nameTextAnchor or "TOPLEFT"):upper()
-    if nameAnchor ~= "LEFT" and nameAnchor ~= "TOPLEFT" and nameAnchor ~= "FRAMELEFT" then showDots = false end
-    if resolved.nameShortenSide == "RIGHT" then
-        local text = TruncateUtf8Chars(name, maxChars)
-        return showDots and (text .. "...") or text
-    end
-    local text = name:sub(#TruncateUtf8Chars(name, chars - maxChars) + 1)
-    return showDots and ("..." .. text) or text
-end
 local function TextScopeSet(key, field, value)
     local u = UnitDB(key)
     SeedTextFromGeneral(u)
@@ -631,155 +608,11 @@ local function PreviewNPCKind(key, data, cache, forText)
     end
     return data.reactionKind or "enemy"
 end
-local function NPCColor(kind)
-    if type(_G.MSUF_UFCore_GetNPCReactionColorFast) == "function" then
-        local r, g, b = _G.MSUF_UFCore_GetNPCReactionColorFast(kind)
-        if r then return r, g, b end
-    end
-    local api = MSUF and MSUF._colorsAPI
-    if api and type(api.GetNPCColor) == "function" then
-        local r, g, b = api.GetNPCColor(kind)
-        if r then return r, g, b end
-    end
-    if kind == "friendly" then return 0, 1, 0 end
-    if kind == "neutral" then return 1, 1, 0 end
-    if kind == "dead" then return 0.4, 0.4, 0.4 end
-    if kind == "npcBoss" then return 0.74, 0.11, 0 end
-    if kind == "npcMiniboss" then return 0.56, 0, 0.74 end
-    if kind == "npcCaster" then return 0, 0.45, 0.74 end
-    if kind == "npcMelee" then return 0.99, 0.99, 0.99 end
-    if kind == "npcRegular" then return 0.70, 0.56, 0.33 end
-    return 0.85, 0.10, 0.10
-end
 -- One stops table, refilled on every call: the shared gradient evaluator
 -- caches its colour curve on the table and checks it against these values, so
 -- a repaint or an animation tick builds neither a table nor a curve.
-local previewGradientStops = {}
-local function PreviewGradientHealth(cache, g)
-    local t = previewGradientStops
-    t.gradientLowR = (cache and cache.healthGradientLowR) or g.healthGradientLowR or 1
-    t.gradientLowG = (cache and cache.healthGradientLowG) or g.healthGradientLowG or 0
-    t.gradientLowB = (cache and cache.healthGradientLowB) or g.healthGradientLowB or 0
-    t.gradientMidR = (cache and cache.healthGradientMidR) or g.healthGradientMidR or 1
-    t.gradientMidG = (cache and cache.healthGradientMidG) or g.healthGradientMidG or 1
-    t.gradientMidB = (cache and cache.healthGradientMidB) or g.healthGradientMidB or 0
-    t.gradientHighR = (cache and cache.healthGradientHighR) or g.healthGradientHighR or 0
-    t.gradientHighG = (cache and cache.healthGradientHighG) or g.healthGradientHighG or 1
-    t.gradientHighB = (cache and cache.healthGradientHighB) or g.healthGradientHighB or 0
-    return t
-end
 local function GradientPreviewColor(pct, health)
-    pct = Clamp01(pct, 0.75)
-    local common = MSUF and MSUF.UFBarTextCommon
-    if common and type(common.PreviewHealthGradientColor) == "function" then
-        local r, g, b = common.PreviewHealthGradientColor(health, pct)
-        if r ~= nil then return r, g, b end
-    end
-    health = health or {}
-    local lr, lg, lb = health.gradientLowR or 1, health.gradientLowG or 0, health.gradientLowB or 0
-    local mr, mg, mb = health.gradientMidR or 1, health.gradientMidG or 1, health.gradientMidB or 0
-    local hr, hg, hb = health.gradientHighR or 0, health.gradientHighG or 1, health.gradientHighB or 0
-    if pct < 0.5 then
-        local t = pct * 2
-        return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t
-    end
-    local t = (pct - 0.5) * 2
-    return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t
-end
-local PREVIEW_HEALTH_MODE_ALIASES = {
-    CLASS = "class", class = "class",
-    GRADIENT = "gradient", gradient = "gradient",
-    DARK = "dark", dark = "dark",
-    UNIFIED = "unified", unified = "unified",
-}
-local function NormalizePreviewHealthMode(value)
-    if type(value) ~= "string" then return nil end
-    return PREVIEW_HEALTH_MODE_ALIASES[value] or PREVIEW_HEALTH_MODE_ALIASES[value:lower()]
-end
-local function PreviewGlobalHealthMode(g, cache)
-    local mode = (cache and cache.barMode) or g.barMode or "dark"
-    mode = NormalizePreviewHealthMode(mode) or ((g.useClassColors and "class") or "dark")
-    if mode == "gradient" then
-        local enabled = cache and cache.healthGradientEnabled
-        if enabled == nil then enabled = g.enableHealthGradient ~= false end
-        if not enabled then mode = "class" end
-    end
-    return mode
-end
-local function PreviewHealthMode(key, g, cache)
-    local db = M.EnsureDB()
-    local conf = db and db[CanonKey(key)]
-    return NormalizePreviewHealthMode(conf and conf.healthColorMode) or PreviewGlobalHealthMode(g, cache)
-end
-local function HealthColor(key, data)
-    local g = M.EnsureDB().general or {}
-    local cache = SettingsCache()
-    local mode = PreviewHealthMode(key, g, cache)
-    data = data or UNIT_DATA.player
-    if mode == "class" then
-        if data.isPet and cache and cache.petFrameUsePlayerClassColor then
-            return cache.petPlayerClassR or 0.12, cache.petPlayerClassG or 0.62, cache.petPlayerClassB or 0.95
-        end
-        if data.isPet and cache and cache.petFrameColorEnabled then return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0 end
-        if data.isPlayer then return ClassColor(data.class) end
-        local npcClassColor = cache and cache.npcClassColorBar
-        if npcClassColor == nil then npcClassColor = g.npcClassColorBar == true end
-        if npcClassColor and not data.isPet and key ~= "boss" then return ClassColor(data.class) end
-        return NPCColor(PreviewNPCKind(key, data, cache))
-    end
-    if mode == "gradient" then return GradientPreviewColor(data.hp, PreviewGradientHealth(cache, g)) end
-    if mode == "unified" then
-        return (cache and cache.unifiedBarR) or g.unifiedBarR or 0.10,
-               (cache and cache.unifiedBarG) or g.unifiedBarG or 0.60,
-               (cache and cache.unifiedBarB) or g.unifiedBarB or 0.90
-    end
-    return PreviewHelpers.DarkBarColor(cache)
-end
-local function DarkMatchHPColor(r, g, b, cache)
-    return MSUF.UF.Config.DarkTint((cache and cache.generalRef) or M.EnsureDB().general, r, g, b)
-end
-local function PerUnitBackgroundAlpha(conf, key, fallbackKey, resolvedAlpha, resolver)
-    local alpha = conf and conf[key]
-    if alpha == nil and fallbackKey then alpha = conf and conf[fallbackKey] end
-    if type(alpha) ~= "number" then return Clamp01(resolvedAlpha, 0.9) end
-    local tintAlpha = 1
-    if type(resolver) == "function" then
-        local _, _, _, value = resolver()
-        tintAlpha = Clamp01(value, 1)
-    end
-    return Clamp01(alpha, 1) * tintAlpha
-end
-local function HealthBackgroundColor(hr, hg, hb, data, conf)
-    local cache = SettingsCache()
-    local gen = (cache and cache.generalRef) or M.EnsureDB().general
-    local r, g, b, a
-    if cache then
-        r, g, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
-    elseif type(_G.MSUF_GetBarBackgroundTintRGBA) == "function" then
-        r, g, b, a = _G.MSUF_GetBarBackgroundTintRGBA()
-    end
-    r, g, b, a = Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), Clamp01(a, 0.9)
-    a = PerUnitBackgroundAlpha(conf, "hpBgAlpha", nil, a, _G.MSUF_GetBarBackgroundTintRGBA)
-    if (cache and cache.barBgClassColor) or ((not cache) and gen and gen.barBgClassColor) then
-        local classToken = data and data.isPlayer and data.class or UNIT_DATA.player.class
-        r, g, b = ClassColor(classToken)
-    elseif (cache and cache.barBgMatchHPColor) or ((not cache) and gen and gen.barBgMatchHPColor) then
-        r, g, b = DarkMatchHPColor(hr, hg, hb, cache)
-    end
-    return r, g, b, a
-end
-local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb, conf)
-    local cache = SettingsCache()
-    local r, g, b, a
-    if cache then
-        r, g, b, a = cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA
-    elseif type(_G.MSUF_GetPowerBarBackgroundTintRGBA) == "function" then
-        r, g, b, a = _G.MSUF_GetPowerBarBackgroundTintRGBA()
-    end
-    r, g, b, a = Clamp01(r, pr * 0.16), Clamp01(g, pg * 0.16), Clamp01(b, pb * 0.16), Clamp01(a, 0.9)
-    a = PerUnitBackgroundAlpha(conf, "powerBarBgAlpha", "hpBgAlpha", a, _G.MSUF_GetPowerBarBackgroundTintRGBA)
-    if cache and cache.powerBarBgMatchHPColor then r, g, b = DarkMatchHPColor(hr, hg, hb, cache) end
-    return r, g, b, a
+    return MSUF.UFBarTextCommon.PreviewHealthGradientColor(health, Clamp01(pct, 0.75))
 end
 local function PowerColor(token)
     if type(_G.MSUF_GetResolvedPowerColor) == "function" then
@@ -790,25 +623,6 @@ local function PowerColor(token)
     if token == "RAGE" then return 0.82, 0.12, 0.08 end
     if token == "FOCUS" then return 0.95, 0.45, 0.10 end
     return 0.10, 0.35, 0.95
-end
-local function ClassPortraitVisual(class, style)
-    local PM = MSUF and MSUF.PortraitMedia
-    if PM and PM.ResolveClassPortrait then return PM.ResolveClassPortrait(class, NormalizePortraitClassStyle(style)) end
-    local coords = class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]
-    if coords then
-        return {
-            texture = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES",
-            left = coords[1] or 0,
-            right = coords[2] or 1,
-            top = coords[3] or 0,
-            bottom = coords[4] or 1,
-        }
-    end
-    return { texture = "Interface\\ICONS\\INV_Misc_QuestionMark", left = 0, right = 1, top = 0, bottom = 1 }
-end
-local function UnitPreviewPortraitTexture(key, data)
-    data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
-    return data.portraitTexture or "Interface\\ICONS\\INV_Misc_QuestionMark"
 end
 local function FontColor()
     local fn = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
@@ -823,120 +637,8 @@ local function NormalizeToTInlineColorMode(value)
     if value == "TOT_NAME" or value == "TARGET_NAME" or value == "NPC" or value == "DEFAULT" then return value end
     return "AUTO"
 end
-local function PreviewNameColorFlags(key)
-    local db = M.EnsureDB()
-    local gen = db.general or {}
-    local wantClass = gen.nameClassColor
-    local wantNpc = gen.npcNameRed
-    local wantNpcClass = gen.nameNpcClassColor
-    local conf = db[key]
-    if conf and conf.fontOverride then
-        if conf.nameClassColor ~= nil then wantClass = conf.nameClassColor end
-        if conf.npcNameRed ~= nil then wantNpc = conf.npcNameRed end
-        if conf.nameNpcClassColor ~= nil then wantNpcClass = conf.nameNpcClassColor end
-    end
-    return wantClass == true, wantNpc == true, wantNpcClass == true
-end
-local function PreviewNameColor(key, data, fallbackR, fallbackG, fallbackB)
-    data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
-    local wantClass, wantNpc, wantNpcClass = PreviewNameColorFlags(key)
-    if data.isPlayer then
-        if wantClass then return ClassColor(data.class) end
-    else
-        if wantNpcClass and data.class then return ClassColor(data.class) end
-        if wantNpc or wantNpcClass then return NPCColor(PreviewNPCKind(key, data, SettingsCache(), true)) end
-    end
-    return fallbackR or 1, fallbackG or 1, fallbackB or 1
-end
-local function PreviewToTInlineColor(mode, totData, targetR, targetG, targetB, fallbackR, fallbackG, fallbackB)
-    mode = NormalizeToTInlineColorMode(mode)
-    if mode == "DEFAULT" then
-        return fallbackR, fallbackG, fallbackB
-    elseif mode == "TARGET_NAME" then
-        return targetR, targetG, targetB
-    elseif mode == "TOT_NAME" then
-        return PreviewNameColor("targettarget", totData, fallbackR, fallbackG, fallbackB)
-    elseif mode == "NPC" then
-        local _, wantNpc = PreviewNameColorFlags("targettarget")
-        if wantNpc and totData and not totData.isPlayer then return NPCColor(PreviewNPCKind("targettarget", totData, SettingsCache(), true)) end
-        return fallbackR, fallbackG, fallbackB
-    end
-    if totData and totData.isPlayer then
-        local wantClass = PreviewNameColorFlags("target")
-        if wantClass then return ClassColor(totData.class) end
-        return 1, 1, 1
-    end
-    local _, wantNpc, wantNpcClass = PreviewNameColorFlags("target")
-    if wantNpcClass and totData and totData.class then return ClassColor(totData.class) end
-    if (wantNpc or wantNpcClass) and totData then return NPCColor(PreviewNPCKind("target", totData, SettingsCache(), true)) end
-    return NPCColor(totData and totData.reactionKind or "enemy")
-end
 local function SetTex(region, tex)
     if region and region.SetTexture then region:SetTexture(tex or TEX_W8) end
-end
-local function NormalizePreviewAnchorMode(value, fallback)
-    local mode = tonumber(value) or fallback or 3
-    if mode < 1 or mode > 5 then mode = fallback or 3 end
-    return mode
-end
-local function UnitPreviewBarOverrideEnabled(conf)
-    return conf and (conf.hlOverride == true or conf.hpPowerTextOverride == true)
-end
-local function PreviewHealPredictionEnabled(conf, g)
-    if g == nil then g, conf = conf, nil end
-    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
-    if g then
-        if g.healPredEnabled ~= nil then return g.healPredEnabled == true end
-        if g.showSelfHealPrediction ~= nil then return g.showSelfHealPrediction == true end
-        if g.enableHealPrediction ~= nil then return g.enableHealPrediction ~= false end
-    end
-    return false
-end
-local function PreviewResolveHealPredAnchorMode(conf, g)
-    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredAnchorMode ~= nil then return NormalizePreviewAnchorMode(conf.healPredAnchorMode, 3) end
-    return NormalizePreviewAnchorMode(g and g.healPredAnchorMode, 3)
-end
-local function PreviewResolveAbsorbAnchorMode(conf, g)
-    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbAnchorMode ~= nil then return NormalizePreviewAnchorMode(conf.absorbAnchorMode, 2) end
-    return NormalizePreviewAnchorMode(g and g.absorbAnchorMode, 2)
-end
-local function PreviewAbsorbBarEnabled(conf, g, key)
-    if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key, "absorb") then return true end
-    local enabled
-    if UnitPreviewBarOverrideEnabled(conf) and conf.enableAbsorbBar ~= nil then enabled = conf.enableAbsorbBar end
-    if enabled == nil and g and g.enableAbsorbBar ~= nil then enabled = g.enableAbsorbBar end
-    if enabled ~= nil then return enabled ~= false end
-    local mode
-    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbTextMode ~= nil then mode = tonumber(conf.absorbTextMode) end
-    if mode == nil and g then mode = tonumber(g.absorbTextMode) end
-    if mode then return mode == 2 or mode == 3 end
-    return not (g and g.enableAbsorbBar == false)
-end
-local function PreviewOverlayWidth(areaW, frac)
-    return max(1, floor((tonumber(areaW) or 1) * (tonumber(frac) or 0.1) + 0.5))
-end
-local function LayoutUnitPreviewOverlay(tex, hpBG, hpFill, mode, frac, hpReverse, followAnchor, areaW)
-    if not (tex and hpBG and hpFill) then return end
-    mode = NormalizePreviewAnchorMode(mode, 3)
-    tex:ClearAllPoints()
-    tex:SetWidth(PreviewOverlayWidth(areaW, frac))
-    if mode == 3 or mode == 4 then
-        local anchor = followAnchor or hpFill
-        if hpReverse then
-            tex:SetPoint("TOPRIGHT", anchor, "TOPLEFT", 0, 0)
-            tex:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMLEFT", 0, 0)
-        else
-            tex:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 0, 0)
-            tex:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)
-        end
-    elseif mode == 1 or (mode == 5 and hpReverse) then
-        tex:SetPoint("TOPLEFT", hpBG, "TOPLEFT", 0, 0)
-        tex:SetPoint("BOTTOMLEFT", hpBG, "BOTTOMLEFT", 0, 0)
-    else
-        tex:SetPoint("TOPRIGHT", hpBG, "TOPRIGHT", 0, 0)
-        tex:SetPoint("BOTTOMRIGHT", hpBG, "BOTTOMRIGHT", 0, 0)
-    end
-    tex:Show()
 end
 local function MakeFS(parent, layer, size)
     local fs = PixelLayoutRegion(parent:CreateFontString(nil, layer or "OVERLAY"))
@@ -989,60 +691,6 @@ local function ResolveNameOffsetDelta(anchor, dx, dy)
     if anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "FRAMERIGHT" then dx = -dx end
     return dx, dy
 end
-local function NumText(v, shortNumbers)
-    if shortNumbers == false then
-        if PreviewFullNumbers then return PreviewFullNumbers(v) end
-        return tostring(v)
-    end
-    if PreviewAbbreviateNumbers then return PreviewAbbreviateNumbers(v, PreviewNumOpts) end
-    if v >= 1000000 then return format("%.1fm", v / 1000000) end
-    if v >= 1000 then return format("%.1fk", v / 1000) end
-    return tostring(v)
-end
-local function JoinSep(sep)
-    sep = tostring(sep or "")
-    if sep == "" then return " " end
-    return " " .. sep .. " "
-end
-local ABSORB_MODE_BASE = {
-    CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
-    CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
-    CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
-    PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX",
-    PERCENTCURMAXABSORB = "PERCENTCURMAX", MAXCURABSORB = "MAXCUR",
-    PERCENTMAXCURABSORB = "PERCENTMAXCUR",
-}
-local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
-local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers, absorbIcon, absorbValue)
-    if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
-    if mode == "NONE" then return "" end
-    local absorbBase = ABSORB_MODE_BASE[mode]
-    local c = NumText(cur, shortNumbers)
-    local m = NumText(maxVal, shortNumbers)
-    local a = NumText(tonumber(absorbValue) or 125000, shortNumbers)
-    local absorbText = (absorbIcon and (ABSORB_ICON_MARKUP .. " ") or "") .. a
-    local p = tostring(pct)
-    if hidePercentSymbol ~= true then p = p .. "%" end
-    local s = JoinSep(sep)
-    if mode == "ABSORB" then return absorbText end
-    mode = absorbBase or mode
-    local value
-    if mode == "PERCENT" then value = p
-    elseif mode == "CURRENT" or mode == "FULLVALUE" then value = c
-    elseif mode == "MAX" then value = m
-    elseif mode == "DEFICIT" then value = "-" .. NumText(maxVal - cur, shortNumbers)
-    elseif mode == "CURMAX" then value = c .. s .. m
-    elseif mode == "MAXCUR" then value = m .. s .. c
-    elseif mode == "CURPERCENT" then value = c .. s .. p
-    elseif mode == "PERCENTCUR" then value = p .. s .. c
-    elseif mode == "CURMAXPERCENT" then value = c .. s .. m .. s .. p
-    elseif mode == "PERCENTMAXCUR" then value = p .. s .. m .. s .. c
-    elseif mode == "MAXPERCENT" then value = m .. s .. p
-    elseif mode == "PERCENTMAX" then value = p .. s .. m
-    elseif mode == "PERCENTCURMAX" then value = p .. s .. c .. s .. m
-    else value = c .. s .. p end
-    return absorbBase and (value .. " + " .. absorbText) or value
-end
 local UnitPreviewText = {}
 function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
@@ -1068,7 +716,7 @@ M.Assign(Model, {
     TOTINLINE_CUSTOM_SEPARATOR = TOTINLINE_CUSTOM_SEPARATOR,
     TOTINLINE_CUSTOM_SEPARATOR_MAX = TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars = TruncateUtf8Chars,
     CleanToTInlineCustomSeparator = CleanToTInlineCustomSeparator, ToTInlineSeparator = ToTInlineSeparator,
-    ShortenPreviewName = ShortenPreviewName, TextScopeSet = TextScopeSet, ForceTextUnit = ForceTextUnit,
+    TextScopeSet = TextScopeSet, ForceTextUnit = ForceTextUnit,
     ApplyPanelUnit = ApplyPanelUnit, RefreshAllControls = RefreshAllControls, Label = Label,
     PlaceTopLeft = PlaceTopLeft, SetOptionWidth = SetOptionWidth, AddOptionDivider = AddOptionDivider,
     SetWidgetEnabled = SetWidgetEnabled,
@@ -1077,24 +725,14 @@ M.Assign(Model, {
 M.Assign(Model, {
     PortraitStyleGet = PortraitStyleGet, PortraitStyleSet = PortraitStyleSet, ApplyPortrait = ApplyPortrait,
     NormalizeStatusPreviewId = NormalizeStatusPreviewId, ClassColor = ClassColor, Clamp01 = Clamp01,
-    SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind, NPCColor = NPCColor,
-    GradientPreviewColor = GradientPreviewColor, HealthColor = HealthColor, DarkMatchHPColor = DarkMatchHPColor,
-    HealthBackgroundColor = HealthBackgroundColor, PowerBackgroundColor = PowerBackgroundColor,
-    PowerColor = PowerColor, ClassPortraitVisual = ClassPortraitVisual,
-    UnitPreviewPortraitTexture = UnitPreviewPortraitTexture, FontColor = FontColor,
-    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode, PreviewNameColorFlags = PreviewNameColorFlags,
-    PreviewNameColor = PreviewNameColor, PreviewToTInlineColor = PreviewToTInlineColor, SetTex = SetTex,
+    SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind, GradientPreviewColor = GradientPreviewColor, PowerColor = PowerColor, FontColor = FontColor,
+    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode, SetTex = SetTex,
 })
 M.Assign(Model, {
-    NormalizePreviewAnchorMode = NormalizePreviewAnchorMode,
-    UnitPreviewBarOverrideEnabled = UnitPreviewBarOverrideEnabled,
-    PreviewHealPredictionEnabled = PreviewHealPredictionEnabled,
-    PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode,
-    PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode,
-    PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled, PreviewOverlayWidth = PreviewOverlayWidth,
-    LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay, MakeFS = MakeFS, ReadPowerBarEnabled = ReadPowerBarEnabled,
+    MakeFS = MakeFS, ReadPowerBarEnabled = ReadPowerBarEnabled,
     CanDetachPowerBarKey = CanDetachPowerBarKey, ReadPowerBarHeight = ReadPowerBarHeight,
-    ResolveNameAnchor = ResolveNameAnchor, ResolveNameOffsetDelta = ResolveNameOffsetDelta, NumText = NumText,
-    JoinSep = JoinSep, FormatMode = FormatMode, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
+    ResolveNameAnchor = ResolveNameAnchor, ResolveNameOffsetDelta = ResolveNameOffsetDelta, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
     LiveRaidSubgroup = LiveRaidSubgroup,
 })
+
+Model.POWER_TYPES = { MANA = 0, RAGE = 1, FOCUS = 2, ENERGY = 3, RUNIC_POWER = 6 }

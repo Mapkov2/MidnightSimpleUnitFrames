@@ -1,23 +1,13 @@
 -- mainline_unit_preview_classic_hunks_smoke.lua <repoRoot> <flavor>
 --
--- Every client loads the Retail-named Preview/MSUF_Menu2_UnitPreview_Render.lua.
--- Its Classic override hunks are gated on client facts read once at load
--- (PREVIEW_CLASSIC, LEGACY_BLIZZARD_PORTRAIT): on Vanilla, TBC and Mists the
--- Blizzard portrait shape gets a gold fallback ring where the stock atlas is
--- missing; Era also skips the modern atlases. Midnight and WoW Forever keep
--- Retail's portrait preview exactly. Texture layers stamp after the portrait on
--- every client (the Retail order stamped them inside Stage.RenderHealth, before
--- power and portrait had this refresh's geometry). The Classic side is pinned by
--- classic_unit_preview_parity_smoke and classic_unit_preview_texture_layer_order_smoke.
+-- Every client uses the engine UnitScene for the Options unit body. Classic
+-- portrait differences now come from the live portrait rules. Texture layers
+-- must sample only after the native portrait has received this refresh's geometry.
+-- The Classic side is pinned by classic_unit_preview_parity_smoke and
+-- classic_unit_preview_texture_layer_order_smoke.
 --
--- This smoke boots the flavor's whole shipped core and Options graph through
--- tools/tests/client_world.lua, builds the real unit preview and drives its real
--- Refresh from MSUF_DB:
---   * the stamp order: RenderTextureLayerPreview runs once per refresh, from
---     Preview.Refresh after Stage.RenderPortrait, never from Stage.RenderHealth
---     (a call hook records who calls it);
---   * the Blizzard portrait shape: the standalone contour ring and atlas mask while the
---     atlases exist, and no gold fallback ring when they do not.
+-- Boots the flavor's shipped core and Options graph, builds the actual preview,
+-- and checks the native texture-layer paint order and Blizzard portrait contours.
 --
 -- Plain Lua 5.1 with the repo root and a Mainline-family flavor (Mainline or
 -- Forever) as arguments.
@@ -80,20 +70,8 @@ local refreshInfo = debug.getinfo(Preview.Refresh, "S")
 Check(refreshInfo.source:gsub("\\", "/"):find(RENDER, 1, true) ~= nil,
     "Preview.Refresh does not come from the unit preview render: " .. refreshInfo.source)
 
--- Where the render defines the functions the stamp order is read from.
 local source = World.Read(root .. "/" .. RENDER)
-local function DefinedAt(pattern, label)
-    local at = source:find(pattern)
-    Check(at ~= nil, "harness: the unit preview render no longer defines " .. label)
-    local line = 1
-    for _ in source:sub(1, at):gmatch("\n") do line = line + 1 end
-    return line
-end
-local STAMP_LINE = DefinedAt("\nlocal function RenderTextureLayerPreview%(", "RenderTextureLayerPreview")
-local HEALTH_LINE = DefinedAt("\nfunction Stage%.RenderHealth%(", "Stage.RenderHealth")
-local REFRESH_LINE = DefinedAt("\nfunction Preview%.Refresh%(", "Preview.Refresh")
-Check(refreshInfo.linedefined == REFRESH_LINE, "harness: Preview.Refresh is not the function defined at line " .. REFRESH_LINE)
-
+Check(not source:find("local function RenderTextureLayerPreview", 1, true), "Options kept a duplicate texture painter")
 local parent = env.CreateFrame("Frame", nil, env.UIParent)
 parent:SetSize(900, 400)
 local panel = env.CreateFrame("Frame", nil, env.UIParent)
@@ -106,7 +84,7 @@ box:Show()
 -- has; the Fit zoom is computed from it.
 box.canvas:SetSize(400, 200)
 local mock = box.mock
-Check(type(mock.texLayers) == "table" and mock.texLayers[1] ~= nil, "the preview has no texture layer holders")
+Check(mock.texLayers == nil, "texture holders must be lazy before the first scene paint")
 
 local player = env.MSUF_DB.player
 local function Refresh(key)
@@ -127,19 +105,14 @@ player.texLayer2Enabled, player.texLayer2AnchorTarget, player.texLayer2Anchor = 
 Refresh("player")
 local callers = {}
 debug.sethook(function()
-    local called = debug.getinfo(2, "S")
-    if called and called.linedefined == STAMP_LINE and called.source:gsub("\\", "/"):find(RENDER, 1, true) then
-        local caller = debug.getinfo(3, "S")
-        callers[#callers + 1] = caller and caller.linedefined or -1
+    if debug.getinfo(2, "f").func == MSUF.TextureLayer.PaintSample then
+        callers[#callers + 1] = debug.getinfo(3, "f").func
+        Check(mock._body.targetPowerBar:IsShown() and mock._body.MSUFPortraitHolder:IsShown(), "texture stamp preceded body geometry")
     end
 end, "c")
 Refresh("player")
 debug.sethook()
-Check(#callers > 0, "the refresh never stamps the texture layers")
-Check(#callers == 1, "a refresh stamps the texture layers " .. #callers .. " times instead of once")
-Check(callers[1] == REFRESH_LINE, "the texture layers are stamped by the function at line " .. tostring(callers[1])
-    .. (callers[1] == HEALTH_LINE and " (Stage.RenderHealth, before power and portrait have this refresh's geometry)" or "")
-    .. " instead of Preview.Refresh after Stage.RenderPortrait")
+Check(#callers == 1 and callers[1] == box._unitScene.RefreshData, "the scene must stamp texture layers once after body layout")
 Check(Shown(mock.powerBG) and Shown(mock.portrait), "harness: the measured refresh shows no power bar or portrait")
 Check(Shown(mock.texLayers[1]), "the texture layer on Player Power is not previewed")
 for _, prefix in ipairs({ "texLayer", "texLayer2" }) do
@@ -151,16 +124,16 @@ player.portraitShape = "BLIZZARD"
 Refresh("player")
 local portrait = mock.portrait
 Check(Shown(portrait), "the Player portrait is not previewed")
-Check(not Shown(portrait._msufPreviewBlizzCorner), "the player bar-housing joint overlays the standalone ring")
-local ring, mask = portrait._msufPreviewBlizzRing, portrait._msufPreviewShapeMask
+Check(not Shown(portrait.blizzCorner), "the player bar-housing joint overlays the standalone ring")
+local ring, mask = portrait.blizzRing, portrait.mask
 Check(Shown(ring) and type(ring.texture) == "string" and ring.texture:find("msuf_portrait_ring_blizzard", 1, true), "the preview lost the standalone contour ring for the Blizzard shape")
 Check(mask and type(mask.texture) == "string" and mask.texture:find("portrait_blizzard_mask", 1, true), "the preview does not mask the Blizzard shape with the matching contour asset")
-Check(portrait._msufPreviewBlizzFallback == nil, "the preview builds the Classic gold fallback ring")
+Check(not Shown(portrait.artBorder), "the preview builds the Classic gold fallback ring")
 -- No atlas: the standalone contour stays available without a client atlas.
 atlasesPresent = false
 Refresh("player")
-Check(Shown(portrait._msufPreviewBlizzRing), "the standalone contour disappears without an atlas")
-Check(portrait._msufPreviewBlizzFallback == nil, "a missing atlas draws the Classic gold fallback ring")
+Check(Shown(portrait.blizzRing), "the standalone contour disappears without an atlas")
+Check(not Shown(portrait.artBorder), "a missing atlas draws the Classic gold fallback ring")
 atlasesPresent = true
 player.portraitMode, player.portraitShape, player.showPowerBar = nil, nil, nil
 

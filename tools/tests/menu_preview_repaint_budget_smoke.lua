@@ -276,9 +276,9 @@ do
     local result = Record("unit player styled repaint", Measure(function() Preview.Refresh(box, "MENU_PREVIEW_BUDGET") end, 20))
     Preview.statusPreviewMode = savedStatusMode
     Check(box.mock.detachedPower:IsShown(), "harness: the styled player preview shows no detached power bar")
-    Check(box.mock._msufPreviewFrameBorder and box.mock._msufPreviewFrameBorder._msufSmokeBackdrop
-        and box.mock._msufPreviewFrameBorder._msufSmokeBackdrop.edgeFile ~= nil,
-        "harness: the styled player preview draws no true-outline frame border")
+    local frame = box.mock._body
+    Check(frame.MSUFBorderOverlay and frame.MSUFBorderOverlay:IsShown() and frame.MSUFBorderTexturePieces,
+        "harness: the styled engine scene draws no live true-outline frame border")
     CheckRepaint("the styled unit player preview", result)
     bars.barOutlineTexture, player.powerBarDetached = savedOutline, savedDetached
     player.portraitShape, player.portraitBlizzardCorner, player.portraitMode = savedShape, savedCorner, savedMode
@@ -393,6 +393,14 @@ end
 -- a full refresh paints at the same clock; `refreshes` names the frames that
 -- may hand over to a full refresh, nil for none.
 local function AnimateUnit(key, label, refreshes)
+    if not MSUF.UF.UnitScene.Normalize(key) then
+        local unit = key == "boss" and "boss1" or key
+        Check(MSUF.Client.SupportsUnit(unit) ~= true, label .. ": a supported unit lost its scene")
+        local frames = #world.widgets.frames
+        Check(box._unitSceneRoot:Unit(key) == nil, label .. ": an unsupported unit acquired a fake scene")
+        Check(#world.widgets.frames == frames, label .. ": rejecting an unsupported unit created frames")
+        return 0
+    end
     selected = key
     Preview.Refresh(box, "MENU_PREVIEW_BUDGET")
     local onUpdate, action = StartAnimation(box, label)
@@ -435,25 +443,24 @@ local function CountWrites(region, method, label)
     end)
 end
 local function ResetWriteCounts() for label in pairs(writeCounts) do writeCounts[label] = nil end end
--- Each health value is written once per full repaint: RenderHealth writes the
--- fill, the heal prediction that follows it and the heal absorb width, and the
--- shared value painter skips them on a full refresh. A tick writes each once
--- and leaves the heal prediction anchored where the refresh put it.
+-- A full scene repaint writes health and native prediction values once. Its light clock path
+-- updates health and leaves unchanged prediction values and anchors alone.
 do
     selected = "player"
     Preview.Refresh(box, "MENU_PREVIEW_BUDGET")
     local scene, mock = box._msufPreviewScene, box.mock
-    Check(scene.healPredShown and scene.healPredMode == 3 and scene.healAbsorbShown,
+    Check(mock._body._msufPredictionHealMode == 3 and mock.healPred:IsShown() and mock.healAbsorb:IsShown(),
         "harness: the player preview shows no following heal prediction and heal absorb")
+    Check(math.abs(mock.healPred:GetValue() - 14) < 1e-8 and math.abs(mock.healAbsorb:GetValue() - 7) < 1e-8, "native prediction sample values differ")
     local watched = {
-        { mock.healthBar, "SetValue", "health fill" }, { mock.healPred, "SetWidth", "heal prediction width" },
-        { mock.healPred, "ClearAllPoints", "heal prediction anchor" }, { mock.healAbsorb, "SetWidth", "heal absorb width" },
+        { mock.healthBar, "SetValue", "health fill" }, { mock.healPred, "SetValue", "heal prediction value" },
+        { mock.healPred, "ClearAllPoints", "heal prediction anchor" }, { mock.healAbsorb, "SetValue", "heal absorb value" },
     }
     for _, w in ipairs(watched) do CountWrites(w[1], w[2], w[3]) end
     ResetWriteCounts()
     Preview.Refresh(box, "MENU_PREVIEW_BUDGET")
-    for _, label in ipairs({ "health fill", "heal prediction width", "heal absorb width" }) do
-        Check(writeCounts[label] == 1, string.format("a full player repaint writes the %s %d times (once expected)", label, writeCounts[label] or 0))
+    for _, label in ipairs({ "health fill", "heal prediction value", "heal absorb value" }) do
+        Check((writeCounts[label] or 0) == 1, string.format("a warm player repaint redundantly writes %s %d times", label, writeCounts[label] or 0))
     end
     local onUpdate, action = StartAnimation(box, "unit player value writes")
     onUpdate(box, 0.06)
@@ -461,8 +468,8 @@ do
     local before = fullRefreshes
     onUpdate(box, 0.06)
     Check(fullRefreshes == before, "harness: the counted player tick ran a full repaint")
-    for _, label in ipairs({ "health fill", "heal prediction width", "heal absorb width" }) do
-        Check(writeCounts[label] == 1, string.format("an Animate tick writes the %s %d times (once expected)", label, writeCounts[label] or 0))
+    for _, label in ipairs({ "health fill", "heal prediction value", "heal absorb value" }) do
+        Check((writeCounts[label] or 0) == (label == "health fill" and 1 or 0), string.format("an Animate tick redundantly writes %s %d times", label, writeCounts[label] or 0))
     end
     Check((writeCounts["heal prediction anchor"] or 0) == 0, "an Animate tick re-anchors the heal prediction")
     action.set(false)
@@ -520,18 +527,20 @@ do
     local healthColor = rawget(box.mock.healthBar, "statusBarColor")
     Check(type(healthColor) == "table" and type(healthColor[1]) == "number" and type(healthColor[2]) == "number",
         "harness: the gradient health colour is no number")
-    -- A second layer shown only below 75% health appears and disappears
-    -- with the animated health: exactly those frames hand over to a full
-    -- refresh, which lays the layer out.
+    -- The live decorator uses alpha for health-gated layers; its scene form updates that alpha on the light tick.
     local savedT2 = SetFields(target, { texLayer2Enabled = true, texLayer2HealthCondition = "BELOW", texLayer2HealthThreshold = 0.75 })
     MSUF.UF.Config.Refresh()
-    local layer, scratch = nil, {}
-    local handedOver = AnimateUnit("target", "unit target health-gated layer", function(owner)
-        layer = layer or owner.mock.texLayers[2]
-        local state = MSUF.PreviewAnimation.BuildFrameState(nil, 1, "target", scratch, owner._animationElapsed + 0.06)
-        return (state.hpPct < 0.75) ~= (layer:IsShown() == true)
-    end)
-    Check(handedOver > 0, "harness: the health-gated layer never crossed its threshold")
+    local handedOver = AnimateUnit("target", "unit target health-gated layer")
+    Check(handedOver == 0, "a native health-gated layer required a full repaint")
+    local scene = box._unitScene
+    local layer = box.mock.texLayers[2]
+    for _, sample in ipairs({ { 0.5, 1 }, { 0.9, 0 }, { 0.6, 1 } }) do
+        local data = scene:Sample()
+        data.hp, data.hpCur = sample[1], nil
+        box._unitSceneRoot:SetClock(nil, true)
+        scene:RefreshData()
+        Check(layer:GetAlpha() == sample[2], "the native layer did not cross its configured health threshold")
+    end
     RestoreFields(target, savedT2)
     RestoreFields(g, savedG)
     RestoreFields(target, savedT)

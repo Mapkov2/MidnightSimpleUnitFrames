@@ -57,21 +57,21 @@ local function CheckPortraitDecorationVisibility()
         return box.mock.portrait
     end
     local portrait = Paint("SQUARE", "SOLID", true)
-    local border, edges = portrait.border, portrait.border.edges
+    local border, edges = portrait.border, portrait.edges
     local edgeKey = edges[1] and 1 or "top"
     local first = assert(edges[edgeKey], "square edges missing")
     local handleParent = box.handlePortrait:GetParent()
     Check(ActualVisible(first), "square edge inherits a hidden owner")
     Paint("SQUARE", "SOLID", false)
-    Check(not border:IsShown() and not ActualVisible(first), "NONE left straight edges visible")
+    Check(not first:IsShown() and not ActualVisible(first), "NONE left straight edges visible")
     local relief, ring, mask, stock, corner
     for pass = 1, 2 do
         for _, shape in ipairs({ "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND" }) do
             Paint(shape, "RELIEF", true)
-            local art = portrait._msufPreviewArtBorder
-            Check(not border:IsShown(), shape .. " relief showed the straight host")
+            local art = portrait.artBorder
+            Check(not first:IsShown(), shape .. " relief showed the straight host")
             Check(ActualVisible(art), shape .. " relief inherits a hidden owner")
-            Check(art and art:GetParent() == portrait, shape .. " relief owner is not the portrait")
+            Check(art and art:GetParent() == border, shape .. " relief owner is not the portrait")
             if relief then Check(art == relief, "relief transition recreated its texture") end
             relief = art
             Decoration(art, "relief", 2)
@@ -80,9 +80,9 @@ local function CheckPortraitDecorationVisibility()
             Check(not ActualVisible(art), shape .. " NONE left relief visible")
             if shape ~= "SQUARE" then
                 Paint(shape, "SOLID", true)
-                local currentRing = portrait._msufPreviewShapeRing
-                local currentMask = portrait._msufPreviewShapeRingMask
-                Check(not border:IsShown() and ActualVisible(currentRing), shape .. " solid ring visibility")
+                local currentRing = portrait.ring
+                local currentMask = portrait.ringMask
+                Check(not first:IsShown() and ActualVisible(currentRing), shape .. " solid ring visibility")
                 Check(ActualVisible(currentMask), shape .. " mask inherits a hidden owner")
                 if ring then Check(currentRing == ring and currentMask == mask, "shape transition recreated ring/mask") end
                 ring, mask = currentRing, currentMask
@@ -90,17 +90,17 @@ local function CheckPortraitDecorationVisibility()
         end
         Paint("BLIZZARD", "SOLID", true)
         local legacy = core.Client.IsVanilla == true
-        local currentStock = legacy and portrait._msufPreviewBlizzFallback or portrait._msufPreviewBlizzRing
-        local currentCorner = portrait._msufPreviewBlizzCorner
-        Check(not border:IsShown(), "stock dressing showed the straight host")
+        local currentStock = legacy and portrait.artBorder or portrait.blizzRing
+        local currentCorner = portrait.blizzCorner
+        Check(not first:IsShown(), "stock dressing showed the straight host")
         Check(ActualVisible(currentStock), "stock " .. (legacy and "fallback" or "ring") .. " inherits a hidden owner")
-        Check(currentStock and currentStock:GetParent() == portrait, "stock owner is not the portrait")
+        Check(currentStock and currentStock:GetParent() == border, "stock owner is not the portrait")
         if legacy then
             Check(not ActualVisible(currentCorner), "Classic stock created a native corner")
-            Check(not ActualVisible(portrait._msufPreviewBlizzRing), "Classic stock created a native ring")
+            Check(not ActualVisible(portrait.blizzRing), "Classic stock created a native ring")
         else
             Check(ActualVisible(currentCorner), "stock corner inherits a hidden owner")
-            Check(currentCorner and currentCorner:GetParent() == portrait, "stock corner owner is not the portrait")
+            Check(currentCorner and currentCorner:GetParent() == border, "stock corner owner is not the portrait")
         end
         if stock then Check(currentStock == stock and currentCorner == corner, "stock transition recreated decoration") end
         stock, corner = currentStock, currentCorner
@@ -112,10 +112,10 @@ local function CheckPortraitDecorationVisibility()
         portrait:Show()
         Check(ActualVisible(currentStock), "showing portrait did not restore stock dressing")
         Paint("SQUARE", "SOLID", false)
-        Check(not border:IsShown() and not ActualVisible(stock) and not ActualVisible(corner), "NONE left stock visible")
+        Check(not first:IsShown() and not ActualVisible(stock) and not ActualVisible(corner), "NONE left stock visible")
         Paint("SQUARE", "SOLID", true)
         Check(ActualVisible(first) and border:IsShown(), "same-key square border did not restore")
-        Check(portrait.border == border and border.edges == edges and edges[edgeKey] == first, "square transition recreated edges")
+        Check(portrait.border == border and portrait.edges == edges and edges[edgeKey] == first, "square transition recreated edges")
         Check(not ActualVisible(relief) and not ActualVisible(ring), "square left another renderer visible")
         Check(box.handlePortrait:GetParent() == handleParent, "portrait controls changed owner")
     end
@@ -140,8 +140,8 @@ assert(type(Colors.ResolveFullColor) == "function", "runtime full colour is not 
 assert(type(Castbars.ApplyIconZoom) == "function", "runtime castbar zoom is not exported")
 assert(type(Castbars.PaintIconBorder) == "function", "runtime castbar icon border is not exported")
 assert(type(Castbars.DetailNum) == "function" and type(Castbars.DetailString) == "function", "runtime details are not exported")
-local defaultX, defaultY = core.UFPreviewRender.PreviewPortraitRingInflation(nil)
-assert(defaultX == 3 and defaultY == 3, "optional portrait relief inputs changed")
+local defaultX, defaultY = Portrait.RingInflation({}, nil, 3)
+assert(defaultX == 5 and defaultY == 5, "the live default 36px portrait relief inflation changed")
 
 local function Near(a, b, label)
     assert(type(a) == "number" and type(b) == "number" and math.abs(a - b) < 1e-7,
@@ -168,60 +168,47 @@ box.canvas:SetSize(600, 260)
 do
     Preview.Refresh(box, "INITIAL_BORDER_LIFECYCLE")
     local initial = box.mock.portrait
-    assert(not initial.border:IsShown() and #initial.border.edges == 0,
-        "initial menu border must stay hidden and lazy: shown=" .. tostring(initial.border:IsShown())
-            .. ", edges=" .. #initial.border.edges)
-    local render = Preview.RefreshDeps._RenderState
-    local function Surface(shape, art)
-        local portrait = env.CreateFrame("Frame", nil, env.UIParent)
-        portrait:SetSize(73, 47)
-        portrait.border = env.CreateFrame("Frame", nil, portrait)
-        portrait.border:SetAllPoints(portrait)
-        portrait.border.edges = {}
-        portrait._msufPreviewBorderShape, portrait._msufPreviewBorderArt = shape, art
-        return portrait
+    assert(initial == box.mock._body.MSUFPortraitHolder and #initial.edges == 4 and not ActualVisible(initial.edges[1]),
+        "initial engine portrait must own its four native edges without drawing them")
+    local conf = env.MSUF_DB.player
+    conf.portraitMode, conf.portraitWidth, conf.portraitHeight, conf.portraitSizeMode = "LEFT", 73, 47, "SEPARATE"
+    conf.portraitBorderThickness = 3
+    local function Paint(shape, art, enabled)
+        conf.portraitShape, conf.portraitBorderArt = shape, art
+        conf.portraitBorderStyle = enabled and "CUSTOM" or "NONE"
+        Config.Refresh()
+        Preview.Refresh(box, "ENGINE_BORDER_LIFECYCLE")
+        return box.mock.portrait
     end
     for _, shape in ipairs({ "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND", "BLIZZARD" }) do
         for _, art in ipairs({ "SOLID", "RELIEF" }) do
-            local portrait = Surface(shape, art)
-            render.LayoutPreviewBlizzardPortrait(portrait, shape == "BLIZZARD", 73, 47)
-            render.LayoutPreviewPortraitBorder(portrait, 3, false)
-            assert(not portrait.border:IsShown() and #portrait.border.edges == 0, shape .. " disabled border allocated edges")
-            render.LayoutPreviewPortraitBorder(portrait, 3, false, .2, .4, .6, .7)
+            local portrait = Paint(shape, art, false)
+            assert(#portrait.edges == 4 and not portrait.edges[1]:IsShown(), shape .. " disabled native edges visible")
+            Paint(shape, art, true)
             local straight = shape == "SQUARE" and art == "SOLID"
-            assert(portrait.border:IsShown() == straight, shape .. " border host ownership")
-            assert(#portrait.border.edges == (straight and 4 or 0), shape .. " unused border edges")
-            assert(portrait.edges == portrait.border.edges, "preview edge alias lost")
+            assert(portrait.edges[1]:IsShown() == straight, shape .. " native edge visibility")
+            assert(portrait == initial and #portrait.edges == 4, shape .. " replaced the engine portrait")
         end
     end
-    local portrait = Surface("SQUARE", "SOLID")
-    local function Paint(shape, art, enabled)
-        portrait._msufPreviewBorderShape, portrait._msufPreviewBorderArt = shape, art
-        render.LayoutPreviewBlizzardPortrait(portrait, shape == "BLIZZARD", 73, 47)
-        render.LayoutPreviewPortraitBorder(portrait, 3, false, enabled and .2 or nil, .4, .6, .7)
-    end
-    Paint("SQUARE", "SOLID", true)
-    local edges = portrait.edges
-    local first = edges[1]
+    local portrait = Paint("SQUARE", "SOLID", true)
+    local edges, first = portrait.edges, portrait.edges[1]
     Paint("CIRCLE", "SOLID", true)
-    assert(not portrait.border:IsShown() and portrait.ring:IsShown(), "shaped ring must own visibility")
-    assert(portrait._msufPreviewShapeRing == portrait.ring, "preview ring alias lost")
+    assert(not first:IsShown() and portrait.ring:IsShown(), "shaped ring must own visibility")
     Paint("SQUARE", "RELIEF", true)
-    assert(not portrait.border:IsShown() and portrait.artBorder:IsShown(), "relief must own visibility")
-    assert(portrait._msufPreviewArtBorder == portrait.artBorder, "preview relief alias lost")
+    assert(not first:IsShown() and portrait.artBorder:IsShown(), "relief must own visibility")
     Paint("SQUARE", "SOLID", false)
-    assert(not portrait.border:IsShown() and not portrait.artBorder:IsShown(), "disabled border host stayed visible")
+    assert(not first:IsShown() and not portrait.artBorder:IsShown(), "disabled border remained visible")
     Paint("SQUARE", "SOLID", true)
-    assert(portrait.border:IsShown() and first:IsShown(), "cached straight border did not restore")
-    assert(portrait.edges == edges and edges[1] == first and #edges == 4, "shape switch recreated edges")
-    assert(not portrait.ring:IsShown() and not portrait.artBorder:IsShown(), "old border renderer stayed shown")
-    portrait._msufPreviewBorderShape = "BLIZZARD"
-    render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
-    assert(portrait._msufLayoutWidth == 60 and portrait._msufLayoutHeight == 60, "explicit stock dimensions were ignored")
-    assert(not portrait.border:IsShown() and not first:IsShown(), "stock border left the straight host visible")
+    assert(first:IsShown() and portrait.edges == edges, "cached native border did not restore")
+    assert(not portrait.ring:IsShown() and not portrait.artBorder:IsShown(), "old border renderer remained visible")
+    conf.portraitWidth, conf.portraitHeight = 60, 60
+    Paint("BLIZZARD", "SOLID", true)
+    assert(portrait:GetWidth() == 60 and portrait:GetHeight() == 60, "explicit stock dimensions ignored")
+    assert(not first:IsShown(), "stock border left straight edges visible")
     Paint("SQUARE", "SOLID", true)
-    assert(portrait.border:IsShown() and first:IsShown() and edges[1] == first, "stock switch did not restore cached edges")
+    assert(first:IsShown() and edges[1] == first, "stock switch replaced native edges")
 end
+
 local conf = env.MSUF_DB.player
 conf.portraitMode, conf.portraitRender, conf.portraitShape = "LEFT", "CLASS", "ROUNDED"
 conf.portraitBorderStyle, conf.portraitBorderArt = "CUSTOM", "RELIEF"
@@ -427,7 +414,14 @@ for _, vertical in ipairs({ false, true }) do
             Calls(layout, function() Preview.Refresh(box, "SHARED_HEALTH_FILL") end, "unit health background")
             local bg = box.mock.healthBackgroundBar
             local pct = box._msufPreviewScene.data.hp
-            Near(bg.value, missing and (1 - pct) or 1, "background sample")
+            local body = box.mock._body
+            local masked = body._msufHealthBackgroundMaskActive == true
+            Near(bg.value, missing and not masked and (1 - pct) * 100 or 100, "native background sample")
+            if masked then
+                local mask = assert(body._msufHealthBackgroundClipMask)
+                assert(bg:GetStatusBarTexture().masks[1] == mask, "native background lost its inverse clip mask")
+                assert(select(2, mask:GetPoint(1)) == body.hpBar:GetStatusBarTexture(), "inverse mask no longer follows the health edge")
+            end
             assert(bg.orientation == (vertical and "VERTICAL" or "HORIZONTAL"), "background orientation")
             assert(bg.reverseFill == (missing and not reverse or not missing and reverse), "background direction")
         end

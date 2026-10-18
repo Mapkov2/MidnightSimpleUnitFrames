@@ -570,6 +570,7 @@ local function HideFrameAuraPreview(visual)
   if visual._timer then visual._timer:Hide() end
   if visual._stack then visual._stack:Hide() end
   if visual._durationBar then visual._durationBar:Hide() end
+  if visual._stealableMarker then visual._stealableMarker:Hide() end
   local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.ApplyIconStylePreview) == "function" then
     A3.ApplyIconStylePreview(visual, nil)
@@ -577,20 +578,20 @@ local function HideFrameAuraPreview(visual)
 end
 
 local function FrameAuraPreviewOffset(lane, slot)
-  local step = tonumber(lane.step) or ((tonumber(lane.size) or 1) + (tonumber(lane.spacing) or 0))
+  local step = tonumber(lane.stepX or lane.step) or ((tonumber(lane.size) or 1) + (tonumber(lane.spacing) or 0))
   if lane.verticalGrowth == true then
-    return 0, slot * step * (tonumber(lane.ySign) or -1)
+    return 0, slot * (lane.stepY or step) * (tonumber(lane.ySign) or -1)
   end
   local perRow = floor((tonumber(lane.perRow) or 1) + 0.5)
   if not (perRow >= 1) then perRow = 1 end
   local column = slot % perRow
   local row = floor(slot / perRow)
   local x = column * step * (tonumber(lane.xSign) or 1)
-  local y = row * step * (tonumber(lane.ySign) or -1)
+  local y = row * (lane.stepY or step) * (tonumber(lane.ySign) or -1)
   return x, y
 end
 
-local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host)
+local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host, reminderPlaced)
   local A3 = Auras
   local size = tonumber(lane.size) or 18
   if not (size >= 1) then size = 1 end
@@ -600,21 +601,35 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
   end
   local x, y = FrameAuraPreviewOffset(lane, slot)
+  if kind == "unit" and (lane.padding or 0) > 0 then
+    local px, py = Auras.PaddingInset(initialAnchor, lane.padding)
+    x, y = x + px, y + py
+  end
 
   visual:ClearAllPoints()
-  visual:SetSize(size, size)
+  visual:SetSize(lane.buttonWidth or size, lane.buttonHeight or size)
   visual:SetPoint(initialAnchor, host, initialAnchor, x, y)
   if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
   if visual.SetAlpha then visual:SetAlpha(1) end
 
   local texture = visual._texture
   local textures = descriptor.textures
-  texture:SetTexture(textures[((sampleIndex - 1) % #textures) + 1] or PREVIEW_QUESTION)
+  local entries = lane._msufSceneEntries
+  local entry = entries and entries[slot + 1]
+  texture:SetTexture(entry and entry.icon or textures[((sampleIndex - 1) % #textures) + 1] or PREVIEW_QUESTION)
   local zoom = tonumber(lane.iconZoom) or 100
   if not (zoom < 200) then zoom = 200 elseif zoom < 100 then zoom = 100 end
-  local inset = A3.IconShape.IconZoomInset(zoom)
-  texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
-  texture:SetVertexColor(1, 1, 1, 1)
+  texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, lane.buttonWidth or size, lane.buttonHeight or size))
+  -- Alternate custom slots show the reminder's missing state, as in the Options lane preview.
+  local missing = reminderPlaced and reminderPlaced.reminderEnabled == true and slot % 2 == 1
+  if texture.SetDesaturated then texture:SetDesaturated(missing and reminderPlaced.reminderDesaturate ~= false or false) end
+  if missing then
+    local tint = type(reminderPlaced.reminderColor) == "table" and reminderPlaced.reminderColor
+    texture:SetVertexColor(tint and tint[1] or 1, tint and tint[2] or 1, tint and tint[3] or 1,
+      max(0.1, min(1, tonumber(reminderPlaced.reminderAlpha) or 0.45)))
+  else
+    texture:SetVertexColor(1, 1, 1, 1)
+  end
 
   local swipe, timer, stack, durationBar, dispelBorder = visual._swipe, visual._timer,
     visual._stack, visual._durationBar, visual._dispelBorder
@@ -660,6 +675,39 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     end
     dispelBorder:Show()
   end
+  local marker = visual._stealableMarker
+  if marker then marker:Hide() end
+  if descriptor.key == "buff" and lane.showStealableMarker == true and slot == 0 and not barOnly then
+    marker = EnsurePreviewTexture(visual, "_stealableMarker", "OVERLAY", 5)
+    if lane.stealableStyle == "ICON" then
+      local markerSize = max(7, floor(size * 0.42 + 0.5))
+      marker:ClearAllPoints()
+      marker:SetSize(markerSize, markerSize)
+      marker:SetPoint("TOPLEFT", visual, "TOPLEFT", 1, -1)
+      marker:SetAtlas("RaidFrame-Icon-DebuffMagic", false)
+      marker:SetVertexColor(1, 1, 1, 1)
+      marker:Show()
+    else
+      local mode = lane.stealableStyle == "BORDER" and "BORDER" or "SYMBOL"
+      if not (type(A3.ApplyAuraDispelPreview) == "function"
+        and A3.ApplyAuraDispelPreview(marker, visual, size, mode, lane.iconShape, "Magic", false)) then
+        -- Classic's shaped painter leaves rectangular samples to the stock atlas.
+        local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
+          and A3.NativeAuraDispelBorderPadding(size) or max(1, floor(size / 6 + 0.5))
+        marker:ClearAllPoints()
+        marker:SetPoint("TOPLEFT", visual, "TOPLEFT", -pad, pad)
+        marker:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", pad, -pad)
+        marker:SetAtlas(mode == "BORDER" and "ui-debuff-border-magic-noicon" or "ui-debuff-border-magic-icon", false)
+        marker:SetVertexColor(1, 1, 1, 1)
+        marker:Show()
+      end
+    end
+  end
+  if frame._msufPreviewScene then
+    visual._sceneStaticTimer = sampleIndex == 1 and "12" or "8"
+    visual._sceneAuraLane, visual._sceneAuraKind, visual._sceneAuraIndex = lane,
+      (descriptor.key == "debuff" or lane.targetDots or (lane.nativeFilter and lane.nativeFilter:find("HARMFUL", 1, true))) and "debuff" or "buff", slot + 1
+  end
   visual:Show()
   return true
 end
@@ -698,8 +746,20 @@ local function PreviewAuraConfigSpec(frame, compiledSpec)
   return base
 end
 
+local function SceneLaneEntries(frame, lane, descriptor)
+  local scene, model = frame._msufPreviewScene, Auras.MenuModel
+  if not (scene and scene.auraSampleCount and model) then return end
+  if lane._msufSceneEntries == nil then
+    local index = descriptor.key:match("^custom(%d)$")
+      or ((descriptor.key == "defensivePortrait" or descriptor.key == "targetDotPortrait") and 4)
+    local read = model.CustomContainerPreviewEntries or model.CustomContainerSpellEntries
+    lane._msufSceneEntries = index and read and read(frame._msufSceneUnit, tonumber(index)) or false
+  end
+  return lane._msufSceneEntries
+end
+
 --- Lay out and paint the stand-ins of the lanes `descriptors` names that `lanes` enables; true when any icon shows.
-local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex)
+local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex, sampleLimit)
   local used = 0
   previewIndex = max(1, floor((tonumber(previewIndex) or 1) + 0.5))
   for laneIndex = 1, #descriptors do
@@ -711,7 +771,13 @@ local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex
       local anchor = tostring(lane.anchor or "CENTER"):upper()
       if not VALID_POINTS[anchor] then anchor = "CENTER" end
       host:ClearAllPoints()
-      host:SetPoint(anchor, frame, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
+      local parent = frame
+      if lane.anchorTarget == "portrait" then
+        local runtime = Auras.Runtime
+        local custom = runtime and runtime.CustomConfig
+        parent = custom and custom.ResolveLaneParentFrame(frame, lane) or frame.MSUFPortraitHolder or frame
+      end
+      host:SetPoint(anchor, parent, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
       host:SetSize(max(1, tonumber(lane.width) or lane.size or 1),
         max(1, tonumber(lane.height) or lane.size or 1))
       if host.SetFrameLevel and frame.GetFrameLevel then
@@ -721,11 +787,15 @@ local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex
       end
       if host.SetAlpha then host:SetAlpha(tonumber(lane.alpha) or 1) end
       host:Show()
-      local sampleCount = min(PREVIEW_AURA_SAMPLE_LIMIT, maxCount)
+      local entries = SceneLaneEntries(frame, lane, descriptor)
+      local customIndex = kind == "unit" and descriptor.key:match("^custom(%d)$")
+      local item = customIndex and Auras.MenuModel.CustomContainerStyleItem(frame._msufSceneUnit, tonumber(customIndex), false)
+      local reminderPlaced = item and item.placed
+      local sampleCount = min(entries and #entries > 0 and #entries or sampleLimit or PREVIEW_AURA_SAMPLE_LIMIT, maxCount)
       for sampleIndex = 1, sampleCount do
         used = used + 1
         ApplyFrameAuraPreview(frame, kind, EnsureAuraPreview(frame, used, "_msufGFFrameAuraPreviews"),
-          lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host)
+          lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host, reminderPlaced)
       end
     else
       host:Hide()
@@ -757,6 +827,77 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
 end
 
 local PREVIEW_UNIT_AURA_LANES = { PREVIEW_AURA_LANES[1], PREVIEW_AURA_LANES[3] }
+local UNIT_EXTRA_AURA_LANES = { "custom1", "custom2", "custom3", "custom4", "defensivePortrait", "targetDotPortrait" }
+for i = 1, #UNIT_EXTRA_AURA_LANES do
+  local key = UNIT_EXTRA_AURA_LANES[i]
+  PREVIEW_UNIT_AURA_LANES[#PREVIEW_UNIT_AURA_LANES + 1] = { key = key, textures = PREVIEW_AURA_LANES[1].textures }
+end
+
+-- The Style tool has always offered a sample while its lane is disabled. Keep that input on the
+-- private scene, leaving the runtime config and saved enable/max values untouched.
+local STYLE_LANE_FIELDS = { "size", "x", "y", "anchor", "layer", "iconZoom", "iconShape", "perRow", "spacing",
+      "stackSize", "stackX", "stackY", "stackAnchor", "cooldownSize", "cooldownX", "cooldownY", "cooldownAnchor",
+      "cooldownDecimalSeconds", "showCooldownSwipe", "cooldownSwipeReverse", "showCooldownText", "showDurationBar",
+      "durationBarHeight", "durationBarDisplay", "durationBarPosition", "durationBarDirection" }
+local function SceneStyleLane(frame, unit, lanes, kind)
+  if not kind then return lanes end
+  local model = Auras.MenuModel
+  local cfg = model.ReadPreviewConfig(unit)
+  local index = tonumber(kind:match("^custom(%d)$"))
+  local item = index and model.CustomContainer(unit, index, false)
+  local portrait = frame.MSUFSpec and frame.MSUFSpec.portrait
+  local portraitKey = index == 4 and item and item.portraitIcon == true and portrait
+    and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)
+    and (unit == "player" and "defensivePortrait" or "targetDotPortrait") or nil
+  local source = lanes and lanes[portraitKey or kind]
+    or (index and cfg.customMetrics[index] or cfg[kind .. "Metrics"])
+  local lane = {}
+  for key, value in pairs(source or {}) do lane[key] = value end
+  local raw, placed
+  if index then
+    raw = model.CustomContainerStyleItem and model.CustomContainerStyleItem(unit, index, false)
+      or model.CustomContainer(unit, index, false)
+    placed = raw and raw.placed or {}
+  else
+    placed = {}
+    for i = 1, #STYLE_LANE_FIELDS do
+      local field = STYLE_LANE_FIELDS[i]
+      local value = cfg[kind .. field:sub(1, 1):upper() .. field:sub(2)]
+      if value ~= nil then placed[field] = value end
+    end
+    placed.showStacks = cfg[kind .. "ShowStackCount"]
+  end
+  for key, value in pairs(placed) do if lane[key] == nil then lane[key] = value end end
+  lane.enabled, lane.max = true, max(1, tonumber(lane.max or lane.num or placed.max) or 4)
+  if (tonumber(source and (source.max or source.num)) or tonumber(placed.max) or 4) <= 0 then lane.max = 4 end
+  lane.size, lane.perRow = lane.size or 26, max(1, lane.perRow or 4)
+  if portraitKey and not source then
+    lane.anchorTarget, lane.anchor, lane.x, lane.y = "portrait", "CENTER", 0, 0
+    lane.max, lane.size = 1, portrait.width or portrait.size or 36
+  end
+  lane.buttonWidth, lane.buttonHeight = lane.buttonWidth or lane.size, lane.buttonHeight or lane.size
+  lane.xSign = lane.xSign or (type(lane.growthX) == "number" and lane.growthX or nil)
+  lane.ySign = lane.ySign or (type(lane.growthY) == "number" and lane.growthY or nil)
+  lane.stepX = lane.stepX or lane.buttonWidth + (lane.spacing or cfg.spacing or 2)
+  lane.stepY = lane.stepY or lane.buttonHeight + (lane.spacing or cfg.spacing or 2)
+  local growth, wrap = cfg[kind .. "GrowthX"] or placed.growth or "RIGHT", cfg[kind .. "GrowthY"] or "DOWN"
+  if not source then
+    lane.verticalGrowth = growth == "UP" or growth == "DOWN"
+    lane.xSign, lane.ySign = growth:find("LEFT", 1, true) and -1 or 1,
+      (growth:find("UP", 1, true) or wrap == "UP") and 1 or -1
+    lane.initialAnchor = (lane.ySign == 1 and "BOTTOM" or "TOP") .. (lane.xSign == 1 and "LEFT" or "RIGHT")
+  end
+  local cols = lane.verticalGrowth and 1 or min(lane.max, lane.perRow)
+  local rows = lane.verticalGrowth and lane.max or math.ceil(lane.max / lane.perRow)
+  lane.padding = lane.padding or cfg.stylePadding or 0
+  lane.width, lane.height = (cols - 1) * lane.stepX + lane.buttonWidth + 2 * lane.padding,
+    (rows - 1) * lane.stepY + lane.buttonHeight + 2 * lane.padding
+  local result = {}
+  for key, value in pairs(lanes or {}) do result[key] = value end
+  if portraitKey then result[kind] = nil end
+  result[portraitKey or kind] = lane
+  return result
+end
 
 --- Aura stand-ins of a unit scene frame: the buff and debuff lanes of the unit's compiled aura configuration, painted
 --- like a group frame's. The layer filter of the on-screen previews is lifted for the call.
@@ -764,17 +905,55 @@ function GF.PreviewUnitFrameAuras(frame, unit, spec, previewIndex)
   if InCombat() then return false end
   local auras = spec and spec.auras
   local A3 = MSUF and MSUF.MSUF_Auras3
-  local config = auras and auras.enabled == true and A3 and A3.ResolveAuraPreviewConfig(frame, unit, spec)
-  local lanes = config and config.lanes
+  local config = A3 and A3.ResolveAuraPreviewConfig(frame, unit, spec)
+  local scene = frame._msufPreviewScene
+  if not (auras and auras.enabled == true) and not (scene.sample.auraStyleKey or scene.sample.auraForceStandard) then
+    GF.HideFrameAuras(frame)
+    GF.HideSpellIndicators(frame)
+    frame._msufSceneAuraLanes = nil
+    return false
+  end
+  local lanes = SceneStyleLane(frame, unit, config and config.lanes, scene.sample.auraStyleKey)
+  if scene.sample.auraForceStandard then
+    lanes = SceneStyleLane(frame, unit, lanes, "buff")
+    lanes = SceneStyleLane(frame, unit, lanes, "debuff")
+  end
+  frame._msufSceneAuraLanes = lanes
   if not lanes then
     GF.HideFrameAuras(frame)
     return false
   end
   local heldVisible, heldSolo = previewLayerVisible, previewLayerSolo
   previewLayerVisible, previewLayerSolo = nil, nil
-  local shown = PaintFrameAuraLanes(frame, "unit", lanes, PREVIEW_UNIT_AURA_LANES, previewIndex)
+  local shown = PaintFrameAuraLanes(frame, "unit", lanes, PREVIEW_UNIT_AURA_LANES, previewIndex, frame._msufPreviewScene.auraSampleCount)
+  if frame._msufPreviewScene.auraSampleCount then GF.PreviewSpellIndicators(frame, "unit", spec, unit) end
   previewLayerVisible, previewLayerSolo = heldVisible, heldSolo
   return shown
+end
+
+function GF.AnimateUnitFrameAuras(frame, elapsed)
+  local visuals = frame._msufGFFrameAuraPreviews
+  for i = 1, #(visuals or {}) do
+    local visual = visuals[i]
+    local lane = visual._sceneAuraLane
+    if lane and visual:IsShown() then
+      local state = elapsed ~= nil and AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane, elapsed,
+        lane.targetDots and 18 or nil, lane.targetDots, lane.targetDots and 0.30 or nil)
+      if visual._swipe and lane.showCooldownSwipe then
+        AuraPainter.Swipe(visual._swipe, visual, visual:GetWidth(), visual:GetHeight(), state and state.remainingFrac or 0.42,
+          lane.cooldownSwipeReverse == true)
+      end
+      if visual._timer and lane.showCooldownText then visual._timer:SetText(state and state.text or visual._sceneStaticTimer or "8") end
+      if visual._stack and lane.showStacks then visual._stack:SetText(state and state.stacks or "2") end
+      if Auras.ApplyPandemicVisual and (lane.targetDots or visual._msufA3PandemicRegion) then
+        Auras.ApplyPandemicVisual(visual, lane, lane.pandemicEnabled == true and visual._sceneAuraIndex == 1
+          and (not state or state.pandemicActive ~= false))
+      end
+      if visual._durationBar then
+        AuraPainter.DurationBar(visual._durationBar, visual, lane, visual:GetWidth(), visual:GetHeight(), state)
+      end
+    end
+  end
 end
 
 --- Refresh only the pooled Aura stand-ins on active Edit Mode group dummies.
@@ -999,11 +1178,11 @@ function GF.HideSpellIndicators(frame)
   return true
 end
 
-function GF.PreviewSpellIndicators(frame, kind, compiledSpec)
+function GF.PreviewSpellIndicators(frame, kind, compiledSpec, unit)
   if InCombat() then return false end
   local A3 = MSUF and MSUF.MSUF_Auras3
   local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
-    and A3.ResolveAuraPreviewConfig(frame, frame and (frame.MSUFUnitKey or "player"), PreviewAuraConfigSpec(frame, compiledSpec)) or nil
+    and A3.ResolveAuraPreviewConfig(frame, unit or (frame and (frame.MSUFUnitKey or "player")), PreviewAuraConfigSpec(frame, compiledSpec)) or nil
   local root = runtimeConfig and runtimeConfig.spellIndicators
   local slots = root and root.slots
   if not (root and root.enabled == true and type(slots) == "table") or not PreviewLayerOn("si") then
@@ -2169,6 +2348,7 @@ function SceneRoot:SetClock(elapsed, noRefresh)
   for _, surface in pairs(self.surfaces) do
     if surface.opts.animate then surface:Refresh() end
   end
+  for _, scene in pairs(self.units) do scene:RefreshData(false) end
 end
 
 function SceneRoot:SetParent(parent)

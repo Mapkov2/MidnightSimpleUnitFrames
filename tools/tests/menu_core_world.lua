@@ -177,6 +177,7 @@ function MenuWorld.Open(root, flavor, options)
     local failure = world:FirstFailure()
     if failure then error("menu_core_world " .. flavor .. ": boot failed in " .. tostring(failure.file) .. ": " .. tostring(failure.message), 2) end
     local env, core = world.env, world.core
+    assert(loadfile(root .. "/tools/tests/unit_scene_region_fixture.lua"))().Install(core)
     local M = assert(core.MSUF2, "menu_core_world: Menu2 did not load")
     env.MSUF_EnsureDB(true)
     -- The queued unit-frame runtime apply reads APIs the harness only stubs.

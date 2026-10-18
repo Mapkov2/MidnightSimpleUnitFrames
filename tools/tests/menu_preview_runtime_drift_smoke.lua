@@ -194,7 +194,7 @@ Section("2 health text gradient", function()
     Check(spec and spec.text and spec.text.healthColorByHealth == true, "harness: the player spec does not colour health text by health")
     local scene = box._msufPreviewScene
     Check(scene and scene.data and tonumber(scene.data.hp), "harness: the unit preview kept no scene data")
-    Expect("unit preview", spec.health, tonumber(scene.data.hp), box.mock.hpTextLeft.textColor)
+    Expect("unit preview", spec.health, tonumber(scene.data.hp), box.mock._body.hpText.textColor)
 
     M.gfScope = "party"
     local gbox = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
@@ -265,7 +265,7 @@ Section("4 portrait border colour", function()
     end
     local function BorderRGB(portrait)
         local border = portrait.border
-        return { border._msufPreviewEdgeR, border._msufPreviewEdgeG, border._msufPreviewEdgeB }
+        return assert(portrait.edges and portrait.edges[1], "scene portrait has no live border edge").vertexColor
     end
 
     -- Unit preview: a custom class colour is a bar/text choice; the live portrait
@@ -289,7 +289,7 @@ Section("4 portrait border colour", function()
         conf.portraitBorderStyle = "REACTION"
         Refresh()
         if key == "target" then
-            Want("hostile reaction border", BorderRGB(box.mock.portrait), 1, 0, 0)
+            Want("neutral reaction border (the target sample)", BorderRGB(box.mock.portrait), 1, 0.6, 0)
         else
             Want("friendly reaction border", BorderRGB(box.mock.portrait), 0, 1, 0)
         end

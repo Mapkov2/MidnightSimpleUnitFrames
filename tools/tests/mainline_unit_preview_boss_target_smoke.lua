@@ -114,7 +114,7 @@ Check(Shown(marker), "Arrow style draws no boss target marker")
 Check(Shown(box.handleBossTarget), "the boss target marker has no drag handle")
 local _, handleAnchor = box.handleBossTarget:GetPoint(1)
 Check(handleAnchor == marker, "the boss target handle is not placed on the marker")
-Check(mock._msufPreviewBossBorder == nil, "Arrow style paints the border highlight")
+Check(mock._body._msufBorderVisualSource ~= "bossTarget", "Arrow style paints the border highlight")
 -- The Fit footprint covers the marker: moved far out, the preview zooms out.
 local nearScale = box._mockAutoScale
 boss.bossTargetIndicatorOffsetX = -500
@@ -126,22 +126,22 @@ boss.bossTargetIndicatorOffsetX = nil
 HighlightOn("BORDER")
 Refresh("boss")
 Check(not Shown(marker) and not Shown(box.handleBossTarget), "Border style keeps the boss target marker")
-Check(mock._msufPreviewBossBorder ~= nil, "Border style paints no boss target highlight")
+Check(mock._body._msufBorderVisualSource == "bossTarget", "Border style paints no boss target highlight")
 
 HighlightOn("BORDER_ARROW")
 Refresh("boss")
-Check(Shown(marker) and Shown(box.handleBossTarget) and mock._msufPreviewBossBorder ~= nil,
+Check(Shown(marker) and Shown(box.handleBossTarget) and mock._body._msufBorderVisualSource == "bossTarget",
     "Border and arrow style does not draw both pieces")
 
 g.bossTargetHighlightEnabled = false
 g.bossTargetOutlineMode = 0
 Refresh("boss")
-Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._msufPreviewBossBorder == nil,
+Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._body._msufBorderVisualSource ~= "bossTarget",
     "the boss target highlight stays with the highlight off")
 
 HighlightOn("BORDER_ARROW")
 Refresh("player")
-Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._msufPreviewBossBorder == nil,
+Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._body._msufBorderVisualSource ~= "bossTarget",
     "the boss target highlight shows on a unit that is not a boss")
 
 print(string.format("mainline_unit_preview_boss_target_smoke: ok (%s)", flavor))

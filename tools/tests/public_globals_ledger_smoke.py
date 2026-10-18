@@ -37,6 +37,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOL = os.path.join(ROOT, "tools", "public_globals_ledger.py")
@@ -581,9 +583,27 @@ def runtime_smoke_can_fail(tool):
                "the runtime failure for %s must name %s and the reader %s:\n%s" % (label, name, reader, output))
 
 
+def working_tree_inventory(tool):
+    """An unstaged deletion remains in ls-files; scan only the current source on disk."""
+    with tempfile.TemporaryDirectory(prefix="msuf-ledger-worktree-") as root:
+        addon = os.path.join(root, "MidnightSimpleUnitFrames")
+        os.makedirs(addon)
+        present, removed = "MidnightSimpleUnitFrames/Live.lua", "MidnightSimpleUnitFrames/Removed.lua"
+        with open(os.path.join(root, present), "w", encoding="utf-8") as handle:
+            handle.write('ExportPublic("MSUF_WorktreeExport", {})\n')
+        listed = SimpleNamespace(returncode=0, stdout=(present + "\0" + removed + "\0").encode("utf-8"))
+        with mock.patch.object(tool.subprocess, "run", return_value=listed):
+            files = tool.addon_files(root)
+            expect(files == [present], "the inventory must omit an unstaged deleted source, retaining existing tracked files")
+            exports, _dynamic = tool.static_inventory(root)
+        expect("MSUF_WorktreeExport" in exports, "filtering deleted paths lost an existing export")
+        expect(len(exports) == 1, "the inventory fabricated exports for a deleted source")
+
+
 def main():
     started = time.time()
     tool = load_tool()
+    working_tree_inventory(tool)
     rows = committed_ledger(tool)
     scanner_mechanisms(tool)
     literals, written, exported = complete_scan(tool)

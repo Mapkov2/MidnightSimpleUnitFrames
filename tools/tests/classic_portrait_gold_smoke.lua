@@ -273,41 +273,41 @@ assert(holder.mask.texture and tostring(holder.mask.texture):find("circle_mask",
     "CIRCLE shape must restore the file-based mask")
 assert(holder.ring and holder.ring.shown == true, "solid ring renderer must take over for CIRCLE")
 
--- 4) Preview uses the same bounds even at fractional sizes.
-do
-    local ns = { MSUF2 = {}, Client = { IsRetail = true, IsForever = true } }
-    ns.MSUF2.PickFallbackTable = function(deps, defaults)
-        return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
-    end
-    LoadElement(ns.Client, ns)
-assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
-    local preview = {}
-    ns.UFPreviewRender.Install(preview, {})
-    local render = preview.RefreshDeps._RenderState
-    local portrait = NewPreviewPortrait()
-    portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
-    render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
-    assert(portrait._msufPreviewShapeMask.texture == MASK_FILE, "preview must use the matching player mask")
-    render.LayoutPreviewBlizzardPortrait(portrait, true, 58, 58)
-    assert(portrait._msufPreviewBlizzCorner == nil, "preview connector default must stay off")
-    render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60, true)
-    local previewCorner = assert(portrait._msufPreviewBlizzCorner, "preview connector missing")
-    assert(previewCorner.shown and previewCorner.atlas == CORNER_ATLAS, "preview connector atlas drifted")
-    Near(previewCorner.points[1][4], 34.5, "preview connector x offset")
-    Near(previewCorner.points[1][5], -34.5, "preview connector y offset")
+-- 4) The real Options scene uses the native bounds, including fractional art geometry and the connector toggle.
+if (arg[2] or "Mainline") ~= "Vanilla" then
+    local World = assert(loadfile(arg[1] .. "/tools/tests/menu_core_world.lua"))()
+    local w = World.Open(arg[1], arg[2] or "Mainline", { page = "home" })
+    w.env.C_Texture = { GetAtlasInfo = function() return { width = 80, height = 90 } end }
+    local conf = w.env.MSUF_DB.player
+    conf.portraitMode, conf.portraitShape, conf.portraitSizeMode = "LEFT", "BLIZZARD", "SEPARATE"
+    conf.portraitWidth, conf.portraitHeight = 58, 58
+    local panel = w.env.CreateFrame("Frame", nil, w.env.UIParent)
+    panel._msufGetCurrentKey = function() return "player" end
+    local box = w.core.UFPreview._BuildPreview(w.env.UIParent, panel, 900, 400)
+    box:Show(); box.canvas:SetSize(600, 260)
+    local function Paint() w.core.UFPreview.Refresh(box, "SETTINGS"); return box.mock.portrait end
+    local portrait = Paint()
+    assert(portrait == box._unitScene:Frame().MSUFPortraitHolder and portrait.mask.texture == MASK_FILE,
+        "Options must use the native portrait holder and matching mask")
+    assert(not portrait.blizzCorner or not portrait.blizzCorner:IsShown(), "preview connector default changed")
+    conf.portraitWidth, conf.portraitHeight, conf.portraitBlizzardCorner = 60, 60, true
+    Paint()
+    local corner = assert(portrait.blizzCorner, "scene connector missing")
+    assert(corner:IsShown() and corner.atlas == CORNER_ATLAS, "scene connector atlas drifted")
+    Near(select(4, corner:GetPoint(1)), 34.5, "scene connector x offset")
+    Near(select(5, corner:GetPoint(1)), -34.5, "scene connector y offset")
     for _, size in ipairs({ 36, 58, 73.5 }) do
-        render.LayoutPreviewBlizzardPortrait(portrait, true, size, size)
-        local art = assert(portrait._msufPreviewBlizzRing)
-        assert(art.snapToPixelGrid == false and art.texelSnappingBias == 0,
-            "native art must retain fractional atlas geometry")
-        assert(not portrait._msufPreviewBlizzCorner.shown, "preview connector toggle must hide its texture")
-        assert(not portrait._msufPreviewBlizzMirror and not portrait._msufPreviewBlizzClip and not art.masks,
-            "preview must preserve the native branch without mirroring or clipping")
-        Near(art.texCoord[1], 0, "preview contour left")
-        Near(art.texCoord[2], 1, "preview contour right")
-        assert(art.allPoints == portrait and portrait._msufPreviewShapeMask.allPoints == portrait,
-            "preview must anchor the mask and border to identical bounds")
+        conf.portraitWidth, conf.portraitHeight, conf.portraitBlizzardCorner = size, size, false
+        Paint()
+        local art = assert(portrait.blizzRing)
+        assert(art.snapToPixelGrid == false and art.texelSnappingBias == 0, "scene art snapped its native fractional geometry")
+        assert(not corner:IsShown(), "scene connector toggle did not hide the texture")
+        assert(not portrait.blizzRingMirror and #(art.masks or {}) == 0, "scene added an independent mirror or clip")
+        Near(art.texCoord[1], 0, "scene contour left")
+        Near(art.texCoord[2], 1, "scene contour right")
+        assert(art.allPoints == portrait and portrait.mask.allPoints == portrait, "scene ring and mask bounds differ")
     end
+    box:Hide()
 end
 _G.C_Texture = nil
 local noAtlas = LoadElement()
@@ -336,44 +336,35 @@ fallbackFrame.MSUFSpec.portrait.shape = "SQUARE"
 PortraitFallback.Apply(fallbackFrame, fallbackFrame.MSUFSpec)
 assert(not art.shown, "leaving Blizzard shape must hide fallback")
 
--- Vanilla, TBC and Mists load the Retail-named unit preview render; its Classic
--- portrait branches read MSUF.Client, so each load below names the client.
-local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
-ns.MSUF2.PickFallbackTable = function(deps, defaults)
-    return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
+-- The Options portrait is the engine holder, including Era's gold art and the bundled mask even with atlas APIs.
+if arg[2] == "Vanilla" then
+    local repo = assert(arg[1])
+    local World = assert(loadfile(repo .. "/tools/tests/menu_core_world.lua"))()
+    local w = World.Open(repo, "Vanilla", { page = "home" })
+    w.env.C_Texture = { GetAtlasInfo = function(atlas)
+        assert(atlas ~= CORNER_ATLAS, "Era scene must not query the modern HUD portrait corner atlas")
+        return nil -- other native body indicators may probe their own status atlases
+    end }
+    local conf = w.env.MSUF_DB.player
+    conf.portraitMode, conf.portraitShape = "LEFT", "BLIZZARD"
+    local panel = w.env.CreateFrame("Frame", nil, w.env.UIParent)
+    panel._msufGetCurrentKey = function() return "player" end
+    local box = w.core.UFPreview._BuildPreview(w.env.UIParent, panel, 900, 400)
+    box:Show(); box.canvas:SetSize(600, 260)
+    w.core.UFPreview.Refresh(box, "SETTINGS")
+    local portrait = box.mock.portrait
+    assert(portrait == box._unitScene:Frame().MSUFPortraitHolder, "Options copied the portrait holder")
+    local previewArt = assert(portrait.artBorder)
+    assert(previewArt:IsShown() and previewArt.vertexColor[2] == 0.82, "Era scene must show gold")
+    assert(portrait.mask.texture:find("circle_mask", 1, true), "Era scene must use the bundled circle mask")
+    conf.portraitShape = "SQUARE"
+    w.core.UFPreview.Refresh(box, "SETTINGS")
+    assert(not previewArt:IsShown(), "scene gold art survived the shape switch")
+    conf.portraitShape = "BLIZZARD"
+    w.core.UFPreview.Refresh(box, "SETTINGS")
+    assert(portrait.artBorder == previewArt and previewArt:IsShown(), "Era scene did not restore its cached gold art")
+    box:Hide()
 end
-LoadElement(ns.Client, ns)
-assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
-local preview = {}
-ns.UFPreviewRender.Install(preview, {})
-local render = assert(preview.RefreshDeps._RenderState)
-local portrait = NewPreviewPortrait()
-render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
-local previewArt = assert(portrait._msufPreviewBlizzFallback)
-assert(previewArt.shown and previewArt.vertexColor[2] == 0.82, "Era preview must show gold")
-render.LayoutPreviewBlizzardPortrait(portrait, false, 60, 60)
-assert(not previewArt.shown, "preview fallback must hide on shape switch")
--- Era must use bundled art even when the modern atlas name resolves.
-_G.WOW_PROJECT_CLASSIC, _G.WOW_PROJECT_ID = 2, 2
-_G.C_Texture = { GetAtlasInfo = function() error("Era must not query modern HUD portrait atlases") end }
-local era = LoadElement({ IsVanilla = true })
-local eraFrame = NewFrame("BLIZZARD")
-era.Create(eraFrame)
-era.Apply(eraFrame, eraFrame.MSUFSpec)
-assert(eraFrame.MSUFPortraitHolder.artBorder.shown, "Era default Blizzard shape needs gold art")
-assert(eraFrame.MSUFPortraitHolder.mask.texture:find("circle_mask", 1, true))
-ns = { MSUF2 = ns.MSUF2, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
-LoadElement(ns.Client, ns)
-assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
-preview = {}
-ns.UFPreviewRender.Install(preview, {})
-render = preview.RefreshDeps._RenderState
-portrait = NewPreviewPortrait()
-portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
-render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
-render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
-assert(portrait._msufPreviewShapeMask.texture:find("circle_mask", 1, true), "Era preview must use the bundled circle mask")
-assert(portrait._msufPreviewBlizzFallback.shown, "Era preview must use gold art even with atlas APIs")
 -- Actual asset pixels: the corner is filled, its outer tip is rounded, the
 -- other quadrants stay circular, and the mask ends below the opaque stroke.
 do

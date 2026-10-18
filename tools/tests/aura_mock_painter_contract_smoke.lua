@@ -243,7 +243,14 @@ for _, path in ipairs(CONSUMERS) do
     end
 end
 for _, path in ipairs({ CONSUMERS[1], CONSUMERS[2], CONSUMERS[3], CONSUMERS[4], CONSUMERS[5] }) do
-    assert(Read(root .. "/" .. path):find("MockAuraPainter", 1, true), path .. " no longer paints through the shared painter")
+    if path == CONSUMERS[3] then
+        local stage = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+        assert(stage:find(":Unit(key)", 1, true) and Read(root .. "/" .. CONSUMERS[2]):find("MockAuraPainter", 1, true),
+            "Options no longer delegates its aura body through the engine scene and shared painter")
+        assert(not Read(root .. "/" .. path):find("CreateTexture", 1, true), "Options retained a duplicate aura painter")
+    else
+        assert(Read(root .. "/" .. path):find("MockAuraPainter", 1, true), path .. " no longer paints through the shared painter")
+    end
 end
 
 print("PASS aura mock painter contract: inert source, plain regions only, geometry, text, bars and sample state")

@@ -41,8 +41,23 @@ function Regions.Install(world)
         return region
     end
     -- These native portrait APIs otherwise resolve to opaque permissive stubs.
+    -- Model the texture resource that SetPortraitTexture stamps, so a live snapshot copied with GetTexture/SetTexture
+    -- retains its native portrait provenance. Each handle has one explicit source; no color/position inference.
+    local portraitSources = {}
+    local setTexture = widgets.Methods.SetTexture
+    widgets.Methods.SetTexture = function(region, texture, ...)
+        local result = setTexture(region, texture, ...)
+        if world.oraclePortraitSnapshot then region.oraclePortrait = portraitSources[texture] end
+        return result
+    end
     world.env.SetPortraitTexture = function(region, unit, legacy)
-        region.oraclePortrait = { unit = unit, legacy = legacy == true }
+        if not world.oraclePortraitSnapshot then
+            region.oraclePortrait = { unit = unit, legacy = legacy == true }
+            return
+        end
+        local handle = "native-portrait:" .. unit .. (legacy and ":legacy" or "")
+        portraitSources[handle] = { unit = unit, legacy = legacy == true }
+        region:SetTexture(handle)
     end
     world.env.SetPortraitTextureFromCreatureDisplayID = function(region, id)
         region.oraclePortrait = { displayID = id }

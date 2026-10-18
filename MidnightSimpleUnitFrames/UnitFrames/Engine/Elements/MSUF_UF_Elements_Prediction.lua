@@ -2388,6 +2388,19 @@ function Prediction.PaintSample(frame, healthValue, incoming, absorb, healAbsorb
   return true
 end
 
+-- Values-only companion for an owner's animation clock. Native follow anchors track the health texture themselves.
+function Prediction.PaintSampleData(frame, healthValue, incoming, absorb, healAbsorb)
+  local cfg = frame._msufPredictionRuntimeCfg
+  if not (cfg and cfg.enabled) then return false end
+  if cfg.heal and frame.incomingHealBar then ShowValue(frame.incomingHealBar, TEST_MAX, incoming) end
+  if cfg.absorb and frame.absorbBar then
+    ShowValue(frame.absorbBar, TEST_MAX, absorb)
+    UpdateOverAbsorbGlow(frame, cfg, frame.MSUFUnitKey, healthValue, TEST_MAX, absorb, true, true)
+  end
+  if cfg.healAbsorb and frame.healAbsorbBar then ShowValue(frame.healAbsorbBar, TEST_MAX, healAbsorb) end
+  return true
+end
+
 UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedActive)
   if boundUnit == true then
     unit = frame.MSUFUnitKey

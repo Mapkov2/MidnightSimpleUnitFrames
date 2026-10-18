@@ -113,7 +113,19 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- TBC/ruRU 7,948,487 -> 7,947,738 (-749). Mists drops 884 bytes.
         -- Both ceilings fall by exactly 749: 10,074,069 -> 10,073,320;
         -- 7,957,825 -> 7,957,076. Runtime cost pins are unchanged.
-        assert(bytes < (suffix == "Mainline" and 10073320 or 7957076),
+        -- 2026-10-18 (96b): Options paints its unit body through the engine scene; native sample/layer/style bridges
+        -- add exactly 23,896 Mainline/Forever and 21,644 Classic LF source bytes, measured against 13a01081c.
+        -- Mainline/ruRU 10,039,474 -> 10,063,370; TBC/ruRU 7,915,596 -> 7,937,240.
+        -- Source ceilings move by exactly those deltas: Mainline 10,039,762 -> 10,063,658,
+        -- Classic 7,924,934 -> 7,946,578. Live VM/native/heap and responsibility ceilings are unchanged.
+        -- 2026-10-18 (96b review fixes): shared aura samples restore stealable markers and missing reminders.
+        -- Measured core LF delta: +2446 on every client; Mainline/ruRU 10,063,370 -> 10,065,816,
+        -- TBC/ruRU 7,937,240 -> 7,939,686. Ceilings add exactly that delta:
+        -- Mainline 10,063,658 -> 10,066,104; Classic 7,946,578 -> 7,949,024.
+        -- 2026-10-19: 96b stacked on 98 (independent core bytes, summed): Mainline +26,342, Classic +24,090;
+        -- Mainline/ruRU 10,073,032 -> 10,099,374, TBC/ruRU 7,947,738 -> 7,971,828.
+        -- Ceilings: Mainline 10,073,320 -> 10,099,662; Classic 7,957,076 -> 7,981,166.
+        assert(bytes < (suffix == "Mainline" and 10099662 or 7981166),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

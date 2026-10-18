@@ -62,7 +62,7 @@ Check(type(box) == "table" and type(box.mock) == "table", "the unit preview did 
 box:Show()
 box.canvas:SetSize(400, 200)
 local mock = box.mock
-Check(type(mock.texLayers) == "table" and mock.texLayers[1] and mock.texLayers[2], "the preview has no texture layer holders")
+Check(mock.texLayers == nil, "texture holders were built before a scene paint")
 
 local player = env.MSUF_DB.player
 local function Refresh()
@@ -98,19 +98,19 @@ Check(not Shown(mock.powerBG) and not Shown(mock.portrait), "harness: the first 
 Show(true)
 Refresh()
 Check(Shown(mock.powerBG) and Shown(mock.portrait), "harness: the measured refresh shows no power bar or portrait")
-Check(Anchor(mock.texLayers[1]) == mock.powerBG,
+Check(Anchor(mock.texLayers[1]) == mock._body.targetPowerBar,
     "a texture layer anchored to Player Power follows the previous refresh instead of the power bar shown now")
 Check(Anchor(mock.texLayers[2]) == mock.portrait,
     "a texture layer anchored to the Portrait follows the previous refresh instead of the portrait shown now")
 
 -- 2. The previous refresh showed both; this one hides them, so both layers
--- fall back to the frame instead of a bar or portrait that is gone.
+-- retain the live anchor owners (their visibility does not change the native anchoring rule).
 Show(false)
 Refresh()
 Check(not Shown(mock.powerBG) and not Shown(mock.portrait), "harness: the measured refresh still shows power or the portrait")
-Check(Anchor(mock.texLayers[1]) == mock,
-    "a texture layer stays on the Player Power bar this refresh hid")
-Check(Anchor(mock.texLayers[2]) == mock,
-    "a texture layer stays on the Portrait this refresh hid")
+Check(Anchor(mock.texLayers[1]) == MSUF.TextureLayer.ResolveAnchorTarget(mock._body, "POWER"),
+    "hidden power anchor diverges from the live texture-layer owner")
+Check(Anchor(mock.texLayers[2]) == MSUF.TextureLayer.ResolveAnchorTarget(mock._body, "PORTRAIT"),
+    "hidden portrait anchor diverges from the live texture-layer owner")
 
 print(string.format("classic_unit_preview_texture_layer_order_smoke: ok (%s)", flavor))

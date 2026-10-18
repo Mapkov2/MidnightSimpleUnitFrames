@@ -4,7 +4,7 @@
 -- tokens the health element compares and paints MSUF.Translate(token) on the
 -- font string. The menu previews show the same words:
 --   * the unit preview's status text icons paint through
---     PreviewStatus.StatusTokenText (it used to paint the English token);
+--     the engine scene's native status FontStrings;
 --   * the group preview's status handles are Theme font strings, whose SetText
 --     translates already, so their words come out translated as they are.
 -- Boots the real core and Options graph on a German client, shows every status
@@ -63,13 +63,13 @@ for _, flavor in ipairs(flavors) do
     Check(box and box.mock and box.mock.icons, flavor .. ": no active unit preview")
     for _, row in ipairs(UNIT_TEXTS) do
         local icon = box.mock.icons[row.id]
-        Check(icon and icon.txt, flavor .. ": the unit preview has no " .. row.id .. " icon")
+        Check(icon and icon.GetText, flavor .. ": the unit preview has no " .. row.id .. " icon")
         Check(icon:IsShown(), flavor .. ": the unit preview hides " .. row.id .. " with its switch on")
-        local painted = icon.txt:GetText()
+        local painted = icon:GetText()
         Check(painted == core.Translate(row.token), flavor .. ": the unit preview paints " .. row.id .. " as '"
             .. tostring(painted) .. "', the live text paints '" .. tostring(core.Translate(row.token)) .. "'")
     end
-    Check(box.mock.icons.statusText.txt:GetText() == "TOT", flavor .. ": the unit preview Dead text is not German")
+    Check(box.mock.icons.statusText:GetText() == "TOT", flavor .. ": the unit preview Dead text is not German")
 
     -- Group preview: the status handles paint through the Theme's translating
     -- SetText, so every handle shows the translated word.

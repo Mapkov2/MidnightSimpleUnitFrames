@@ -110,6 +110,7 @@ local function VisualRoots(owner, path, roots, seen, depth, Regions)
 end
 
 local function Unit(mw, case, Regions)
+    mw.world.oraclePortraitSnapshot = true
     local env, Preview = mw.env, mw.core.UFPreview
     local parent = env.CreateFrame("Frame", nil, env.UIParent)
     parent:SetSize(900, 400)
@@ -144,7 +145,7 @@ local function Unit(mw, case, Regions)
     VisualRoots(box.mock, "unit", roots, {}, 0, Regions)
     if box.auraPreviewVisuals then VisualRoots(box.auraPreviewVisuals, "auras", roots, {}, 0, Regions) end
     return roots, aliases, { build = Source(mw.world.root, Preview._BuildPreview),
-        render = Source(mw.world.root, Preview.Refresh), entry = "UFPreview._BuildPreview; UFPreview.Refresh",
+        render = Source(mw.world.root, Preview.Refresh), entry = "UFPreview._BuildPreview; UFPreview.Refresh; root:Unit; scene:SetSample; scene:Frame",
         animation = case.animated and "animateCombatButton action; OnUpdate(0.06) at 101.25" or nil }
 end
 

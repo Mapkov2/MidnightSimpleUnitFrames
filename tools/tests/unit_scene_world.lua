@@ -319,6 +319,7 @@ function Methods:LiveFrame(unit, sample, name, register)
     for _, element in ipairs(UF.UnitScene.ELEMENTS) do mask[element] = true end
     UF.ApplySpec(live, spec, "MSUF_APPLY", mask)
     UF.FrameRuntimeUpdate(live, "MSUF_FORCE_UPDATE")
+    env.MSUF.UFStatusRuntime.UpdateBossNumber(live, spec.status)
     -- Later-registered elements (the Classic threat text) build regions after the first opacity pass; the next opacity
     -- update of a live frame settles them, so the twin starts from the settled state.
     UF.elements.Alpha.Update(live, "MSUF_ALPHA")

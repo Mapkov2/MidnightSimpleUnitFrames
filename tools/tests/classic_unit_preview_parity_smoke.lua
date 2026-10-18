@@ -112,7 +112,13 @@ local function Refresh(key)
     previewKey = key
     MSUF.UF.Config.Refresh()
     Preview.Refresh(box, "CLASSIC_UNIT_PREVIEW_PARITY_SMOKE")
-    Check(box.key == key, "the preview did not switch to " .. key)
+    if MSUF.UF.UnitScene.Normalize(key) then
+        Check(box.key == key, "the preview did not switch to " .. key)
+    else
+        local unit = key == "boss" and "boss1" or key
+        Check(not MSUF.Client.SupportsUnit(unit) and box._unitSceneRoot:Unit(key) == nil,
+            "unsupported " .. key .. " retained the old mock's fabricated unit body")
+    end
 end
 Refresh("player")
 local R = Preview.RefreshDeps and Preview.RefreshDeps._RenderState
@@ -125,7 +131,7 @@ local g = DB().general
 g.enablePowerGradient = true
 Refresh("target")
 Check(Shown(mock.power), "the Target preview lost its power bar")
-local powerGradients = mock._msufPreviewPowerGradients
+local powerGradients = mock._body.powerGradients
 Check(type(powerGradients) == "table" and Shown(powerGradients.right),
     "Power gradient is on but the preview power bar shows no gradient")
 Check(powerGradients.right._msufGradientTarget == mock.power,
@@ -141,7 +147,7 @@ player.detachedPowerBarShape = "BAR"
 g.enablePowerGradient = true
 Refresh("player")
 Check(Shown(mock.detachedPower), "the detached Player power bar is not previewed")
-local detachedGradients = mock._msufPreviewDetachedPowerGradients
+local detachedGradients = mock._body.powerGradients
 Check(type(detachedGradients) == "table" and Shown(detachedGradients.right)
     and detachedGradients.right._msufGradientTarget == mock.detachedPower.fill,
     "Power gradient is on but the detached power bar preview shows no gradient")
@@ -174,8 +180,8 @@ local function HighlightOn(style)
     g.bossTargetHighlightStyle = style
 end
 local function BorderEdgeColor()
-    local overlay = mock._msufPreviewFrameBorder
-    local edge = overlay and overlay._edges and overlay._edges.top
+    local edges = mock._body.MSUFBorderEdges
+    local edge = edges and (edges.top or edges[1])
     return edge and edge.vertexColor
 end
 local boss = DB().boss
@@ -189,7 +195,7 @@ if bossUnits then
     Check(Shown(box.handleBossTarget), "the boss target marker has no drag handle")
     local _, handleAnchor = box.handleBossTarget:GetPoint(1)
     Check(handleAnchor == marker, "the boss target handle is not placed on the marker")
-    Check(mock._msufPreviewBossBorder == nil, "Arrow style paints the border highlight")
+    Check(mock._body._msufBorderVisualSource ~= "bossTarget", "Arrow style paints the border highlight")
     -- The Fit footprint covers the marker: moved far out, the preview zooms out.
     local nearScale = box._mockAutoScale
     boss.bossTargetIndicatorOffsetX = -500
@@ -201,19 +207,19 @@ if bossUnits then
     HighlightOn("BORDER")
     Refresh("boss")
     Check(not Shown(marker) and not Shown(box.handleBossTarget), "Border style keeps the boss target marker")
-    Check(mock._msufPreviewBossBorder ~= nil, "Border style paints no boss target highlight")
+    Check(mock._body._msufBorderVisualSource == "bossTarget", "Border style paints no boss target highlight")
     local color = BorderEdgeColor()
     Check(color and color[1] == 1 and color[2] == 0.82 and color[3] == 0,
         "the boss frame border does not show the boss target highlight colour")
 
     HighlightOn("BORDER_ARROW")
     Refresh("boss")
-    Check(Shown(marker) and mock._msufPreviewBossBorder ~= nil, "Border and arrow style does not draw both pieces")
+    Check(Shown(marker) and mock._body._msufBorderVisualSource == "bossTarget", "Border and arrow style does not draw both pieces")
 
     g.bossTargetHighlightEnabled = false
     g.bossTargetOutlineMode = 0
     Refresh("boss")
-    Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._msufPreviewBossBorder == nil,
+    Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._body._msufBorderVisualSource ~= "bossTarget",
         "the boss target highlight stays with the highlight off")
     color = BorderEdgeColor()
     Check(not (color and color[1] == 1 and color[2] == 0.82 and color[3] == 0 and mock._msufPreviewFrameBorderEnabled == true),
@@ -221,7 +227,7 @@ if bossUnits then
 
     HighlightOn("BORDER_ARROW")
     Refresh("player")
-    Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._msufPreviewBossBorder == nil,
+    Check(not Shown(marker) and not Shown(box.handleBossTarget) and mock._body._msufBorderVisualSource ~= "bossTarget",
         "the boss target highlight shows on a unit that is not a boss")
 else
     Check(box.handleBossTarget == nil, "a client without boss units builds the boss target handle")
@@ -231,23 +237,27 @@ else
     -- Even a boss spec reaching the preview must draw no boss piece here: the
     -- spec the flavor compiles for Target carries the same boss target keys.
     HighlightOn("BORDER_ARROW")
-    local compiled = R.RuntimeSpecForPreviewKey
-    R.RuntimeSpecForPreviewKey = function(key) return compiled(key == "boss" and "target" or key) end
+    local compile, bossCompiles = MSUF.UF.Config.CompileSpec, 0
+    MSUF.UF.Config.CompileSpec = function(unit, output)
+        if unit == "boss1" then bossCompiles = bossCompiles + 1; return compile("target", output) end
+        return compile(unit, output)
+    end
     Refresh("boss")
-    local forced = R.RuntimeSpecForPreviewKey("boss")
+    local forced = compile("target", {})
+    Check(bossCompiles == 0 and box._unitSceneRoot:Unit("boss") == nil, "unsupported boss bypassed the scene gate")
     Check(forced and Indicator.HasMarker(forced.border) and Indicator.HasBorder(forced.border),
         "harness: the forced boss spec carries no boss target highlight")
     Check(mock._msufBossTargetIndicator == nil, "a client without boss units draws the boss target marker")
-    Check(mock._msufPreviewBossBorder == nil, "a client without boss units paints the boss target border")
+    Check(mock._body._msufBorderVisualSource ~= "bossTarget", "a client without boss units paints the boss target border")
     -- The forced spec compiles from the Target settings, so move its marker.
     local withHighlight = box._mockAutoScale
     local target = DB().target
     target.bossTargetIndicatorOffsetX = -500
     Refresh("boss")
-    Check(R.RuntimeSpecForPreviewKey("boss").border.bossTargetX == -500, "harness: the forced boss spec ignores the marker offset")
+    Check(compile("target", {}).border.bossTargetX == -500, "harness: the forced boss spec ignores the marker offset")
     Check(box._mockAutoScale == withHighlight, "a client without boss units sizes the preview for a boss target marker")
     target.bossTargetIndicatorOffsetX = nil
-    R.RuntimeSpecForPreviewKey = compiled
+    MSUF.UF.Config.CompileSpec = compile
 end
 
 -- 4. Status preview ---------------------------------------------------------
@@ -462,26 +472,26 @@ if supportsThreat then
         return math.max(1, math.floor(width + 0.5))
     end
     Check(RowWidth("100%") ~= RowWidth("85%"), "harness: 100% and 85% measure the same width")
-    local plate = threatRow.bg
-    Check(threatRow._msufThreatPlate == true and plate ~= nil, "the Target preview draws the threat sample without its dark plate")
+    local plate = mock._body.threatIndicatorPlate
+    Check(threatRow.txt._msufThreatPlate == plate and plate ~= nil, "the Target preview draws the threat sample without its dark plate")
     local topLeft, bottomRight = plate.points[1], plate.points[2]
-    Check(#plate.points == 2 and topLeft.point == "TOPLEFT" and topLeft.relativeTo == threatRow
-        and bottomRight.point == "BOTTOMRIGHT" and bottomRight.relativeTo == threatRow
+    Check(#plate.points == 2 and topLeft.point == "TOPLEFT" and topLeft.relativeTo == plate._msufThreatSample
+        and bottomRight.point == "BOTTOMRIGHT" and bottomRight.relativeTo == plate._msufThreatSample
         and topLeft.x < 0 and topLeft.y > 0 and bottomRight.x == -topLeft.x and bottomRight.y == -topLeft.y,
         "the threat plate is not padded evenly around the sample")
-    local plateColor = plate.colorTexture or {}
+    local plateColor = plate.color or {}
     Check(plateColor[1] == 0 and plateColor[2] == 0 and plateColor[3] == 0 and plateColor[4] == 0.75,
         "the threat plate is not the runtime's dark plate")
-    Check(threatRow:GetWidth() == RowWidth("100%"), "the threat sample on its plate is not as wide as 100% ("
+    Check(plate._msufThreatSample:GetStringWidth() == RowWidth("100%"), "the threat sample on its plate is not as wide as 100% ("
         .. tostring(threatRow:GetWidth()) .. ")")
     target.threatIndicatorBackground = false
     Refresh("target")
-    Check(threatRow._msufThreatPlate == nil and plate.allPoints ~= nil and (plate.colorTexture or {})[4] == 0,
+    Check(threatRow.txt._msufThreatPlate == nil and not plate:IsShown(),
         "Background off does not clear the threat plate")
-    Check(threatRow:GetWidth() == RowWidth("85%"), "without its plate the threat sample keeps the width of 100%")
+    Check(not plate:IsShown() and threatRow.txt._msufThreatPlate == nil, "without its plate the threat sample keeps the width of 100%")
     target.threatIndicatorBackground = nil
     Refresh("target")
-    Check(threatRow._msufThreatPlate == true, "Background back on does not bring the threat plate back")
+    Check(threatRow.txt._msufThreatPlate == plate, "Background back on does not bring the threat plate back")
     target.threatIndicatorColorCurve = false
     compiledThreat, threatRow = ThreatText()
     color = threatRow.txt.textColor or {}
@@ -508,9 +518,9 @@ player.portraitShape = "BLIZZARD"
 Refresh("player")
 local portrait = mock.portrait
 Check(Shown(portrait), "the Player portrait is not previewed")
-Check(not Shown(portrait._msufPreviewBlizzCorner), "the player bar-housing joint overlays the standalone ring")
-local ring, fallback = portrait._msufPreviewBlizzRing, portrait._msufPreviewBlizzFallback
-local mask = portrait._msufPreviewShapeMask
+Check(not Shown(portrait.blizzCorner), "the player bar-housing joint overlays the standalone ring")
+local ring, fallback = portrait.blizzRing, portrait.artBorder
+local mask = portrait.mask
 if MSUF.Client.IsVanilla == true then
     Check(Shown(fallback), "the Era preview lost the gold fallback ring for the Blizzard shape")
     Check(not Shown(ring), "the Era preview draws the modern atlas ring")

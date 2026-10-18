@@ -194,33 +194,25 @@ assert(castStyle() == nil)
 _G.MSUF_DB.bars.slantedBarsEnabled = true
 _G.MSUF_DB.bars.slantedCastbars = false
 
-local unitPreviewPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua"
-local unitPreview = Slice.Read(unitPreviewPath)
-local previewStyle = Slice.Function(unitPreview, "local function PreviewFrameStyle", unitPreviewPath)
-local previewPower = Slice.Function(unitPreview, "local function PreviewRoundedPowerBarsEnabled", unitPreviewPath)
-local previewHarness = [[
-local function UnitDB(key) return _G.MSUF_DB[key] end
-local function ReadPreviewBarsBool(key, fallback)
-    local value = _G.MSUF_DB.bars[key]
-    if value == nil then return fallback == true end
-    return value == true
-end
-]] .. previewStyle .. "\n" .. previewPower .. "\n" .. [[
-return PreviewFrameStyle, PreviewRoundedPowerBarsEnabled
-]]
-local unitPreviewStyle, unitPreviewPower = assert(compile(previewHarness))()
+-- The Options unit body is an engine scene. Its live style/power resolver must preserve the same toggle matrix.
+local function unitPreviewStyle(key) return style({ configKey = key }) end
+local function unitPreviewPower(key) return power({ configKey = key }) end
 assert(unitPreviewStyle("player") == "SLANTED" and unitPreviewPower("player"))
 assert(unitPreviewStyle("target") == "SQUARE" and not unitPreviewPower("target"))
 assert(unitPreviewStyle("focus") == "ROUNDED" and not unitPreviewPower("focus"))
 _G.MSUF_DB.bars.slantedBarsEnabled = false
+updateSlanted()
 assert(unitPreviewStyle("player") == "ROUNDED" and not unitPreviewPower("player"))
 _G.MSUF_DB.bars.slantedBarsEnabled = true
 _G.MSUF_DB.bars.slantedUnitFrames = false
+updateSlanted()
 assert(unitPreviewStyle("player") == "ROUNDED" and not unitPreviewPower("player"))
 _G.MSUF_DB.bars.slantedUnitFrames = true
 _G.MSUF_DB.bars.slantedPowerBars = false
+updateSlanted()
 assert(unitPreviewStyle("player") == "SLANTED" and not unitPreviewPower("player"))
 _G.MSUF_DB.bars.slantedPowerBars = true
+updateSlanted()
 
 -- The group preview cell is an engine scene frame: its style and power-bar choice are the live resolver's, not a
 -- second mirror in the Options addon (slanted_direction_scope_smoke asserts that the cell takes them). The same

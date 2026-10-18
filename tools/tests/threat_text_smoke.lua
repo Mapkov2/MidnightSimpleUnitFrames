@@ -1148,7 +1148,7 @@ do
     -- the Retail-named menu manifests (their Classic copies were removed).
     local MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
     for manifest, script in pairs({
-        ["Preview/MSUF_Menu2_UnitPreview.xml"] = { "MSUF_Menu2_UnitPreview_Status.lua", "MSUF_Menu2_UnitPreview_Render.lua" },
+        ["Preview/MSUF_Menu2_UnitPreview.xml"] = { "MSUF_Menu2_UnitPreview_Render.lua" },
         ["MSUF_Menu2_AfterUnitPreview.xml"] = { "Pages\\MSUF_Menu2_UnitStatusSection.lua" },
         ["MSUF_Menu2_AfterSearch.xml"] = { "Pages\\MSUF_Menu2_Unit.lua" },
     }) do
@@ -1158,15 +1158,11 @@ do
         end
     end
     do
-        local status = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Status.lua")
-        Check(status:find('\n    statusThreat = "85%",\n}', 1, true),
-            "UnitPreview_Status: the threat row must render as status text with the 85% sample")
+        local scene = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua")
+        Check(scene:find('"ThreatIndicator"', 1, true) and scene:find('PaintTestModeElements(frame, unit)', 1, true),
+            "the unit scene must use the real Threat % sample mode")
         local render = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Render.lua")
-        Check(render:find('statusPetHappiness = "petHappiness", statusThreat = "threat",', 1, true),
-            "UnitPreview_Render: the preview must read the compiled threat entry")
-        Check(render:find('                textW = RenderState.PreviewStatus.ThreatPlate and RenderState.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
-            1, true),
-            "UnitPreview_Render: the Threat % preview no longer lays out on its plate")
+        Check(render:find('statusThreat = "threatIndicatorHolder"', 1, true), "the Options handle must use the native threat holder")
         local section = Read(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua")
         Check(section:find('\n    local threat = FindStatusSpec(unit, "statusThreat")\n'
             .. '    if threat and threat.value == "statusThreat" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'
@@ -1207,78 +1203,55 @@ do
     end
 
     -- Preview: the sample shows its curve color, with the compile's default rule.
-    local function LoadPreviewStatus(client)
-        local addon = { Client = client,
-            UFPreview = { Model = { MakeFS = function() end, FontColor = function() return 1, 1, 1 end } } }
-        assert(loadfile(options .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua"))(
-            "MidnightSimpleUnitFrames_Options", addon)
-        return addon.UFPreviewStatus
-    end
     local function ThreatNamespace(client)
-        local ns = {
-            Client = client,
-            UF = { Layers = {}, Shared = {}, RegisterElement = function() end, RefreshElements = function() return true end },
-        }
+        local ns = { Client = client, UF = { Layers = {}, Shared = {}, RegisterElement = function() end,
+            RefreshElements = function() return true end } }
         assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", ns)
         return ns
     end
     local namespace = ThreatNamespace((LoadMainlineClient(true)))
-    local previewCases = { { "Forever", namespace }, { "Classic Era", ThreatNamespace((LoadClassicClient("Vanilla"))) },
-        { "TBC", ThreatNamespace((LoadClassicClient("TBC"))) } }
-    -- Mists loads the preview file too, but no threat module: its sample keeps the text color.
-    local mistsNS = ThreatNamespace((LoadClassicClient("Mists")))
-    Check(mistsNS.UFThreatText == nil, "Mists: the threat module published itself")
-    local oldNS = _G.MSUF_NS
-    _G.MSUF_NS = mistsNS
-    Check(LoadPreviewStatus(mistsNS.Client).ThreatCurveColor({}, {}) == nil, "Mists: the preview drew a threat curve color without the module")
-    local function PreviewIcon(text)
-        local bg = { points = {} }
-        function bg:ClearAllPoints() self.points = {}; self.allPoints = nil end
-        function bg:SetAllPoints() self.allPoints = true end
-        function bg:SetPoint(...) self.points[#self.points + 1] = { ... } end
-        function bg:SetColorTexture(r, g, b, a) self.colorTexture = { r, g, b, a } end
-        local txt = { text = text }
-        function txt:SetText(value) self.text = value end
-        function txt:GetText() return self.text end
-        function txt:GetStringWidth() return #self.text * 5 end
-        return { bg = bg, txt = txt }
+    local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
+    for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+        local mw = MenuWorld.Open(root, flavor, { page = "home" })
+        local db, Preview = mw.env.MSUF_DB, mw.core.UFPreview
+        local panel = mw.env.CreateFrame("Frame", nil, mw.env.UIParent)
+        panel._msufGetCurrentKey = function() return "target" end
+        local box = Preview._BuildPreview(mw.env.UIParent, panel, 900, 400)
+        box:Show(); box.canvas:SetSize(600, 260)
+        Preview.statusPreviewMode = "all"
+        local function Paint()
+            Preview.Refresh(box, "SETTINGS")
+            return box.mock._body
+        end
+        local frame = Paint()
+        if not mw.core.Client.SupportsThreatText then
+            Check(mw.core.UFThreatText == nil and frame.threatIndicatorText == nil, flavor .. " scene painted an unsupported threat sample")
+        else
+            local text, plate = frame.threatIndicatorText, frame.threatIndicatorPlate
+            Check(text and text:GetText() == "85%", flavor .. ": native scene lost its 85% sample")
+            local er, eg, eb = mw.core.UFThreatText.CurveColorAt(db.general, 85)
+            local color = text.textColor
+            Check(color[1] == er and color[2] == eg and color[3] == eb, flavor .. ": scene bypassed its threat curve")
+            db.target.threatIndicatorColorR, db.target.threatIndicatorColorG, db.target.threatIndicatorColorB = 0, .5, 1
+            Paint(); color = text.textColor
+            Check(color[1] == 0 and color[2] == .5 and color[3] == 1, flavor .. ": explicit threat RGB lost")
+            db.target.threatIndicatorColorCurve = true
+            Paint(); color = text.textColor
+            Check(color[1] == er and color[2] == eg and color[3] == eb, flavor .. ": explicit curve did not win")
+            local sample = assert(plate._msufThreatSample)
+            local top, bottom = plate.points[1], plate.points[2]
+            Check(plate:IsShown() and sample:GetText() == "100%" and text:GetText() == "85%", flavor .. ": native plate measure lost")
+            Check(top.relativeTo == sample and bottom.relativeTo == sample and top.x == -2 and top.y == 1
+                and bottom.x == 2 and bottom.y == -1 and plate.color[4] == .75, flavor .. ": native plate padding/color drift")
+            for _, variant in ipairs({ { nil, nil, true }, { false, nil, false }, { nil, false, false }, { true, false, true } }) do
+                db.target.threatIndicatorBackground, db.general.threatIndicatorBackground = variant[1], variant[2]
+                Paint()
+                Check(plate:IsShown() == variant[3], flavor .. ": native plate enable/override/default drift")
+            end
+            Check(frame.levelText == nil or frame.levelText._msufThreatPlate == nil, flavor .. ": Level acquired a threat plate")
+        end
+        box:Hide()
     end
-    -- Every client loads the same Retail-named preview file; the curve comes from
-    -- that client's own core module.
-    for _, case in ipairs(previewCases) do
-        local label = "UnitPreview_Status (" .. case[1] .. ")"
-        _G.MSUF_NS = case[2]
-        local preview = LoadPreviewStatus(case[2].Client)
-        local spec = { id = "statusThreat", size = "threatIndicatorSize" }
-        local r, g, b = preview.TextIndicatorColor(spec, {}, {}, {})
-        local er, eg, eb = case[2].UFThreatText.CurveColorAt({}, 85)
-        Check(r == er and g == eg and b == eb, label .. ": the sample must show its 85% curve color")
-        r, g, b = preview.TextIndicatorColor(spec, { threatIndicatorColorR = 0, threatIndicatorColorG = 0.5,
-            threatIndicatorColorB = 1 }, {}, {})
-        Check(r == 0 and g == 0.5 and b == 1, label .. ": a frame's own threat color must win while the curve is unset")
-        r = preview.TextIndicatorColor(spec, { threatIndicatorColorCurve = true, threatIndicatorColorR = 0,
-            threatIndicatorColorG = 0.5, threatIndicatorColorB = 1 }, {}, {})
-        Check(r == er, label .. ": an explicit Color by threat must win in the preview")
-        -- The plate: on unless turned off, as wide as "100%", padded around the icon.
-        Check(preview.ThreatBackgroundEnabled({}, {}) == true
-            and preview.ThreatBackgroundEnabled({ threatIndicatorBackground = false }, {}) == false
-            and preview.ThreatBackgroundEnabled({}, { threatIndicatorBackground = false }) == false
-            and preview.ThreatBackgroundEnabled({ threatIndicatorBackground = true }, { threatIndicatorBackground = false }) == true,
-            label .. ": the plate default drifted from the compile")
-        local icon = PreviewIcon("85%")
-        local bg = icon.bg
-        Check(preview.ThreatPlate(icon, spec, {}, {}, 4, 2) == 20 and icon.txt.text == "85%",
-            label .. ": the plate must measure 100% and keep the 85% sample")
-        Check(#bg.points == 2 and bg.points[1][1] == "TOPLEFT" and bg.points[1][2] == icon and bg.points[1][4] == -4
-            and bg.points[1][5] == 2 and bg.points[2][1] == "BOTTOMRIGHT" and bg.points[2][2] == icon
-            and bg.points[2][4] == 4 and bg.points[2][5] == -2 and bg.colorTexture[1] == 0 and bg.colorTexture[4] == 0.75,
-            label .. ": the preview plate must be the runtime's dark plate")
-        Check(preview.ThreatPlate(icon, spec, { threatIndicatorBackground = false }, {}, 4, 2) == nil and bg.allPoints
-            and bg.colorTexture[4] == 0, label .. ": Background off must clear the preview plate")
-        Check(preview.ThreatPlate(PreviewIcon("80"), { id = "level" }, {}, {}, 4, 2) == nil,
-            label .. ": only Threat % gets a plate")
-    end
-    _G.MSUF_NS = oldNS
 
     -- Colors page: the curve rows run for real in a sandbox. Their keys and defaults
     -- are literals (the offline search index generator never loads the runtime
@@ -1443,6 +1416,7 @@ do
     local World = dofile(root .. "/tools/tests/client_world.lua")
     for _, case in ipairs({ { "Forever", true }, { "Vanilla", true }, { "TBC", true }, { "Mainline", false }, { "Mists", false } }) do
         local flavor, supported = case[1], case[2]
+        if not arg[2] or flavor == arg[2] then
         local world = World.New(root, flavor):Boot()
         local failure = world:FirstFailure()
         Check(failure == nil, flavor .. " did not boot: " .. tostring(failure and failure.file) .. " "
@@ -1467,6 +1441,7 @@ do
             and frame._msufActiveElements and frame._msufActiveElements.ThreatIndicator == true
         Check((built == true) == supported, flavor .. ": a party frame " .. (supported and "did not build" or "built")
             .. " the threat text through the real group apply")
+        end
     end
 end
 

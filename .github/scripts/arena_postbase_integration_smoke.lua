@@ -327,16 +327,15 @@ AssertList(auraPreviewRefreshes, { "arena1", "arena2", "arena3", "arena4", "aren
     "5-slot generic aura-preview Arena runtime fan-out")
 _G.MSUF_MAX_ARENA_FRAMES = nil
 
-for _, marker in ipairs({
-    'unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena"',
-    'unit == "target" or unit == "focus" or unit == "boss" or unit == "arena"',
-    'unit ~= "target" and unit ~= "focus" and unit ~= "boss" and unit ~= "arena"',
-}) do
-    assert(unitPreviewAuras:find(marker, 1, true),
-        "generic aura preview lost Arena custom4/target-dot parity: " .. marker)
-end
-assert(unitPreviewAuras:find('if unit ~= "player" then return nil end', 1, true),
-    "Defensive Portrait preview must remain player-only")
+-- The body/aura painter now belongs to the engine. The real per-unit Custom-4 samples and portrait owners
+-- are exercised by unit_menu_scene_checks (through menu_preview_quality), including Arena.
+local engineAuras = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
+assert(engineAuras:find('"custom4", "defensivePortrait", "targetDotPortrait"', 1, true),
+    "engine aura scene lost a Custom-4 portrait lane")
+assert(engineAuras:find('unit == "player" and "defensivePortrait" or "targetDotPortrait"', 1, true),
+    "engine aura scene no longer separates Player Defensives from Target DoTs")
+assert(engineAuras:find('frame.MSUFPortraitHolder', 1, true), "engine portrait aura lane lost its native owner")
+assert(not unitPreviewAuras:find("CreateTexture", 1, true), "Options regained a duplicate aura painter")
 
 local unitPreviewRender = Read(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")

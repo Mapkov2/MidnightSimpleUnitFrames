@@ -77,12 +77,12 @@ for _, scenario in ipairs({ "no_live_frame", "size_override" }) do
             local portrait = box.mock.portrait
             assert(box._runtimeAppliedPortraitW == nil, "scenario did not bypass applied-size reader")
             Near(box._mockScale, 1, scenario .. " preview zoom")
-            Near(portrait._msufPreviewLayoutWidth, live._msufLayoutWidth, scenario .. " cached full width")
-            Near(portrait._msufPreviewLayoutHeight, live._msufLayoutHeight, scenario .. " cached full height")
+            Near(portrait:GetWidth(), live:GetWidth(), scenario .. " native holder width")
+            Near(portrait:GetHeight(), live:GetHeight(), scenario .. " native holder height")
             Near(portrait._msufLayoutWidth, live._msufLayoutWidth, scenario .. " painted full width")
             Near(portrait._msufLayoutHeight, live._msufLayoutHeight, scenario .. " painted full height")
-            Near(portrait._msufPreviewBorderSpec.width, live._msufLayoutWidth, scenario .. " spec width")
-            Near(portrait._msufPreviewBorderSpec.height, live._msufLayoutHeight, scenario .. " spec height")
+            Near(box.mock._body.MSUFSpec.portrait.width, frame.MSUFSpec.portrait.width, scenario .. " native spec width")
+            Near(box.mock._body.MSUFSpec.portrait.height, frame.MSUFSpec.portrait.height, scenario .. " native spec height")
             if core.Client.IsVanilla then
                 ComparePoints(portrait.artBorder, live.artBorder, scenario .. " Era gold ring")
                 Near(select(4, live.artBorder:GetPoint(1)), -26, "275px Era ring reference")
@@ -97,13 +97,18 @@ for _, scenario in ipairs({ "no_live_frame", "size_override" }) do
     end
 end
 if not selected or selected == "availability" then
-    -- Reinstall the real painter to observe its cold capability probe even if
-    -- opening the menu already warmed the original closure.
-    core.UFPreviewRender.Install(Preview, Preview.RefreshDeps)
-    local render = Preview.RefreshDeps._RenderState
+    -- A fresh scene performs the native capability decision once; Era never probes the modern corner.
+    local sceneRoot = core.GF.NewPreviewScene(parent)
+    local scene = sceneRoot:Unit("player")
     local before = atlasProbes
-    render.LayoutPreviewBlizzardPortrait(box.mock.portrait, true, 36, 36, true, true, {})
+    sceneRoot:Activate()
+    scene:Show()
+    mw.world.widgets:RunTimers()
     if core.Client.IsVanilla then Near(atlasProbes, before, "cold Era corner availability probe") end
+    local warm = atlasProbes
+    scene:Refresh()
+    Near(atlasProbes, warm, "warm scene corner availability cache")
+    sceneRoot:Release()
 end
 assert(#failures == 0, table.concat(failures, "; "))
 print("portrait_full_overlay_preview_smoke: ok (" .. flavor .. "; no live frame, uniform override, repeated full overlay)")

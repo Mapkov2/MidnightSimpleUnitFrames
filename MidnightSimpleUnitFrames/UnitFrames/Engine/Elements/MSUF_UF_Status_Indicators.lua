@@ -684,7 +684,7 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   local leaderCfg, assistCfg = status.leader, status.assist
   local leaderTex, assistTex = frame.leaderIcon or frame.LeaderIndicator, frame.assistIcon
   local leader = sample.player == true and sample.leader == true
-  local assist = sample.player == true and not leader and sample.assist == true
+  local assist = sample.player == true and (not leader or sample.statusSelection == "all") and sample.assist == true
   if leaderTex then
     local show = leaderCfg and leaderCfg.enabled and leader
     if show then ApplyLeaderTexture(leaderTex, leaderCfg, status, false) end
@@ -728,7 +728,10 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
       SetShown(tex, false)
     end
   end
-  SetShown(frame.incomingResIndicatorIcon, false)
+  tex, cfg = frame.incomingResIndicatorIcon, status.incomingRes
+  local resurrect = sample.incomingRes == true and cfg and cfg.enabled
+  if resurrect then ApplyStateOrPackIconTexture(tex, "incomingRes", cfg, status, "resurrect") end
+  SetShown(tex, resurrect and true or false)
   cfg, tex = status.pvp, frame.pvpIndicatorIcon
   if tex then
     local faction = cfg and cfg.enabled and sample.pvp or nil
@@ -747,6 +750,67 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   end
   local statusText = frame.statusIndicatorText
   if statusText then ClearStatusText(frame, statusText) end
+end
+
+local SCENE_STATUS_TEXTS = {
+  { "statusText", "dead", "showDead", "DEAD" }, { "statusGhostText", "ghost", "showGhost", "GHOST" },
+  { "statusAFKText", "afk", "showAFK", "AFK" }, { "statusDNDText", "dnd", "showDND", "DND" },
+}
+local SCENE_STATUS_FIELDS = {
+  { "raidmarker", "raidTargetIcon" },
+  { "leader", "leaderIcon" },
+  { "assist", "assistIcon" },
+  { "level", "levelText" },
+  { "bossNumber", "bossNumberText" },
+  { "raceText", "raceText" },
+  { "classText", "classStatusText" },
+  { "elite", "eliteIcon" },
+  { "statusCombat", "combatStateIndicatorIcon" },
+  { "statusResting", "restingIndicatorIcon" },
+  { "statusIncomingRes", "incomingResIndicatorIcon" },
+  { "statusPvp", "pvpIndicatorIcon" },
+  { "statusPetHappiness", "petHappinessIndicatorHolder" },
+  { "statusPetXP", "petXPBar" },
+  { "statusThreat", "threatIndicatorHolder" },
+  { "stance", "stanceIndicatorText" },
+}
+-- Options selects one configured indicator or all of them. Extra state texts use the live layout and font rules;
+-- there is no unit event, AFK timer or ledger behind these stand-ins.
+function Runtime.PaintSceneStatus(frame, status, selection, sample)
+  for i = 1, #SCENE_STATUS_FIELDS do
+    local key, field = SCENE_STATUS_FIELDS[i][1], SCENE_STATUS_FIELDS[i][2]
+    if selection ~= "all" and key ~= selection then SetShown(frame[field], false) end
+  end
+  local cfg = status.statusText
+  for i = 1, #SCENE_STATUS_TEXTS do
+    local row = SCENE_STATUS_TEXTS[i]
+    local field = "_msufScene_" .. row[1]
+    local layout = cfg and (cfg[row[2]] or cfg)
+    local shown = cfg and cfg.enabled and cfg[row[3]] and layout.enabled ~= false
+      and (selection == "all" or selection == row[1])
+    local fs = frame[field]
+    if shown then
+      fs = fs or EnsureText(frame, field, layout.layer)
+      AdoptRegion(frame, fs, layout.layer)
+      LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
+      SetText(fs, MSUF.Translate(row[4]))
+      fs:SetAlpha((fs._msufStatusAlpha or 1) * (frame._msufAlphaLastFG or 1))
+    end
+    SetShown(fs, shown and true or false)
+  end
+  local held = status.testMode
+  status.testMode = true
+  UpdateAFKTimerText(frame, status, cfg, (selection == "all" or selection == "statusAFKTimer") and "afk" or nil)
+  status.testMode = held
+  local stance = status.stance
+  if stance and stance.enabled and (selection == "all" or selection == "stance") then
+    local fs = frame.stanceIndicatorText
+    if fs then
+      LayoutRegion(fs, frame, frame.MSUFSpec, stance, true)
+      SetText(fs, sample and sample.stance or MSUF.Translate("Stance"))
+      SetShown(fs, true)
+    end
+  end
 end
 
 local function BindStatusIndicatorArt(values)

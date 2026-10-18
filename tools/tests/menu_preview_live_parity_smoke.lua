@@ -41,6 +41,7 @@ local failure = world:FirstFailure()
 Check(failure == nil, "load failed in " .. tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
 
 local env, MSUF = world.env, world.core
+assert(loadfile(root .. "/tools/tests/unit_scene_region_fixture.lua"))().Install(MSUF)
 local Methods = world.widgets.Methods
 for name, method in pairs({
     SetStartPoint = function(self, ...) self.startPoint = { ... } end,
@@ -157,13 +158,14 @@ do
     player.portraitSizeMode, player.portraitWidth, player.portraitHeight = "SEPARATE", 60, 30
     player.portraitZoom, player.portraitPanX, player.portraitPanY, player.portraitFlip = 150, 50, -25, true
     MSUF.UF.Config.Refresh()
-    local R = Preview.RefreshDeps._RenderState
-    local compiled = R.RuntimeSpecForPreviewKey("player")
+    local config = MSUF.UF.Config
+    local getSpec = config.GetSpec
+    local compiled = getSpec("player")
     Check(compiled and compiled.portrait and compiled.portrait.texL ~= nil, "harness: no compiled player portrait")
-    local runtimeSpecFor = R.RuntimeSpecForPreviewKey
-    R.RuntimeSpecForPreviewKey = function() return nil end
+    config.GetSpec = function() return nil end -- no shared/live compiled spec: the scene must compile its private one
     Preview.Refresh(box, "MENU_PREVIEW_LIVE_PARITY")
-    R.RuntimeSpecForPreviewKey = runtimeSpecFor
+    config.GetSpec = getSpec
+    Check(box._unitScene.spec ~= compiled, "the preview borrowed the live compiled portrait spec")
     local coords = box.mock.portrait.tex.texCoord
     Check(type(coords) == "table", "harness: the fallback portrait got no texture coordinates")
     local p = compiled.portrait

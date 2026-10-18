@@ -893,6 +893,20 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive, threatKnown, th
   return false
 end
 
+-- A menu's boss-target sample paints the configured highlight through the live border/marker painters.
+function Borders.PaintScene(frame, unit)
+  local cfg = frame.MSUFSpec and frame.MSUFSpec.border
+  local boss = IsBossUnit(unit)
+  if BossIndicator then
+    local marker = BossIndicator.Apply(frame, boss and cfg or nil, 1)
+    if marker then marker:Show() end
+    if boss and BossIndicator.HasBorder(cfg) then
+      ApplyResolvedBorder(frame, cfg, "bossTarget", RuntimeHighlightBorderLevel(frame, cfg, "bossTarget"),
+        frame._msufBorderRuntimeHighlightThickness, BossTargetColor(cfg))
+    end
+  end
+end
+
 function Borders.Create(frame)
   LayoutBorder(frame, 1)
   EnsureTexturedBorderPieces(frame)

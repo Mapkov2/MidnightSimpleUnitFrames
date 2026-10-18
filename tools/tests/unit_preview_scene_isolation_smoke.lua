@@ -619,6 +619,35 @@ for _, variant in ipairs(TWIN_VARIANTS) do
     TwinAll(variant[1])
 end
 
+-- Native rounded/slanted decoration must also remain unit-free on these plain scene frames.
+do
+    local bars = db.bars
+    local saved = { bars.roundedFramesEnabled, bars.roundedUnitFrames, bars.slantedBarsEnabled, bars.slantedUnitFrames }
+    local forEach = UF.ForEachFrame
+    local auras = env.MSUF.MSUF_Auras3
+    local function ApplyDecoratorConfig()
+        UF.ForEachFrame = function() end -- this world's header placeholders have no native edge pools
+        local refreshMasks = auras.RefreshRoundedDispelOverlayMasks
+        auras.RefreshRoundedDispelOverlayMasks = function() return false end -- no live aura surfaces in this scene-only fixture
+        env.MSUF_ApplyRoundedUnitframes()
+        auras.RefreshRoundedDispelOverlayMasks = refreshMasks
+        UF.ForEachFrame = forEach
+    end
+    for _, shape in ipairs({ "rounded", "slanted" }) do
+        bars.roundedFramesEnabled, bars.roundedUnitFrames = shape == "rounded", shape == "rounded"
+        bars.slantedBarsEnabled, bars.slantedUnitFrames = shape == "slanted", shape == "slanted"
+        ApplyDecoratorConfig()
+        UF.Config.Refresh()
+        w:Reset(); w:Arm()
+        for _, scene in ipairs(scenes) do scene:Refresh() end
+        w:Disarm()
+        Check(not w:Violations(), shape .. " unit scene queried the client: " .. tostring(w:Violations()))
+    end
+    bars.roundedFramesEnabled, bars.roundedUnitFrames, bars.slantedBarsEnabled, bars.slantedUnitFrames = unpack(saved, 1, 4)
+    ApplyDecoratorConfig()
+    UF.Config.Refresh()
+end
+
 ---------------------------------------------------------------------------
 -- 4b. A scene paint touches no live frame, whatever its unit token finds: the live frame of the same token (in the unit
 -- index, under its global name) is digested before and after every kind of scene paint.
@@ -748,10 +777,11 @@ UF.Config.Refresh()
 ---------------------------------------------------------------------------
 local A3 = env.MSUF.MSUF_Auras3
 local STANDINS = 2
-local AURA_LANES = { buff = true, debuff = true }
+local AURA_LANES = { buff = true, debuff = true, custom1 = true, custom2 = true, custom3 = true, custom4 = true, defensivePortrait = true, targetDotPortrait = true }
 --- The stand-in icons a scene frame shows, by the lane host they are anchored to, and the icons that belong to no lane.
 local function StandIns(frame)
-    local counts, strays, byHost = { buff = 0, debuff = 0 }, 0, {}
+    local counts, strays, byHost = {}, 0, {}
+    for key in pairs(AURA_LANES) do counts[key] = 0 end
     for key, laneHost in pairs(frame._msufGFFrameAuraPreviewHosts or {}) do byHost[laneHost] = key end
     for _, visual in ipairs(frame._msufGFFrameAuraPreviews or {}) do
         if visual.shown == true and (visual._texture == nil or visual._texture.shown ~= false) then
@@ -767,7 +797,8 @@ local function WantedStandIns(scene)
     local frame = scene:Frame()
     local spec = frame.MSUFSpec
     local config = spec.auras and spec.auras.enabled == true and A3.ResolveAuraPreviewConfig(frame, scene:Unit(), spec)
-    local wanted = { buff = 0, debuff = 0 }
+    local wanted = {}
+    for key in pairs(AURA_LANES) do wanted[key] = 0 end
     for key in pairs(wanted) do
         local lane = config and config.lanes and config.lanes[key]
         if lane and lane.enabled == true and (tonumber(lane.max) or 0) >= 1 then
@@ -777,7 +808,8 @@ local function WantedStandIns(scene)
     return wanted, config
 end
 local function CheckStandIns(label)
-    local total = { buff = 0, debuff = 0 }
+    local total = {}
+    for key in pairs(AURA_LANES) do total[key] = 0 end
     for _, scene in ipairs(scenes) do
         local unit, frame = scene:Unit(), scene:Frame()
         local wanted, config = WantedStandIns(scene)
@@ -791,13 +823,13 @@ local function CheckStandIns(label)
                 for _, visual in ipairs(frame._msufGFFrameAuraPreviews) do
                     local first = visual.points and visual.points[1]
                     if visual.shown == true and first and first.relativeTo == frame._msufGFFrameAuraPreviewHosts[key] then
-                        Check(visual.width == lane.size and visual.height == lane.size,
+                        Check(visual.width == (lane.buttonWidth or lane.size) and visual.height == (lane.buttonHeight or lane.size),
                             label .. ": " .. unit .. " " .. key .. " stand-in is not the lane's size")
                     end
                 end
             end
         end
-        Check(strays == 0, label .. ": " .. unit .. " shows " .. strays .. " stand-in icons that belong to no buff or debuff lane")
+        Check(strays == 0, label .. ": " .. unit .. " shows " .. strays .. " stand-in icons that belong to no configured unit lane")
         for key, laneHost in pairs(frame._msufGFFrameAuraPreviewHosts or {}) do
             Check(AURA_LANES[key] == true, label .. ": " .. unit .. " built a lane host for " .. tostring(key)
                 .. ", a lane a unit frame has no stand-ins for")

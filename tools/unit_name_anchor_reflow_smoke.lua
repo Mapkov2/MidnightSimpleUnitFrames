@@ -312,26 +312,14 @@ local previewFile = assert(io.open(
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua", "rb"))
 local previewSource = previewFile:read("*a")
 previewFile:close()
-local runtimeFontCall =
-  "ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz),"
-local runtimeFontPos = previewSource:find(runtimeFontCall, 1, true)
-Check(runtimeFontPos ~= nil, "identity Preview does not use the compiled runtime font")
-Check(previewSource:find('return (anchor == "NAMERIGHT" or anchor == "NAMELEFT") and "name" or nil', 1, true),
-  "identity Preview changes font roles outside name-relative anchors")
-local previewTextPos = runtimeFontPos and previewSource:find(
-  "RenderState.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)",
-  runtimeFontPos, true)
-Check(previewTextPos ~= nil and runtimeFontPos < previewTextPos,
-  "identity Preview applies its font after its indicator color")
-local identityLayoutPos = previewTextPos and previewSource:find(
-  "if isIdentityText then", previewTextPos, true)
-local statusTextLayoutPos = identityLayoutPos and previewSource:find(
-  "elseif RenderState.PreviewStatus.IsStatusTextState", identityLayoutPos, true)
-local identityLayout = identityLayoutPos and statusTextLayoutPos
-  and previewSource:sub(identityLayoutPos, statusTextLayoutPos - 1) or ""
-Check(identityLayout ~= "", "identity Preview layout branch is missing")
-Check(not identityLayout:find("ApplyPreviewFont(icon.txt", 1, true),
-  "identity Preview layout overwrites the compiled runtime font")
+Check(previewSource:find('local scene = root:Unit(key)', 1, true)
+  and previewSource:find('AliasScene(box.mock, scene:Frame())', 1, true), "Options identity text is not the native scene text")
+Check(not previewSource:find('ApplyRuntimePreviewFont(', 1, true)
+  and not previewSource:find('SetPreviewIconTexture(', 1, true), "Options can overwrite the native identity font/color")
+local sceneFile = assert(io.open("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua", "rb"))
+local sceneSource = sceneFile:read("*a"); sceneFile:close()
+Check(sceneSource:find('"StatusIndicators"', 1, true)
+  and sceneSource:find('runtime.PaintSampleIdentityTexts(frame, status, sample)', 1, true), "scene bypasses the native identity text owner")
 
 local statusFile = assert(io.open(
   "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", "rb"))

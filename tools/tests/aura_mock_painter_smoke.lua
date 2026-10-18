@@ -1,4 +1,4 @@
--- Finite real-consumer aura painting parity against the frozen output of the pre-painter renderers (1400cfa7).
+-- Finite real-consumer aura parity: legacy observations plus the reviewed native unit-scene migration.
 local root,flavor=assert(arg[1]),assert(arg[2])
 root=root:gsub("\\", "/"):gsub("/$", "")
 local World=assert(loadfile(root.."/tools/tests/client_world.lua"))()
@@ -189,20 +189,28 @@ for _,variant in ipairs(variants) do
  local visual=bySurface.groupCore.EnsureAuraPreview(parent,"painter",1)
  bySurface.groupCore.ApplyFrameAuraPreview(parent,"party",visual,lane,{textures={135987,136116}},1,1,parent)
  Emit("groupCore/"..variant.name,visual)
- local state=assert(w.core.UFPreviewAuras.BuildState("player",200,80,nil,true))
- local box={mock=parent,auraPreviewVisuals={}}
- local handle=w.env.CreateFrame("Frame",nil,parent)
- local bounds=assert(state.debuff)
- bounds.shown=2
- for key,value in pairs(variant) do if key~="name" then state.cfg[key]=value end end
- bySurface.unit.LayoutHandle(box,handle,state,"debuff",function(v)return v end,1)
- Emit("unit/"..variant.name,box.auraPreviewVisuals.debuff)
- -- Repaint and reduced lane counts exercise pooled identity and overlay cleanup.
- local first=box.auraPreviewVisuals.debuff._icons[1]
- bounds.shown=1
- bySurface.unit.LayoutHandle(box,handle,state,"debuff",function(v)return v end,1)
- assert(first==box.auraPreviewVisuals.debuff._icons[1],"unit pool identity")
- Emit("unit-reuse/"..variant.name,box.auraPreviewVisuals.debuff)
+ -- The unit consumer now paints native scene regions, including its pooled identities.
+ local rootScene = c.GF.NewPreviewScene(parent)
+ local scene = rootScene:Unit("player")
+ local frame = scene:Frame()
+ local host = bySurface.groupCore.EnsureFrameAuraLaneHost(frame, "debuff")
+ host:SetSize(200,80);host:Show()
+ local function UnitPaint(count)
+  for i=1,count do
+   local icon=bySurface.groupCore.EnsureAuraPreview(frame,i,"_msufGFFrameAuraPreviews")
+   bySurface.groupCore.ApplyFrameAuraPreview(frame,"unit",icon,lane,{key="debuff",textures={135987,136116}},i-1,i,host)
+  end
+  for i=count+1,#frame._msufGFFrameAuraPreviews do bySurface.groupCore.HideFrameAuraPreview(frame._msufGFFrameAuraPreviews[i]) end
+  c.GF.AnimateUnitFrameAuras(frame,nil)
+ end
+ UnitPaint(2)
+ frame:Show()
+ Emit("unit/"..variant.name,frame)
+ local first=frame._msufGFFrameAuraPreviews[1]
+ UnitPaint(1)
+ assert(first==frame._msufGFFrameAuraPreviews[1],"unit pool identity")
+ Emit("unit-reuse/"..variant.name,frame)
+ rootScene:Release()
 end
 local parent=w.env.CreateFrame("Frame",nil,w.env.UIParent);parent:SetSize(40,30);parent:Show()
 for _,anchor in ipairs({"TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT","invalid"}) do
@@ -316,4 +324,4 @@ for i=1,4 do Paint() end
 assert(visual==bySurface.groupCore.EnsureAuraPreview(host,1,"_painterPool"),"core pool identity changed")
 assert(#w.widgets.frames==frames and #visual.regions==regions and visual._swipe==swipe and visual._durationBar==bar and visual._timer==timer and visual._stack==stack and visual._dispelBorder==border,"core lazy region identity changed")
 
-print("PASS aura mock painter " .. flavor .. ": 89 frozen legacy states; real provider, combat fallback and private pools")
+print("PASS aura mock painter " .. flavor .. ": 89 frozen painter states; real provider, combat fallback and private pools")

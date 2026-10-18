@@ -26,7 +26,6 @@ MSUF.UFPreview = Preview
 ExportPublic("MSUF_UFPreview", Preview)
 local PreviewCore = MSUF.UFPreviewCore or {}
 local PreviewCastbar = MSUF.UFPreviewCastbar or {}
-local PreviewStatus = MSUF.UFPreviewStatus or {}
 local PreviewAuras = MSUF.UFPreviewAuras or {}
 local PreviewRuntime = MSUF.UFPreviewRuntime or {}
 local PreviewZoomPan = MSUF.UFPreviewZoomPan or {}
@@ -47,19 +46,13 @@ local NormalizePreviewRaidGroupNameAnchor = PreviewModel.NormalizePreviewRaidGro
 local CurrentPanelKey, UnitDB, NormalizeHpMode = PreviewModel.CurrentPanelKey, PreviewModel.UnitDB, PreviewModel.NormalizeHpMode
 local NormalizePowerMode, TextScopeGet, TextScopeHasSlots = PreviewModel.NormalizePowerMode, PreviewModel.TextScopeGet, PreviewModel.TextScopeHasSlots
 local TextScopeSlotGet, ToTInlineSeparator = PreviewModel.TextScopeSlotGet, PreviewModel.ToTInlineSeparator
-local ShortenPreviewName, ForceTextUnit, ApplyPanelUnit = PreviewModel.ShortenPreviewName, PreviewModel.ForceTextUnit, PreviewModel.ApplyPanelUnit
+local ForceTextUnit, ApplyPanelUnit = PreviewModel.ForceTextUnit, PreviewModel.ApplyPanelUnit
 local EnsureUnitPortraitStyle, PortraitStyleGet = PreviewModel.EnsureUnitPortraitStyle, PreviewModel.PortraitStyleGet
 local ApplyPortrait, NormalizeStatusPreviewId, ClassColor = PreviewModel.ApplyPortrait, PreviewModel.NormalizeStatusPreviewId, PreviewModel.ClassColor
-local HealthColor, DarkMatchHPColor, HealthBackgroundColor = PreviewModel.HealthColor, PreviewModel.DarkMatchHPColor, PreviewModel.HealthBackgroundColor
-local PowerBackgroundColor, PowerColor, ClassPortraitVisual = PreviewModel.PowerBackgroundColor, PreviewModel.PowerColor, PreviewModel.ClassPortraitVisual
-local UnitPreviewPortraitTexture, FontColor = PreviewModel.UnitPreviewPortraitTexture, PreviewModel.FontColor
-local PreviewNameColor, PreviewToTInlineColor, SetTex = PreviewModel.PreviewNameColor, PreviewModel.PreviewToTInlineColor, PreviewModel.SetTex
-local PreviewHealPredictionEnabled = PreviewModel.PreviewHealPredictionEnabled
-local PreviewResolveHealPredAnchorMode = PreviewModel.PreviewResolveHealPredAnchorMode
-local PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled = PreviewModel.PreviewResolveAbsorbAnchorMode, PreviewModel.PreviewAbsorbBarEnabled
-local LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled = PreviewModel.LayoutUnitPreviewOverlay, PreviewModel.MakeFS, PreviewModel.ReadPowerBarEnabled
+local PowerColor, FontColor, SetTex = PreviewModel.PowerColor, PreviewModel.FontColor, PreviewModel.SetTex
+local MakeFS, ReadPowerBarEnabled = PreviewModel.MakeFS, PreviewModel.ReadPowerBarEnabled
 local CanDetachPowerBarKey, ReadPowerBarHeight = PreviewModel.CanDetachPowerBarKey, PreviewModel.ReadPowerBarHeight
-local ResolveNameAnchor, FormatMode = PreviewModel.ResolveNameAnchor, PreviewModel.FormatMode
+local ResolveNameAnchor = PreviewModel.ResolveNameAnchor
 local UnitPreviewText = PreviewModel.UnitPreviewText
 Preview.statusPreviewMode = "current"
 Preview.selectedStatusId = nil
@@ -78,9 +71,6 @@ function Preview.SelectStatusIcon(id)
     if h and SelectPreviewHandle then SelectPreviewHandle(h, true) end
     Preview.RequestRefresh("STATUS_PREVIEW_SELECT")
 end
-local PositionFromAnchor, PositionRuntimeLayoutIconPreview = PreviewStatus.PositionFromAnchor, PreviewStatus.PositionRuntimeLayoutIconPreview
-local PositionStatusCornerPreview, PositionSameAnchorPreview = PreviewStatus.PositionStatusCornerPreview, PreviewStatus.PositionSameAnchorPreview
-local PositionLevelPreview = PreviewStatus.PositionLevelPreview
 local RoundOffset = PreviewCore.RoundOffset
 -- Preview keyboard helpers are shared with ClassPower preview so arrow nudges,
 -- EM2 nudge targets, and text-focus guards stay identical across preview types.
@@ -278,6 +268,42 @@ local function CommitHandleMove(handle, reason)
     RequestPreviewLayoutRefresh(box, moveReason)
     RefreshHandleSelectionVisuals(box)
 end
+-- Deltas stored by the controls are unit-frame coordinates. The handle lives on the outer stage; engine texts
+-- live inside the zoomed scene. Convert through each real region's effective scale, as the group preview does.
+local function DragSceneText(handle, dx, dy)
+    local box, key = handle._preview, handle._key
+    local mock = box and box.mock
+    if not (mock and mock._body) then return end
+    local body, regions = mock._body, {}
+    if key == "name" then
+        regions[1] = body._msufNameClipFrame and body._msufNameClipFrame:IsShown() and body._msufNameClipFrame or body.nameText
+    elseif key == "hp" then regions = { body.hpTextLeft, body.hpTextCenter, body.hpText }
+    elseif key == "power" then regions = { body.powerTextLeft, body.powerTextCenter, body.powerText }
+    else
+        local field = ({ hpLeft = "hpTextLeft", hpCenter = "hpTextCenter", hpRight = "hpText",
+            powerLeft = "powerTextLeft", powerCenter = "powerTextCenter", powerRight = "powerText" })[key]
+        if field then regions[1] = body[field] end
+    end
+    local stageScale = mock:GetEffectiveScale()
+    local outerX, outerY = dx * box._mockEffectiveScale, dy * box._mockEffectiveScale
+    -- Canvas rectangles move independently; a fallback anchored to the text follows its native anchor chain.
+    local _, relative = handle:GetPoint(1)
+    if relative == box.canvas or relative == mock then regions.handle = handle end
+    for _, region in pairs(regions) do
+        if region and region:IsShown() then
+            local ratio = region:GetEffectiveScale() / stageScale
+            local points = {}
+            for index = 1, region:GetNumPoints() do points[index] = { region:GetPoint(index) } end
+            region:ClearAllPoints()
+            for i = 1, #points do
+                local point = points[i]
+                region:SetPoint(point[1], point[2], point[3], (point[4] or 0) + outerX / ratio, (point[5] or 0) + outerY / ratio)
+            end
+            region._msufX, region._msufY, region._msufPoint, region._msufRelPoint, region._msufRelativeTo = nil, nil, nil, nil, nil
+        end
+    end
+end
+
 local function WriteHandleOffsets(handle, x, y, reason)
     if not handle then return false end
     local box = handle._preview
@@ -316,6 +342,13 @@ local function WriteHandleOffsets(handle, x, y, reason)
     elseif fields.text and type(M2.SyncDirectTextOffsets) == "function" then
         M2.SyncDirectTextOffsets(store, xKey)
         M2.SyncDirectTextOffsets(store, yKey)
+    end
+    if fields.text and reason == "UNIT_PREVIEW_DRAG" then
+        local dx, dy = nextX - beforeX, nextY - beforeY
+        if not directPrefixes and type(fields.resolveOffsetDelta) == "function" then
+            dx, dy = fields.resolveOffsetDelta(handle, dx, dy)
+        end
+        DragSceneText(handle, dx, dy)
     end
     CommitHandleMove(handle, reason)
     if not handle._msuf2PreviewHistoryTx then CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move") end
@@ -835,9 +868,6 @@ local function MakeHandle(preview, key, fields, label, color)
     preview.handles[#preview.handles + 1] = h
     return h
 end
-local CreateIcon = PreviewStatus.CreateIcon
-local SetPreviewIconTexture = PreviewStatus.SetIconTexture
-local ResolveStatusPreviewAnchor = PreviewStatus.ResolveAnchor
 MenuTheme = PreviewCore.MenuTheme
 local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
@@ -1098,7 +1128,7 @@ function BoxBuild.Selection(box, s)
         return PreviewHelpers.ApplyDockedPreviewLayout(self, self.sidebar, self.canvas, bottomInset, false)
     end
 end
-function BoxBuild.MockHealth(box, s)
+function BoxBuild.Stage(box, s)
     local T, canvas = s.T, s.canvas
     -- A plain root owns no synthetic Center texture. Only the real health
     -- background media below may cover the unit-frame rectangle; outlines are
@@ -1106,28 +1136,6 @@ function BoxBuild.MockHealth(box, s)
     local mock = PixelLayoutRegion(CreateFrame("Frame", nil, canvas), true)
     if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
     box.mock = mock
-    local function MockTexture(field, layer, texture, color, mode, owner)
-        local tex = PixelLayoutRegion((owner or mock):CreateTexture(nil, layer))
-        if mode == "settex" then SetTex(tex, texture or TEX_W8) else tex:SetTexture(texture or TEX_W8) end
-        if color then
-            if mode == "color" then tex:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
-            else tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
-        end
-        mock[field] = tex
-        return tex
-    end
-    local function FillFrame(parentFrame)
-        local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parentFrame))
-        frame:SetAllPoints(parentFrame)
-        return frame
-    end
-    local function MakeTextSet(layer, ...)
-        for i = 1, select("#", ...) do
-            mock[select(i, ...)] = MakeFS(layer, "OVERLAY", 12)
-        end
-    end
-    -- Bounds is guide-line ownership only; it must not create another full-frame
-    -- backdrop Center behind the real bar media.
     mock.bounds = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     mock.bounds:SetFrameLevel((mock:GetFrameLevel() or 0) + 28)
     mock.bounds:SetAllPoints(mock)
@@ -1135,56 +1143,10 @@ function BoxBuild.MockHealth(box, s)
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
-    -- Runtime uses a native inverse StatusBar for secret-safe missing values
-    -- and suppresses its exact 0% fill-texture endpoint. Keep the preview on
-    -- the same ownership model.
-    mock.healthBackgroundBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock.healthBackgroundBar:SetAllPoints(mock)
-    mock.healthBackgroundBar:SetMinMaxValues(0, 1)
-    mock.healthBackgroundBar:SetValue(1)
-    mock.healthBackgroundBar:SetStatusBarTexture(TEX_W8)
-    mock.healthBackgroundBar:EnableMouse(false)
-    if mock.healthBackgroundBar.SetFrameLevel and mock.GetFrameLevel then
-        mock.healthBackgroundBar:SetFrameLevel(mock:GetFrameLevel() or 0)
-    end
-    mock.hpBG = mock.healthBackgroundBar:GetStatusBarTexture()
-    if mock.hpBG.SetDrawLayer then mock.hpBG:SetDrawLayer("BACKGROUND", -7) end
-    mock.hpBG:SetVertexColor(0, 0, 0, 0)
-    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
-
-    mock.healthBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
-    mock.healthBar:SetAllPoints(mock)
-    mock.healthBar:SetMinMaxValues(0, 1)
-    mock.healthBar:SetValue(0.72)
-    mock.healthBar:SetStatusBarTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
-    mock.hp = mock.healthBar:GetStatusBarTexture()
-    mock.hpBar, mock.Health, mock.health = mock.healthBar, mock.healthBar, mock.healthBar
-    mock.healthFill = mock.hp
-    if mock.hp and mock.hp.SetDrawLayer then mock.hp:SetDrawLayer("ARTWORK", 0) end
-    if mock.hp then mock.hp:SetAlpha(0) end
-    MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color", mock.healthBar)
-    MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 }, nil, mock.healthBar)
-    MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 }, nil, mock.healthBar)
-    MockTexture("absorb", "ARTWORK", TEX_W8, { 0.55, 0.70, 1, 0.58 }, nil, mock.healthBar)
-    MockTexture("healAbsorb", "ARTWORK", TEX_W8, { 0.70, 0, 0, 1 }, nil, mock.healthBar)
-    MockTexture("powerBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0 }, "color")
-    local initialPower = MockTexture("power", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
-    initialPower:SetAlpha(0)
-    s.mock, s.FillFrame, s.MakeTextSet = mock, FillFrame, MakeTextSet
+    s.mock = mock
 end
 function BoxBuild.MockClassPower(box, s)
     local canvas, mock = s.canvas, s.mock
-    -- Decorative texture layer preview regions (3 slots): child frames so the
-    -- render pass can mirror the runtime's per-slot frame-level offsets (see
-    -- RenderTextureLayerPreview).
-    mock.texLayers = {}
-    for i = 1, 3 do
-        local texLayerHolder = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-        texLayerHolder.tex = PixelLayoutRegion(texLayerHolder:CreateTexture(nil, "ARTWORK"))
-        texLayerHolder.tex:SetAllPoints(texLayerHolder)
-        texLayerHolder:Hide()
-        mock.texLayers[i] = texLayerHolder
-    end
     mock.classPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
     PixelLayoutRegion(mock.classPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
@@ -1229,49 +1191,6 @@ function BoxBuild.MockClassPower(box, s)
     mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)
     mock.classPower.text:SetText("5")
     mock.classPower.text:Hide()
-end
-function BoxBuild.MockOverlays(box, s)
-    local canvas, mock, FillFrame, MakeTextSet = s.canvas, s.mock, s.FillFrame, s.MakeTextSet
-    mock.detachedPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
-    PixelLayoutRegion(mock.detachedPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    mock.detachedPower:SetBackdropColor(0, 0, 0, 0.82)
-    mock.detachedPower:SetBackdropBorderColor(0, 0, 0, 1)
-    mock.detachedPower.bg = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "BACKGROUND"))
-    mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
-    mock.detachedPower.bg:SetTexture(TEX_W8)
-    mock.detachedPower.bg:SetVertexColor(0, 0, 0, 0)
-    mock.detachedPower.fill = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "ARTWORK"))
-    SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
-    mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 1, -1)
-    mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 1, 1)
-    mock.detachedPower.edge = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "OVERLAY"))
-    mock.detachedPower.edge:SetAllPoints(mock.detachedPower)
-    mock.detachedPower.edge:SetTexture(TEX_W8)
-    mock.detachedPower.edge:SetVertexColor(0, 0, 0, 1)
-    mock.detachedPower.edge:Hide()
-    mock.portrait = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
-    PixelLayoutRegion(mock.portrait, "SetBackdrop", { bgFile = TEX_W8 })
-    mock.portrait:SetBackdropColor(0, 0, 0, 0)
-    mock.portrait.bg = PixelLayoutRegion(mock.portrait:CreateTexture(nil, "BACKGROUND"))
-    mock.portrait.bg:SetAllPoints()
-    mock.portrait.bg:SetTexture(TEX_W8)
-    mock.portrait.bg:Hide()
-    mock.portrait.tex = PixelLayoutRegion(mock.portrait:CreateTexture(nil, "ARTWORK"))
-    mock.portrait.tex:SetAllPoints()
-    mock.portrait.border = PixelLayoutRegion(CreateFrame("Frame", nil, mock.portrait))
-    mock.portrait.border:SetAllPoints()
-    mock.portrait.border.edges = {}
-    mock.portrait.initial = MakeFS(mock.portrait, "OVERLAY", 22)
-    mock.portrait.initial:SetPoint("CENTER")
-    mock.textFrame = FillFrame(mock)
-    mock.nameLayer = FillFrame(mock.textFrame)
-    mock.raidGroupLayer = FillFrame(mock.textFrame)
-    mock.hpLayer = FillFrame(mock.textFrame)
-    mock.powerLayer = FillFrame(mock.textFrame)
-    MakeTextSet(mock.nameLayer, "nameText", "totInlineSep", "totInlineText")
-    MakeTextSet(mock.raidGroupLayer, "raidGroupNameText")
-    MakeTextSet(mock.hpLayer, "hpTextLeft", "hpTextCenter", "hpText", "hpTextPct")
-    MakeTextSet(mock.powerLayer, "powerTextLeft", "powerTextCenter", "powerText", "powerTextPct")
 end
 function BoxBuild.MockCast(box, s)
     local T, canvas, mock = s.T, s.canvas, s.mock
@@ -1326,10 +1245,6 @@ function BoxBuild.MockCast(box, s)
     mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.cast.sizeTag, { 0.20, 0.90, 0.85, 0.95 }, 0) end
     mock.icons = {}
-    for i = 1, #STATUS_PREVIEW do
-        local spec = STATUS_PREVIEW[i]
-        mock.icons[spec.id] = CreateIcon(canvas, spec.color, spec.text)
-    end
 end
 function BoxBuild.Handles(box, s)
     local canvas = s.canvas
@@ -1470,6 +1385,7 @@ function BoxBuild.Scripts(box)
         ViewChrome.StopPreviewAnimationDriver(self)
         if ViewChrome.PreviewAnimationActive(self) then Preview.RestoreStaticEditModeAuraPreview(self) end
         ViewChrome.ReleaseUnitPreviewLiveState(self)
+        if self._unitSceneRoot then self._unitSceneRoot:Deactivate() end
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
         self._refreshReason = nil
@@ -1521,9 +1437,8 @@ local function BuildPreview(parent, panel, width, height)
     BoxBuild.Chrome(box, s)
     BoxBuild.LayerRail(box, s)
     BoxBuild.Selection(box, s)
-    BoxBuild.MockHealth(box, s)
+    BoxBuild.Stage(box, s)
     BoxBuild.MockClassPower(box, s)
-    BoxBuild.MockOverlays(box, s)
     BoxBuild.MockCast(box, s)
     BoxBuild.Handles(box, s)
     BoxBuild.Scripts(box)
@@ -1569,23 +1484,12 @@ do
         PlaceHandle = PlaceHandle, PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions,
         UnitPreviewText = UnitPreviewText, UnitPreviewTextMovesTogether = ViewHandles.UnitPreviewTextMovesTogether,
         NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode, TextScopeGet = TextScopeGet,
-        TextScopeHasSlots = TextScopeHasSlots, TextScopeSlotGet = TextScopeSlotGet, FormatMode = FormatMode,
-        ShortenPreviewName = ShortenPreviewName, ToTInlineSeparator = ToTInlineSeparator,
-        ResolveNameAnchor = ResolveNameAnchor, ClassColor = ClassColor, HealthColor = HealthColor,
+        TextScopeHasSlots = TextScopeHasSlots, TextScopeSlotGet = TextScopeSlotGet,
+        ToTInlineSeparator = ToTInlineSeparator,
+        ResolveNameAnchor = ResolveNameAnchor, ClassColor = ClassColor,
     })
     M2.Assign(deps, {
-        DarkMatchHPColor = DarkMatchHPColor, HealthBackgroundColor = HealthBackgroundColor,
-        PowerBackgroundColor = PowerBackgroundColor, PowerColor = PowerColor, FontColor = FontColor,
-        PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode,
-        PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode,
-        PreviewHealPredictionEnabled = PreviewHealPredictionEnabled,
-        PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled, UnitPreviewPortraitTexture = UnitPreviewPortraitTexture,
-        ClassPortraitVisual = ClassPortraitVisual, PreviewNameColor = PreviewNameColor,
-        PreviewToTInlineColor = PreviewToTInlineColor, LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay,
-        PositionFromAnchor = PositionFromAnchor, PositionRuntimeLayoutIconPreview = PositionRuntimeLayoutIconPreview,
-        PositionStatusCornerPreview = PositionStatusCornerPreview,
-        PositionSameAnchorPreview = PositionSameAnchorPreview, PositionLevelPreview = PositionLevelPreview,
-        ResolveStatusPreviewAnchor = ResolveStatusPreviewAnchor, SetPreviewIconTexture = SetPreviewIconTexture,
+        PowerColor = PowerColor, FontColor = FontColor,
         NormalizeStatusPreviewId = NormalizeStatusPreviewId,
         ApplyPreviewTextFocus = ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded = ApplyPreviewRounded,
         ApplyPreviewFrameBorder = ApplyPreviewFrameBorder,

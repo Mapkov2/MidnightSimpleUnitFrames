@@ -14,41 +14,14 @@ end
 -- Runtime: one texture region follows all classifications at the shared
 -- Elite Indicator position and uses Blizzard's current classification atlases.
 do
-    local classification = "elite"
-    _G.issecretvalue = function() return false end
-    _G.UnitClassification = function() return classification end
-    _G.UnitLevel = function() return 80 end
-    _G.UnitIsPlayer = function() return false end
-    _G.CreateFrame = function() return {} end
-
-    local elements = {}
-    local UF = {
-        Layers = {},
-        elements = elements,
-        FreshUnitState = function() return nil end,
-        ReadUnitExistsCached = function() return true, true end,
-        ReadUnitIsPlayerCached = function() return false, true end,
-        RegisterElement = function(name, element) elements[name] = element end,
-    }
-    local MSUF = { UF = UF, Secrets = {} }
-    -- Status consumes the real factories after the responsibility move.
-    for _, owner in ipairs({ "Regions", "Indicators", "GroupRuntime", "Level" }) do
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_" .. owner .. ".lua"))(
-            "MidnightSimpleUnitFrames", MSUF)
-    end
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"))(
-        "MidnightSimpleUnitFrames", MSUF)
-
-    local texture = { shown = false }
-    function texture:SetShown(value) self.shown = value == true end
-    function texture:SetAtlas(value) self.atlas = value end
-    function texture:SetTexture(value) self.texture = value end
-    function texture:SetTexCoord(...) self.texCoord = { ... } end
-
-    local frame = { MSUFUnitKey = "target", eliteIcon = texture }
-    local status = { elite = { enabled = true, style = "BLIZZARD" } }
-    local update = assert(MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.UpdateElite,
-        "elite runtime updater missing")
+    local World = assert(loadfile(root .. "/tools/tests/unit_scene_world.lua"))()
+    local w = World.New(root, arg[2] or "Mainline")
+    w:Enable()
+    local sample = { name = "Classified Target", class = "MAGE", level = 80, hp = .7, power = .5,
+        classification = "elite", reaction = "enemy" }
+    local frame = w:LiveFrame("target", sample)
+    local texture = assert(frame.eliteIcon)
+    local update = assert(w.env.MSUF.UFStatusRuntime.UpdateElite)
     local cases = {
         elite = "nameplates-icon-elite-gold",
         worldboss = "nameplates-icon-elite-gold",
@@ -56,63 +29,69 @@ do
         rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
     }
     for state, atlas in pairs(cases) do
-        classification = state
-        update(frame, status)
-        Check(texture.shown == true, state .. " classification did not show the shared indicator")
+        sample.classification = state
+        w:Model("target", sample)
+        update(frame, frame.MSUFSpec.status)
+        Check(texture:IsShown(), state .. " classification did not show the shared indicator")
         Check(texture.atlas == atlas, state .. " classification used the wrong atlas")
     end
     Check(frame.eliteIcon == texture, "classification update replaced the shared Elite Indicator region")
+    w:Unmodel()
 end
 
--- Menu preview: the selected indicator remains visible independent of the
--- current live target and resolves the exact live/fallback classification.
+-- The menu uses the same native Elite region and live classification snapshot.
 do
-    local MSUF = {
-        UFPreview = { Model = {
-            MakeFS = function() return {} end,
-            FontColor = function() return 1, 1, 1 end,
-        } },
-    }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua"))(
-        "MidnightSimpleUnitFrames_Options", MSUF)
-    local Status = assert(MSUF.UFPreviewStatus, "unit preview status helpers missing")
-
-    local texture = {}
-    function texture:Show() self.shown = true end
-    function texture:Hide() self.shown = false end
-    function texture:SetVertexColor(...) self.vertex = { ... } end
-    function texture:SetTexCoord(...) self.texCoord = { ... } end
-    function texture:SetAtlas(value) self.atlas = value; self.texture = nil end
-    function texture:SetTexture(value) self.texture = value; self.atlas = nil end
-    local text = { Hide = function(self) self.shown = false end }
-    local icon = { tex = texture, txt = text }
-    local spec = {
-        id = "elite",
-        iconStyle = "eliteIconStyle",
-        defaultIconStyle = "BLIZZARD",
-        customIcon = "eliteIconCustomIcon",
-    }
+    local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
+    local w = World.Open(root, arg[2] or "Mainline", { page = "home" })
+    local env, Preview = w.env, w.core.UFPreview
+    local classification = "elite"
+    env.UnitExists = function(unit) return unit == "target" end
+    env.UnitName = function() return "Classified Target" end
+    env.UnitIsPlayer = function() return false end
+    env.UnitClassification = function() return classification end
+    env.UnitLevel = function() return 80 end
+    env.MSUF_DB.target.showEliteIcon = true
+    env.MSUF_DB.target.eliteIconStyle = "BLIZZARD"
+    local panel = env.CreateFrame("Frame", nil, env.UIParent)
+    panel._msufGetCurrentKey = function() return "target" end
+    local box = Preview._BuildPreview(env.UIParent, panel, 900, 400)
+    World.FireVisibilityScripts(box)
+    box:Show()
+    box.canvas:SetSize(600, 260)
+    Preview.selectedStatusId = "elite"
     local cases = {
         elite = "nameplates-icon-elite-gold",
         worldboss = "nameplates-icon-elite-gold",
         rareelite = "nameplates-icon-elite-silver",
         rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
     }
-    for classification, atlas in pairs(cases) do
-        Status.SetIconTexture(icon, spec, {}, {}, "target", { classification = classification },
-            { style = "BLIZZARD" })
-        Check(texture.atlas == atlas, classification .. " preview used the wrong atlas")
+    local texture
+    for state, atlas in pairs(cases) do
+        classification = state
+        Preview.Refresh(box, "SETTINGS")
+        local body = box.mock._body
+        Check(body == box._unitScene:Frame(), "classification preview bypassed the native scene")
+        texture = texture or body.eliteIcon
+        Check(body.eliteIcon == texture, "classification preview replaced the shared Elite region")
+        Check(texture:IsShown() and texture.atlas == atlas, state .. " preview used the wrong native atlas")
     end
-    Status.SetIconTexture(icon, spec, {}, {}, "target", { classification = "normal" },
-        { style = "BLIZZARD" })
-    Check(texture.atlas == "nameplates-icon-elite-gold",
+    classification = "normal"
+    Preview.Refresh(box, "SETTINGS")
+    Check(texture:IsShown() and texture.atlas == "nameplates-icon-elite-gold",
         "selected Elite Indicator preview disappeared instead of using its deterministic fallback")
-
+    Preview.selectedStatusId = "leader"
+    Preview.Refresh(box, "SETTINGS")
+    Check(not texture:IsShown(), "unselected Elite Indicator ignored normal live classification")
+    Preview.statusPreviewMode = "all"
+    Preview.Refresh(box, "SETTINGS")
+    Check(texture:IsShown(), "Status All lost the Elite Indicator sample")
+    if w.core.UF.UnitScene.Normalize("boss") then
+        panel._msufGetCurrentKey = function() return "boss" end
+        Preview.Refresh(box, "SETTINGS")
+        Check(box._unitScene:Sample().classification == "worldboss", "Status All replaced the boss classification")
+    end
+    box:Hide()
 end
-
-local render = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
-Check(not render:find('spec.id == "elite" and not data.elite', 1, true),
-    "live target classification can still hide the selected Elite Indicator preview")
 
 local section = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua")
 for _, variant in ipairs({ '"ELITE"', '"RAREELITE"', '"RARE"' }) do

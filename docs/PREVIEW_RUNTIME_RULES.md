@@ -17,17 +17,13 @@ the live unit registry or subscribes to unit events.
 The live colour resolvers retain their cached-controller calling convention.
 Previews reuse a scratch config and translate a default slot result of nil into
 their base colour. They do not replace the controller's config or colour caches.
-The portrait adapters reuse per-holder inputs and preserve existing preview region
-aliases. Hiding a shared region goes through the same painter so its cached
-visibility remains valid when the portrait is enabled again.
-The unit preview owns its straight-edge host visibility and constructs edges
-only for a visible square solid border. Shaped, relief, stock and disabled
-borders can pass an empty edge table to the runtime painter. Explicit
-stock portrait dimensions take priority over the mock frame's queried size.
-New relief and stock ring/corner textures are adopted onto the visible portrait
-once when their preview aliases are first synchronized. Straight edges keep
-their separate host; the runtime's anchors, layers and cached paint state stay
-intact. Warm painting performs no parent query or ownership change.
+The Options unit body is `root:Unit(unitKey):Frame()`. The stage owns only its parent,
+scale and position; engine regions own the health, power, prediction, texts, portraits,
+status, shapes, aura lanes, texture layers and dispel samples. Handles refer to these
+real regions. Castbar and ClassPower retain their Options paths for package 98 and
+anchor to the scene body. Text focus, layer/solo controls, animation, background,
+selection, guides and zoom/pan remain stage chrome. Drag deltas divide by each real
+region's effective-scale ratio to the outer stage before moving its anchors.
 
 Health geometry is shared independently from value ownership. Live health keeps
 its native inverse percentage, secret handling, interpolation and surface masks.
@@ -220,11 +216,22 @@ frame, its regions and the aura stand-ins are reused by every repaint and by clo
 catches an error inside a paint (no protected call), so a paint that fails leaves its window open until the next one;
 every full refresh closes a stale window before it applies the spec.
 
-The unit/group body renderers, class-resource surface construction, castbar page
-layout and preview aura painters remain scene-specific. Their region ownership,
-rounding, animation and interactions need scene integration before their larger
-render blocks can be deleted safely. Moving those blocks into another helper
-would retain their independent rendering rules.
+The Options adapter samples `UFPreview.LiveUnitData` outside the scene and feeds
+`scene:SetSample(sample, true)` before showing it. Exact `hpCur`, `hpMax`, `powerCur`
+and `powerMax` take priority over fractions. Missing/secret fields use the stylized
+sample independently; zero absorb uses the visible 10% sample shield. A hidden
+per-box portrait texture samples the native bust and passes its plain texture resource as `portraitTexture`.
+The scene never reads the unit. The existing per-box live-state driver pulls at most
+once per 0.2 seconds, drops unit listeners in combat and releases them on hide.
+
+`root:SetClock(elapsed)` drives the unit's native bars/value texts and MockAuraPainter
+regions with that owner's clock; nil restores the static sample. Animated fractions
+retain live maxima. `scene:SetLayerFilter(visible)` filters the actual regions after
+painting. The scene reuses its private compiled spec while saved inputs match; a full
+refresh applies layout, while clock updates paint values without layout. The Options
+sample also carries `statusSelection`, `auraStyleKey`, `auraForceStandard`, `frameEffect`
+and `frameEffectLayer` for the retained status/style tools. Disabled/zero-cap Style
+lanes use private sample geometry and never enable their saved/runtime lane.
 
 `runtime_preview_shared_rules_smoke.lua` boots the shipped graphs, checks live
 and preview call identity, changed shared assets, fixed geometry/colour samples,
@@ -324,3 +331,5 @@ real core castbar/controller surfaces. They cover all five graphs, supported res
 width sources, colour rules, pools, closure, combat and a whole-family unit-API spy.
 This is offline contract evidence; live WoW pixels, combat/taint and GPU rendering
 still require in-client verification.
+
+Unit scenes also hide native aura sensors, spell indicators and frame-effect registrations on deactivation. Dispel handles and footprint geometry remain locally bound Options chrome; all visible sample effect painting belongs to the engine.

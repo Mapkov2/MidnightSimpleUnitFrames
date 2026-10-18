@@ -205,14 +205,14 @@ local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Previ
 local searchManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Classic.xml")
 assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
     "Classic unit preview manifest must load the shared preview specs")
-assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Status.lua"/>', 1, true),
-    "Classic unit preview manifest must load the shared status preview")
+assert(not previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Status.lua"/>', 1, true),
+    "Classic unit preview must use the engine status scene")
 assert(searchManifest:find('<Script file="MSUF_Menu2_Search_Keywords.lua"/>', 1, true),
     "Classic search manifest must load the shared search keywords")
 
 local options = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 local previewSpecs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua")
-local previewStatus = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua")
+local previewScene = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua")
 local searchKeywords = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua")
 assert(options:find('StatusControl("statusPetHappiness"', 1, true), "Pet page Happiness selector missing")
 assert(options:find('allowed = function(unit) return unit == "pet" end, statusRuntime = true', 1, true),
@@ -262,7 +262,7 @@ for _, case in ipairs({ { "Vanilla", true }, { "TBC", true }, { "Mists", false }
 end
 assert(options:find("statusPetHappiness", 1, true) and options:find("COPY_STATUSICON_FIELDS", 1, true), "Happiness copy ownership missing")
 assert(previewSpecs:find("statusPetHappiness|showPetHappinessIndicator", 1, true), "Happiness preview spec missing")
-assert(previewStatus:find('spec.id == "statusPetHappiness"', 1, true), "Happiness preview texture path missing")
+assert(previewScene:find('"PetHappinessIndicator"', 1, true) and previewScene:find('PaintTestModeElements(frame, unit)', 1, true), "scene Happiness painter missing")
 assert(searchKeywords:find("PET_HAPPINESS", 1, true), "Pet Happiness search capability gate missing")
 assert(searchKeywords:find("haustier zufriedenheit", 1, true), "German Pet Happiness search aliases missing")
 

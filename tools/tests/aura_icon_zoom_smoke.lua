@@ -63,8 +63,6 @@ local function SharedPreviewZoom(path, callsite, binding)
     return mock.IconZoom
 end
 CheckZoom("Edit Mode", SharedPreviewZoom("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Preview.lua", "local ApplyIconZoom = AuraPainter.IconZoom"))
-CheckZoom("Unit preview", SharedPreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua", "PaintArt(icon,",
-    "local AuraState, PaintArt, DispelBorder = AuraPainter.AuraState, AuraPainter.Art, AuraPainter.DispelBorder"))
 CheckZoom("Group preview", PreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua", "ApplyPreviewIconZoom"))
 CheckZoom("Aura Style preview", SharedPreviewZoom("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua",
     "PaintAuraArt(icon,", "local PaintAuraArt, PlaceAuraText = AuraPainter.Art, AuraPainter.PlaceText"))
@@ -74,6 +72,9 @@ local spellPreview = PreviewZoom(groupPath, "ApplySpellIndicatorPreview")
 local function Visual(texture)
     return {_texture=texture,ClearAllPoints=Noop,SetSize=Noop,SetPoint=Noop,Show=Noop,SetShown=Noop}
 end
+CheckZoom("Unit preview", function(texture, zoom)
+    auraPreview({}, "unit", Visual(texture), {iconZoom=zoom}, {textures={123}}, 0, 1, {})
+end)
 CheckZoom("in-world group aura preview", function(texture, zoom)
     auraPreview({}, "party", Visual(texture), {iconZoom=zoom}, {textures={123}}, 0, 1, {})
 end)

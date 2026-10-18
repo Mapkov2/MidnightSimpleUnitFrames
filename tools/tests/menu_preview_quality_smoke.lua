@@ -117,10 +117,21 @@ do
     Check(#NAME == 20 and Utf8Chars(NAME) == 10, "harness: the sample name is not 10 two-byte characters")
     env.UnitExists = function(unit) return unit == "target" or unit == "player" end
     env.UnitName = function(unit) if unit == "target" then return NAME end return "Player" end
+    MSUF.UFText.SetDisplayNameResolver(function(unit) return env.UnitName(unit) end)
     local db = env.MSUF_DB
+    local live
     local function Render()
         MSUF.UF.Config.Refresh()
         Preview.Refresh(box, "MENU_PREVIEW_QUALITY")
+        live = env.CreateFrame("Button", nil, env.UIParent)
+        live.MSUFUnitKey = "target"
+        live.MSUFSpec = MSUF.UF.Config.specs.target
+        live:SetSize(live.MSUFSpec.width, live.MSUFSpec.height)
+        MSUF.UF.ApplySceneSpec(live, live.MSUFSpec, { Text = true, NameText = true, InlineToT = true }, "single", "target")
+        MSUF.UFText.UpdateName(live, "MSUF_FORCE_UPDATE", "target")
+        Check(box.mock.nameText:GetText() == live.nameText:GetText(), "the preview name differs from the live name pass")
+        local a, b = box.mock._body._msufNameClipFrame, live._msufNameClipFrame
+        Check((a and a:IsShown() or false) == (b and b:IsShown() or false), "the preview name clip differs from live")
         return Check(box.mock and box.mock.nameText, "the target preview has no name text"):GetText()
     end
     db.shortenNames = true
@@ -128,13 +139,11 @@ do
     db.target.nameTextAnchor = "TOPLEFT"
     local text = Render()
     Check(ValidUtf8(text), "the shortened preview name is not valid UTF-8: " .. text:gsub("[\128-\255]", "?"))
-    Check(text == "..." .. NAME:sub(9), "a 10-character name shortened to 6 from the left reads " .. text:gsub("[\128-\255]", "?")
-        .. ", not ... and its last 6 characters")
+    Check(text == live.nameText:GetText(), "the configured left shortening differs from live")
     -- The engine's per-frame aliases: nameClipSide (any case) and nameNoEllipsis.
     db.target.fontOverride, db.target.nameClipSide, db.target.nameNoEllipsis = true, "right", true
     text = Render()
-    Check(text == NAME:sub(1, 12), "with the per-frame nameClipSide=right and nameNoEllipsis aliases the name reads "
-        .. text:gsub("[\128-\255]", "?") .. ", not its first 6 characters without dots")
+    Check(text == live.nameText:GetText(), "the right/no-ellipsis alias differs from live")
     db.target.fontOverride, db.target.nameClipSide, db.target.nameNoEllipsis = nil, nil, nil
     -- The target of target inline name uses its own compiled block (text.inlineToT).
     env.UnitExists = function(unit) return unit == "target" or unit == "player" or unit == "targettarget" end
@@ -142,11 +151,12 @@ do
     db.targettarget.showToTInTargetName = true
     Render()
     local inline = Check(box.mock.totInlineText, "the target preview has no inline target of target"):GetText()
-    Check(inline == "..." .. NAME:sub(9), "the inline target of target name reads " .. tostring(inline):gsub("[\128-\255]", "?")
-        .. ", not ... and its last 6 characters")
+    MSUF.UFText.UpdateInline(live, "MSUF_FORCE_UPDATE", "target")
+    Check(inline == live.totInlineText:GetText(), "the inline target-of-target shortening differs from live")
     db.targettarget.showToTInTargetName = nil
     db.shortenNames = false
     Check(Render() == NAME, "with shortening off the name is not shown in full")
+    MSUF.UFText.SetDisplayNameResolver(nil)
 end
 
 ---------------------------------------------------------------------------
@@ -325,7 +335,12 @@ do
         Check(Same(r or -1, g or -1, b or -1, er, eg, eb), string.format("%s dark colour is %s,%s,%s, the engine draws %s,%s,%s",
             where, tostring(r), tostring(g), tostring(b), er, eg, eb))
     end
-    local Model = Check(MSUF.UFPreview.Model, "no unit preview model")
+    local Preview = MSUF.UFPreview
+    local panel = env.CreateFrame("Frame", nil, env.UIParent)
+    panel._msufGetCurrentKey = function() return "target" end
+    local unitBox = Preview._BuildPreview(env.UIParent, panel, 900, 400)
+    unitBox:Show()
+    unitBox.canvas:SetSize(400, 200)
     local group = NewGroupPreview("party")
     local groupState = Check(group._msufGFRenderState, "no group preview render state")
     local conf = M.GroupPage.Conf("party")
@@ -342,7 +357,8 @@ do
         general.darkBarR, general.darkBarG, general.darkBarB = case.r, case.g, case.b
         general.darkBarGray, general.darkBgBrightness = case.gray, case.brightness
         local w = case.want
-        local ur, ug, ub = Model.HealthColor("target", nil)
+        Preview.Refresh(unitBox, "SETTINGS")
+        local ur, ug, ub = unitBox.mock._body.hpBar:GetStatusBarColor()
         Expect("the unit preview (" .. case.label .. ")", ur, ug, ub, w[1], w[2], w[3])
         -- The group cell is an engine frame: its health colour is the scene's, from the same dark fallback.
         MSUF.GF.InvalidateCompiledSpecs("party")
@@ -362,6 +378,7 @@ do
         saved[1], saved[2], saved[3], saved[4], saved[5], saved[6]
     env.MSUF_UFCore_GetSettingsCache = GetCache
     group:Hide()
+    unitBox:Hide()
 end
 
 ---------------------------------------------------------------------------
@@ -404,3 +421,5 @@ do
 end
 
 print(string.format("menu_preview_quality_smoke: ok (%s)", flavor))
+
+assert(loadfile(root .. "/tools/tests/unit_menu_scene_checks.lua"))()(root, flavor)

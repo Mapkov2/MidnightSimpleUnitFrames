@@ -101,11 +101,14 @@ preview.ResolveFrameBarMedia = function(style, scope, conf)
     seenScope, seenConf = scope, conf
     return Resolve(style, scope, conf)
 end
-local mock = env.CreateFrame("Frame", nil, env.UIParent)
-mock:SetSize(180, 40)
-mock.hpBG, mock.hp, mock.powerBG, mock.power = mock:CreateTexture(), mock:CreateTexture(), mock:CreateTexture(), mock:CreateTexture()
-mw.core.UFPreviewCore.ApplyRounded({ mock = mock }, "target", true, 1, true, 1)
-assert(seenScope == "target", "unit preview lost its selected scope")
+local unitRoot = mw.core.GF.NewPreviewScene(env.UIParent)
+unitRoot:Activate()
+local unitScene = assert(unitRoot:Unit("target"))
+unitScene:Show()
+local unitBody = unitScene:Frame()
+local unitMask = assert(unitBody._msufRUF_MaskedTextures[unitBody.hpBar:GetStatusBarTexture()], "unit scene has no live slanted mask")
+assert(unitMask:GetTexture() == kit.SLANTED_MASK_PATHS.LEFT_UP, "unit preview lost target's scoped direction")
+unitRoot:Release()
 -- The group preview cell is an engine scene frame: it adopts its scope's mask and edge through the live rounded
 -- surface, exactly like a live group frame of the same kind.
 local cellBoxes = {}

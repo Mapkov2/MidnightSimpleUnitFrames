@@ -161,3 +161,19 @@ all rounded/slanted/texture decorators, every portrait shape, group animation,
 group additional blocks, Edit Mode on-screen group scenes, all unit scopes,
 all castbar scopes/types/options, localization, solo/focus/drag interactions and
 combat lifecycle. No EventBus, aura consolidation or scene implementation is here.
+
+## Unit scene live-look migration (96b)
+
+The 41 unit observations now record `root:Unit(key):Frame()` and its native
+regions. Their cases and client inputs are unchanged. The replaced mock body,
+font/clipping, status/portrait, prediction and aura geometry now follow the live
+engine; the existing castbar and ClassPower renderers retain their scene anchors.
+The other 47 observations retain their original bytes. Historical capture and
+source provenance above remain historical. The current per-fixture hashes cover
+the reviewed unit observations, including their actual scene source provenance.
+
+The native widget fixture resolves anchored unit health-bar dimensions and native
+child frame levels; it does not inject profile values or expected output. Exact
+scene identity, live and secret-field samples, zoomed text dragging, slot anchors,
+layer restoration and unchanged repaint limits have separate runtime assertions.
+All twenty native setter mutations must still fail the comparator.

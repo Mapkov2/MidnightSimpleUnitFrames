@@ -8,6 +8,16 @@ clients+Forever	lua	tools/tests/portrait_settings_smoke.lua	{root} {flavor}	Port
 clients+Forever	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} {flavor}	Arena PvP trinket placement and previews: {flavor}
 -	lua	tools/tests/menu_advprofiles_parity_smoke.lua	{root} Mainline	Advanced and profile replacing-row parity failed: Mainline	push
 clients+Forever	lua	tools/tests/menu_advprofiles_parity_smoke.lua	{root} {flavor}	Advanced and profile replacing-row parity failed: {flavor}	nightly
+-	lua	tools/tests/portrait_settings_smoke.lua	{root} Mainline	Portrait settings regression: Mainline
+-	lua	tools/tests/portrait_settings_smoke.lua	{root} Forever	Portrait settings regression: Forever	nightly
+-	lua	tools/tests/portrait_settings_smoke.lua	{root} Vanilla	Portrait settings regression: Vanilla	nightly
+-	lua	tools/tests/portrait_settings_smoke.lua	{root} TBC	Portrait settings regression: TBC	nightly
+-	lua	tools/tests/portrait_settings_smoke.lua	{root} Mists	Portrait settings regression: Mists	nightly
+-	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} Mainline	Arena PvP trinket placement and previews: Mainline
+-	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} Forever	Arena PvP trinket placement and previews: Forever	nightly
+-	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} Vanilla	Arena PvP trinket placement and previews: Vanilla	nightly
+-	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} TBC	Arena PvP trinket placement and previews: TBC	nightly
+-	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} Mists	Arena PvP trinket placement and previews: Mists	nightly
 clients+Forever	lua	tools/tests/menu_appearance_presets_smoke.lua	{root} {flavor}	Appearance preset dropdown regression: {flavor}
 -	python	.github/scripts/classic_refactor_load_order_smoke.py		Classic refactor load-order contract failed
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor}	Menu skin smoke failed: {flavor}
@@ -78,7 +88,11 @@ clients+Forever	lua	tools/tests/public_globals_smoke.lua	{root/} {flavor}	Public
 -	python	tools/tests/gate_manifest_rules_smoke.py	{root}	Gate manifest rules smoke failed
 -	lua	tools/tests/forever_pet_happiness_smoke.lua	{root}	Forever pet happiness smoke failed
 -	lua	tools/tests/tap_denied_gray_smoke.lua	{root}	Tagged-mob graying smoke failed
--	lua	tools/tests/threat_text_smoke.lua	{root}	Threat text smoke failed
+-	lua	tools/tests/threat_text_smoke.lua	{root} Mainline	Threat text smoke failed: Mainline
+-	lua	tools/tests/threat_text_smoke.lua	{root} Forever	Threat text smoke failed: Forever	nightly
+-	lua	tools/tests/threat_text_smoke.lua	{root} Vanilla	Threat text smoke failed: Vanilla	nightly
+-	lua	tools/tests/threat_text_smoke.lua	{root} TBC	Threat text smoke failed: TBC	nightly
+-	lua	tools/tests/threat_text_smoke.lua	{root} Mists	Threat text smoke failed: Mists	nightly
 -	lua	tools/tests/forever_character_names_smoke.lua	{root}	Forever character names smoke failed
 -	lua	tools/tests/forever_onboarding_scenes_smoke.lua	{root}	Forever onboarding scenes smoke failed
 -	lua	tools/tests/forever_arena_zero_smoke.lua	{root/}	Forever arena-zero Mainline smoke failed
@@ -88,7 +102,11 @@ clients+Forever	lua	tools/tests/menu_pages_client_gates_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/menu_factory_profile_memo_smoke.lua	{root} {flavor}	Menu factory profile memo smoke failed: {flavor}
 clients+Forever	lua	tools/tests/menu_page_labels_locale_smoke.lua	{root} {flavor}	Menu page label locale smoke failed: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_quality_smoke.lua	{root} {flavor}	Menu pages quality smoke failed: {flavor}
-clients+Forever	lua	tools/tests/menu_preview_quality_smoke.lua	{root} {flavor}	Menu preview quality smoke failed: {flavor}
+-	lua	tools/tests/menu_preview_quality_smoke.lua	{root} Mainline	Menu preview quality smoke failed: Mainline
+-	lua	tools/tests/menu_preview_quality_smoke.lua	{root} Forever	Menu preview quality smoke failed: Forever	nightly
+-	lua	tools/tests/menu_preview_quality_smoke.lua	{root} Vanilla	Menu preview quality smoke failed: Vanilla	nightly
+-	lua	tools/tests/menu_preview_quality_smoke.lua	{root} TBC	Menu preview quality smoke failed: TBC	nightly
+-	lua	tools/tests/menu_preview_quality_smoke.lua	{root} Mists	Menu preview quality smoke failed: Mists	nightly
 -	lua	tools/tests/forever_factory_profile_smoke.lua	{root}	Forever factory profile CBOR smoke failed
 -	python	tools/tests/factory_ui_scale_defaults_smoke.py	{root}	Factory UI scale defaults smoke failed
 clients	lua	tools/tests/factory_default_profile_smoke.lua	{root} {flavor}	Factory default profile smoke failed: {flavor}
@@ -153,7 +171,11 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	.github/scripts/arena_postbase_integration_smoke.lua		Arena frame regression smoke failed: .github/scripts/arena_postbase_integration_smoke.lua
 -	lua+driver	.github/scripts/arena_restoration_gaps_smoke.lua		Arena frame regression smoke failed: .github/scripts/arena_restoration_gaps_smoke.lua
 -	lua+driver	tools/nickname_provider_api_smoke.lua	{root/}	Classic nickname provider API smoke failed
--	lua+driver	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/}	Elite indicator classification smoke failed
+-	lua	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/} Mainline	Elite indicator classification smoke failed: Mainline
+-	lua	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/} Forever	Elite indicator classification smoke failed: Forever	nightly
+-	lua	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/} Vanilla	Elite indicator classification smoke failed: Vanilla	nightly
+-	lua	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/} TBC	Elite indicator classification smoke failed: TBC	nightly
+-	lua	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/} Mists	Elite indicator classification smoke failed: Mists	nightly
 -	lua+driver	tools/addon_interop_guard_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/addon_interop_guard_smoke.lua
 -	lua+driver	tools/slash_command_registry_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/slash_command_registry_smoke.lua
 -	lua+driver	.github/scripts/health_background_sample_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/health_background_sample_parity_smoke.lua
@@ -166,7 +188,11 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	tools/group_preview_roster_handoff_smoke.lua		v6.04 parity smoke failed: tools/group_preview_roster_handoff_smoke.lua
 -	lua+driver	tools/unit_name_anchor_reflow_smoke.lua		v6.04 parity smoke failed: tools/unit_name_anchor_reflow_smoke.lua
 -	lua+driver	tools/tests/classic_unit_availability_smoke.lua		Classic unit/portrait regression failed: classic_unit_availability_smoke.lua
--	lua+driver	tools/tests/classic_portrait_gold_smoke.lua		Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua
+-	lua	tools/tests/classic_portrait_gold_smoke.lua	{root} Mainline	Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua: Mainline
+-	lua	tools/tests/classic_portrait_gold_smoke.lua	{root} Forever	Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua: Forever	nightly
+-	lua	tools/tests/classic_portrait_gold_smoke.lua	{root} Vanilla	Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua: Vanilla	nightly
+-	lua	tools/tests/classic_portrait_gold_smoke.lua	{root} TBC	Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua: TBC	nightly
+-	lua	tools/tests/classic_portrait_gold_smoke.lua	{root} Mists	Classic unit/portrait regression failed: classic_portrait_gold_smoke.lua: Mists	nightly
 -	lua+driver	tools/tests/classic_minimap_click_smoke.lua		Classic unit/portrait regression failed: classic_minimap_click_smoke.lua
 -	lua+driver	tools/tests/classic_prediction_contract_smoke.lua	{root/}	Classic prediction contract smoke failed
 -	lua+driver	tools/tests/classic_aura_backend_smoke.lua	{root/}	Classic aura backend smoke failed
@@ -231,12 +257,18 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
 -	lua+driver	tools/tests/classic_menu_retail_parity_smoke.lua	{root/}	Classic Menu2 Retail parity smoke failed
-classics	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} {flavor}	Classic unit preview parity smoke failed: {flavor}
+-	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} Vanilla	Classic unit preview parity smoke failed: Vanilla	nightly
+-	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} TBC	Classic unit preview parity smoke failed: TBC	nightly
+-	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} Mists	Classic unit preview parity smoke failed: Mists	nightly
 -	lua	tools/tests/mainline_unit_preview_boss_target_smoke.lua	{root/} Mainline	Mainline unit preview boss target smoke failed: Mainline
--	lua	tools/tests/mainline_unit_preview_boss_target_smoke.lua	{root/} Forever	Mainline unit preview boss target smoke failed: Forever
+-	lua	tools/tests/mainline_unit_preview_boss_target_smoke.lua	{root/} Forever	Mainline unit preview boss target smoke failed: Forever	nightly
 -	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Mainline	Mainline unit preview Classic hunks smoke failed: Mainline
--	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Forever	Mainline unit preview Classic hunks smoke failed: Forever
-clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} {flavor}	Unit preview texture layer order smoke failed: {flavor}
+-	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Forever	Mainline unit preview Classic hunks smoke failed: Forever	nightly
+-	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} Mainline	Unit preview texture layer order smoke failed: Mainline
+-	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} Forever	Unit preview texture layer order smoke failed: Forever	nightly
+-	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} Vanilla	Unit preview texture layer order smoke failed: Vanilla	nightly
+-	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} TBC	Unit preview texture layer order smoke failed: TBC	nightly
+-	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} Mists	Unit preview texture layer order smoke failed: Mists	nightly
 -	lua	tools/tests/classic_history_ui_scale_smoke.lua	{root/}	Classic History UI scale smoke failed
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_history_cancel_variant_smoke.lua	{root} {flavor}	Edit Mode Cancel All dropped the active profile variant: {flavor}
@@ -399,7 +431,11 @@ clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla ruRU	Menu search finds options by their name: Vanilla ruRU
 -	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla zhCN	Menu search finds options by their name: Vanilla zhCN
 -	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla zhTW	Menu search finds options by their name: Vanilla zhTW
--	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root}	Pet and Pet Target preview lifecycle failed
+-	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root} Mainline	Pet and Pet Target preview lifecycle failed: Mainline
+-	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root} Forever	Pet and Pet Target preview lifecycle failed: Forever	nightly
+-	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root} Vanilla	Pet and Pet Target preview lifecycle failed: Vanilla	nightly
+-	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root} TBC	Pet and Pet Target preview lifecycle failed: TBC	nightly
+-	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root} Mists	Pet and Pet Target preview lifecycle failed: Mists	nightly
 -	lua	tools/tests/group_menu_additional_preview_smoke.lua	{root}	Group menu additional preview lifecycle failed
 -	lua	tools/tests/unit_preview_castbar_features_smoke.lua	{root}	Castbar feature preview lifecycle failed
 -	lua	tools/tests/group_additional_edit_entry_smoke.lua	{root}	Additional group previews during Edit Mode entry failed
@@ -407,8 +443,16 @@ clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/castbar_detached_gcd_editmode_smoke.lua	{root}	Detached GCD Edit Mode lifecycle failed
 -	lua	tools/tests/resource_extra_aura_editmode_smoke.lua	{root}	Additional resource aura Edit Mode lifecycle failed
 -	lua	tools/tests/mana_extra_editmode_smoke.lua	{root}	Mana resource Edit Mode lifecycle failed
-clients+Forever	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} {flavor}	Menu preview live parity smoke failed: {flavor}
-clients+Forever	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} {flavor}	Menu preview repaint budget smoke failed: {flavor}
+-	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} Mainline	Menu preview live parity smoke failed: Mainline
+-	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} Forever	Menu preview live parity smoke failed: Forever	nightly
+-	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} Vanilla	Menu preview live parity smoke failed: Vanilla	nightly
+-	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} TBC	Menu preview live parity smoke failed: TBC	nightly
+-	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} Mists	Menu preview live parity smoke failed: Mists	nightly
+-	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} Mainline	Menu preview repaint budget smoke failed: Mainline
+-	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} Forever	Menu preview repaint budget smoke failed: Forever	nightly
+-	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} Vanilla	Menu preview repaint budget smoke failed: Vanilla	nightly
+-	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} TBC	Menu preview repaint budget smoke failed: TBC	nightly
+-	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} Mists	Menu preview repaint budget smoke failed: Mists	nightly
 -	lua	tools/tests/options_manifest_duplicates_smoke.lua	{root}	Options manifest duplicate smoke failed
 clients+Forever	lua	tools/tests/auras3_normalize_stamp_smoke.lua	{root} {flavor}	Auras3 normalize stamp smoke failed: {flavor}
 clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}	Auras3 normalize trust smoke failed: {flavor}
@@ -492,7 +536,11 @@ clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	
 clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {flavor}	Castbar preview time offsets drifted from the live bar: {flavor}
 -	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required	nightly
 clients+Forever	lua	tools/tests/group_preview_repaint_budget_smoke.lua	{root} {flavor}	Group preview repaint allocates or calls more than its budget: {flavor}
-clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {flavor}	Menu previews paint an English status word on a German client: {flavor}
+-	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} Mainline	Menu previews paint an English status word on a German client: Mainline
+-	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} Forever	Menu previews paint an English status word on a German client: Forever	nightly
+-	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} Vanilla	Menu previews paint an English status word on a German client: Vanilla	nightly
+-	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} TBC	Menu previews paint an English status word on a German client: TBC	nightly
+-	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} Mists	Menu previews paint an English status word on a German client: Mists	nightly
 -	lua	tools/tests/focus_kick_preview_combat_keyboard_smoke.lua	{root}	The focus interrupt tracker preview calls a restricted keyboard API in combat or swallows keybinds
 -	lua	tools/tests/castbar_target_name_font_pass_smoke.lua	{root}	A castbar font pass mid-cast leaves the cast target name in the font colour
 -	lua	tools/tests/castbar_preview_native_conceal_smoke.lua	{root}	The castbar previews hide a shown managed Blizzard player castbar (tainted container layout)
@@ -531,7 +579,11 @@ clients+Forever	lua	tools/tests/game_menu_combat_layout_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/resource_extras_preview_smoke.lua	{root} {flavor}	Additional resource examples: {flavor}
 clients+Forever	lua	tools/tests/resource_extras_layout_colors_smoke.lua	{root} {flavor}	Additional resource accordions and color shortcuts: {flavor}
 -	lua	tools/tests/power_foreign_token_text_skip_smoke.lua	{root}	Power foreign-token text skip smoke failed
--	lua	tools/tests/power_border_color_smoke.lua	{root}	Power bar border color: compiler fallback, picker target, Copy To or preview drifted
+-	lua	tools/tests/power_border_color_smoke.lua	{root} Mainline	Power bar border color: compiler fallback, picker target, Copy To or preview drifted: Mainline
+-	lua	tools/tests/power_border_color_smoke.lua	{root} Forever	Power bar border color: compiler fallback, picker target, Copy To or preview drifted: Forever	nightly
+-	lua	tools/tests/power_border_color_smoke.lua	{root} Vanilla	Power bar border color: compiler fallback, picker target, Copy To or preview drifted: Vanilla	nightly
+-	lua	tools/tests/power_border_color_smoke.lua	{root} TBC	Power bar border color: compiler fallback, picker target, Copy To or preview drifted: TBC	nightly
+-	lua	tools/tests/power_border_color_smoke.lua	{root} Mists	Power bar border color: compiler fallback, picker target, Copy To or preview drifted: Mists	nightly
 clients+Forever	lua	tools/tests/menu_group_design_smoke.lua	{root} {flavor}	Menu group hierarchy, portrait geometry and actions: {flavor}
 -	lua	tools/tests/release_skip_neutral_smoke.lua	{root}	Release tour neutral skip styling and action semantics
 
@@ -566,7 +618,11 @@ clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} scope	
 clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} alpha	BH3 bh3_menu_search_smoke alpha failed: {flavor}
 clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} profile	BH3 bh3_menu_search_smoke profile failed: {flavor}
 -	lua	tools/tests/bh3_menu_selection_edit_smoke.lua	{root}	BH3 bh3_menu_selection_edit_smoke  failed
-clients+Forever	lua	tools/tests/bh3_preview_state_smoke.lua	{root} {flavor}	BH3 bh3_preview_state_smoke  failed: {flavor}	nightly
+-	lua	tools/tests/bh3_preview_state_smoke.lua	{root} Mainline	BH3 bh3_preview_state_smoke  failed: Mainline
+-	lua	tools/tests/bh3_preview_state_smoke.lua	{root} Forever	BH3 bh3_preview_state_smoke  failed: Forever	nightly
+-	lua	tools/tests/bh3_preview_state_smoke.lua	{root} Vanilla	BH3 bh3_preview_state_smoke  failed: Vanilla	nightly
+-	lua	tools/tests/bh3_preview_state_smoke.lua	{root} TBC	BH3 bh3_preview_state_smoke  failed: TBC	nightly
+-	lua	tools/tests/bh3_preview_state_smoke.lua	{root} Mists	BH3 bh3_preview_state_smoke  failed: Mists	nightly
 clients+Forever	lua	tools/tests/bh3_profile_startup_smoke.lua	{root} {flavor} minimap	BH3 bh3_profile_startup_smoke minimap failed: {flavor}
 clients+Forever	lua	tools/tests/bh3_profile_startup_smoke.lua	{root} {flavor} locale	BH3 bh3_profile_startup_smoke locale failed: {flavor}
 -	lua	tools/tests/bh3_runtime_afk_independent_smoke.lua	{root}	BH3 bh3_runtime_afk_independent_smoke  failed
@@ -601,7 +657,11 @@ clients+Forever	lua	tools/tests/bars_outline_override_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/bars_outline_color_smoke.lua	{root} {flavor}	Frame Outline style color application regression: {flavor}
 clients+Forever	lua	tools/tests/bars_outline_texture_apply_smoke.lua	{root} {flavor}	Frame Outline texture selection scoped apply budget: {flavor}
 -	lua	tools/tests/frame_strata_secret_smoke.lua	{root}	Frame strata secret regression
-clients+Forever	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} {flavor}	Slanted cut direction scope and preview regression: {flavor}
+-	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} Mainline	Slanted cut direction scope and preview regression: Mainline
+-	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} Forever	Slanted cut direction scope and preview regression: Forever	nightly
+-	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} Vanilla	Slanted cut direction scope and preview regression: Vanilla	nightly
+-	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} TBC	Slanted cut direction scope and preview regression: TBC	nightly
+-	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} Mists	Slanted cut direction scope and preview regression: Mists	nightly
 clients+Forever	lua	tools/tests/slanted_scope_review_smoke.lua	{root} {flavor}	Slanted scoped inheritance copy reset preview combat regression: {flavor}
 clients+Forever	lua	tools/tests/slanted_all_surfaces_smoke.lua	{root} {flavor}	All Slanted unit castbar and resource scopes: {flavor}
 clients+Forever	lua	tools/tests/search_human_intent_smoke.lua	{root} {flavor}	Natural search tasks and specific detail guards: {flavor}	nightly
@@ -641,7 +701,11 @@ clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {fla
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} hud	Edit Mode input and session integrity hud failed
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} snapshot	Edit Mode input and session integrity snapshot failed
 -	lua	tools/tests/editmode_input_and_session_integrity_smoke.lua	{root} danders	Edit Mode input and session integrity danders failed
-clients+Forever	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} {flavor}	Menu preview drifted from the live element it stands for: {flavor}
+-	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} Mainline	Menu preview drifted from the live element it stands for: Mainline
+-	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} Forever	Menu preview drifted from the live element it stands for: Forever	nightly
+-	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} Vanilla	Menu preview drifted from the live element it stands for: Vanilla	nightly
+-	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} TBC	Menu preview drifted from the live element it stands for: TBC	nightly
+-	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} Mists	Menu preview drifted from the live element it stands for: Mists	nightly
 clients+Forever	lua	tools/tests/menu_group_copy_to_gated_smoke.lua	{root} {flavor}	Group Copy To left the Bars values behind the Custom settings flag or switched a frame provider: {flavor}
 clients+Forever	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} {flavor}	Colors page status text repaint, picker opacity, strength label or preview apply drifted: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_review_bugs_smoke.lua	{root} {flavor}	A menu page review fix drifted (shake default, ToT color, gated toggles, copy lists, apply modes): {flavor}
@@ -782,14 +846,30 @@ clients+Forever	lua	tools/tests/preview_config_signal_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/settings_surface_commit_cost_smoke.lua	{root} {flavor}	Settings publication entered the internal surface commit original cost route: {flavor}
 clients+Forever	lua	tools/tests/preview_config_apply_bridge_smoke.lua	{root} {flavor}	Settings public bridge real-painter lifecycle failed: {flavor}
 clients+Forever	lua	tools/tests/preview_spec_lifecycle_smoke.lua	{root} {flavor}	Preview reads preserve live specs and deferred applies: {flavor}
-clients+Forever	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} {flavor}	Runtime and menu call the same portrait, resource, health and castbar rules: {flavor}
-clients+Forever	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} {flavor}	Full-overlay portrait preview matches live dressing: {flavor}
-clients+Forever	lua	tools/tests/preview_render_oracle_smoke.lua	{root} {flavor}	Frozen actual preview render output: {flavor}
+-	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} Mainline	Runtime and menu call the same portrait, resource, health and castbar rules: Mainline
+-	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} Forever	Runtime and menu call the same portrait, resource, health and castbar rules: Forever	nightly
+-	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} Vanilla	Runtime and menu call the same portrait, resource, health and castbar rules: Vanilla	nightly
+-	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} TBC	Runtime and menu call the same portrait, resource, health and castbar rules: TBC	nightly
+-	lua	tools/tests/runtime_preview_shared_rules_smoke.lua	{root} Mists	Runtime and menu call the same portrait, resource, health and castbar rules: Mists	nightly
+-	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} Mainline	Full-overlay portrait preview matches live dressing: Mainline
+-	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} Forever	Full-overlay portrait preview matches live dressing: Forever	nightly
+-	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} Vanilla	Full-overlay portrait preview matches live dressing: Vanilla	nightly
+-	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} TBC	Full-overlay portrait preview matches live dressing: TBC	nightly
+-	lua	tools/tests/portrait_full_overlay_preview_smoke.lua	{root} Mists	Full-overlay portrait preview matches live dressing: Mists	nightly
+-	lua	tools/tests/preview_render_oracle_smoke.lua	{root} Mainline	Frozen actual preview render output: Mainline
+-	lua	tools/tests/preview_render_oracle_smoke.lua	{root} Forever	Frozen actual preview render output: Forever	nightly
+-	lua	tools/tests/preview_render_oracle_smoke.lua	{root} Vanilla	Frozen actual preview render output: Vanilla	nightly
+-	lua	tools/tests/preview_render_oracle_smoke.lua	{root} TBC	Frozen actual preview render output: TBC	nightly
+-	lua	tools/tests/preview_render_oracle_smoke.lua	{root} Mists	Frozen actual preview render output: Mists	nightly
 -	lua	tools/tests/preview_oracle_contract_smoke.lua	{root}	Preview observation semantic roles and native-state contract
 -	python	tools/tests/preview_oracle_mutation_smoke.py	{root}	Known actual preview output mutations must fail comparison
 -	python	tools/tests/preview_oracle_corpus_smoke.py	{root}	Frozen legacy preview fixture inventory and byte integrity
 clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter tables import unchanged, without a prompt, as 6.21 showed them: {flavor}
-clients+Forever	lua	tools/tests/aura_mock_painter_smoke.lua	{root} {flavor}	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: {flavor}
+-	lua	tools/tests/aura_mock_painter_smoke.lua	{root} Mainline	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: Mainline
+-	lua	tools/tests/aura_mock_painter_smoke.lua	{root} Forever	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: Forever	nightly
+-	lua	tools/tests/aura_mock_painter_smoke.lua	{root} Vanilla	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: Vanilla	nightly
+-	lua	tools/tests/aura_mock_painter_smoke.lua	{root} TBC	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: TBC	nightly
+-	lua	tools/tests/aura_mock_painter_smoke.lua	{root} Mists	Shared mock aura painter output drifted from the frozen legacy preview states or lost its pool lifecycle: Mists	nightly
 -	lua	tools/tests/aura_mock_painter_contract_smoke.lua	{root}	Shared mock aura painter touched a secure, event or script surface, or broke a geometry, text, bar or sample-state contract
 clients+Forever	lua	tools/tests/editmode_aura_tick_idle_regions_smoke.lua	{root} {flavor}	Edit Mode aura tick touched an idle duration bar or stopped following the sample state: {flavor}
 -	lua	tools/tests/startup_login_budget_smoke.lua	{root} Mainline	Startup login budget smoke failed: Mainline (Lua instructions or widget calls of a /reload)
@@ -827,3 +907,18 @@ classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavo
 -	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Vanilla	Core classpower scene twin geometry, isolation and lifecycle: Vanilla	nightly
 -	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} TBC	Core classpower scene twin geometry, isolation and lifecycle: TBC	nightly
 -	lua	tools/tests/classpower_preview_scene_smoke.lua	{root} Mists	Core classpower scene twin geometry, isolation and lifecycle: Mists	nightly
+-	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} Mainline	Unit preview scenes shared state, reached the live registry, unit index, click casting, events, scripts or secure attributes, called a unit API, painted differently from a live frame of the same unit, or touched a live frame: Mainline
+-	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} Forever	Unit preview scenes shared state, reached the live registry, unit index, click casting, events, scripts or secure attributes, called a unit API, painted differently from a live frame of the same unit, or touched a live frame: Forever	nightly
+-	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} Vanilla	Unit preview scenes shared state, reached the live registry, unit index, click casting, events, scripts or secure attributes, called a unit API, painted differently from a live frame of the same unit, or touched a live frame: Vanilla	nightly
+-	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} TBC	Unit preview scenes shared state, reached the live registry, unit index, click casting, events, scripts or secure attributes, called a unit API, painted differently from a live frame of the same unit, or touched a live frame: TBC	nightly
+-	lua	tools/tests/unit_preview_scene_isolation_smoke.lua	{root} Mists	Unit preview scenes shared state, reached the live registry, unit index, click casting, events, scripts or secure attributes, called a unit API, painted differently from a live frame of the same unit, or touched a live frame: Mists	nightly
+-	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} Mainline	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: Mainline
+-	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} Forever	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: Forever	nightly
+-	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} Vanilla	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: Vanilla	nightly
+-	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} TBC	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: TBC	nightly
+-	lua	tools/tests/unit_preview_scene_lifecycle_smoke.lua	{root} Mists	A unit preview scene listened or showed while its root was closed, ignored combat, repainted in combat, built a region on repaint, followed the shared preview animation, or left a subscription or timer after release: Mists	nightly
+-	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Mainline	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Mainline
+-	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Forever	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Forever	nightly
+-	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Vanilla	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Vanilla	nightly
+-	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} TBC	Restored unit preview marker, reminder, Bounds or absorb sample regressed: TBC	nightly
+-	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Mists	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Mists	nightly

@@ -406,6 +406,10 @@ function Methods:SetOrder(order) self.order = order end
 function Methods:SetStartDelay(delay) self.startDelay = delay end
 function Methods:SetFromAlpha(alpha) self.fromAlpha = alpha end
 function Methods:SetToAlpha(alpha) self.toAlpha = alpha end
+function Methods:SetToFinalAlpha(enabled) self.toFinalAlpha = enabled end
+function Methods:SetFlipBookRows(rows) self.flipBookRows = rows end
+function Methods:SetFlipBookColumns(columns) self.flipBookColumns = columns end
+function Methods:SetFlipBookFrames(frames) self.flipBookFrames = frames end
 function Methods:SetOffset(x, y) self.offset = { x, y } end
 
 --------------------------------------------------------------------------

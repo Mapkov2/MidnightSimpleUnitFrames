@@ -871,9 +871,11 @@ local function ApplyHealthVisibility(holder, conf, keys, unit, hp, maxHP)
   end
 end
 
-local function ResolveAboveThresholdRGB(conf, keys, unit)
+local function ResolveAboveThresholdRGB(conf, keys, unit, frame)
   if conf[keys.HealthAboveMode] == "CLASS" then
-    local r, g, b = ResolveClassRGB(unit)
+    local r, g, b
+    if frame and frame._msufSceneClass then r, g, b = MSUF.UF.Config.ClassColor(frame._msufSceneClass)
+    else r, g, b = ResolveClassRGB(unit) end
     if r then return r, g, b end
   end
   return Clamp01(conf[keys.ColorR], 1), Clamp01(conf[keys.ColorG], 1), Clamp01(conf[keys.ColorB], 1)
@@ -885,7 +887,7 @@ local function EnsureThresholdColorCurve(holder, frame, conf, keys, unit)
   local threshold = HealthThreshold(conf, keys)
   local aboveMode = conf[keys.HealthAboveMode]
   if aboveMode ~= "CLASS" and aboveMode ~= "CUSTOM" then return nil end
-  local fr, fg, fb = ResolveAboveThresholdRGB(conf, keys, unit)
+  local fr, fg, fb = ResolveAboveThresholdRGB(conf, keys, unit, frame)
   if holder._msufTexLayerHealthColorCurve
     and holder._msufTexLayerHealthColorSpec == health
     and holder._msufTexLayerHealthColorThreshold == threshold
@@ -937,7 +939,7 @@ local function ResolveHealthRGB(holder, frame, conf, keys, unit, hp, maxHP, r, g
 
   local pct = PlainHealthPercent(hp, maxHP)
   if pct ~= nil then
-    if pct >= HealthThreshold(conf, keys) then return ResolveAboveThresholdRGB(conf, keys, unit) end
+    if pct >= HealthThreshold(conf, keys) then return ResolveAboveThresholdRGB(conf, keys, unit, frame) end
     if issecretvalue(r) == true or r ~= nil then return r, g, b end
     if hp ~= nil and maxHP ~= nil and HealthGradientColorFromValues then
       r, g, b = HealthGradientColorFromValues(health, hp, maxHP)
@@ -948,7 +950,7 @@ local function ResolveHealthRGB(holder, frame, conf, keys, unit, hp, maxHP, r, g
   local color = EvaluateUnitCurve(unit, curve)
   if color and color.GetRGB then return color:GetRGB() end
   if GradientColor then return GradientColor(unit, nil, frame) end
-  return ResolveAboveThresholdRGB(conf, keys, unit)
+  return ResolveAboveThresholdRGB(conf, keys, unit, frame)
 end
 
 local function ApplySlot(frame, conf, unitKey, slot, event)
@@ -1035,11 +1037,11 @@ local function ApplySlot(frame, conf, unitKey, slot, event)
   local colorMode = conf[keys.ColorMode]
   local hp, maxHP
   if colorMode == "HEALTH" or conf[keys.HealthCondition] == "BELOW" or conf[keys.HealthLowAlphaEnabled] == true then
-    hp, maxHP = ColdHealthValues(unitKey)
+    if frame._msufSceneHP then hp, maxHP = frame._msufSceneHP, frame._msufSceneHPMax else hp, maxHP = ColdHealthValues(unitKey) end
   end
   local r, g, b
   if colorMode == "CLASS" then
-    r, g, b = ResolveClassRGB(unitKey)
+    if frame._msufSceneClass then r, g, b = MSUF.UF.Config.ClassColor(frame._msufSceneClass) else r, g, b = ResolveClassRGB(unitKey) end
   elseif colorMode == "HEALTH" then
     r, g, b = ResolveHealthRGB(holder, frame, conf, keys, unitKey, hp, maxHP)
   end
@@ -1113,6 +1115,12 @@ local function ApplySlot(frame, conf, unitKey, slot, event)
   holder.clipApplied = clipWanted or nil
   holder:Show()
   ApplyHealthVisibility(holder, conf, keys, unitKey, hp, maxHP)
+end
+
+function TextureLayer.PaintSample(frame, unit, hp, hpMax, class)
+  frame._msufSceneHP, frame._msufSceneHPMax, frame._msufSceneClass = hp, hpMax, class
+  local conf = ConfForUnitKey(unit)
+  for slot = 1, #SLOT_PREFIXES do ApplySlot(frame, conf, nil, slot) end
 end
 
 local function ApplyToUnitFrame(frame)

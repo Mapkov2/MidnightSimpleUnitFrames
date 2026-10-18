@@ -305,8 +305,20 @@ rootA:SetParent(mover)
 for _, unit in ipairs(units) do
     Check(scenes[unit].frame:GetParent() == mover, unit .. ": re-parenting the root did not move the scene")
 end
+-- Native preview effects can own pulse/glow registrations: release must stop them, not merely hide an ancestor.
+local effects = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.SpellIndicators
+local effectStops = 0
+if effects and effects.HidePreviewFrameEffect then
+    local stopEffect = effects.HidePreviewFrameEffect
+    effects.HidePreviewFrameEffect = function(owner)
+        effectStops = effectStops + 1
+        return stopEffect(owner)
+    end
+    scenes[units[1]].frame._msufSceneEffectOwner = env.CreateFrame("Frame", nil, scenes[units[1]].frame)
+end
 rootA:Release()
 h:RunTimers()
+if effects and effects.HidePreviewFrameEffect then Check(effectStops > 0, "release retained native effect registrations") end
 for _, unit in ipairs(units) do
     Check(not scenes[unit]:IsActive() and not frameOf[unit]:IsShown(), unit .. ": release left a scene shown")
 end

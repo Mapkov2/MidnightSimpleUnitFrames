@@ -147,17 +147,17 @@ cases["C31-A3"] = function()
     db.player.showPower, db.player.powerBarDetached = true, false
     db.player.verticalFillBars, db.player.reverseFillBars = true, true
     local box, refresh = Unit(mw)
-    local point = box.mock.power:GetPoint()
-    assert(point == "TOPLEFT", "vertical reverse power is anchored left")
-    local h = box.mock.power:GetHeight()
-    assert(h and h < box.mock.powerBG:GetHeight(), "vertical fraction does not change height")
+    local bar = box.mock._body.targetPowerBar
+    assert(bar:GetOrientation() == "VERTICAL" and bar:GetReverseFill(), "vertical power lost its live reverse fill")
+    local low, high = bar:GetMinMaxValues()
+    assert(bar:GetValue() > low and bar:GetValue() < high, "vertical power fraction is not inside its live range")
     db.player.verticalFillBars, db.player.reverseFillBars = false, true
     refresh()
-    assert(box.mock.power:GetPoint() == "TOPRIGHT", "horizontal reverse power anchored left")
+    assert(bar:GetOrientation() == "HORIZONTAL" and bar:GetReverseFill(), "horizontal power lost its live reverse fill")
     db.player.powerBarDetached, db.player.detachedPowerBarAnchorToClassPower = true, false
     db.player.verticalFillBars, db.player.detachedPowerBarShape = true, "BAR"
     refresh()
-    assert(box.mock.detachedPower.fill:GetPoint() == "TOPLEFT", "detached BAR ignores vertical reverse")
+    assert(bar:GetOrientation() == "VERTICAL" and bar:GetReverseFill(), "detached BAR ignores vertical reverse")
 end
 local function ShapedPower()
     local mw = Open(); local p = mw.env.MSUF_DB.player

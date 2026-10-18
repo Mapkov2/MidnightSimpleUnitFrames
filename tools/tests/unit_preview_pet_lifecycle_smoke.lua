@@ -1,6 +1,6 @@
 local root=assert(arg[1])
 local World=assert(loadfile(root.."/tools/tests/client_world.lua"))()
-for _,flavor in ipairs({"Mainline","Forever","Vanilla","TBC","Mists"}) do
+for _,flavor in ipairs(arg[2] and {arg[2]} or {"Mainline","Forever","Vanilla","TBC","Mists"}) do
     local world=World.New(root,flavor):Boot()
     local failure=world:FirstFailure();assert(not failure,failure and failure.message)
     local env,ns=world.env,world.core
@@ -39,7 +39,8 @@ for _,flavor in ipairs({"Mainline","Forever","Vanilla","TBC","Mists"}) do
         local conf=env.MSUF_DB[unit];conf.width=177;conf.height=43
         for _,on in ipairs({false,true,false}) do
             conf.showPowerBar=on;ns.UF.Config.Refresh();Preview.Refresh(box,"PET_PREVIEW_LIFECYCLE")
-            assert(box.key==unit and box.mock.power:IsShown()==on,flavor.." "..unit..": menu configured power visibility mismatch")
+            local bar=box.mock._body.targetPowerBar
+            assert(box.key==unit and (bar and bar:IsShown() or false)==on,flavor.." "..unit..": menu configured power visibility mismatch")
             assert(ns.UF.Config.GetSpec(unit).width==177 and ns.UF.Config.GetSpec(unit).height==43,"pet dimensions failed compilation")
         end
     end

@@ -93,7 +93,7 @@ end
 -- The unit elements a scene paints. Castbar and class power are the next scene package's; the auras are stand-ins.
 local SCENE_ELEMENTS = {
   "Health", "TempMaxHealth", "Power", "Portrait", "Prediction", "StatusIndicators", "RaidMarkerIndicator",
-  "LeaderIndicator", "LevelIndicator", "RaidGroupIndicator", "EliteIndicator",
+  "LeaderIndicator", "LevelIndicator", "BossNumberIndicator", "RaidGroupIndicator", "EliteIndicator",
   "StatusTextIndicator", "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "PVPIndicator",
   "StanceIndicator", "Borders", "Text", "NameText", "HealthText", "PowerText", "InlineToT", "Alpha",
   "PetHappinessIndicator", "PetXPBar", "ThreatIndicator",
@@ -139,7 +139,7 @@ local function OpenWindow(frame, unit, sample)
   state.identityIsPlayerRead = true
   state.identityReady = true
   local names = _G.LOCALIZED_CLASS_NAMES_MALE
-  local className = sample.class and type(names) == "table" and names[sample.class] or nil
+  local className = sample.className or (sample.class and type(names) == "table" and names[sample.class])
   state.className = type(className) == "string" and className or sample.class
   state.classToken = sample.class
   sample.className = state.className
@@ -211,23 +211,25 @@ local function PaintTestModeElements(frame, unit)
 end
 
 --- Paint the sample into one applied frame; the window is open.
-local function PaintSample(frame, unit, sample)
+local function PaintSample(frame, unit, sample, layout)
   local elements = UF.elements
   local active = frame._msufActiveElements or {}
   local hpMax = sample.hpMax or UnitScene.HEALTH_MAX
   local fraction = min(1, max(0, sample.hp or 1))
-  local hp = floor(hpMax * fraction + 0.5)
+  local hp = sample.hpCur or floor(hpMax * fraction + 0.5)
+  fraction = hp / hpMax
   local health = elements.Health
   if health and health.PaintSample then health.PaintSample(frame, unit, hp, hpMax) end
   local powerMax = sample.powerMax or 100
-  local power = floor(powerMax * min(1, max(0, sample.power or 0)) + 0.5)
+  local power = sample.powerCur or floor(powerMax * min(1, max(0, sample.power or 0)) + 0.5)
   local powerElement = elements.Power
   if powerElement and powerElement.PaintSample and frame.targetPowerBar then
     powerElement.PaintSample(frame, unit, power, powerMax, sample.powerType, sample.powerToken)
   end
   local prediction = elements.Prediction
   if prediction and active.Prediction == true and prediction.PaintSample then
-    prediction.PaintSample(frame, fraction * 100, (sample.incoming or 0) * 100, (sample.absorb or 0) * 100,
+    local paint = layout ~= false and prediction.PaintSample or prediction.PaintSampleData
+    paint(frame, fraction * 100, (sample.incoming or 0) * 100, (sample.absorb or 0) * 100,
       (sample.healAbsorb or 0) * 100)
   end
   local tempMax = elements.TempMaxHealth
@@ -251,14 +253,77 @@ local function PaintSample(frame, unit, sample)
   if status and runtime then
     runtime.PaintSampleIdentityTexts(frame, status, sample)
     runtime.PaintSampleIndicators(frame, status, sample)
+    runtime.UpdateBossNumber(frame, status)
+    if sample.statusSelection then runtime.PaintSceneStatus(frame, status, sample.statusSelection, sample) end
   end
   local portrait = elements.Portrait
   if portrait and portrait.PaintSample and active.Portrait == true then portrait.PaintSample(frame, sample) end
   PaintTestModeElements(frame, unit)
-  local groupFrames = MSUF.GF
-  if groupFrames and groupFrames.PreviewUnitFrameAuras then
-    groupFrames.PreviewUnitFrameAuras(frame, unit, frame.MSUFSpec, 1)
+  if sample.bossTargetPreview then elements.Borders.PaintScene(frame, unit) end
+
+
+end
+
+local LAYER_REGIONS = {
+  power = { "targetPowerBar", "powerBarBG", "powerLossTrail" },
+  nameText = { "nameText", "totInlineSep", "totInlineText", "_msufNameDotsFS", "_msufInlineDotsFS" },
+  hpText = { "hpTextLeft", "hpTextCenter", "hpText" }, powerText = { "powerTextLeft", "powerTextCenter", "powerText" },
+  portrait = { "MSUFPortraitHolder" },
+  dispelOverlay = { "_msufSceneDispelOverlay" }, dispelSymbol = { "_msufSceneDispelSymbol" },
+  status = { "raidTargetIcon", "leaderIcon", "assistIcon", "eliteIcon", "levelText", "raceText", "classStatusText",
+    "raidGroupNameText", "bossNumberText", "statusAFKTimerText", "combatStateIndicatorIcon",
+    "restingIndicatorIcon", "incomingResIndicatorIcon", "pvpIndicatorIcon",
+    "petHappinessIndicatorHolder", "petXPBar", "threatIndicatorHolder", "stanceIndicatorText", "_msufScene_statusText", "_msufScene_statusGhostText",
+    "_msufScene_statusAFKText", "_msufScene_statusDNDText" },
+}
+function Scene:RestoreLayers()
+  if self.hidden then
+    for region in pairs(self.hidden) do
+      region:Show()
+      self.hidden[region] = nil
+    end
   end
+end
+function Scene:FilterLayers()
+  local frame, visible = self.frame, self.layerVisible
+  if not (frame and visible) then return end
+  local hidden = self.hidden or {}
+  self.hidden = hidden
+  local function Hide(region)
+    if region and region:IsShown() then
+      hidden[region] = true
+      region:Hide()
+    end
+  end
+  for layer, fields in pairs(LAYER_REGIONS) do
+    if visible[layer] == false then for i = 1, #fields do Hide(frame[fields[i]]) end end
+  end
+  if visible.power == false then
+    local bar = frame.targetPowerBar
+    Hide(bar and bar.MSUFPowerBorderHost)
+    local trail = frame.powerLossTrail
+    local pool = trail and trail._msufLossTrailPool
+    for i = 1, pool and #pool or 0 do Hide(pool[i]) end
+  end
+  for key, host in pairs(frame._msufGFFrameAuraPreviewHosts or {}) do
+    if visible[key] == false or (key ~= "buff" and key ~= "debuff" and visible.auras == false) then Hide(host) end
+  end
+  local effectLayer = self.sample.frameEffectLayer
+  if (effectLayer and visible[effectLayer] == false) or (not effectLayer and visible.auras == false) then Hide(frame._msufSceneEffectOwner) end
+  if visible.auras == false then
+    for _, region in pairs(frame._msufGFSpellIndicatorPreviews or {}) do
+      Hide(region)
+      Hide(region._frameEffectOwner)
+    end
+  end
+  if visible.texLayer == false then
+    for _, holder in pairs(frame._msufTexLayers or {}) do Hide(holder) end
+  end
+end
+function Scene:SetLayerFilter(visible)
+  self:RestoreLayers()
+  self.layerVisible = visible
+  self:FilterLayers()
 end
 
 function Scene:Frame()
@@ -270,13 +335,70 @@ function Scene:Unit() return self.unit end
 function Scene:Sample() return self.sample end
 function Scene:IsActive() return self.frame ~= nil and self.shown == true end
 
+-- A warm menu repaint reuses its private spec. Capture the saved inputs (including nested profile tables), never
+-- the live compiled spec: sliders can paint before the debounced live apply. No allocation on an unchanged read.
+local function SettingsChanged(source, saved)
+  local changed = false
+  for key, value in pairs(source) do
+    if type(value) == "table" then
+      local child = saved[key]
+      if type(child) ~= "table" then
+        child = {}
+        saved[key] = child
+        changed = true
+      end
+      if SettingsChanged(value, child) then changed = true end
+    elseif saved[key] ~= value then
+      saved[key] = value
+      changed = true
+    end
+  end
+  for key in pairs(saved) do
+    if source[key] == nil then
+      saved[key] = nil
+      changed = true
+    end
+  end
+  return changed
+end
+function Scene:Compile()
+  local db = UF.Config.GetDB()
+  local inputs = self.inputs or {}
+  self.inputs = inputs
+  inputs.unit = UF.Config.GetUnitDB(self.unit)
+  inputs.general, inputs.bars = db.general, db.bars
+  inputs.classColors, inputs.powerColors = db.classColors, db.powerColors
+  inputs.auras = db.auras3
+  inputs.shortenNames = db.shortenNames
+  inputs.inlineTarget = self.unit == "target" and db.targettarget or nil
+  local saved = self.savedInputs or {}
+  self.savedInputs = saved
+  local changed = SettingsChanged(inputs, saved)
+  if not self.spec or changed or self.serial ~= UF.Config.serial then
+    self.serial = UF.Config.serial
+    self.spec = UF.Config.CompileSpec(self.unit, self.spec)
+    local p = self.spec and self.spec.portrait
+    if p and p.blizzardCorner then
+      if MSUF.Client.IsVanilla then self.cornerAvailable = false end
+      if self.cornerAvailable == nil then
+        local info = C_Texture and C_Texture.GetAtlasInfo
+        self.cornerAvailable = MSUF.Client.IsForever == true
+          or (info and info("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment") ~= nil) or false
+      end
+      p.blizzardCornerAvailable = self.cornerAvailable
+    end
+  end
+  return self.spec
+end
+
 --- Re-apply the spec (compiled now into this scene's own table) and paint the sample.
 function Scene:Refresh()
   if InCombat() or self.shown ~= true then return false end
   local unit = self.unit
-  local spec = UF.Config.CompileSpec(unit, self.spec)
+  local spec = self:Compile()
   if not spec then return false end
   self.spec = spec
+  self:RestoreLayers()
   local frame = self:Frame()
   local sample = self.sample
   -- The health visual root cannot be built in combat; a refresh never runs there.
@@ -286,7 +408,7 @@ function Scene:Refresh()
   frame.configKey = spec.key
   frame._msufPortraitSampleClass = sample.class
   frame._msufSampleReaction = REACTION_VALUE[sample.reaction or "friendly"]
-  frame._msufSamplePortraitArt = sample.player ~= true and sample.portrait or nil
+  frame._msufSamplePortraitArt = sample.portraitTexture or (sample.player ~= true and sample.portrait or nil)
   if frame._msufSceneWidth ~= spec.width or frame._msufSceneHeight ~= spec.height then
     frame._msufSceneWidth, frame._msufSceneHeight = spec.width, spec.height
     frame:SetSize(spec.width, spec.height)
@@ -297,24 +419,98 @@ function Scene:Refresh()
   end
   -- A paint that failed left its window open; the apply must not hold the unit.
   CloseWindow(frame)
+  local layers = UF.Layers
+  layers.SetLevelBias(self.level or 0)
   UF.ApplySceneSpec(frame, spec, SCENE_MASK, "single", unit)
-  self:RefreshData()
+  local rounded = UF.Decorators.RoundedFrames
+  if rounded and rounded.active then
+    OpenWindow(frame, unit, sample)
+    rounded.Apply(frame)
+    CloseWindow(frame)
+  end
+  layers.SetLevelBias(0)
+  self:RefreshData(true)
   frame:Show()
   return true
 end
 
 --- Paint the sample again; no spec and no layout.
-function Scene:RefreshData()
+function Scene:RefreshData(layout)
   if InCombat() or self.shown ~= true or not self.frame then return false end
-  local frame, unit = self.frame, self.unit
-  OpenWindow(frame, unit, self.sample)
-  PaintSample(frame, unit, self.sample)
+  self:RestoreLayers()
+  local layers = UF.Layers
+  layers.SetLevelBias(self.level or 0)
+  local frame, unit, spec = self.frame, self.unit, self.frame.MSUFSpec
+  local sample = self.sample
+  if self.root.animating then
+    local animated = self.animatedSample or {}
+    self.animatedSample = animated
+    for key in pairs(animated) do animated[key] = nil end
+    for key, value in pairs(sample) do animated[key] = value end
+    local state = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE)(frame, 1, unit, self.animationState or {}, self.root.elapsed)
+    self.animationState = state
+    animated.hp, animated.power = state.hpPct, state.powerPct
+    animated.hpCur, animated.powerCur = nil, nil
+    sample = animated
+  end
+  local auraEnabled = spec.auras and spec.auras.enabled == true or false
+  if layout == true or (layout ~= false and self.auraEnabled ~= auraEnabled) then
+    self.auraEnabled = auraEnabled
+    local gf = MSUF.GF
+    if gf and gf.PreviewUnitFrameAuras then gf.PreviewUnitFrameAuras(frame, unit, spec, 1) end
+    local auras = MSUF.MSUF_Auras3
+    local effects = auras and auras.Runtime and auras.Runtime.EffectPreview
+    if effects and effects.PaintScene then
+      local cfg = auras.ResolveAuraPreviewConfig(frame, unit, spec)
+      effects.PaintScene(frame, cfg and cfg.sensors)
+    elseif auras and auras.ClassicVisuals then
+      local cfg = auras.ResolveAuraPreviewConfig(frame, unit, spec)
+      local visual, native = cfg and cfg.visual, auras.ClassicVisuals
+      local present = self.dispelTypes
+      if not present then
+        present = {}
+        self.dispelTypes = present
+        for i = 1, #native.DispelTypes do present[native.DispelTypes[i]] = true end
+      end
+      native.UpdateDispelOverlay(frame, visual, visual and visual.overlayEnabled,
+        visual and visual.r, visual and visual.g, visual and visual.b, 1)
+      native.UpdateDispelSymbols(frame, visual, present)
+      frame._msufSceneDispelOverlay = frame._msufA3ClassicDispelOverlayHost
+      frame._msufSceneDispelSymbol = frame._msufA3ClassicDispelSymbolHost
+    end
+  end
+  if layout ~= false then
+    local auras = MSUF.MSUF_Auras3
+    local effects = auras and auras.SpellIndicators
+    local owner = frame._msufSceneEffectOwner
+    if effects and sample.frameEffect then
+      if not owner then
+        local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+        owner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+        owner:EnableMouse(false)
+        owner:SetAllPoints(frame)
+        frame._msufSceneEffectOwner = owner
+      end
+      effects.ApplyPreviewFrameEffect(owner, sample.frameEffect, frame)
+      owner:Show()
+    elseif effects and owner then effects.HidePreviewFrameEffect(owner) end
+  end
+  OpenWindow(frame, unit, sample)
+  PaintSample(frame, unit, sample, layout)
+  local gf = MSUF.GF
+  if gf and gf.AnimateUnitFrameAuras then gf.AnimateUnitFrameAuras(frame, self.root.animating and self.root.elapsed or nil) end
   CloseWindow(frame)
+  if MSUF.TextureLayer and MSUF.TextureLayer.PaintSample then
+    MSUF.TextureLayer.PaintSample(frame, unit, sample.hpCur or (sample.hp or 1) * (sample.hpMax or UnitScene.HEALTH_MAX),
+      sample.hpMax or UnitScene.HEALTH_MAX, sample.class)
+  end
   -- The paint can build regions the opacity pass has not seen (the threat text): settle it again, without the unit.
   local alpha = UF.elements.Alpha
   if alpha and frame._msufActiveElements and frame._msufActiveElements.Alpha == true then
     alpha.SceneApply(frame, frame.MSUFSpec)
   end
+  self:FilterLayers()
+  layers.SetLevelBias(0)
   return true
 end
 
@@ -333,15 +529,26 @@ end
 
 function Scene:Conceal()
   self.shown = nil
-  if self.frame then self.frame:Hide() end
+  local frame = self.frame
+  if frame then
+    frame:Hide()
+    local gf = MSUF.GF
+    if gf then
+      gf.HideFrameAuras(frame)
+      gf.HideSpellIndicators(frame)
+    end
+    local auras = MSUF.MSUF_Auras3
+    local effects = auras and auras.SpellIndicators
+    if effects and frame._msufSceneEffectOwner then effects.HidePreviewFrameEffect(frame._msufSceneEffectOwner) end
+  end
   return true
 end
 
 --- A new sample (merged over the unit's own; nil restores it).
-function Scene:SetSample(sample)
+function Scene:SetSample(sample, noRefresh)
   self.override = type(sample) == "table" and sample or nil
   self.sample = Merge(SAMPLES[FamilyOf(self.unit)], self.override)
-  if self.shown ~= true then return false end
+  if noRefresh == true or self.shown ~= true then return false end
   return self:Refresh()
 end
 

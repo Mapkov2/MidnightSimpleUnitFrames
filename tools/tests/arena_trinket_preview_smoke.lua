@@ -280,7 +280,7 @@ else
         "a non-arena preview offers or shows the trinket")
     local render = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
     local refresh = Body(render, "function Preview.Refresh(box, reason)")
-    local auras, painted = refresh:find("Stage.RenderAurasAndStatus(st, Preview)", 1, true), refresh:find("Stage.RenderArenaTrinket(st)", 1, true)
+    local auras, painted = refresh:find("Stage.RenderSceneHandles(st, Preview)", 1, true), refresh:find("Stage.RenderArenaTrinket(st)", 1, true)
     Check(auras and painted and auras < painted, "the unit preview refresh does not paint the trinket after Status")
     Check(Body(render, "function Stage.MeasureLayerFootprint(st)"):find("arenaTrinket.Footprint(", 1, true),
         "the unit preview fit ignores the trinket footprint")

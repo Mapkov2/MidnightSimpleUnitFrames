@@ -34,7 +34,7 @@ end
 local KEYS = { "powerBarBorderColorR", "powerBarBorderColorG", "powerBarBorderColorB" }
 
 local checked = {}
-for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
+for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     local world = World.New(root, flavor):Boot()
     local failure = world:FirstFailure()
     Check(not failure, flavor .. ": boot failed: " .. tostring(failure and failure.file) .. ": "
@@ -80,19 +80,23 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     for i = 1, #KEYS do
         Check(fields:find(" " .. KEYS[i] .. " ", 1, true), flavor .. ": Copy To / reset of Power leaves " .. KEYS[i] .. " behind")
     end
+    local sceneRoot = world.core.GF.NewPreviewScene(world.env.UIParent)
+    sceneRoot:Activate()
+    local scene = assert(sceneRoot:Unit("target"))
+    scene:Show()
+    local bar = scene:Frame().targetPowerBar
+    Check(bar and Near(bar._msufPowerBorderR, power.borderR) and Near(bar._msufPowerBorderG, power.borderG)
+        and Near(bar._msufPowerBorderB, power.borderB), flavor .. ": the scene power border did not paint the live color")
+    target.powerBarBorderColorR, target.powerBarBorderColorG, target.powerBarBorderColorB = .9, .4, .05
+    scene:Refresh()
+    Check(Near(bar._msufPowerBorderR, .9) and Near(bar._msufPowerBorderG, .4) and Near(bar._msufPowerBorderB, .05),
+        flavor .. ": the scene ignored custom power border RGB")
+    sceneRoot:Release()
     checked[#checked + 1] = flavor
 end
 
 local visuals = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
 Check(visuals:find('refs[#refs + 1] = "bar.power_loss"\n            if ReadPowerBorderEnabled() then refs[#refs + 1] = "power.border" end', 1, true),
     "the Border & fill card no longer offers the power border color while the border is on")
-
-local preview = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
-for _, channel in ipairs({ "R", "G", "B" }) do
-    Check(preview:find("or tonumber(conf.powerBarBorderColor" .. channel .. ") or tonumber(conf.barOutlineColor" .. channel .. ")", 1, true),
-        "the unit preview fallback ignores powerBarBorderColor" .. channel)
-end
-Check(preview:find("SetBackdropBorderColor(mock._msufPreviewPowerBorderR, mock._msufPreviewPowerBorderG,", 1, true),
-    "the detached power preview border is painted black instead of the power border color")
 
 print("power_border_color_smoke: ok (" .. table.concat(checked, ", ") .. ")")

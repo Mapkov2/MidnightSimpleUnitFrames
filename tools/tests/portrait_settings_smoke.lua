@@ -27,6 +27,7 @@ end
 world:Boot()
 local failure=world:FirstFailure()
 assert(not failure, failure and failure.message)
+assert(loadfile(root .. "/tools/tests/unit_scene_region_fixture.lua"))().Install(core)
 local UF=core.UF
 env.MSUF_InitProfiles()
 env.MSUF_EnsureDB(true)
@@ -199,7 +200,7 @@ for _,layer in ipairs({0,7,30}) do
     if layer==0 then
         assert(mock.portrait:GetFrameLevel()<mock.healthBar:GetFrameLevel(),"preview layer 0")
         assert(mock.portrait.border:GetFrameLevel()<mock.healthBar:GetFrameLevel(),"preview rim layer 0")
-    else near(mock.portrait:GetFrameLevel(),UF.Layers.ElementLevel(layer,7,0),"preview layer") end
+    else near(mock.portrait:GetFrameLevel(),UF.Layers.ElementLevel(layer,7,0) + (box._unitScene.level or 0),"preview layer") end
     assert(mock.portrait.tex._msufImageX<0 and mock.portrait.tex._msufImageY<0,"preview unzoomed pan")
 end
 -- Party uses its real compiler and the same live portrait/alpha elements.
@@ -264,9 +265,9 @@ for _,state in ipairs({"rareelite","rare","worldboss","normal","elite"}) do
     local previewDragon=box.mock.portrait.blizzElite
     if expected then
         assert(previewDragon and previewDragon:IsShown() and previewDragon.atlas==expected,"preview classification art")
-        -- The default dragon level shares the frame that draws the preview's
-        -- image and ring, never the hidden geometric border frame.
-        assert(previewDragon:GetParent()==box.mock.portrait,"preview dragon must share the preview portrait frame")
+        -- The native default dragon level shares the live border/ring owner.
+        assert(previewDragon:GetParent()==box.mock.portrait.border and dragon:GetParent()==frame.MSUFPortraitHolder.border,
+            "preview dragon must use the same native border owner as the live portrait")
     else assert(not previewDragon or not previewDragon:IsShown(),"normal preview hides dragon") end
 end
 classification="rareelite"
@@ -415,7 +416,7 @@ do
     end
     local originalSetTexCoord = Methods.SetTexCoord
     Methods.SetTexCoord = function(self, ...)
-        assert(self ~= frame.MSUFPortraitHolder.mask and self ~= box.mock.portrait._msufPreviewShapeMask,
+        assert(self ~= frame.MSUFPortraitHolder.mask and self ~= box.mock.portrait.mask,
             "frame direction must never change native portrait mask UVs")
         return originalSetTexCoord(self, ...)
     end
@@ -429,12 +430,12 @@ do
         local holder, sample = frame.MSUFPortraitHolder, box.mock.portrait
         if core.Client.IsVanilla then
             assert(holder.mask.texture:find("circle_mask", 1, true), "native Era circle mask")
-            assert(sample._msufPreviewShapeMask.texture == holder.mask.texture, "Era sample mask")
+            assert(sample.mask.texture == holder.mask.texture, "Era sample mask")
         else
             checkUV(holder.blizzRing, case[2], "live ring")
             assert(holder.mask.texture == maskPath(case), "live mask orientation " .. case[1])
-            checkUV(sample._msufPreviewBlizzRing, case[2], "sample ring")
-            assert(sample._msufPreviewShapeMask.texture == maskPath(case), "sample mask orientation " .. case[1])
+            checkUV(sample.blizzRing, case[2], "sample ring")
+            assert(sample.mask.texture == maskPath(case), "sample mask orientation " .. case[1])
             local corner = holder.blizzCorner
             if corner and corner:IsShown() then
                 checkUV(corner, case[2], "live connector")
@@ -442,12 +443,12 @@ do
                 assert(point == case[3] and relativePoint == case[3], "connector anchor " .. case[1])
                 near(x, case[4] * 34.5 / 60 * 73, "connector X")
                 near(y, case[5] * 34.5 / 60 * 47, "connector Y")
-                checkUV(sample._msufPreviewBlizzCorner, case[2], "sample connector")
+                checkUV(sample.blizzCorner, case[2], "sample connector")
             end
         end
         assert(frame.portrait:IsShown() and frame.portrait.texture == "portrait:player", "unit portrait survives frame changes")
         assert(sample.tex:IsShown() and sample.tex.texture, "preview image survives frame changes")
-        assert(holder.mask.allPoints == holder and sample._msufPreviewShapeMask.allPoints == sample, "fixed coverage anchors")
+        assert(holder.mask.allPoints == holder and sample.mask.allPoints == sample, "fixed coverage anchors")
         crop(compiled)
         return compiled
     end
@@ -474,13 +475,13 @@ do
     conf.portraitShape = "ROUNDED"
     apply(); Preview.Refresh(box, "PORTRAIT_DIRECTION_RESET")
     assert(frame.MSUFPortraitHolder.mask.texture:find("rounded", 1, true), "changing shape restores rounded coverage")
-    assert(box.mock.portrait._msufPreviewShapeMask.texture == frame.MSUFPortraitHolder.mask.texture, "sample rounded coverage")
+    assert(box.mock.portrait.mask.texture == frame.MSUFPortraitHolder.mask.texture, "sample rounded coverage")
     conf.portraitShape, conf.portraitBlizzardDirection = "BLIZZARD", "BOTTOMLEFT"
     conf.portraitBlizzardStandaloneRing = false
     apply(); Preview.Refresh(box, "PORTRAIT_DIRECTION_NATIVE_RING")
     if not core.Client.IsVanilla then
         assert(not frame.MSUFPortraitHolder.blizzRing:IsShown(), "standalone ring suppression preserved")
-        assert(not box.mock.portrait._msufPreviewBlizzRing:IsShown(), "sample suppression preserved")
+        assert(not box.mock.portrait.blizzRing:IsShown(), "sample suppression preserved")
         assert(frame.MSUFPortraitHolder.mask.texture == maskPath(cases[2]), "native frame mask still oriented")
     end
     Methods.SetTexCoord = originalSetTexCoord

@@ -351,6 +351,52 @@ ExportPublic("MSUF_RefreshDispelSymbolPreview", A3.RefreshDispelSymbolPreview)
 ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", EffectPreview.ApplyDispelSymbolPreview)
 ExportPublic("MSUF_SetDispelSymbolPreviewMoveHandler", A3.SetDispelSymbolPreviewMoveHandler)
 
+function EffectPreview.PaintScene(frame, sensors)
+    sensors = sensors or {}
+    local overlay, sensor = frame._msufSceneDispelOverlay, sensors.dispelOverlay
+    if sensor and sensor.enabled then
+        if not overlay then
+            overlay = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
+            overlay:EnableMouse(false)
+            overlay.Region = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"))
+            frame._msufSceneDispelOverlay = overlay
+        end
+        if LayoutDispelSensorButton(overlay, sensor, frame, 1)
+            and LayoutDispelSensorOverlay(overlay.Region, overlay, sensor, DispelSensorTarget(frame, sensor)) then
+            RegisterRoundedDispelOverlayPreviewRegion(frame, overlay.Region)
+            A3.SetDispelColorTexture(overlay.Region, A3.GetDispelColorPreviewType(), true, 1)
+            overlay.Region:SetAlpha(Clamp01(sensor.alpha, 0.35))
+            overlay.Region:Show()
+            overlay:Show()
+        end
+    elseif overlay then overlay:Hide() end
+    local host = frame._msufSceneDispelSymbol
+    sensor = sensors.dispelSymbol
+    if sensor and sensor.enabled then
+        if not host then
+            host = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
+            host:EnableMouse(false)
+            frame._msufSceneDispelSymbol = host
+        end
+        DS.LayoutButton(host, sensor, frame, 1)
+        local slots, size = sensor.slots, ClampNumber(sensor.size, 14, 4, 64)
+        local x, y = DS.SlotOffset(sensor, 1)
+        local count = slots and #slots or 1
+        for i = 1, count do
+            local tile = DS.PreviewTile(host, i)
+            local sx, sy = DS.SlotOffset(sensor, i)
+            tile:ClearAllPoints()
+            tile:SetPoint("TOPLEFT", host, "TOPLEFT", sx - x, sy - y)
+            tile:SetSize(size, size)
+            tile:SetAlpha(Clamp01(sensor.alpha, 1))
+            DS.PreviewArt(tile.Texture, sensor.style or "BLIZZARD", slots and slots[i] and slots[i].dispelType or "Magic")
+            tile:Show()
+        end
+        for i = count + 1, #(host._msufA3PreviewTiles or {}) do host._msufA3PreviewTiles[i]:Hide() end
+        host:Show()
+    elseif host then host:Hide() end
+end
+
 local exports = {
 }
 for name, value in pairs(exports) do EffectPreview[name] = value end

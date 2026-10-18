@@ -297,13 +297,15 @@ class Entry:
 
 
 def addon_files(root=ROOT):
-    """Tracked Lua/XML/TOC files of both addons, sorted (the files on disk when root is not a git checkout)."""
+    """Existing tracked Lua/XML/TOC files, sorted (files on disk outside a git checkout)."""
     suffixes = (".lua", ".xml", ".toc")
     listed = subprocess.run(["git", "-C", root, "ls-files", "-z", "--"] + list(ADDONS),
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     found = []
     if listed.returncode == 0:
-        found = [rel for rel in listed.stdout.decode("utf-8").split("\0") if rel.lower().endswith(suffixes)]
+        # An unstaged deletion is still listed by git; the inventory describes the working tree.
+        found = [rel for rel in listed.stdout.decode("utf-8").split("\0")
+                 if rel.lower().endswith(suffixes) and os.path.isfile(os.path.join(root, rel))]
     if not found:
         for addon in ADDONS:
             for current, dirs, files in os.walk(os.path.join(root, addon)):
