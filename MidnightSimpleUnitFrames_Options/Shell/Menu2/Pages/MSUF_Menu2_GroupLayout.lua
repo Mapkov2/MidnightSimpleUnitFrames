@@ -6,6 +6,13 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Shared = M.UnitSectionsShared
 local W = M.Widgets
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.GroupOptions()
+local CUSTOM_OPTIONS = Schema.UnitOptions()
+local MIXED_OPTIONS = { bind = function(ctx, widget, row, kind)
+    local options = (row.meta or row.bind) and CUSTOM_OPTIONS or ROW_OPTIONS
+    options.bind(ctx, widget, row, kind)
+end }
 local T = M.Theme
 local GP = M.GroupPage or {}
 local floor = math.floor
@@ -17,7 +24,7 @@ local GF_ANCHOR_POINTS = GP.GF_ANCHOR_POINTS or {}
 local GROUP_FRAME_PROVIDER_VALUES = GP.GROUP_FRAME_PROVIDER_VALUES or {}
 local GROUP_RAID_MANAGER_VALUES = GP.GROUP_RAID_MANAGER_VALUES or {}
 local Conf, Val, QueueGF, Set, Bool, Num, ScopeSection = GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num, GP.ScopeSection
-local CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider = GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown, GP.ScopeSlider
+local CurrentScope = GP.CurrentScope
 local BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled = GP.BuildGrowthDirectionTiles, GP.BuildRoleOrderRows, GP.SetOptionEnabled
 local SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus = GP.SetOptionsEnabled, GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus
 local TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText = GP.TrackSectionRefresh, GP.OnOffBadge, GP.BadgeNumber, GP.OptionText
@@ -49,10 +56,16 @@ local function AttachGroupFocus(widget, component)
     return widget
 end
 local function BindExclusiveFillToggle(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
-    local control = AttachGroupFocus(W.ToggleAt(parent, label, x, y, width), "bars")
-    return GP.BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel, "healthFillMode", function()
-        if M.RequestRefresh then M.RequestRefresh(ctx, "group-health-fill-mode") end
-    end)
+    return Schema.Build(ctx, parent, {
+        { "toggle", key, false, { label, x, y, width }, domain = "visual",
+            beforeBind = function(widget) AttachGroupFocus(widget, "bars") end,
+            bind = function(widget)
+                GP.BindExclusiveScopeToggle(ctx, widget, key, peerKey, historyLabel, "healthFillMode", function()
+                    if M.RequestRefresh then M.RequestRefresh(ctx, "group-health-fill-mode") end
+                end)
+                Schema.Owned(widget, "group", "visual")
+            end, scope = "group" },
+    }, CUSTOM_OPTIONS)[key]
 end
 local function CurrentGroupHealthMode()
     return tostring(Val(CurrentScope(), "gfBarMode", "GLOBAL") or "GLOBAL"):upper()
@@ -109,16 +122,16 @@ end
 local function PrepareFrameEnable(ctx, section)
     local entry = section and section._msuf2CollapsibleEntry
     if entry and entry.featureSwitch then return entry.featureSwitch end
-    local enable = W.SectionSwitch(section, "Enable", "Enable")
-    enable._msuf2GroupFrameGateAlwaysEnabled = true
-    M.BindBoolWidget(ctx, enable,
-        function() return Bool(CurrentScope(), "enabled", false) end,
-        function(value)
-            -- Keep the configured Blizzard fallback when toggling MSUF off.
-            Set(CurrentScope(), "enabled", value == true, "rebuild")
-            M.Refresh(ctx)
-        end,
-        ControlMeta(ctx, "field.enabled"))
+    local enable = Schema.Build(ctx, section, {
+        { "sectionSwitch", "enable", nil, { "Enable", "Enable" }, get = function() return Bool(CurrentScope(), "enabled", false) end,
+            set = function(value)
+                -- Keep the configured Blizzard fallback when toggling MSUF off.
+                Set(CurrentScope(), "enabled", value == true, "rebuild")
+                M.Refresh(ctx)
+            end,
+            meta = ControlMeta(ctx, "field.enabled"), domain = "rebuild",
+            flagsBefore = { _msuf2GroupFrameGateAlwaysEnabled = true }, scope = "group" },
+    }, CUSTOM_OPTIONS)["enable"]
     enable:SetChecked(Bool(CurrentScope(), "enabled", false))
     return enable
 end
@@ -159,8 +172,41 @@ local function RefreshFrameBasicsProviderHeader(section)
     SetSectionBadgesAndStatus(section, badges, status)
     return provider, usesMSUF, offlineHidden
 end
+local function BuildProviderControls(ctx, general, generalLeftX, generalLeftW, generalRightX, generalRightW)
+    local heading = W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
+    Schema.Custom(heading, {
+        id = "menu2.gf_layout.basics.behavior_title", kind = "font", scope = "group", applyDomain = "presentation", owner = heading })
+    local providerControls = Schema.Build(ctx, general, {
+        { "dropdown", "frameProvider", nil, { "Frames used in this scope", GROUP_FRAME_PROVIDER_VALUES, min(300, generalLeftW) },
+            get = function() return FrameProvider(CurrentScope()) end,
+            set = function(value)
+                SetFrameProvider(CurrentScope(), value)
+                RefreshContext(ctx)
+            end,
+            meta = ControlMeta(ctx, "basics.frame_provider"), domain = "rebuild",
+            beforeBind = function(widget)
+                AttachGroupFocus(widget, "layout")
+                W.MoveWidget(widget, general, generalLeftX, -64, min(300, generalLeftW), "LEFT")
+                widget._msuf2GroupFrameGateAlwaysEnabled = true
+            end, scope = "group" },
+        { "text", "menu2.gf_layout.basics.providerHelp", nil,
+            { "Choose MSUF, follow WoW's own Blizzard frame settings, force Blizzard frames, or hide both. Party, Raid, and Mythic Raid are independent.",
+            generalRightX, -58, generalRightW, T.colors.muted }, scope = "group" },
+    }, CUSTOM_OPTIONS)
+    local frameProvider = providerControls["frameProvider"]
+    if M.AddTooltip then
+        M.AddTooltip(frameProvider,
+            function() return M.Format("%s frame provider", ScopeLabel()) end,
+            function() return FrameProviderTooltip(CurrentScope()) end,
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    local providerHelp = providerControls["menu2.gf_layout.basics.providerHelp"]
+    if providerHelp and providerHelp.SetWordWrap then providerHelp:SetWordWrap(true) end
+end
+
 local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Basics", 520, false)
+    if general._msuf2CollapsibleEntry then Schema.Section(general, "group") end
     PrepareFrameEnable(ctx, general)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
@@ -187,70 +233,73 @@ local function BuildGFGeneralSection(ctx, b)
             context = CurrentGroupHealthColorContext,
         })
     end
-    W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
-    local frameProvider = AttachGroupFocus(W.Dropdown(general, "Frames used in this scope", GROUP_FRAME_PROVIDER_VALUES, min(300, generalLeftW)), "layout")
-    W.MoveWidget(frameProvider, general, generalLeftX, -64, min(300, generalLeftW), "LEFT")
-    frameProvider._msuf2GroupFrameGateAlwaysEnabled = true
-    M.BindDropdownWidget(ctx, frameProvider,
-        function() return FrameProvider(CurrentScope()) end,
-        function(value)
-            SetFrameProvider(CurrentScope(), value)
-            RefreshContext(ctx)
-        end,
-        ControlMeta(ctx, "basics.frame_provider"))
-    if M.AddTooltip then
-        M.AddTooltip(frameProvider,
-            function() return M.Format("%s frame provider", ScopeLabel()) end,
-            function() return FrameProviderTooltip(CurrentScope()) end,
-            { hook = true, owner = "ANCHOR_RIGHT" })
-    end
-    local providerHelp = W.Text(general,
-        "Choose MSUF, follow WoW's own Blizzard frame settings, force Blizzard frames, or hide both. Party, Raid, and Mythic Raid are independent.",
-        generalRightX, -58, generalRightW, T.colors.muted)
-    if providerHelp and providerHelp.SetWordWrap then providerHelp:SetWordWrap(true) end
+    BuildProviderControls(ctx, general, generalLeftX, generalLeftW, generalRightX, generalRightW)
     local msufControls = {}
     msufControls[#msufControls + 1] = BindExclusiveFillToggle(ctx, general, "Smooth health fill",
         generalRightX, -124, generalRightToggleW, "smoothFill", "chunkedFill", "Smooth group health fill")
     msufControls[#msufControls + 1] = BindExclusiveFillToggle(ctx, general, "Chunked health loss",
         generalRightX, -154, generalRightToggleW, "chunkedFill", "smoothFill", "Chunked group health loss")
-    M.BuildControlSpecs({
-        { "Show player", generalLeftX, -124, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
-        { "Show while solo", generalLeftX, -154, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
-        { "Hide in Housing", generalLeftX, -184, generalLeftToggleW, "layout", "hideInHousing", false, "visual" },
-        { "Reverse fill direction", generalRightX, -184, generalRightToggleW, "bars", "reverseFill", false, "visual" },
-        { "Hide during client scene", generalRightX, -214, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
-        { "Click casting / Clique", generalRightX, -244, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
-    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7],
-        s[8]) end }, nil, msufControls)
+    local rows = {
+        { "toggle", "showPlayer", true, { "Show player", generalLeftX, -124, generalLeftToggleW }, domain = "rebuild", scope = "group" },
+        { "toggle", "showSolo", false, { "Show while solo", generalLeftX, -154, generalLeftToggleW }, domain = "rebuild", scope = "group" },
+        { "toggle", "hideInHousing", false, { "Hide in Housing", generalLeftX, -184, generalLeftToggleW }, domain = "visual", scope = "group" },
+        { "toggle", "reverseFill", false, { "Reverse fill direction", generalRightX, -184, generalRightToggleW }, domain = "visual",
+            beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
+        { "toggle", "hideInClientScene", true, { "Hide during client scene", generalRightX, -214, generalRightToggleW }, domain = "visual", scope = "group" },
+        { "toggle", "clickCastEnabled", true, { "Click casting / Clique", generalRightX, -244, generalRightToggleW }, domain = "rebuild", scope = "group" },
+    }
+    for _, row in ipairs(rows) do
+        row.beforeBind = row.beforeBind or function(widget) AttachGroupFocus(widget, "layout") end
+    end
+    local basics = Schema.Build(ctx, general, rows, ROW_OPTIONS)
+    for _, row in ipairs(rows) do msufControls[#msufControls + 1] = basics[row[2]] end
     --- Blizzard's Raid Manager tab is one shared frame, so this control is deliberately
     --- not scope-bound: it reads and writes Party, Raid and Mythic Raid together. It also
     --- stays live on the Blizzard providers, where MSUF's ownership pass never hides the
     --- tab -- so it must not join msufControls, which grey out when the provider is not MSUF.
-    local raidManager = AttachGroupFocus(W.Dropdown(general, "Blizzard Raid Manager", GROUP_RAID_MANAGER_VALUES, min(300, generalLeftW)), "layout")
-    W.MoveWidget(raidManager, general, generalLeftX, -220, min(300, generalLeftW), "LEFT")
-    raidManager._msuf2GroupFrameGateAlwaysEnabled = true
-    M.BindDropdownWidget(ctx, raidManager,
-        function() return RaidManagerMode() end,
-        function(value) SetRaidManagerMode(value) end,
-        ControlMeta(ctx, "basics.raid_manager"))
+    local managerControls = Schema.Build(ctx, general, {
+        { "dropdown", "raidManager", nil, { "Blizzard Raid Manager", GROUP_RAID_MANAGER_VALUES, min(300, generalLeftW) },
+            get = function() return RaidManagerMode() end,
+            set = function(value) SetRaidManagerMode(value) end,
+            meta = ControlMeta(ctx, "basics.raid_manager"), domain = "visual",
+            beforeBind = function(widget)
+                AttachGroupFocus(widget, "layout")
+                W.MoveWidget(widget, general, generalLeftX, -220, min(300, generalLeftW), "LEFT")
+                widget._msuf2GroupFrameGateAlwaysEnabled = true
+            end, scope = "group" },
+        { "text", "menu2.gf_layout.basics.raidManagerHelp", nil,
+            { "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames.", generalLeftX,
+            -278, generalW - generalLeftX - 32, T.colors.muted }, scope = "group" },
+    }, CUSTOM_OPTIONS)
+    local raidManager = managerControls["raidManager"]
     if M.AddTooltip then
         M.AddTooltip(raidManager,
             function() return M.Tr("Blizzard Raid Manager") end,
             function()
-                return M.Tr("Blizzard's tab at the left screen edge with ready check, raid markers, and role filters. One shared frame, so this setting is the same for Party, Raid, and Mythic Raid.")
+                return M.Tr("Blizzard's tab at the left screen edge with ready check, raid markers, and role filters. One shared frame, so " ..
+                    "this setting is the same for Party, Raid, and Mythic Raid.")
             end,
             { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    local raidManagerHelp = W.Text(general,
-        "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames.",
-        generalLeftX, -278, generalW - generalLeftX - 32, T.colors.muted)
+    local raidManagerHelp = managerControls["menu2.gf_layout.basics.raidManagerHelp"]
     if raidManagerHelp and raidManagerHelp.SetWordWrap then raidManagerHelp:SetWordWrap(true) end
     W.DividerAt(general, -326, generalLeftX, 32)
-    W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -370, generalLeftW), "layout"),
-        "hideOfflineEnabled", false, "visual")
-    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -370, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
-    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -404, offlineSliderW, "LEFT"), "layout")
+    local heading = W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
+    Schema.Custom(heading, {
+        id = "menu2.gf_layout.basics.offline_title", kind = "font", scope = "group", applyDomain = "presentation", owner = heading })
+    local offlineControls = Schema.Build(ctx, general, {
+        { "switch", "hideOfflineEnabled", false, { "Offline Members", generalLeftX,
+        -370, generalLeftW }, domain = "visual",
+        beforeBind = function(widget) AttachGroupFocus(widget, "layout") end, scope = "group" },
+        { "toggle", "hideOfflineInCombat", false, { "Hide offline in combat", generalRightX, -370, generalRightToggleW }, domain = "visual",
+            beforeBind = function(widget) AttachGroupFocus(widget, "layout") end, scope = "group" },
+        { "slider", "hideOfflineDelay", 0, { "Hide offline after", 0, 120, 1,
+        offlineSliderW }, { generalLeftX,
+        -404, offlineSliderW, "LEFT" }, domain = "visual", scope = "group" },
+    }, ROW_OPTIONS)
+    local hideOfflineEnabled = offlineControls["hideOfflineEnabled"]
+    local hideOfflineCombat = offlineControls["hideOfflineInCombat"]
+    local hideOffline = AttachGroupFocus(offlineControls["hideOfflineDelay"], "layout")
     local hideOfflineControls = { hideOfflineCombat, hideOffline }
     local generalNotice, generalNoticeButton
     if type(CreateSectionNotice) == "function" then
@@ -274,6 +323,7 @@ local function BuildGFGeneralSection(ctx, b)
             SetFrameProvider(CurrentScope(), "MSUF")
             RefreshContext(ctx)
         end)
+        Schema.Owned(generalNoticeButton, "group", "rebuild")
     end
     local function RefreshHideOfflineState()
         local provider, usesMSUF, enabled = RefreshFrameBasicsProviderHeader(general)
@@ -285,7 +335,8 @@ local function BuildGFGeneralSection(ctx, b)
             if provider == "AUTO" then
                 generalNotice:SetMessage(M.Format("%s uses Blizzard frames. WoW's own settings decide when they appear.", ScopeLabel()), "info")
             elseif provider == "SHOW" then
-                generalNotice:SetMessage(M.Format("%s forces Blizzard frames visible. Use this only when the normal WoW settings option does not show them.", ScopeLabel()), "warning")
+                generalNotice:SetMessage(M.Format("%s forces Blizzard frames visible. Use this only when the normal WoW settings option does not show them.",
+                    ScopeLabel()), "warning")
             elseif provider == "NONE" then
                 generalNotice:SetMessage(M.Format("%s hides both MSUF and Blizzard group frames.", ScopeLabel()), "warning")
             end
@@ -313,6 +364,7 @@ local function BuildGFTransparencySection(ctx, b)
     -- Keep Group Frame opacity controls visually aligned with the Unitframe
     -- Transparency section while binding them to the currently selected scope.
     local transparency = b:CollapsibleSection("transparency", "Transparency", nil, false)
+    if transparency._msuf2CollapsibleEntry then Schema.Section(transparency, "group") end
     local transparencyW = transparency._msuf2Width or b.width or 720
     local transparencyGap = 16
     local transparencyLeftX = 20
@@ -325,14 +377,26 @@ local function BuildGFTransparencySection(ctx, b)
     -- the second tab holds the whole-member-frame out-of-combat fade.
     local _, transparencyBarY = W.NextRow(transparency, 34)
     local _, transparencyCardY = W.NextRow(transparency, transparencyCardH)
-    local healthOpacityCard = W.ControlCard(transparency, "Health Bar", nil, transparencyLeftX, transparencyCardY, transparencyCardW, transparencyCardH)
-    local opacityOptionsCard = W.ControlCard(transparency, "Options", nil, transparencyRightX, transparencyCardY, transparencyRightW, transparencyCardH)
-    local oocCard = W.ControlCard(transparency, "Out of Combat", nil, transparencyLeftX, transparencyCardY, transparencyInnerW, transparencyCardH)
+    local opacityCards = Schema.Build(ctx, transparency, {
+        { "card", "menu2.gf_layout.transparency.healthOpacityCard", nil,
+        { "Health Bar", nil, transparencyLeftX, transparencyCardY,
+        transparencyCardW, transparencyCardH }, domain = "layout", scope = "group" },
+        { "card", "menu2.gf_layout.transparency.opacityOptionsCard", nil,
+        { "Options", nil, transparencyRightX, transparencyCardY,
+        transparencyRightW, transparencyCardH }, domain = "layout", scope = "group" },
+        { "card", "menu2.gf_layout.transparency.oocCard", nil, { "Out of Combat",
+        nil, transparencyLeftX, transparencyCardY,
+        transparencyInnerW, transparencyCardH }, domain = "layout", scope = "group" },
+    })
+    local healthOpacityCard = opacityCards["menu2.gf_layout.transparency.healthOpacityCard"]
+    local opacityOptionsCard = opacityCards["menu2.gf_layout.transparency.opacityOptionsCard"]
+    local oocCard = opacityCards["menu2.gf_layout.transparency.oocCard"]
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(healthOpacityCard, CurrentGroupHealthColorRefs, {
             title = "Group Health Bar Colors",
             note = function()
-                return GroupHealthColorNote("Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic Raid.")
+                return GroupHealthColorNote("Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic " ..
+                    "Raid.")
             end,
             historySource = "menu:group-transparency-colors",
             maxTargets = 7,
@@ -341,30 +405,33 @@ local function BuildGFTransparencySection(ctx, b)
         })
     end
     local function AddAlphaSlider(parent, width, spec)
-        local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
-        M.UsePercentInput(slider)
-        M.BindNumberWidget(ctx, slider,
-            function() return Num(CurrentScope(), spec.key, spec.default) end,
-            function(value) Set(CurrentScope(), spec.key, tonumber(value) or spec.default, "visual") end,
-            spec.default,
-            ControlMeta(ctx, "field." .. tostring(spec.key)))
+        local slider = Schema.Build(ctx, parent, {
+            { "slider", spec.key, spec.default, { spec.label, 0, 1, 0.05, width },
+                get = function() return Num(CurrentScope(), spec.key, spec.default) end,
+                set = function(value) Set(CurrentScope(), spec.key, tonumber(value) or spec.default, "visual") end,
+                meta = ControlMeta(ctx, "field." .. tostring(spec.key)), domain = "visual",
+                beforeBind = function(widget)
+                    M.UsePercentInput(widget)
+                end, scope = "group" },
+        }, CUSTOM_OPTIONS)[spec.key]
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
         return AttachGroupFocus(slider, "bars")
     end
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Foreground", key = "hpBarAlpha", default = 1, y = -54 })
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Background", key = "hpBgAlpha", default = 0.85, y = -112 })
-    BindScopeToggle(ctx,
-        AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
-        "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
-    BindScopeToggle(ctx,
-        AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep Absorbs + Prediction Visible", 16, -112, transparencyRightW - 32), "bars"),
-        "alphaExcludePredictionBars", false, "visual", "field.alphaExcludePredictionBars")
+    Schema.Build(ctx, opacityOptionsCard, {
+        { "toggle", "alphaExcludeTextPortrait", false, { "Keep text + portrait visible", 16, -62, transparencyRightW - 32 },
+            domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
+        { "toggle", "alphaExcludePredictionBars", false, { "Keep Absorbs + Prediction Visible", 16, -112, transparencyRightW - 32 },
+            domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
+    }, ROW_OPTIONS)
 
     -- Out of Combat tab: whole-member-frame fade; min-composed with range and
     -- offline fades at runtime (strongest fade wins). Slider greys while off.
-    BindScopeToggle(ctx,
-        AttachGroupFocus(W.ToggleAt(oocCard, "Fade frame out of combat", 16, -54, transparencyCardW + 40), "bars"),
-        "oocFadeEnabled", false, "visual", "field.oocFadeEnabled")
+    Schema.Build(ctx, oocCard, {
+        { "toggle", "oocFadeEnabled", false, { "Fade frame out of combat", 16, -54, transparencyCardW + 40 }, domain = "visual",
+            beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
+    }, ROW_OPTIONS)
     local oocSlider = AddAlphaSlider(oocCard, transparencyCardW, { label = "Out of Combat Opacity", key = "oocFadeAlpha", default = 0.5, y = -112 })
     local function RefreshOocState()
         SetOptionEnabled(oocSlider, Bool(CurrentScope(), "oocFadeEnabled", false))
@@ -391,7 +458,8 @@ local function BuildGFTransparencySection(ctx, b)
             end,
         }
     end
-    local stateBar = W.ScopeOverrideBar(ctx, transparency, {
+    local stateBar = Schema.Build(ctx, transparency, {
+        { "scopebar", "transparencyState", nil, { {
         values = {
             { value = "combat", text = "General" },
             { value = "ooc", text = "Out of Combat" },
@@ -406,26 +474,37 @@ local function BuildGFTransparencySection(ctx, b)
             transparencyTab = value == "ooc" and "ooc" or "combat"
             ApplyTransparencyTab()
         end,
-    })
-    if RegisterControl then
-        RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
-    end
+    } }, domain = "menuState", beforeBind = function(widget)
+                if RegisterControl then RegisterControl(widget, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral") end
+            end, scope = "group" },
+    })["transparencyState"]
     ApplyTransparencyTab()
     if b.FinishSection then b:FinishSection(transparency, 48) end
 end
 
 local function BuildGFGeometrySection(ctx, b)
     local section = b:CollapsibleSection("layout_advanced", "Group Layout", GEOMETRY_SECTION_HEIGHT, false)
+    if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
     local width = section._msuf2Width or b.width or 720
     local inner = width - 40
     local col = (inner - 16) / 2
-    local grid = W.ControlCard(section, "Grid", nil, 20, -38, col, 190)
-    local growth = W.ControlCard(section, "Growth", nil, col + 36, -38, col, 190)
-    BuildGrowthDirectionTiles(ctx, growth, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
-    AttachGroupFocus(ScopeSlider(ctx, grid, "Units per column", 1, 40, 1, col - 64, "unitsPerColumn", 5, "rebuild", 16, -40, col - 64, "LEFT"), "layout")
-    AttachGroupFocus(ScopeSlider(ctx, grid, "Max columns", 1, 8, 1, col - 64, "maxColumns", 8, "rebuild", 16, -100, col - 64, "LEFT"), "layout")
-    local preserve = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(grid, "Preserve raid groups", 16, -152, col - 32), "layout"),
-        "preserveRaidGroups", false, "rebuild")
+    local geometryCards = Schema.Build(ctx, section, {
+        { "card", "menu2.gf_layout.geometry.grid", nil, { "Grid", nil, 20, -38, col, 190 }, domain = "layout", scope = "group" },
+        { "card", "menu2.gf_layout.geometry.growth", nil, { "Growth", nil, col + 36, -38, col, 190 }, domain = "layout", scope = "group" },
+    })
+    local grid = geometryCards["menu2.gf_layout.geometry.grid"]
+    local growth = geometryCards["menu2.gf_layout.geometry.growth"]
+    local growthTiles = BuildGrowthDirectionTiles(ctx, growth, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
+    for _, tile in ipairs({ growthTiles:GetChildren() }) do Schema.Owned(tile, "group", "layout") end
+    local gridControls = Schema.Build(ctx, grid, {
+        { "slider", "unitsPerColumn", 5, { "Units per column", 1, 40, 1, col - 64 }, { 16, -40, col - 64, "LEFT" }, domain = "rebuild" },
+        { "slider", "maxColumns", 8, { "Max columns", 1, 8, 1, col - 64 }, { 16, -100, col - 64, "LEFT" }, domain = "rebuild" },
+        { "toggle", "preserveRaidGroups", false, { "Preserve raid groups", 16, -152, col - 32 },
+            domain = "rebuild", beforeBind = function(widget) AttachGroupFocus(widget, "layout") end },
+    }, ROW_OPTIONS)
+    AttachGroupFocus(gridControls.unitsPerColumn, "layout")
+    AttachGroupFocus(gridControls.maxColumns, "layout")
+    local preserve = gridControls.preserveRaidGroups
     local visibilityRows = {
         {"Collapse empty preserved raid groups", "collapseEmptyGroups"},
         {"Center party frames while solo", "centerSolo"},
@@ -435,12 +514,19 @@ local function BuildGFGeometrySection(ctx, b)
         table.insert(visibilityRows, 2, {"Hide groups 5–8 in Mythic raids", "hideMythicGroupsFiveToEight"})
     end
     local missingRows = 4 - #visibilityRows
-    local rules = W.ControlCard(section, "Group visibility", nil, 20, -246, inner, 262 - missingRows * 36)
-    local organization = {}
+    local rules = Schema.Build(ctx, section, { { "card", "menu2.gf_layout.geometry.rules", nil, { "Group visibility", nil, 20,
+        -246, inner, 262 - missingRows * 36 }, domain = "layout", scope = "group" }, })["menu2.gf_layout.geometry.rules"]
+    local rows = {}
     for i, entry in ipairs(visibilityRows) do
-        organization[entry[2]] = M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(rules, entry[1], 16, -40 - (i - 1) * 36, inner - 32), "layout"), entry[2], false, "rebuild"), entry[2])
+        rows[#rows + 1] = { "toggle", entry[2], false, { entry[1], 16, -40 - (i - 1) * 36, inner - 32 },
+            domain = "rebuild", beforeBind = function(widget) AttachGroupFocus(widget, "layout") end }
     end
-    W.Text(rules, "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups collapse when Preserve raid groups is enabled.", 16, -188 + missingRows * 36, inner - 32, T.colors.muted)
+    rows[#rows + 1] = { "text", "menu2.gf_layout.geometry.visibility_help", nil,
+        { "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups " ..
+            "collapse when Preserve raid groups is enabled.",
+            16, -188 + missingRows * 36, inner - 32, T.colors.muted }, scope = "group" }
+    local organization = Schema.Build(ctx, rules, rows, ROW_OPTIONS)
+    for _, entry in ipairs(visibilityRows) do M.GroupFrameAdditionalSections.ExactScope(organization[entry[2]], entry[2]) end
     TrackSectionRefresh(ctx, section, function()
         local scope = CurrentScope()
         SetOptionEnabled(preserve, scope ~= "party")
@@ -508,11 +594,15 @@ local function BuildClassPriorityRows(ctx, parent, width, topY)
         holder:SnapRows()
         holder:SetRowsEnabled(Conf(CurrentScope()).sortClassPriority == true)
     end)
+    Schema.Custom(holder, { id = "menu2.gf_layout.sorting.class_priority", kind = "dragSort",
+        scope = "group", applyDomain = "rebuild", owner = holder })
+    for _, row in ipairs(holder.rows) do Schema.Owned(row.frame, "group", "rebuild") end
     return holder
 end
 
 local function BuildGFSortingSection(ctx, b)
     local sorting = b:CollapsibleSection("sorting", "Sorting", nil, false)
+    if sorting._msuf2CollapsibleEntry then Schema.Section(sorting, "group") end
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
     local sortingLeftX = 20
@@ -520,50 +610,61 @@ local function BuildGFSortingSection(ctx, b)
     local sortingLeftW = floor((sortingInnerW - sortingGap) * 0.52)
     local sortingRightX = sortingLeftX + sortingLeftW + sortingGap
     local sortingRightW = sortingInnerW - sortingLeftW - sortingGap
-    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 218)
-    local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 192)
-    local sortMode = W.Dropdown(sortCard, "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32))
-    W.MoveWidget(sortMode, sortCard, 16, -28, min(260, sortingLeftW - 32), "LEFT")
-    if sortMode._msuf2Title then
-        sortMode._msuf2Title:ClearAllPoints()
-        sortMode._msuf2Title:SetPoint("LEFT", sortMode, "RIGHT", 8, 0)
-        sortMode._msuf2Title:SetJustifyH("LEFT")
-        sortMode._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
-    end
+    local sortingCards = Schema.Build(ctx, sorting, {
+        { "card", "menu2.gf_layout.sorting.sortCard", nil, { "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 218 }, domain = "layout", scope = "group" },
+        { "card", "menu2.gf_layout.sorting.roleCard", nil, { "Role Priority",
+        "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 192 }, domain = "layout", scope = "group" },
+    })
+    local sortCard = sortingCards["menu2.gf_layout.sorting.sortCard"]
+    local roleCard = sortingCards["menu2.gf_layout.sorting.roleCard"]
     local refreshSortingControls
-    M.BindDropdownWidget(ctx, sortMode,
-        function()
+    local sortControls = Schema.Build(ctx, sortCard, {
+        { "dropdown", "sortMode", nil, { "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32) }, get = function()
             local conf = Conf(CurrentScope())
             if conf.sortMode then return conf.sortMode end
             return conf.sortByRole and "ROLE" or "INDEX"
         end,
-        function(v)
-            local conf = Conf(CurrentScope())
-            conf.sortMode = v or "INDEX"
-            conf.sortByRole = (conf.sortMode == "ROLE")
-            QueueGF(CurrentScope(), "rebuild")
-            if refreshSortingControls then refreshSortingControls() end
-        end,
-        ControlMeta(ctx, "field.sortMode"))
-    local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -86, sortingLeftW - 32)
-    M.BindBoolWidget(ctx, roleSort,
-        function()
+            set = function(v)
+                local conf = Conf(CurrentScope())
+                conf.sortMode = v or "INDEX"
+                conf.sortByRole = (conf.sortMode == "ROLE")
+                QueueGF(CurrentScope(), "rebuild")
+                if refreshSortingControls then refreshSortingControls() end
+            end,
+            meta = ControlMeta(ctx, "field.sortMode"), domain = "rebuild",
+            beforeBind = function(widget)
+                W.MoveWidget(widget, sortCard, 16, -28, min(260, sortingLeftW - 32), "LEFT")
+                if widget._msuf2Title then
+                    widget._msuf2Title:ClearAllPoints()
+                    widget._msuf2Title:SetPoint("LEFT", widget, "RIGHT", 8, 0)
+                    widget._msuf2Title:SetJustifyH("LEFT")
+                    widget._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
+                end
+            end, scope = "group" },
+        { "toggle", "roleSort", nil, { "Sort by Role", 16, -86, sortingLeftW - 32 }, get = function()
             local conf = Conf(CurrentScope())
             if conf.sortMode then return conf.sortMode == "ROLE" end
             return conf.sortByRole and true or false
         end,
-        function(v)
-            local conf = Conf(CurrentScope())
-            conf.sortByRole = v and true or false
-            conf.sortMode = v and "ROLE" or "INDEX"
-            QueueGF(CurrentScope(), "rebuild")
-            if refreshSortingControls then refreshSortingControls() end
-        end,
-        ControlMeta(ctx, "field.sortByRole"))
-    local playerFirst = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Player first in role", 16, -116, sortingLeftW - 32), "playerFirstInRole", false, "rebuild")
+            set = function(v)
+                local conf = Conf(CurrentScope())
+                conf.sortByRole = v and true or false
+                conf.sortMode = v and "ROLE" or "INDEX"
+                QueueGF(CurrentScope(), "rebuild")
+                if refreshSortingControls then refreshSortingControls() end
+            end,
+            meta = ControlMeta(ctx, "field.sortByRole"), domain = "rebuild", scope = "group" },
+        { "toggle", "playerFirstInRole", false, { "Player first in role", 16, -116, sortingLeftW - 32 }, domain = "rebuild", scope = "group" },
+        { "toggle", "sortRolesAcrossRaid", false, { "Sort roles across entire raid", 16, -146, sortingLeftW - 32 }, domain = "rebuild", scope = "group" },
+        { "toggle", "sortAlphabeticalWithinRole", false,
+        { "Alphabetize names within roles", 16, -176, sortingLeftW - 32 }, domain = "rebuild", scope = "group" },
+    }, MIXED_OPTIONS)
+    local sortMode = sortControls["sortMode"]
+    local roleSort = sortControls["roleSort"]
+    local playerFirst = sortControls["playerFirstInRole"]
     --- Raid/Mythic only: By Role with Preserve raid groups (and Group + Role) sort
     --- roles inside each raid group; this orders them across the entire raid.
-    local raidWideRoles = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Sort roles across entire raid", 16, -146, sortingLeftW - 32), "sortRolesAcrossRaid", false, "rebuild")
+    local raidWideRoles = sortControls["sortRolesAcrossRaid"]
     raidWideRoles._msuf2ExactTargetKinds = { groupScope = true }
     raidWideRoles._msuf2ExactTargetContracts = {
         groupScope = {
@@ -581,15 +682,15 @@ local function BuildGFSortingSection(ctx, b)
     end
     if M.AddTooltip then
         M.AddTooltip(raidWideRoles, "Sort roles across entire raid",
-            "Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role.",
+            "Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and " ..
+                "Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role.",
             { hook = true, labelHit = true })
     end
-    local alphabeticalInRole = BindScopeToggle(ctx,
-        W.ToggleAt(sortCard, "Alphabetize names within roles", 16, -176, sortingLeftW - 32),
-        "sortAlphabeticalWithinRole", false, "rebuild")
+    local alphabeticalInRole = sortControls["sortAlphabeticalWithinRole"]
     if M.AddTooltip then
         M.AddTooltip(alphabeticalInRole, "Alphabetize names within roles",
-            "Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, according to the role sorting options above. Raid and Mythic Raid only.",
+            "Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, " ..
+                "according to the role sorting options above. Raid and Mythic Raid only.",
             { hook = true, labelHit = true })
     end
     local roleRows = BuildRoleOrderRows(ctx, roleCard, {
@@ -598,6 +699,9 @@ local function BuildGFSortingSection(ctx, b)
         width = min(250, sortingRightW - 32),
         advanceCursor = false,
     })
+    Schema.Custom(roleRows, { id = "menu2.gf_layout.sorting.role_priority", kind = "dragSort",
+        scope = "group", applyDomain = "rebuild", owner = roleRows })
+    for _, row in ipairs(roleRows.rows) do Schema.Owned(row.frame, "group", "rebuild") end
     refreshSortingControls = function()
         local conf = Conf(CurrentScope())
         local currentMode = conf.sortMode or (conf.sortByRole and "ROLE" or "INDEX")
@@ -625,11 +729,14 @@ local function BuildGFSortingSection(ctx, b)
         end
         SetSectionBadgesAndStatus(sorting, badges)
     end
-    local classCard = W.ControlCard(sorting, "Class priority", "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 120)
+    local classCard = Schema.Build(ctx, sorting, {
+        { "card", "menu2.gf_layout.sorting.classCard", nil, { "Class priority",
+            "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 120 }, domain = "layout", scope = "group" },
+    })["menu2.gf_layout.sorting.classCard"]
     -- Measure once during construction, including a wrapped description.
     local classToggleY = -56 - max(16, classCard.subtitle:GetStringHeight())
-    M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, classToggleY, sortingInnerW - 32),
-        "sortClassPriority", false, "rebuild"), "sortClassPriority")
+    M.GroupFrameAdditionalSections.ExactScope(Schema.Build(ctx, classCard, { { "toggle", "sortClassPriority", false, { "Use class priority", 16, classToggleY,
+        sortingInnerW - 32 }, domain = "rebuild", scope = "group" } }, ROW_OPTIONS)["sortClassPriority"], "sortClassPriority")
     local classRowsY = classToggleY - 40
     local classRows = BuildClassPriorityRows(ctx, classCard, sortingInnerW, classRowsY)
     local classCardHeight = -classRowsY + classRows:GetHeight() + 16
@@ -640,8 +747,57 @@ local function BuildGFSortingSection(ctx, b)
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
 end
 
+local function BuildScalingGeneral(ctx, general, col, inner, sizingOptions)
+    local sizingCards = Schema.Build(ctx, general, {
+        { "card", "menu2.gf_layout.scaling.sizeCard", nil, { "Base dimensions",
+        "Used before scaling and raid size overrides.", 20, -4, col, 248 }, domain = "layout", scope = "group" },
+        { "card", "menu2.gf_layout.scaling.modeCard", nil, { "Scaling",
+        "Changes base dimensions, spacing, and resource bar height.", col + 36, -4, col, 248 }, domain = "layout", scope = "group" },
+    })
+    local sizeCard = sizingCards["menu2.gf_layout.scaling.sizeCard"]
+    local modeCard = sizingCards["menu2.gf_layout.scaling.modeCard"]
+    Schema.Build(ctx, sizeCard, {
+        { "slider", "width", 120, { "Width", 40, 300, 1, col - 64 }, { 16, -84, col - 64, "LEFT" }, domain = "rebuild", scope = "group" },
+        { "slider", "height", 40, { "Height", 16, 120, 1, col - 64 }, { 16, -142, col - 64, "LEFT" }, domain = "rebuild", scope = "group" },
+        { "slider", "spacing", 1, { "Spacing", 0, 60, 1, col - 64 }, { 16, -200, col - 64, "LEFT" }, domain = "rebuild", scope = "group" },
+    }, sizingOptions)
+    local scaleControls = Schema.Build(ctx, modeCard, {
+        { "dropdown", "frameScaleMode", "off", { "Scale Mode", VT("off", "Off", "manual", "Manual",
+        "auto", "By group size"), col - 32 }, { 16, -80, col - 32, "LEFT" },
+        domain = "rebuild", scope = "group" },
+        { "slider", "frameScaleManual", 100, { "Manual scale (%)", 50, 150, 5, col - 64 }, { 16,
+        -166, col - 64, "LEFT" }, domain = "rebuild", scope = "group" },
+    }, sizingOptions)
+    local mode = scaleControls["frameScaleMode"]
+    local manual = scaleControls["frameScaleManual"]
+    local rules = Schema.Build(ctx, general, { { "card", "menu2.gf_layout.scaling.rules", nil, { "Raid size overrides", nil, 20,
+        -270, inner, 158 }, domain = "layout", scope = "group" }, })["menu2.gf_layout.scaling.rules"]
+    local tierOptions = Schema.Build(ctx, rules, {
+        { "toggle", "layoutTiersEnabled", false, { "Use raid size overrides", 16, -38, inner - 32 }, domain = "rebuild", scope = "group" },
+        { "toggle", "excludeHiddenGroups", false, { "Exclude hidden groups from group size", 16, -76, inner - 32 }, domain = "rebuild", scope = "group" },
+        { "text", "menu2.gf_layout.scaling.size_help", nil,
+            { "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16,
+            -112, inner - 32, T.colors.muted }, scope = "group" },
+    }, sizingOptions)
+    local useTiers = tierOptions["layoutTiersEnabled"]
+    local exclude = tierOptions["excludeHiddenGroups"]
+    local appearance = Schema.Build(ctx, general, { { "card", "menu2.gf_layout.scaling.appearance", nil, { "Resize appearance",
+        nil, 20, -446, inner, 154 }, domain = "layout", scope = "group" }, })["menu2.gf_layout.scaling.appearance"]
+    local appearanceRows = {}
+    for i, entry in ipairs({
+        {"Scale indicators with frame dimensions", "autoScaleIndicatorsOnResize"},
+        {"Scale auras with frame dimensions", "autoScaleAurasOnResize"},
+        {"Scale tracked buffs with frame dimensions", "autoScaleTrackedOnResize"},
+    }) do
+        appearanceRows[#appearanceRows + 1] = { "toggle", entry[2], false, { entry[1], 16, -38 - (i - 1) * 36, inner - 32 }, domain = "rebuild" }
+    end
+    Schema.Build(ctx, appearance, appearanceRows, sizingOptions)
+    return manual, useTiers, exclude
+end
+
 local function BuildGFScalingSection(ctx, b)
     local scale = b:CollapsibleSection("scaling", "Size & Scaling", 720, false)
+    if scale._msuf2CollapsibleEntry then Schema.Section(scale, "group") end
     local width = scale._msuf2Width or b.width or 720
     local inner = width - 40
     local col = (inner - 16) / 2
@@ -656,6 +812,7 @@ local function BuildGFScalingSection(ctx, b)
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, ctx, "scaling.workspace_tab", "Size area", "segment", "ephemeral")
+    Schema.Owned(tabs, "group", "menuState")
     scale._msuf2GuidedSelectTab = function(tab)
         if not frames[tab] then return false end
         SetTab(tab)
@@ -671,50 +828,20 @@ local function BuildGFScalingSection(ctx, b)
         meta.prepareExactSearchTarget = function() return scale._msuf2GuidedSelectTab(tab) end
         return meta
     end
-    local baseSlider, baseDropdown, baseToggle = ScopeSlider, ScopeDropdown, BindScopeToggle
-    local function ScopeSlider(ctx, parent, label, low, high, step, sliderWidth, key, default, mode, x, y, placeWidth, justify)
-        local tab = parent._msuf2GroupSizingTab or "general"
-        local meta = SizingMeta(key, tab)
-        local control = baseSlider(ctx, parent, label, low, high, step, sliderWidth, key, default, mode, x, y, placeWidth, justify, meta)
-        meta.label, meta.kind = label, "slider"
-        M.RegisterSearchWidget(control, meta)
-        return AttachGroupFocus(M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget), "layout")
+    local sizingOptions = Schema.UnitOptions()
+    sizingOptions.bind = function(bindCtx, widget, row, kind)
+        local meta = SizingMeta(row[2], row.tab or "general")
+        local binder = kind == "slider" and GP.BindScopeSlider or kind == "toggle" and GP.BindScopeToggle or GP.BindScopeDropdown
+        binder(bindCtx, widget, row[2], row[3], row.domain, meta)
+        if kind ~= "toggle" then meta.label = row[4][1] end
+        meta.kind = kind
+        if kind == "dropdown" then meta.values = row[4][2] end
+        M.RegisterSearchWidget(widget, meta)
+        M.GroupFrameAdditionalSections.ExactScope(widget, row[2], meta.prepareExactSearchTarget)
+        if kind == "slider" then AttachGroupFocus(widget, "layout") end
+        Schema.Owned(widget, "group", row.domain)
     end
-    local function ScopeDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth)
-        local meta = SizingMeta(key, "general")
-        local control = baseDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth, "LEFT", meta)
-        meta.label, meta.kind, meta.values = label, "dropdown", values
-        M.RegisterSearchWidget(control, meta)
-        return M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget)
-    end
-    local function BindScopeToggle(ctx, widget, key, default, mode)
-        local meta = SizingMeta(key, "general")
-        local control = baseToggle(ctx, widget, key, default, mode, meta)
-        meta.kind = "toggle"
-        M.RegisterSearchWidget(control, meta)
-        return M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget)
-    end
-    local general = frames.general
-    local sizeCard = W.ControlCard(general, "Base dimensions", "Used before scaling and raid size overrides.", 20, -4, col, 248)
-    local modeCard = W.ControlCard(general, "Scaling", "Changes base dimensions, spacing, and resource bar height.", col + 36, -4, col, 248)
-    ScopeSlider(ctx, sizeCard, "Width", 40, 300, 1, col - 64, "width", 120, "rebuild", 16, -84, col - 64, "LEFT")
-    ScopeSlider(ctx, sizeCard, "Height", 16, 120, 1, col - 64, "height", 40, "rebuild", 16, -142, col - 64, "LEFT")
-    ScopeSlider(ctx, sizeCard, "Spacing", 0, 60, 1, col - 64, "spacing", 1, "rebuild", 16, -200, col - 64, "LEFT")
-    local mode = ScopeDropdown(ctx, modeCard, "Scale Mode", VT("off", "Off", "manual", "Manual", "auto", "By group size"), col - 32,
-        "frameScaleMode", "off", "rebuild", 16, -80, col - 32)
-    local manual = ScopeSlider(ctx, modeCard, "Manual scale (%)", 50, 150, 5, col - 64, "frameScaleManual", 100, "rebuild", 16, -166, col - 64, "LEFT")
-    local rules = W.ControlCard(general, "Raid size overrides", nil, 20, -270, inner, 158)
-    local useTiers = BindScopeToggle(ctx, W.ToggleAt(rules, "Use raid size overrides", 16, -38, inner - 32), "layoutTiersEnabled", false, "rebuild")
-    local exclude = BindScopeToggle(ctx, W.ToggleAt(rules, "Exclude hidden groups from group size", 16, -76, inner - 32), "excludeHiddenGroups", false, "rebuild")
-    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112, inner - 32, T.colors.muted)
-    local appearance = W.ControlCard(general, "Resize appearance", nil, 20, -446, inner, 154)
-    for i, entry in ipairs({
-        {"Scale indicators with frame dimensions", "autoScaleIndicatorsOnResize"},
-        {"Scale auras with frame dimensions", "autoScaleAurasOnResize"},
-        {"Scale tracked buffs with frame dimensions", "autoScaleTrackedOnResize"},
-    }) do
-        BindScopeToggle(ctx, W.ToggleAt(appearance, entry[1], 16, -38 - (i - 1) * 36, inner - 32), entry[2], false, "rebuild")
-    end
+    local manual, useTiers, exclude = BuildScalingGeneral(ctx, frames.general, col, inner, sizingOptions)
     local function BeginAutoScalePreview(slider, previewCount)
         if not (slider and previewCount and type(M.SetGFScalingBreakpointPreview) == "function") then return end
         if Val(CurrentScope(), "frameScaleMode", "off") ~= "auto" then return end
@@ -769,10 +896,16 @@ local function BuildGFScalingSection(ctx, b)
     }
     for _, entry in ipairs(entries) do
         local tab = frames[entry.prefix]
-        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36, -44, inner - 64, "LEFT")
+        local percentage = Schema.Build(ctx, tab, { { "slider", entry.key, entry.default, { "Group size scale (%)", 50, 100, 5, inner - 64 }, { 36, -44,
+            inner - 64, "LEFT" }, domain = "rebuild", tab = entry.prefix, scope = "group" } }, sizingOptions)[entry.key]
         BindAutoScalePreview(percentage, entry.count)
         autoControls[#autoControls + 1] = percentage
-        W.Text(tab, "The percentage applies in By group size mode. Exact raid dimensions below replace scaled width or height; 0 keeps the scaled base. Spacing and resource bar height still use the scaling percentage.", 20, -104, inner, T.colors.muted)
+        Schema.Build(ctx, tab, {
+            { "text", "menu2.gf_layout.scaling." .. entry.prefix .. ".help", nil,
+                { "The percentage applies in By group size mode. Exact raid dimensions below replace scaled width or height; 0 " ..
+                    "keeps the scaled base. Spacing and resource bar height still use the scaling percentage.",
+                20, -104, inner, T.colors.muted }, scope = "group" },
+        })
         local controls = M.GroupFrameAdditionalSections.SizingTier(ctx, tab, entry.prefix, width, SizingMeta)
         for i = 1, #controls do tierControls[#tierControls + 1] = controls[i] end
     end
@@ -790,7 +923,8 @@ local function BuildGFScalingSection(ctx, b)
         end
         RefreshTabs()
         SetSectionBadgesAndStatus(scale, {
-            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off" and "muted" or "info" },
+            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"),
+                kind = scalingMode == "off" and "muted" or "info" },
             OnOffBadge(raid and Bool(CurrentScope(), "layoutTiersEnabled", false), "Raid overrides", "Base dimensions"),
         })
     end)
@@ -798,6 +932,7 @@ end
 
 local function BuildGFAnchorSection(ctx, b)
     local anchor = b:CollapsibleSection("anchor", "Anchor", 220, false)
+    if anchor._msuf2CollapsibleEntry then Schema.Section(anchor, "group") end
     local anchorW = anchor._msuf2Width or b.width or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -806,22 +941,27 @@ local function BuildGFAnchorSection(ctx, b)
     local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
     local anchorControlW = min(300, max(180, anchorColumnW - 16))
     local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorTo = W.Dropdown(anchor, "Anchor To", function()
+    local anchorControls = Schema.Build(ctx, anchor, {
+        { "dropdown", "anchorTo", nil, { "Anchor To", function()
         return M.AnchorTargetValues(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame)
-    end, anchorControlW)
-    M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, anchorLeftX, -38, anchorControlW)
-    M.BindDropdownWidget(ctx, anchorTo,
-        function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
-        function(v)
-            local conf = Conf(CurrentScope())
-            local selectedValue1
-            if not ((v == "FREE")) then selectedValue1 = v end
-            conf.anchorToFrame = selectedValue1
-            QueueGF(CurrentScope(), "rebuild")
-        end,
-        ControlMeta(ctx, "field.anchorToFrame"))
-    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, anchorControlW, "anchorPoint", "CENTER", "rebuild",
-        anchorRightX, -38, anchorControlW)
+    end, anchorControlW }, get = function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
+            set = function(v)
+                local conf = Conf(CurrentScope())
+                local selectedValue1
+                if not ((v == "FREE")) then selectedValue1 = v end
+                conf.anchorToFrame = selectedValue1
+                QueueGF(CurrentScope(), "rebuild")
+            end,
+            meta = ControlMeta(ctx, "field.anchorToFrame"), domain = "rebuild",
+            beforeBind = function(widget)
+                M.UnitSectionsShared.PlaceDropdown(anchor, widget, anchorLeftX, -38, anchorControlW)
+            end, scope = "group" },
+        { "dropdown", "anchorPoint", "CENTER", { "Anchor Point", GF_ANCHOR_POINTS,
+        anchorControlW }, { anchorRightX, -38,
+        anchorControlW, "LEFT" }, domain = "rebuild", scope = "group" },
+    }, MIXED_OPTIONS)
+    local anchorTo = anchorControls["anchorTo"]
+    local anchorPoint = anchorControls["anchorPoint"]
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
@@ -864,6 +1004,12 @@ local function BuildGFAnchorSection(ctx, b)
     RegisterControl(customAnchor.pick, ctx, "anchor.custom.pick", "Pick", "button", "action", {
         actionKey = "start_group_custom_anchor_picker", actionInputArg = "scope",
     })
+    Schema.Custom(customAnchor, { id = "menu2.gf_layout.anchor.custom", kind = "anchorPicker",
+        scope = "group", applyDomain = "rebuild", owner = customAnchor,
+        get = CurrentCustomAnchor, set = SetCustomAnchor })
+    for _, widget in ipairs({ customAnchor.box, customAnchor.clear, customAnchor.pick }) do
+        Schema.Owned(widget, "group", "rebuild")
+    end
     local function RefreshAnchorHeader()
         customAnchor.Refresh()
         SetSectionBadgesAndStatus(anchor, {
@@ -966,6 +1112,15 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         end,
     },
 }
+
+-- Declare the existing lazy header before its body is requested by navigation.
+for _, spec in ipairs(GROUP_LAYOUT_SECTION_SPECS) do
+    local prepare = spec.prepareShell
+    spec.prepareShell = function(ctx, section, ...)
+        Schema.Section(section, "group")
+        if prepare then return prepare(ctx, section, ...) end
+    end
+end
 
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)

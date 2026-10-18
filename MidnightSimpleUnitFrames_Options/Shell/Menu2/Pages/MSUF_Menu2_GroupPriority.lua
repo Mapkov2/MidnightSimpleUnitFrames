@@ -16,6 +16,8 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupPriority.lua", {
 })
 
 local W = M.Widgets
+local Schema = M.ControlSchema
+local CUSTOM_OPTIONS = Schema.UnitOptions()
 local T = M.Theme
 local GP = M.GroupPage or {}
 local GF = GP.GF
@@ -70,7 +72,7 @@ local function PriorityMeta(ctx, path, settingKey)
     return meta
 end
 
-local function RegisterAction(widget, ctx, path, label, extra)
+local function RegisterAction(widget, ctx, path, label, extra, domain)
     if type(RegisterControl) ~= "function" then return widget end
     local directAction = type(extra) == "table" and extra.actionKey and extra.actionKey ~= "open_page"
     local actionLabel = directAction and label or M.Format("Open Priority Frames for %s", M.TranslateText(tostring(label)))
@@ -82,7 +84,10 @@ local function RegisterAction(widget, ctx, path, label, extra)
         actionKey = "open_page",
         actionFixedArgs = { page = "gf_priority", label = actionLabel },
     }, extra)
-    return RegisterControl(widget, ctx, path, actionLabel, "button", "action", extra)
+    RegisterControl(widget, ctx, path, actionLabel, "button", "action", extra)
+    Schema.Owned(widget, "profile", domain or "priority")
+    widget._msuf2ControlSchema.action = Schema.ButtonAction(widget)
+    return widget
 end
 
 local function RequestPageRefresh(ctx, reason)
@@ -157,7 +162,9 @@ local MODIFIER_KEYS = {
     LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true,
 }
 local function BuildBindingCapture(ctx, parent, x, y, width)
-    W.LabelAt(parent, "Hover hotkey", x, y, width, "GameFontNormalSmall", T.colors.accent)
+    local heading = W.LabelAt(parent, "Hover hotkey", x, y, width, "GameFontNormalSmall", T.colors.accent)
+    Schema.Custom(heading, {
+        id = "menu2.gf_priority.binding.title", kind = "font", scope = "profile", applyDomain = "presentation", owner = heading })
     local button = T.Button(parent, "Not bound", min(250, width), 26)
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
     if button.RegisterForClicks then button:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
@@ -165,11 +172,13 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     if button.EnableMouseWheel then button:EnableMouseWheel(false) end
     if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(true) end
     if T.CenterButtonLabel then T.CenterButtonLabel(button) end
-    RegisterAction(button, ctx, "binding.capture", "Priority Frames hotkey")
+    RegisterAction(button, ctx, "binding.capture", "Priority Frames hotkey", nil, "keyBinding")
 
-    local hint = W.Text(parent,
-        "Hover an MSUF Party, Raid, or Priority frame and press this key to pin or unpin that player.",
-        x + min(250, width) + 14, y - 22, max(180, width - min(250, width) - 14), T.colors.muted)
+    local hint = Schema.Build(ctx, parent, {
+        { "text", "menu2.gf_priority.bindingcapture.hint", nil,
+            { "Hover an MSUF Party, Raid, or Priority frame and press this key to pin or unpin that player.", x + min(250, width) + 14,
+            y - 22, max(180, width - min(250, width) - 14), T.colors.muted }, scope = "profile" },
+    })["menu2.gf_priority.bindingcapture.hint"]
     if hint.SetWordWrap then hint:SetWordWrap(true) end
 
     local listening = false
@@ -285,7 +294,8 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     button:HookScript("OnHide", function() StopListening(false) end)
     if type(M.AddTooltip) == "function" then
         M.AddTooltip(button, "Priority Frames hotkey",
-            "Left-click and press a key. Right-click, Backspace, or Delete clears it. Existing bindings are never replaced without confirmation.", { hook = true })
+            "Left-click and press a key. Right-click, Backspace, or Delete clears it. Existing bindings are never replaced without confirmation.",
+                { hook = true })
     end
     M.TrackRefresh(ctx, RefreshLabel)
     return button, RefreshLabel, StopListening
@@ -312,6 +322,84 @@ local function OpenPriorityEditModeWithFeedback()
             enabled and "ok" or "info", 1.8)
     end
     return ok
+end
+
+local function BuildPriorityPlacement(ctx, b)
+    local placement = b:CollapsibleSection("placement", "Placement", 525, false)
+    if placement._msuf2CollapsibleEntry then Schema.Section(placement, "profile") end
+    local placementW = placement._msuf2Width or b.width or 720
+    local placementControls = Schema.Build(ctx, placement, {
+        { "text", "menu2.gf_priority.placement.help", nil,
+            { "Attach the strip to the active Party, Raid, or Mythic Raid container, or choose Free position and place it with Edit Mode.",
+            24, -40, placementW - 48, T.colors.muted }, scope = "profile" },
+        { "dropdown", "place", nil, { "Placement", PLACEMENT_VALUES, 300 }, { 24, -80, 300, "LEFT" }, get = function() return PriorityConf().anchorMode or
+            "RAID_RIGHT" end,
+            set = function(value) SetPriorityOption(ctx, "anchorMode", value or "RAID_RIGHT", "Priority Frames placement") end,
+            meta = PriorityMeta(ctx, "placement.mode", "gf_priority.anchorMode"), domain = "priority", scope = "profile" },
+        { "segment", "growth", nil, { "Growth", GROWTH_VALUES, 318 }, { max(360, placementW - 342), -80, 318, "LEFT" }, get = function() return
+            PriorityConf().growth or "DOWN" end,
+            set = function(value) SetPriorityOption(ctx, "growth", value or "DOWN", "Priority Frames growth") end,
+            meta = PriorityMeta(ctx, "placement.growth", "gf_priority.growth"), domain = "priority", scope = "profile" },
+        { "slider", "spacing", 2, { "Frame spacing", 0, 40, 1, 300 }, { 24, -156, 300, "LEFT" }, get = function() return tonumber(PriorityConf().spacing)
+            or 2 end,
+            set = function(value) SetPriorityOption(ctx, "spacing", floor((tonumber(value) or 2) + 0.5), "Priority Frames spacing") end,
+            meta = M.Assign(PriorityMeta(ctx, "placement.spacing", "gf_priority.spacing"), { step = 1, roundStep = true }), domain = "priority", scope =
+                "profile" },
+        { "slider", "attachGap", 8, { "Attachment gap", 0, 100, 1, 300 }, { max(360, placementW - 342), -156, 300, "LEFT" }, get = function() return
+            tonumber(PriorityConf().attachGap) or 8 end,
+            set = function(value) SetPriorityOption(ctx, "attachGap", floor((tonumber(value) or 8) + 0.5), "Priority Frames attachment gap") end,
+            meta = M.Assign(PriorityMeta(ctx, "placement.attach_gap", "gf_priority.attachGap"), { step = 1, roundStep = true }), domain = "priority",
+                scope = "profile" },
+        { "slider", "attachOffset", 0, { "Alignment offset", -200, 200, 1, 300 }, { 24, -230, 300, "LEFT" }, get = function() return
+            tonumber(PriorityConf().attachOffset) or 0 end,
+            set = function(value) SetPriorityOption(ctx, "attachOffset", floor((tonumber(value) or 0) + 0.5), "Priority Frames alignment offset") end,
+            meta = M.Assign(PriorityMeta(ctx, "placement.attach_offset", "gf_priority.attachOffset"), { step = 1, roundStep = true }), domain = "priority",
+                scope = "profile" },
+    }, CUSTOM_OPTIONS)
+    local attachGap = placementControls.attachGap
+    local attachOffset = placementControls.attachOffset
+    local move = T.Button(placement, "Position in Edit Mode", 172, 26)
+    move:SetPoint("TOPLEFT", placement, "TOPLEFT", max(360, placementW - 342), -252)
+    if T.CenterButtonLabel then T.CenterButtonLabel(move) end
+    move:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
+    RegisterAction(move, ctx, "placement.open_edit_mode", "Position Priority Frames in Edit Mode", {
+        actionKey = "menu.action.editMode.enter",
+        actionFixedArgs = { unit = "gf_priority" },
+    })
+    for index, entry in ipairs({
+        { "width", "Priority frame width (0 inherits)", 0, 500, 0 },
+        { "height", "Priority frame height (0 inherits)", 0, 200, 0 },
+        { "unitsPerColumn", "Frames per row or column", 1, 5, 5 },
+    }) do
+        local key, label, low, high, fallback = unpack(entry)
+        Schema.Build(ctx, placement, {
+            { "slider", key, fallback, { label, low, high, 1, 300 }, get = function() return tonumber(PriorityConf()[key]) or fallback end,
+                set = function(value) SetPriorityOption(ctx, key, value, label) end,
+                meta = M.Assign(PriorityMeta(ctx, "placement." .. key, "gf_priority." .. key), { step = 1, roundStep = true }),
+                domain = "priority",
+                beforeBind = function(widget)
+                    W.MoveWidget(widget, placement, index == 2 and max(360, placementW - 342) or 24,
+                        index == 3 and -422 or -342, 300, "LEFT")
+                end, scope = "profile" },
+        }, CUSTOM_OPTIONS)
+    end
+    local placementHint = Schema.Build(ctx, placement, { { "text", "menu2.gf_priority.prioritypage.placementHint", nil, { "", 24, -490,
+        placementW - 48, T.colors.muted }, scope = "profile" }, })["menu2.gf_priority.prioritypage.placementHint"]
+    local function RefreshPlacement()
+        local conf = PriorityConf()
+        local attached = conf.anchorMode ~= "FREE"
+        move:SetText(conf.enabled == true and "Position in Edit Mode" or "Preview position in Edit Mode")
+        W.SetControlEnabled(attachGap, attached)
+        W.SetControlEnabled(attachOffset, attached)
+        placementHint:SetText(attached and "The strip follows the active Party, Raid, or Mythic Raid container automatically."
+            or "Free position uses the dedicated Priority Frames mover.")
+        SetSectionBadgesAndStatus(placement, {
+            { text = Tr(attached and "Attached" or "Free"), kind = attached and "info" or "accent" },
+            { text = Tr("Growth: ") .. Tr((conf.growth or "DOWN"):sub(1, 1) .. (conf.growth or "DOWN"):sub(2):lower()), kind = "muted" },
+            { text = BadgeNumber(conf.spacing or 2) .. " px", kind = "muted" },
+        })
+    end
+    TrackSectionRefresh(ctx, placement, RefreshPlacement)
 end
 
 local function BuildPriorityPage(ctx)
@@ -342,15 +430,16 @@ local function BuildPriorityPage(ctx)
     M.TrackRefresh(ctx, RefreshSnapshot)
 
     local overview = b:CollapsibleSection("overview", "Priority Frames", 220, true)
+    if overview._msuf2CollapsibleEntry then Schema.Section(overview, "profile") end
     local overviewW = overview._msuf2Width or b.width or 720
-    W.Text(overview,
-        "Keep tanks and manually pinned group members in one stable strip without removing them from the normal Party or Raid frames.",
-        24, -40, overviewW - 210, T.colors.muted)
-    local enable = W.SwitchAt(overview, "Enable Priority Frames", 24, -88, 310)
-    M.BindBoolWidget(ctx, enable,
-        function() return PriorityConf().enabled == true end,
-        function(value) SetPriorityOption(ctx, "enabled", value == true, "Enable Priority Frames") end,
-        PriorityMeta(ctx, "overview.enabled", "gf_priority.enabled"))
+    Schema.Build(ctx, overview, {
+        { "text", "menu2.gf_priority.overview.help", nil,
+            { "Keep tanks and manually pinned group members in one stable strip without removing them from the normal Party or Raid frames.",
+            24, -40, overviewW - 210, T.colors.muted }, scope = "profile" },
+        { "switch", "enable", nil, { "Enable Priority Frames", 24, -88, 310 }, get = function() return PriorityConf().enabled == true end,
+            set = function(value) SetPriorityOption(ctx, "enabled", value == true, "Enable Priority Frames") end,
+            meta = PriorityMeta(ctx, "overview.enabled", "gf_priority.enabled"), domain = "priority", scope = "profile" },
+    }, CUSTOM_OPTIONS)
     local editMode = T.Button(overview, "Open Edit Mode", 146, 26)
     editMode:SetPoint("TOPRIGHT", overview, "TOPRIGHT", -22, -40)
     if T.CenterButtonLabel then T.CenterButtonLabel(editMode) end
@@ -359,10 +448,15 @@ local function BuildPriorityPage(ctx)
         actionKey = "menu.action.editMode.enter",
         actionFixedArgs = { unit = "gf_priority" },
     })
-    local liveStatus = W.Text(overview, "", 24, -132, overviewW - 48, T.colors.accent)
-    local behavior = W.Text(overview,
-        "Profile-wide layout · character-specific pins · available in parties and raids · inherits the active group-frame appearance and click-cast behavior.",
-        24, -166, overviewW - 48, T.colors.muted)
+    local statusLabels = Schema.Build(ctx, overview, {
+        { "text", "menu2.gf_priority.prioritypage.liveStatus", nil, { "", 24, -132, overviewW - 48, T.colors.accent }, scope = "profile" },
+        { "text", "menu2.gf_priority.prioritypage.behavior", nil,
+            { "Profile-wide layout · character-specific pins · available in parties and raids · inherits the active " ..
+                "group-frame appearance and click-cast behavior.",
+            24, -166, overviewW - 48, T.colors.muted }, scope = "profile" },
+    })
+    local liveStatus = statusLabels["menu2.gf_priority.prioritypage.liveStatus"]
+    local behavior = statusLabels["menu2.gf_priority.prioritypage.behavior"]
     if behavior.SetWordWrap then behavior:SetWordWrap(true) end
     local function RefreshOverview()
         local state = stateScratch
@@ -397,37 +491,41 @@ local function BuildPriorityPage(ctx)
     TrackSectionRefresh(ctx, overview, RefreshOverview)
 
     local who = b:CollapsibleSection("who_appears", "Who Appears", 548, true)
+    if who._msuf2CollapsibleEntry then Schema.Section(who, "profile") end
     local whoW = who._msuf2Width or b.width or 720
-    local autoTanks = W.SwitchAt(who, "Include tanks automatically", 24, -52, 330)
-    M.BindBoolWidget(ctx, autoTanks,
-        function() return PriorityConf().autoTanks == true end,
-        function(value) SetPriorityOption(ctx, "autoTanks", value == true, "Priority Frames automatic tanks") end,
-        PriorityMeta(ctx, "selection.auto_tanks", "gf_priority.autoTanks"))
-    local slots = W.Segment(who, "Visible slots", SLOT_VALUES, 300)
-    W.MoveWidget(slots, who, max(380, whoW - 320), -30, 292, "LEFT")
-    M.BindSegment(ctx, slots,
-        function() return floor((tonumber(PriorityConf().maxFrames) or 5) + 0.5) end,
-        function(value) SetPriorityOption(ctx, "maxFrames", tonumber(value) or 5, "Priority Frames visible slots") end,
-        PriorityMeta(ctx, "selection.max_frames", "gf_priority.maxFrames"))
-
-    local bindingCard = W.ControlCard(who, "Fast pinning", nil, 20, -106, whoW - 40, 112)
+    local selectionControls = Schema.Build(ctx, who, {
+        { "switch", "autoTanks", nil, { "Include tanks automatically", 24, -52, 330 }, get = function() return PriorityConf().autoTanks == true end,
+            set = function(value) SetPriorityOption(ctx, "autoTanks", value == true, "Priority Frames automatic tanks") end,
+            meta = PriorityMeta(ctx, "selection.auto_tanks", "gf_priority.autoTanks"), domain = "priority", scope = "profile" },
+        { "segment", "slots", nil, { "Visible slots", SLOT_VALUES, 300 }, { max(380, whoW - 320), -30, 292, "LEFT" }, get = function() return
+            floor((tonumber(PriorityConf().maxFrames) or 5) + 0.5) end,
+            set = function(value) SetPriorityOption(ctx, "maxFrames", tonumber(value) or 5, "Priority Frames visible slots") end,
+            meta = PriorityMeta(ctx, "selection.max_frames", "gf_priority.maxFrames"), domain = "priority", scope = "profile" },
+        { "card", "menu2.gf_priority.prioritypage.bindingCard", nil, { "Fast pinning", nil, 20, -106, whoW - 40, 112 }, domain = "layout", scope = "profile" },
+    }, CUSTOM_OPTIONS)
+    local bindingCard = selectionControls["menu2.gf_priority.prioritypage.bindingCard"]
     BuildBindingCapture(ctx, bindingCard, 16, -42, whoW - 72)
 
-    local pinsCard = W.ControlCard(who, "Manual pins", nil, 20, -232, whoW - 40, 246)
+    local pinsCard = Schema.Build(ctx, who, { { "card", "menu2.gf_priority.prioritypage.pinsCard", nil, { "Manual pins", nil, 20, -232,
+        whoW - 40, 246 }, domain = "layout", scope = "profile" }, })["menu2.gf_priority.prioritypage.pinsCard"]
     local pinsCardW = whoW - 40
-    local pinsStatus = W.Text(pinsCard, "", 16, -42, pinsCardW - 260, T.colors.muted)
+    local pinsStatus = Schema.Build(ctx, pinsCard, { { "text", "menu2.gf_priority.prioritypage.pinsStatus", nil, { "", 16, -42,
+        pinsCardW - 260, T.colors.muted }, scope = "profile" }, })["menu2.gf_priority.prioritypage.pinsStatus"]
     local prevPage = T.Button(pinsCard, "Previous", 72, 22)
     local nextPage = T.Button(pinsCard, "Next", 58, 22)
-    local pageText = T.Font(pinsCard, "GameFontDisableSmall", "", T.colors.dim)
+    local pageText = Schema.Build(ctx, pinsCard, { { "font", "menu2.gf_priority.prioritypage.pageText", nil, { "GameFontDisableSmall", "",
+        T.colors.dim }, scope = "profile" }, })["menu2.gf_priority.prioritypage.pageText"]
     nextPage:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -36)
     pageText:SetPoint("RIGHT", nextPage, "LEFT", -8, 0)
     prevPage:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
-    if T.CenterButtonLabel then T.CenterButtonLabel(prevPage); T.CenterButtonLabel(nextPage) end
+    if T.CenterButtonLabel then T.CenterButtonLabel(prevPage) T.CenterButtonLabel(nextPage) end
     RegisterAction(prevPage, ctx, "pins.page.previous", "Previous pinned players")
     RegisterAction(nextPage, ctx, "pins.page.next", "Next pinned players")
-    local emptyPins = W.Text(pinsCard,
-        "No manual pins yet. While grouped, hover an MSUF Party, Raid, or Priority frame, then press your hotkey.",
-        18, -104, pinsCardW - 36, T.colors.muted)
+    local emptyPins = Schema.Build(ctx, pinsCard, {
+        { "text", "menu2.gf_priority.prioritypage.emptyPins", nil,
+            { "No manual pins yet. While grouped, hover an MSUF Party, Raid, or Priority frame, then press your hotkey.", 18, -104,
+            pinsCardW - 36, T.colors.muted }, scope = "profile" },
+    })["menu2.gf_priority.prioritypage.emptyPins"]
     if emptyPins.SetWordWrap then emptyPins:SetWordWrap(true) end
 
     local pinRows = {}
@@ -436,14 +534,18 @@ local function BuildPriorityPage(ctx)
         row:SetPoint("TOPLEFT", pinsCard, "TOPLEFT", 16, -66 - ((i - 1) * 30))
         row:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -66 - ((i - 1) * 30))
         row:SetHeight(26)
-        local number = T.Font(row, "GameFontNormalSmall", tostring(i), T.colors.dim)
+        local labels = Schema.Build(ctx, row, {
+            { "font", "menu2.gf_priority.pins.number." .. i, nil, { "GameFontNormalSmall", tostring(i), T.colors.dim }, scope = "profile" },
+            { "font", "menu2.gf_priority.pins.name." .. i, nil, { "GameFontHighlightSmall", "", T.colors.text }, scope = "profile" },
+            { "font", "menu2.gf_priority.pins.status." .. i, nil, { "GameFontDisableSmall", "", T.colors.muted }, scope = "profile" },
+        })
+        local number, name, status = labels["menu2.gf_priority.pins.number." .. i],
+            labels["menu2.gf_priority.pins.name." .. i], labels["menu2.gf_priority.pins.status." .. i]
         number:SetPoint("LEFT", row, "LEFT", 8, 0)
         number:SetWidth(22)
-        local name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
         name:SetPoint("LEFT", number, "RIGHT", 4, 0)
         name:SetWidth(max(150, pinsCardW - 330))
         name:SetJustifyH("LEFT")
-        local status = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
         status:SetPoint("RIGHT", row, "RIGHT", -176, 0)
         status:SetWidth(130)
         status:SetJustifyH("RIGHT")
@@ -453,18 +555,22 @@ local function BuildPriorityPage(ctx)
         remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
         up:SetPoint("RIGHT", down, "LEFT", -4, 0)
-        if T.CenterButtonLabel then T.CenterButtonLabel(up); T.CenterButtonLabel(down); T.CenterButtonLabel(remove) end
+        if T.CenterButtonLabel then T.CenterButtonLabel(up) T.CenterButtonLabel(down) T.CenterButtonLabel(remove) end
         RegisterAction(up, ctx, "pins.row." .. i .. ".up", "Move pinned player up")
         RegisterAction(down, ctx, "pins.row." .. i .. ".down", "Move pinned player down")
         RegisterAction(remove, ctx, "pins.row." .. i .. ".remove", "Remove pinned player")
+        Schema.Custom(row, { id = "menu2.gf_priority.pins.row." .. i, kind = "pinRow",
+            scope = "character", applyDomain = "priority", owner = row })
         pinRows[i] = { frame = row, number = number, name = name, status = status, up = up, down = down, remove = remove }
     end
 
-    local clearPins = (W.RoleButton and W.RoleButton(who, "Clear all", "danger", 92, 24)) or T.Button(who, "Clear all", 92, 24)
+    local clearPins = W.RoleButton(who, "Clear all", "danger", 92, 24)
     clearPins:SetPoint("TOPLEFT", who, "TOPLEFT", 24, -500)
     if T.CenterButtonLabel then T.CenterButtonLabel(clearPins) end
     RegisterAction(clearPins, ctx, "pins.clear_all", "Clear all Priority Frame pins")
-    local hotkeyHint = W.Text(who, "Use the hover hotkey above to add or remove players.", 124, -503, whoW - 164, T.colors.muted)
+    local hotkeyHint = Schema.Build(ctx, who, { { "text", "menu2.gf_priority.prioritypage.hotkeyHint", nil,
+        { "Use the hover hotkey above to add or remove players.", 124, -503, whoW - 164, T.colors.muted }, scope = "profile" },
+            })["menu2.gf_priority.prioritypage.hotkeyHint"]
     if hotkeyHint.SetWordWrap then hotkeyHint:SetWordWrap(true) end
 
     local pinPage = tonumber(M.gfPriorityPinPage) or 1
@@ -572,79 +678,7 @@ local function BuildPriorityPage(ctx)
     end)
     TrackSectionRefresh(ctx, who, RefreshPins)
 
-    local placement = b:CollapsibleSection("placement", "Placement", 525, false)
-    local placementW = placement._msuf2Width or b.width or 720
-    W.Text(placement,
-        "Attach the strip to the active Party, Raid, or Mythic Raid container, or choose Free position and place it with Edit Mode.",
-        24, -40, placementW - 48, T.colors.muted)
-    local place = W.Dropdown(placement, "Placement", PLACEMENT_VALUES, 300)
-    W.MoveWidget(place, placement, 24, -80, 300, "LEFT")
-    M.BindDropdownWidget(ctx, place,
-        function() return PriorityConf().anchorMode or "RAID_RIGHT" end,
-        function(value) SetPriorityOption(ctx, "anchorMode", value or "RAID_RIGHT", "Priority Frames placement") end,
-        PriorityMeta(ctx, "placement.mode", "gf_priority.anchorMode"))
-    local growth = W.Segment(placement, "Growth", GROWTH_VALUES, 318)
-    W.MoveWidget(growth, placement, max(360, placementW - 342), -80, 318, "LEFT")
-    M.BindSegment(ctx, growth,
-        function() return PriorityConf().growth or "DOWN" end,
-        function(value) SetPriorityOption(ctx, "growth", value or "DOWN", "Priority Frames growth") end,
-        PriorityMeta(ctx, "placement.growth", "gf_priority.growth"))
-    local spacing = W.Slider(placement, "Frame spacing", 0, 40, 1, 300)
-    W.MoveWidget(spacing, placement, 24, -156, 300, "LEFT")
-    M.BindNumberWidget(ctx, spacing,
-        function() return tonumber(PriorityConf().spacing) or 2 end,
-        function(value) SetPriorityOption(ctx, "spacing", floor((tonumber(value) or 2) + 0.5), "Priority Frames spacing") end,
-        2, M.Assign(PriorityMeta(ctx, "placement.spacing", "gf_priority.spacing"), { step = 1, roundStep = true }))
-    local attachGap = W.Slider(placement, "Attachment gap", 0, 100, 1, 300)
-    W.MoveWidget(attachGap, placement, max(360, placementW - 342), -156, 300, "LEFT")
-    M.BindNumberWidget(ctx, attachGap,
-        function() return tonumber(PriorityConf().attachGap) or 8 end,
-        function(value) SetPriorityOption(ctx, "attachGap", floor((tonumber(value) or 8) + 0.5), "Priority Frames attachment gap") end,
-        8, M.Assign(PriorityMeta(ctx, "placement.attach_gap", "gf_priority.attachGap"), { step = 1, roundStep = true }))
-    local attachOffset = W.Slider(placement, "Alignment offset", -200, 200, 1, 300)
-    W.MoveWidget(attachOffset, placement, 24, -230, 300, "LEFT")
-    M.BindNumberWidget(ctx, attachOffset,
-        function() return tonumber(PriorityConf().attachOffset) or 0 end,
-        function(value) SetPriorityOption(ctx, "attachOffset", floor((tonumber(value) or 0) + 0.5), "Priority Frames alignment offset") end,
-        0, M.Assign(PriorityMeta(ctx, "placement.attach_offset", "gf_priority.attachOffset"), { step = 1, roundStep = true }))
-    local move = T.Button(placement, "Position in Edit Mode", 172, 26)
-    move:SetPoint("TOPLEFT", placement, "TOPLEFT", max(360, placementW - 342), -252)
-    if T.CenterButtonLabel then T.CenterButtonLabel(move) end
-    move:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
-    RegisterAction(move, ctx, "placement.open_edit_mode", "Position Priority Frames in Edit Mode", {
-        actionKey = "menu.action.editMode.enter",
-        actionFixedArgs = { unit = "gf_priority" },
-    })
-    for index, entry in ipairs({
-        { "width", "Priority frame width (0 inherits)", 0, 500, 0 },
-        { "height", "Priority frame height (0 inherits)", 0, 200, 0 },
-        { "unitsPerColumn", "Frames per row or column", 1, 5, 5 },
-    }) do
-        local key, label, low, high, fallback = unpack(entry)
-        local slider = W.Slider(placement, label, low, high, 1, 300)
-        W.MoveWidget(slider, placement, index == 2 and max(360, placementW - 342) or 24,
-            index == 3 and -422 or -342, 300, "LEFT")
-        M.BindNumberWidget(ctx, slider,
-            function() return tonumber(PriorityConf()[key]) or fallback end,
-            function(value) SetPriorityOption(ctx, key, value, label) end,
-            fallback, M.Assign(PriorityMeta(ctx, "placement." .. key, "gf_priority." .. key), { step = 1, roundStep = true }))
-    end
-    local placementHint = W.Text(placement, "", 24, -490, placementW - 48, T.colors.muted)
-    local function RefreshPlacement()
-        local conf = PriorityConf()
-        local attached = conf.anchorMode ~= "FREE"
-        move:SetText(conf.enabled == true and "Position in Edit Mode" or "Preview position in Edit Mode")
-        W.SetControlEnabled(attachGap, attached)
-        W.SetControlEnabled(attachOffset, attached)
-        placementHint:SetText(attached and "The strip follows the active Party, Raid, or Mythic Raid container automatically."
-            or "Free position uses the dedicated Priority Frames mover.")
-        SetSectionBadgesAndStatus(placement, {
-            { text = Tr(attached and "Attached" or "Free"), kind = attached and "info" or "accent" },
-            { text = Tr("Growth: ") .. Tr((conf.growth or "DOWN"):sub(1, 1) .. (conf.growth or "DOWN"):sub(2):lower()), kind = "muted" },
-            { text = BadgeNumber(conf.spacing or 2) .. " px", kind = "muted" },
-        })
-    end
-    TrackSectionRefresh(ctx, placement, RefreshPlacement)
+    BuildPriorityPlacement(ctx, b)
 
     M._priorityMenuListenerSerial = (M._priorityMenuListenerSerial or 0) + 1
     local listenerOwner = "Menu2Priority:" .. tostring(M._priorityMenuListenerSerial)

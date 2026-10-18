@@ -475,9 +475,9 @@ assert(mock._msufBuffCoverage.height == 48, "a 48 px icon was clamped: " .. tost
 GF.RenderBuffCoveragePreview(mock, { buffCoverageEnabled = true, buffCoverageWild = true, buffCoverageSize = 90 }, 1)
 assert(mock._msufBuffCoverage.height == 48, "the icon size is not capped at 48 px")
 local page = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua")
-assert(page:find('"Icon size", 8, 48, 1, width, "buffCoverageSize"', 1, true)
-    and page:find('"Horizontal offset", -200, 200, 1, width, "buffCoverageX"', 1, true)
-    and page:find('"Vertical offset", -200, 200, 1, width, "buffCoverageY"', 1, true),
+assert(page:find('"slider", "buffCoverageSize", 14, { "Icon size", 8, 48, 1, width }', 1, true)
+    and page:find('"slider", "buffCoverageX", 0, { "Horizontal offset", -200, 200, 1, width }', 1, true)
+    and page:find('"slider", "buffCoverageY", 2, { "Vertical offset", -200, 200, 1, width }', 1, true),
     "the buff coverage size or offset sliders lost their range")
 GF.HideBuffCoveragePreview(mock)
 assert(Keys(mock) == "", "sample hide failed")

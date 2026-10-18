@@ -252,9 +252,10 @@ do
     end
 end
 
--- True when the caller two levels up (the widget constructor's caller) is the page file.
+-- Attribute the native constructor through the shared replacing-row renderer when present.
 local function CalledFrom(file)
     local info = debug.getinfo(3, "S")
+    if info and info.source:find("MSUF_Menu2_ControlSchema.lua", 1, true) then info = debug.getinfo(4, "S") end
     return info ~= nil and info.source:gsub("\\", "/"):find(file, 1, true) ~= nil
 end
 local W = Check(M.Widgets, "Menu2 widgets did not load")

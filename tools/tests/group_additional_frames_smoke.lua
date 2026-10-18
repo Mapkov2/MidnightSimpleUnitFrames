@@ -221,13 +221,14 @@ end
 -- Build the actual additional settings: role guidance belongs to both healer
 -- paths and has its own vertical space ahead of the color picker.
 local function Toggle() return {SetChecked=function() end} end
-local widgets={ToggleAt=Toggle,SectionSwitch=Toggle}
-function widgets.Text(section,text,x,y,width) section.help=section.help or {};section.help[#section.help+1]={text=text,y=y,width=width} end
-local gp={BindScopeToggle=function(_,widget) return widget end,ScopeSlider=function() end,ScopeDropdown=function() end,
- Conf=function() return {} end,CurrentScope=function() return "party" end,ResolveControlMeta=function() return {} end}
+local widgets={ToggleAt=Toggle,SectionSwitch=Toggle,Slider=Toggle,MoveWidget=function() end}
+function widgets.Text(section,text,x,y,width) section.help=section.help or {};section.help[#section.help+1]={text=text,y=y,width=width};return {} end
+local gp={BindScopeToggle=function(_,widget) return widget end,BindScopeSlider=function() end,BindScopeDropdown=function() end,
+ Conf=function() return {} end,CurrentScope=function() return "party" end,ResolveControlMeta=function() return {controlId="fixture.additional.master"} end,
+ ControlMeta=function(_,path) return {controlId="fixture.additional."..path} end}
 function gp.ScopeColor(_,section,_,_,_,_,_,_,_,_,y) section.colorY=y end
 function widgets.AttachContextColorReferences(section, references) section.colorReferences=references end
-local menuNS={Client={SupportsGroupKind=function() return true end},GF={GetConf=function() return {} end},
+local menuNS={CPBuilders={ExtraAuraDefaults={}},Client={SupportsGroupKind=function() return true end},GF={GetConf=function() return {} end},
  MSUF2={Widgets=widgets,Theme={colors={muted={}}},GroupPage=gp,BindBoolWidget=function() end}}
 -- The geometry-only menu fixture uses the real refresh and gate providers.
 local supportFile=assert(io.open(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua","rb"))
@@ -237,6 +238,7 @@ local refreshChunk=assert(loadstring(refreshBody,"Menu2 refresh providers"))
 setfenv(refreshChunk,setmetatable({M=menuNS.MSUF2},{__index=_G}))
 refreshChunk()
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlGates.lua"))("MSUF",menuNS)
+assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("MSUF",menuNS)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua"))("MSUF",menuNS)
 local sections={}
 local builder={width=720}
