@@ -805,3 +805,5 @@ clients+Forever	lua	tools/tests/menu_unitsections_parity_smoke.lua	{root} {flavo
 clients+Forever	lua	tools/tests/menu_classpower_parity_smoke.lua	{root} {flavor}	ClassPower replacing-row parent parity failed: {flavor}	nightly
 -	lua	tools/tests/menu_unitcore_parity_smoke.lua	{root} Mainline	Unit core replacing rows retain parent controls and behavior: Mainline	push
 clients+Forever	lua	tools/tests/menu_unitcore_parity_smoke.lua	{root} {flavor}	Unit core replacing rows retain parent controls and behavior: {flavor}	nightly
+-	lua	tools/tests/menu_unitextra_parity_smoke.lua	{root} Mainline	Unit extra replacing controls match parent inputs history and combat: Mainline	push
+clients+Forever	lua	tools/tests/menu_unitextra_parity_smoke.lua	{root} {flavor}	Unit extra replacing controls match parent inputs history and combat: {flavor}	nightly

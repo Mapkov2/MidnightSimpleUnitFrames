@@ -20,6 +20,7 @@ CreateFrame = function()
 end
 
 local namespace = {
+    CPBuilders = { ExtraAuraDefaults = {} },
     UF = { visualRefreshCallbacks = {} },
     ExportPublic = function(name, value) _G[name] = value end,
     MSUF2 = {
@@ -35,6 +36,7 @@ for _, relative in ipairs({
     "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua",
     "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua",
 }) do
     local chunk = assert(loadfile(repo .. "/" .. relative))

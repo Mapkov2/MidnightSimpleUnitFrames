@@ -1179,7 +1179,8 @@ do
         for _, contract in ipairs({
             '        return ReadStatusBool(unit, "threatIndicatorColorCurve", customR == nil)\n',
             '    if threatSpec and threatSpec.value == "statusThreat" then\n'
-                .. '        local threatColorCurve = W.ToggleAt(selectedCard, "Color by threat", 16, -106, selectedControlW)\n',
+                .. '        local threatColorCurve = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.color_curve", nil,\n'
+                .. '            { "Color by threat", 16, -106, selectedControlW },\n',
             'SetBool(unit, "threatIndicatorColorCurve", value, "MSUF2_STATUS_THREAT_COLOR_CURVE", { preview = true })',
             '"status.threat.color_curve", nil, { settingKey = tostring(unit) .. ".threatIndicatorColorCurve" })',
             '                    if spec and spec.value == "statusThreat" and state.ThreatColorCurveEnabled\n'
@@ -1189,8 +1190,9 @@ do
             '            ShowControl(threatColorCurve, spec and spec.value == "statusThreat")\n',
             '            if spec.value == "statusThreat" then\n'
                 .. '                conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil\n',
-            '        local threatBackground = W.ToggleAt(selectedCard, "Background", 16, -136, selectedControlW)\n'
-                .. '        M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,\n',
+            '        local threatBackground = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.background", nil, '
+                .. '{ "Background", 16, -136, selectedControlW },\n',
+            '            M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,\n',
             'SetBool(unit, "threatIndicatorBackground", value, "MSUF2_STATUS_THREAT_BACKGROUND", { preview = true })',
             '"status.threat.background", nil, { settingKey = tostring(unit) .. ".threatIndicatorBackground" })',
             '    local threatBackground = state.threatBackground\n',

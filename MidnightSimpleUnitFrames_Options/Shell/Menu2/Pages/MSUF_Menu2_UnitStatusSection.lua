@@ -9,6 +9,8 @@ MSUF.MSUF2 = M
 -- Runtime status event handling is owned by MSUF_UF_Elements_Status.lua.
 local W = M.Widgets
 local T = M.Theme
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local UP = M.UnitPage or {}
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
@@ -51,7 +53,7 @@ local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus
 -- RefreshProxy so callbacks bound in earlier stages reach the body wired last.
 local StatusSection = {}
 function StatusSection.OpenSection(state, ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", STATUS_SECTION_HEIGHT, false)
+    local sec = Schema.Section(builder:CollapsibleSection("status_icons", "Status icons", STATUS_SECTION_HEIGHT, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -77,6 +79,7 @@ function StatusSection.OpenSection(state, ctx, builder, unit)
     })
     if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
+    Schema.Owned(statusTabs, unit, "menuState")
     sec._msuf2GuidedSelectTab = function(tab)
         if tab ~= "basic" and tab ~= "advanced" then return false end
         if type(ReadStatusTab) == "function" and ReadStatusTab() == tab then return true end
@@ -89,12 +92,15 @@ function StatusSection.OpenSection(state, ctx, builder, unit)
         return type(ReadStatusTab) ~= "function" or ReadStatusTab() == tab
     end
     local topCardY, topCardH, cardRowGap = -38, 214, 12
-    local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, topCardY, leftW + 16, topCardH)
-    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, topCardY, rightW + 16, topCardH)
+    local selectedCard = Schema.Build(ctx, basicTab, {{ "card", "status.selected_card", nil, { "Selected Indicator", nil, leftX - 2, topCardY,
+        leftW + 16, topCardH }, scope = unit, domain = "layout" }})["status.selected_card"]
+    local previewCard = Schema.Build(ctx, basicTab, {{ "card", "status.preview_card", nil, { "Status Preview", nil, rightX - 2, topCardY,
+        rightW + 16, topCardH }, scope = unit, domain = "layout" }})["status.preview_card"]
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCardY = topCardY - topCardH - cardRowGap
-    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, STATUS_PLACEMENT_CARD_HEIGHT)
+    local placementCard = Schema.Build(ctx, basicTab, {{ "card", "status.placement_card", nil, { "Placement", nil, placementCardX,
+        placementCardY, placementCardW, STATUS_PLACEMENT_CARD_HEIGHT }, scope = unit, domain = "layout" }})["status.placement_card"]
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)
@@ -187,43 +193,50 @@ function StatusSection.PrepareBinders(state, ctx, unit)
             meta.actionInputArg = "status"
         end
         M.RegisterSearchWidget(control, meta)
+        Schema.Owned(control, unit, "unitStatus")
     end
     local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)
-        local control = W.Slider(parent, label, minValue, maxValue, 1, 300)
-        Shared.PlaceSlider(parent, control, xPos, yPos, width)
-        M.BindNumberWidget(ctx, control,
-            function()
-                local spec = CurrentStatusSpec(unit)
-                if not spec then return fallback end
-                local legacyKey = specKey == "x" and spec.legacyX
-                    or specKey == "y" and spec.legacyY
-                    or specKey == "layer" and spec.legacyLayer or nil
-                local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey], legacyKey)
-                return normalize and normalize(value, spec) or value
-            end,
-            function(value)
-                local spec = CurrentStatusSpec(unit)
-                if not spec then return end
-                SetNumber(unit, spec[specKey], normalize and normalize(value, spec) or value, reason, { preview = true })
-                RefreshStatusRuntime(unit, spec)
-            end,
-            fallback, { step = 1, roundStep = true })
-        RegisterStatusSearch(control, searchLabel, keywords, nil, nil, "status.placement." .. tostring(reason), nil,
-            selectedStatusContract)
+        local path = "status.placement." .. tostring(reason):lower()
+        local control = Schema.Build(ctx, parent, {{ "slider", path, fallback, { label, minValue, maxValue, 1, 300 },
+        scope = unit, beforeBind = function(control)
+            Shared.PlaceSlider(parent, control, xPos, yPos, width)
+        end, bind = function(control)
+            M.BindNumberWidget(ctx, control,
+                function()
+                    local spec = CurrentStatusSpec(unit)
+                    if not spec then return fallback end
+                    local legacyKey = specKey == "x" and spec.legacyX
+                        or specKey == "y" and spec.legacyY
+                        or specKey == "layer" and spec.legacyLayer or nil
+                    local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey], legacyKey)
+                    return normalize and normalize(value, spec) or value
+                end,
+                function(value)
+                    local spec = CurrentStatusSpec(unit)
+                    if not spec then return end
+                    SetNumber(unit, spec[specKey], normalize and normalize(value, spec) or value, reason, { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                end,
+                fallback, { step = 1, roundStep = true })
+        end }}, ROW_OPTIONS)[path]
+        RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, nil, selectedStatusContract)
         return control
     end
     local function ClampSelectedStatusLayer(value, spec)
         return ClampStatusLayer(value, spec and spec.defaultLayer)
     end
     local function BindStatusTestToggle(parent, label, xPos, yPos, width, reason, searchLabel, keywords)
-        local control = W.ToggleAt(parent, label, xPos, yPos, width)
-        M.BindBoolWidget(ctx, control,
-            function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
-            function(value)
-                SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
-                _G.MSUF_RequestStatusIconsRefreshForCurrent(unit, reason or "MSUF2_STATUS_TEST")
-            end)
-        RegisterStatusSearch(control, searchLabel, keywords, nil, nil, "status.preview." .. tostring(reason), "ephemeral")
+        local path = "status.preview." .. tostring(reason):lower()
+        local control = Schema.Build(ctx, parent, {{ "toggle", path, nil, { label, xPos, yPos, width },
+        scope = unit, bind = function(control)
+            M.BindBoolWidget(ctx, control,
+                function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
+                function(value)
+                    SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
+                    _G.MSUF_RequestStatusIconsRefreshForCurrent(unit, reason or "MSUF2_STATUS_TEST")
+                end)
+        end }}, ROW_OPTIONS)[path]
+        RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, "ephemeral")
         return control
     end
     local function StatusPreviewButton(parent, label, xPos, yPos, width, mode, searchLabel, keywords, semanticPath)
@@ -248,26 +261,29 @@ function StatusSection.PrepareBinders(state, ctx, unit)
     end
     local RefreshStatusSectionState = M.RefreshProxy()
     local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords, searchValues, afterSet)
-        local control = W.Dropdown(parent, label, values, width)
-        Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local spec = CurrentStatusSpec(unit)
-                local key = spec and spec[specField]
-                local legacyKey = specField == "anchor" and spec and spec.legacyAnchor or nil
-                return key and ReadStatusString(unit, key, ResolveStatusDefault(defaultValue, spec), legacyKey) or ResolveStatusDefault(defaultValue, spec)
-            end,
-            function(value)
-                local spec = CurrentStatusSpec(unit)
-                local key = spec and spec[specField]
-                if not key then return end
-                local fallback = ResolveStatusDefault(defaultValue, spec)
-                SetString(unit, key, value or fallback, reason, { preview = true })
-                RefreshStatusRuntime(unit, spec)
-                if afterSet then afterSet(value, spec) end
-            end)
-        RegisterStatusSearch(control, searchLabel, keywords, searchValues or values, nil,
-            "status.selected." .. tostring(specField), nil, selectedStatusContract)
+        local path = "status.selected." .. tostring(specField):lower()
+        local control = Schema.Build(ctx, parent, {{ "dropdown", path, nil, { label, values, width },
+        scope = unit, beforeBind = function(control)
+            Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
+        end, bind = function(control)
+            M.BindDropdownWidget(ctx, control,
+                function()
+                    local spec = CurrentStatusSpec(unit)
+                    local key = spec and spec[specField]
+                    local legacyKey = specField == "anchor" and spec and spec.legacyAnchor or nil
+                    return key and ReadStatusString(unit, key, ResolveStatusDefault(defaultValue, spec), legacyKey) or ResolveStatusDefault(defaultValue, spec)
+                end,
+                function(value)
+                    local spec = CurrentStatusSpec(unit)
+                    local key = spec and spec[specField]
+                    if not key then return end
+                    local fallback = ResolveStatusDefault(defaultValue, spec)
+                    SetString(unit, key, value or fallback, reason, { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                    if afterSet then afterSet() end
+                end)
+        end }}, ROW_OPTIONS)[path]
+        RegisterStatusSearch(control, searchLabel, keywords, searchValues or values, nil, path, nil, selectedStatusContract)
         return control
     end
     state.RefreshStatusMenu, state.ReadStatusEnabled, state.StatusSearchKeywords, state.selectedStatusContract =
@@ -305,12 +321,15 @@ function StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTar
     state.ThreatColorCurveEnabled = ThreatColorCurveEnabled
     local threatSpec = FindStatusSpec(unit, "statusThreat")
     if threatSpec and threatSpec.value == "statusThreat" then
-        local threatColorCurve = W.ToggleAt(selectedCard, "Color by threat", 16, -106, selectedControlW)
-        M.BindBoolWidget(ctx, threatColorCurve, ThreatColorCurveEnabled,
-            function(value)
-                SetBool(unit, "threatIndicatorColorCurve", value, "MSUF2_STATUS_THREAT_COLOR_CURVE", { preview = true })
-                RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-            end)
+        local threatColorCurve = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.color_curve", nil,
+            { "Color by threat", 16, -106, selectedControlW },
+        scope = unit, bind = function(threatColorCurve)
+            M.BindBoolWidget(ctx, threatColorCurve, ThreatColorCurveEnabled,
+                function(value)
+                    SetBool(unit, "threatIndicatorColorCurve", value, "MSUF2_STATUS_THREAT_COLOR_CURVE", { preview = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)["status.threat.color_curve"]
         AttachStatusExactTarget(threatColorCurve, nil, "statusThreat", "threatIndicatorColorCurve")
         RegisterStatusSearch(threatColorCurve, "Threat % Colors", {
             "threat color", "threat colors", "color by threat", "threat color curve", "aggro color",
@@ -322,12 +341,14 @@ function StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTar
         end
         state.threatColorCurve = threatColorCurve
         -- The dark plate behind the number. Mirrors the compile default: on.
-        local threatBackground = W.ToggleAt(selectedCard, "Background", 16, -136, selectedControlW)
-        M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,
-            function(value)
-                SetBool(unit, "threatIndicatorBackground", value, "MSUF2_STATUS_THREAT_BACKGROUND", { preview = true })
-                RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-            end)
+        local threatBackground = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.background", nil, { "Background", 16, -136, selectedControlW },
+        scope = unit, bind = function(threatBackground)
+            M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,
+                function(value)
+                    SetBool(unit, "threatIndicatorBackground", value, "MSUF2_STATUS_THREAT_BACKGROUND", { preview = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)["status.threat.background"]
         AttachStatusExactTarget(threatBackground, nil, "statusThreat", "threatIndicatorBackground")
         RegisterStatusSearch(threatBackground, "Threat % Background", {
             "threat background", "threat plate", "threat backdrop", "threat readability",
@@ -340,56 +361,132 @@ function StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTar
         state.threatBackground = threatBackground
     end
 end
+function StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
+    local selectedCard, selectedControlW, RegisterStatusSearch = state.selectedCard, state.selectedControlW, state.RegisterStatusSearch
+    local AttachStatusExactTarget = state.AttachStatusExactTarget
+    -- Level Text only. Mirrors the compile default in MSUF_UF_Config: on, unless
+    -- this frame already carries its own level text color.
+    local function LevelDifficultyColorEnabled()
+        local conf, g = GetConf(unit), GetGeneral()
+        local customR = conf and conf.levelIndicatorColorR
+        if customR == nil then customR = g and g.levelIndicatorColorR end
+        return ReadStatusBool(unit, "levelIndicatorDifficultyColor", customR == nil)
+    end
+    state.LevelDifficultyColorEnabled = LevelDifficultyColorEnabled
+    local levelDifficultyColor = Schema.Build(ctx, selectedCard, {{ "toggle", "status.level.difficulty_color", nil, { "Color by level difficulty",
+        16, -106, selectedControlW },
+        scope = unit, bind = function(levelDifficultyColor)
+            M.BindBoolWidget(ctx, levelDifficultyColor, LevelDifficultyColorEnabled,
+                function(value)
+                    SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR", { preview = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)["status.level.difficulty_color"]
+    RegisterStatusSearch(levelDifficultyColor, "Level Difficulty Colors", {
+        "level color", "level colors", "level difficulty", "difficulty color", "level color curve",
+        "color level by difficulty", "red level", "gray level", "grey level", "skull level color",
+    }, nil, "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.",
+        "status.level.difficulty_color", nil, { settingKey = tostring(unit) .. ".levelIndicatorDifficultyColor" })
+    if M.AddTooltip then
+        M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
+            "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
+    end
+    state.levelDifficultyColor = levelDifficultyColor
+    local levelForeverBadge = Schema.Build(ctx, selectedCard, {{ "toggle", "status.level.forever_badge", nil,
+        { "Round level badge", 16, -136, selectedControlW },
+        scope = unit, bind = function(levelForeverBadge)
+            M.BindBoolWidget(ctx, levelForeverBadge,
+                function() return ReadStatusBool(unit, "levelIndicatorForeverBadge", false) end,
+                function(value)
+                    SetBool(unit, "levelIndicatorForeverBadge", value, "MSUF2_STATUS_LEVEL_FOREVER_BADGE", { preview = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)["status.level.forever_badge"]
+    RegisterStatusSearch(levelForeverBadge, "Round Level Badge", {
+        "level badge", "level circle", "round level", "camelot level", "level medallion",
+    }, nil, "Centers the level on a dark round medallion with a gold rim on every supported WoW version.",
+        "status.level.forever_badge", nil, { settingKey = tostring(unit) .. ".levelIndicatorForeverBadge" })
+    if M.AddTooltip then
+        M.AddTooltip(levelForeverBadge, "Round level badge",
+            "Centers the level on a dark round medallion with a gold rim on every supported WoW version.", { hook = true })
+    end
+    -- The badge belongs to the Level editor. Exact feature links must select
+    -- that indicator before focusing this otherwise hidden control.
+    levelForeverBadge._msuf2ExactTargetKinds = { unitStatus = true }
+    levelForeverBadge._msuf2ExactTargetContracts = {
+        unitStatus = { level = tostring(unit) .. ".levelIndicatorForeverBadge" },
+    }
+    levelForeverBadge._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        local levelSpec = FindStatusSpec(unit, "level")
+        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus"
+            or exactTarget.prepareValue ~= "level" or not levelSpec
+            or exactTarget.settingKey ~= tostring(unit) .. ".levelIndicatorForeverBadge" then return false end
+        return enabled._msuf2PrepareExactSearchTarget(enabled, {
+            prepareKind = "unitStatus", prepareValue = "level",
+            settingKey = tostring(unit) .. "." .. levelSpec.show,
+        })
+    end
+    state.levelForeverBadge = levelForeverBadge
+    StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTarget)
+end
 function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local sec, selectedCard, previewCard, selectedControlW = state.sec, state.selectedCard, state.previewCard, state.selectedControlW
     local previewControlW, leftW = state.previewControlW, state.leftW
     local RegisterStatusSearch, RefreshStatusMenu, ReadStatusEnabled = state.RegisterStatusSearch, state.RefreshStatusMenu, state.ReadStatusEnabled
     local selectedStatusContract, RefreshStatusSectionState = state.selectedStatusContract, state.RefreshStatusSectionState
-    local selector = W.Dropdown(selectedCard, "Indicator", function() return StatusValues(unit) end, 260)
-    if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1) end
-    Shared.PlaceDropdown(selectedCard, selector, 16, -54, selectedControlW)
-    M.BindDropdownWidget(ctx, selector,
-        function()
-            local spec = CurrentStatusSpec(unit)
-            return spec and spec.value or ""
-        end,
-        function(value)
-            local spec = FindStatusSpec(unit, value)
-            if not spec then return end
-            M.unitStatusSelection = M.unitStatusSelection or {}
-            M.unitStatusSelection[unit] = spec.value
-            _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
-            RefreshStatusMenu()
-        end)
+    local selector = Schema.Build(ctx, selectedCard, {{ "dropdown", "status.selector", nil, { "Indicator", function() return StatusValues(unit) end, 260 },
+        scope = unit, beforeBind = function(selector)
+            if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1],
+                T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1) end
+            Shared.PlaceDropdown(selectedCard, selector, 16, -54, selectedControlW)
+        end, bind = function(selector)
+            M.BindDropdownWidget(ctx, selector,
+                function()
+                    local spec = CurrentStatusSpec(unit)
+                    return spec and spec.value or ""
+                end,
+                function(value)
+                    local spec = FindStatusSpec(unit, value)
+                    if not spec then return end
+                    M.unitStatusSelection = M.unitStatusSelection or {}
+                    M.unitStatusSelection[unit] = spec.value
+                    _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
+                    RefreshStatusMenu()
+                end)
+        end }}, ROW_OPTIONS)["status.selector"]
     RegisterStatusSearch(selector, "Status indicator selector", {
         "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
         "raid group", "raid group name", "group number", "subgroup", "afk", "dnd", "ghost",
         "select afk", "afk status", "status text", "race text", "class text", "unit info",
     }, function() return StatusValues(unit) end, "Choose a status icon or an independent Level, Race, or Class text preview.", "status.selector", "ephemeral")
     local previewLabel = previewCard and previewCard.title
-    local midnight = W.ToggleAt(previewCard, "Use Midnight Style", 16, -92, previewControlW)
-    M.BindBoolWidget(ctx, midnight,
-        function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
-        function(value)
-            SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
-            _G.MSUF_RequestStatusIconsRefreshForCurrent()
-        end)
+    local midnight = Schema.Build(ctx, previewCard, {{ "toggle", "status.midnight_style", nil, { "Use Midnight Style", 16, -92, previewControlW },
+        scope = unit, bind = function(midnight)
+            M.BindBoolWidget(ctx, midnight,
+                function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
+                function(value)
+                    SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
+                    _G.MSUF_RequestStatusIconsRefreshForCurrent()
+                end)
+        end }}, ROW_OPTIONS)["status.midnight_style"]
     RegisterStatusSearch(midnight, "Status indicator style", {
         "midnight style", "status style", "indicator style", "icon style",
     }, nil, nil, "status.midnight_style", nil, { settingKey = "general.statusIconsUseMidnightStyle" })
-    local enabled = W.SwitchAt(selectedCard, "Enabled", leftW - 34, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, enabled,
-        function()
-            local spec = CurrentStatusSpec(unit)
-            return ReadStatusEnabled(spec)
-        end,
-        function(value)
-            local spec = CurrentStatusSpec(unit)
-            if not spec then return end
-            SetBool(unit, spec.show, value, "MSUF2_STATUS_ENABLED", { preview = true })
-            RefreshStatusRuntime(unit, spec)
-            if RefreshStatusSectionState then RefreshStatusSectionState() end
-        end)
+    local enabled = Schema.Build(ctx, selectedCard, {{ "switch", "status.selected.enabled", nil, { "Enabled", leftW - 34, -24, 0, "HIDDEN" },
+        scope = unit, bind = function(enabled)
+            M.BindBoolWidget(ctx, enabled,
+                function()
+                    local spec = CurrentStatusSpec(unit)
+                    return ReadStatusEnabled(spec)
+                end,
+                function(value)
+                    local spec = CurrentStatusSpec(unit)
+                    if not spec then return end
+                    SetBool(unit, spec.show, value, "MSUF2_STATUS_ENABLED", { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                    if RefreshStatusSectionState then RefreshStatusSectionState() end
+                end)
+        end }}, ROW_OPTIONS)["status.selected.enabled"]
     RegisterStatusSearch(enabled, "Status indicator enabled", {
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
         "enable level", "disable level", "turn level on", "turn level off",
@@ -487,69 +584,14 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         }
         M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
     end
-    local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
-        16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
+    local identityRestrictionWarning = Schema.Build(ctx, selectedCard, {{ "text", "status.identity_warning", nil,
+        { IDENTITY_RESTRICTION_WARNING, 16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR },
+        scope = unit }})["status.identity_warning"]
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
-    -- Level Text only. Mirrors the compile default in MSUF_UF_Config: on, unless
-    -- this frame already carries its own level text color.
-    local function LevelDifficultyColorEnabled()
-        local conf, g = GetConf(unit), GetGeneral()
-        local customR = conf and conf.levelIndicatorColorR
-        if customR == nil then customR = g and g.levelIndicatorColorR end
-        return ReadStatusBool(unit, "levelIndicatorDifficultyColor", customR == nil)
-    end
-    state.LevelDifficultyColorEnabled = LevelDifficultyColorEnabled
-    local levelDifficultyColor = W.ToggleAt(selectedCard, "Color by level difficulty", 16, -106, selectedControlW)
-    M.BindBoolWidget(ctx, levelDifficultyColor, LevelDifficultyColorEnabled,
-        function(value)
-            SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR", { preview = true })
-            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-        end)
-    RegisterStatusSearch(levelDifficultyColor, "Level Difficulty Colors", {
-        "level color", "level colors", "level difficulty", "difficulty color", "level color curve",
-        "color level by difficulty", "red level", "gray level", "grey level", "skull level color",
-    }, nil, "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.",
-        "status.level.difficulty_color", nil, { settingKey = tostring(unit) .. ".levelIndicatorDifficultyColor" })
-    if M.AddTooltip then
-        M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
-            "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
-    end
-    state.levelDifficultyColor = levelDifficultyColor
-    local levelForeverBadge = W.ToggleAt(selectedCard, "Round level badge", 16, -136, selectedControlW)
-    M.BindBoolWidget(ctx, levelForeverBadge,
-        function() return ReadStatusBool(unit, "levelIndicatorForeverBadge", false) end,
-        function(value)
-            SetBool(unit, "levelIndicatorForeverBadge", value, "MSUF2_STATUS_LEVEL_FOREVER_BADGE", { preview = true })
-            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-        end)
-    RegisterStatusSearch(levelForeverBadge, "Round Level Badge", {
-        "level badge", "level circle", "round level", "camelot level", "level medallion",
-    }, nil, "Centers the level on a dark round medallion with a gold rim on every supported WoW version.",
-        "status.level.forever_badge", nil, { settingKey = tostring(unit) .. ".levelIndicatorForeverBadge" })
-    if M.AddTooltip then
-        M.AddTooltip(levelForeverBadge, "Round level badge",
-            "Centers the level on a dark round medallion with a gold rim on every supported WoW version.", { hook = true })
-    end
-    -- The badge belongs to the Level editor. Exact feature links must select
-    -- that indicator before focusing this otherwise hidden control.
-    levelForeverBadge._msuf2ExactTargetKinds = { unitStatus = true }
-    levelForeverBadge._msuf2ExactTargetContracts = {
-        unitStatus = { level = tostring(unit) .. ".levelIndicatorForeverBadge" },
-    }
-    levelForeverBadge._msuf2PrepareExactSearchTarget = function(_, exactTarget)
-        local levelSpec = FindStatusSpec(unit, "level")
-        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus"
-            or exactTarget.prepareValue ~= "level" or not levelSpec
-            or exactTarget.settingKey ~= tostring(unit) .. ".levelIndicatorForeverBadge" then return false end
-        return enabled._msuf2PrepareExactSearchTarget(enabled, {
-            prepareKind = "unitStatus", prepareValue = "level",
-            settingKey = tostring(unit) .. "." .. levelSpec.show,
-        })
-    end
-    state.levelForeverBadge = levelForeverBadge
-    StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTarget)
-    state.selector, state.previewLabel, state.midnight, state.enabled, state.AttachStatusExactTarget, state.identityRestrictionWarning =
-        selector, previewLabel, midnight, enabled, AttachStatusExactTarget, identityRestrictionWarning
+    state.AttachStatusExactTarget = AttachStatusExactTarget
+    StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
+    state.selector, state.previewLabel, state.midnight, state.enabled, state.identityRestrictionWarning =
+        selector, previewLabel, midnight, enabled, identityRestrictionWarning
 end
 function StatusSection.PrepareIconResolvers(state, unit)
     local function CurrentStatusSymbolValues()
@@ -779,39 +821,45 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
     local BindStatusSpecDropdown, BindStatusPlacementSlider = state.BindStatusSpecDropdown, state.BindStatusPlacementSlider
     local ClampSelectedStatusLayer, selectedStatusContract = state.ClampSelectedStatusLayer, state.selectedStatusContract
     local RefreshStatusMenu = state.RefreshStatusMenu
-    local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
-    Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
-    M.BindDropdownWidget(ctx, raidGroupStyle,
-        function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
-        function(value)
-            if value ~= "BRACKET" and value ~= "NONE" then value = "PAREN" end
-            SetString(unit, "raidGroupNameStyle", value, "MSUF2_RAID_GROUP_NAME_STYLE", { preview = true, text = true })
-            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-        end)
+    local raidGroupStyle = Schema.Build(ctx, placementCard, {{ "dropdown", "status.raid_group.style", nil, { "Style", RAID_GROUP_NAME_STYLES, 180 },
+        scope = unit, beforeBind = function(raidGroupStyle)
+            Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
+        end, bind = function(raidGroupStyle)
+            M.BindDropdownWidget(ctx, raidGroupStyle,
+                function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
+                function(value)
+                    if value ~= "BRACKET" and value ~= "NONE" then value = "PAREN" end
+                    SetString(unit, "raidGroupNameStyle", value, "MSUF2_RAID_GROUP_NAME_STYLE", { preview = true, text = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)["status.raid_group.style"]
     RegisterStatusSearch(raidGroupStyle, "Raid group style", {
         "raid group style", "parentheses", "brackets", "no brackets", "group number style",
     }, RAID_GROUP_NAME_STYLES, nil, "status.raid_group.style", nil,
         { settingKey = tostring(unit) .. ".raidGroupNameStyle" })
-    local size = W.Slider(placementCard, "Size", 8, 64, 1, 300)
-    Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
-    M.BindNumberWidget(ctx, size,
-        function()
-            local spec = CurrentStatusSpec(unit)
-            if not spec then return 14 end
-            local fallback = spec.defaultSize
-            -- Text indicators and the inline group number inherit the frame's name
-            -- font size until their own size key is written, so the slider has to
-            -- open on the size the player actually sees.
-            if spec.textIndicator or spec.inlineName then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
-            return ReadStatusNumber(unit, spec.size, fallback, spec.legacySize)
-        end,
-        function(value)
-            local spec = CurrentStatusSpec(unit)
-            if not spec then return end
-            SetNumber(unit, spec.size, value, "MSUF2_STATUS_SIZE", { preview = true })
-            RefreshStatusRuntime(unit, spec)
-        end,
-        14, { step = 1, roundStep = true })
+    local size = Schema.Build(ctx, placementCard, {{ "slider", "status.selected.size", 14, { "Size", 8, 64, 1, 300 },
+        scope = unit, beforeBind = function(size)
+            Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
+        end, bind = function(size)
+            M.BindNumberWidget(ctx, size,
+                function()
+                    local spec = CurrentStatusSpec(unit)
+                    if not spec then return 14 end
+                    local fallback = spec.defaultSize
+                    -- Text indicators and the inline group number inherit the frame's name
+                    -- font size until their own size key is written, so the slider has to
+                    -- open on the size the player actually sees.
+                    if spec.textIndicator or spec.inlineName then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
+                    return ReadStatusNumber(unit, spec.size, fallback, spec.legacySize)
+                end,
+                function(value)
+                    local spec = CurrentStatusSpec(unit)
+                    if not spec then return end
+                    SetNumber(unit, spec.size, value, "MSUF2_STATUS_SIZE", { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                end,
+                14, { step = 1, roundStep = true })
+        end }}, ROW_OPTIONS)["status.selected.size"]
     RegisterStatusSearch(size, "Status indicator size", {
         "level size", "level text size", "indicator size", "icon size", "font size",
         "raid group size", "raid group name size", "group number size",
@@ -900,8 +948,17 @@ function StatusSection.BuildPreviewCard(state, unit)
         "Show all status indicators", {
         "show all", "all indicators", "preview all", "all status icons",
     }, "status.preview.basic.all")
-    local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -146, previewControlW, "GameFontNormalSmall", T.colors.accent)
+    local iconPreviewLabel = Schema.Build(state.ctx, previewCard, {{ "font", "status.icon_preview_label", nil,
+        { "GameFontNormalSmall", "Icon preview", T.colors.accent }, anchor = { "TOPLEFT", previewCard, "TOPLEFT", 16, -146 },
+        scope = unit, beforeBind = function(label)
+            W._Shared.SetSearchText(label, "Icon preview")
+            W.RegisterSearchObject(label, "Icon preview", "text")
+            label:SetWidth(previewControlW)
+            label:SetJustifyH("LEFT")
+        end }})["status.icon_preview_label"]
     local iconPreviewStrip, iconPreviewTextures = UP.CreateStatusIconStrip(previewCard, -158, previewControlW)
+    Schema.Custom(iconPreviewStrip, { id = "status.icon_preview_strip", kind = "statusPreview", scope = unit,
+        applyDomain = "preview", owner = iconPreviewStrip })
     for i = 1, #iconPreviewTextures do
         local holder = iconPreviewTextures[i]
         if IS_CLASSIC_FAMILY then
@@ -953,7 +1010,7 @@ function StatusSection.BuildPreviewCard(state, unit)
     state.test, state.current, state.all, state.iconPreviewLabel, state.RefreshIconPreviewStrip =
         test, current, all, iconPreviewLabel, RefreshIconPreviewStrip
 end
-function StatusSection.BuildAdvancedTab(state)
+function StatusSection.BuildAdvancedTab(state, unit)
     local advancedTab, placementCardX, placementCardW, placeLeftX = state.advancedTab, state.placementCardX, state.placementCardW, state.placeLeftX
     local placeLeftW, placeRightX, placeRightW = state.placeLeftW, state.placeRightX, state.placeRightW
     local BindStatusPlacementSlider, ClampSelectedStatusLayer = state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer
@@ -961,7 +1018,8 @@ function StatusSection.BuildAdvancedTab(state)
     local selectedStatusContract, BindStatusTestToggle = state.selectedStatusContract, state.BindStatusTestToggle
     local StatusPreviewButton = state.StatusPreviewButton
     local advanced = {}
-    advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 232)
+    advanced.card = Schema.Build(state.ctx, advancedTab, {{ "card", "status.advanced_card", nil, { "Advanced Placement", nil, placementCardX,
+        -38, placementCardW, 232 }, scope = unit, domain = "layout" }})["status.advanced_card"]
     advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER",
         "Advanced status indicator layer", {
         "advanced layer", "status icon advanced",
@@ -1107,7 +1165,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     M.TrackCollapsibleRefresh(ctx, sec, RefreshStatusSectionState)
 end
 function StatusSection.Build(ctx, builder, unit)
-    local state = {}
+    local state = { ctx = ctx, unit = unit }
     StatusSection.OpenSection(state, ctx, builder, unit)
     StatusSection.PrepareBinders(state, ctx, unit)
     StatusSection.BuildIndicatorSelector(state, ctx, unit)
@@ -1115,7 +1173,7 @@ function StatusSection.Build(ctx, builder, unit)
     StatusSection.BuildIconStyleControls(state, ctx, unit)
     StatusSection.BuildPlacementCard(state, ctx, unit)
     StatusSection.BuildPreviewCard(state, unit)
-    StatusSection.BuildAdvancedTab(state)
+    StatusSection.BuildAdvancedTab(state, unit)
     StatusSection.BindRefreshState(state, ctx, unit)
 end
 M.BuildUnitStatusSection = StatusSection.Build

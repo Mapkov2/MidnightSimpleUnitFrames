@@ -8,8 +8,9 @@ local _, MSUF = ...
 -- The Options bootstrap links this namespace to the core one and creates MSUF2;
 -- the unit page registry (Pages/MSUF_Menu2_UnitLazy.lua) loads before this file.
 local M = MSUF.MSUF2
-local W, UP, Schema = M.Widgets, M.UnitPage, M.ControlSchema
+local UP, Schema = M.UnitPage, M.ControlSchema
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua")
+local ROW_OPTIONS = Schema.UnitOptions()
 local floor = math.floor
 
 local SECTION_ID = "pvp_trinket"
@@ -37,37 +38,43 @@ local function BuildArenaTrinket(ctx, builder, unit)
     local sec = Schema.Section(builder:CollapsibleSection(SECTION_ID, "PvP Trinket", SECTION_HEIGHT, false), unit)
     local width = math.max(340, ((sec and sec._msuf2Width) or (ctx and ctx.width) or 720) - 40)
     local half = floor((width - 16) / 2)
-    local cards = {
-        icon = W.ControlCard(sec, "Icon", nil, 20, -38, half, CARD_HEIGHT),
-        place = W.ControlCard(sec, "Position", nil, 36 + half, -38, width - half - 16, CARD_HEIGHT),
-    }
+    local cards = Schema.Build(ctx, sec, {
+        { "card", "trinket.icon_card", nil, { "Icon", nil, 20, -38, half, CARD_HEIGHT }, scope = unit, domain = "layout" },
+        { "card", "trinket.place_card", nil, { "Position", nil, 36 + half, -38, width - half - 16, CARD_HEIGHT },
+            scope = unit, domain = "layout" },
+    })
     local controlW = half - 32
     local RefreshGate = M.RefreshProxy()
     local offset = limits.offset
-    local rows = {
-        { card = "icon", y = -54, kind = "toggle", path = "show", key = "showTrinket", labelKey = "Show PvP trinket",
-            default = true, after = RefreshGate },
-        { card = "icon", y = -100, kind = "slider", path = "size", key = "trinketSize", labelKey = "Size",
-            range = { limits.sizeMin, limits.sizeMax, 1 }, default = defaults.size },
-        { card = "icon", y = -154, kind = "slider", path = "layer", key = "trinketLayer", labelKey = "Layer",
-            range = { 0, 30, 1 }, default = defaults.layer },
-        { card = "place", y = -54, kind = "dropdown", path = "anchor", key = "trinketAnchor", labelKey = "Anchor",
-            values = SIDE_CHOICES, default = defaults.anchor },
-        { card = "place", y = -112, kind = "slider", path = "offset_x", key = "trinketOffsetX", labelKey = "X offset",
-            range = { -offset, offset, 1 }, default = defaults.x },
-        { card = "place", y = -166, kind = "slider", path = "offset_y", key = "trinketOffsetY", labelKey = "Y offset",
-            range = { -offset, offset, 1 }, default = defaults.y },
-    }
-    local controls = {}
-    for _, row in ipairs(rows) do
-        local meta = UP.SettingMeta(ctx, CONTROL_PATH .. row.path, unit, row.key)
-        controls[row.key] = Schema.Render(ctx, cards[row.card], {
-            id = meta.controlId, kind = row.kind, labelKey = row.labelKey, key = row.key, meta = meta, view = "at",
-            scope = unit, unit = unit, settingPath = unit .. "." .. row.key, applyDomain = "arenaTrinket",
-            reason = APPLY_REASON, range = row.range, values = row.values, roundStep = row.kind == "slider", numberFallback = 0,
-            after = row.after, defaultSource = function() return row.default end,
-        }, { x = 16, y = row.y, width = controlW, moveWidth = controlW })
+    local function Rows(card, rows, controls)
+        for _, row in ipairs(rows) do
+            local key, fallback, kind = row[2], row[3], row[1]
+            row.meta = UP.SettingMeta(ctx, CONTROL_PATH .. row.path, unit, key)
+            row.scope, row.domain, row.roundStep = unit, "arenaTrinket", kind == "slider"
+            row.get = function()
+                if kind == "toggle" then return UP.ReadBool(unit, key, fallback) end
+                if kind == "slider" then return UP.ReadNumber(unit, key, fallback) end
+                return UP.GetConf(unit)[key] or fallback
+            end
+            row.set = function(value)
+                Schema.SetUnit("arenaTrinket", unit, key, value, APPLY_REASON, kind)
+                if kind == "toggle" then RefreshGate() end
+            end
+            -- The original trinket number binding commits invalid text as zero.
+            if kind == "slider" then row[3] = 0 end
+        end
+        return Schema.Build(ctx, card, rows, ROW_OPTIONS, controls)
     end
+    local controls = Rows(cards["trinket.icon_card"], {
+        { "toggle", "showTrinket", true, { "Show PvP trinket", 16, -54, controlW }, path = "show" },
+        { "slider", "trinketSize", defaults.size, { "Size", limits.sizeMin, limits.sizeMax, 1, controlW }, { 16, -100, controlW }, path = "size" },
+        { "slider", "trinketLayer", defaults.layer, { "Layer", 0, 30, 1, controlW }, { 16, -154, controlW }, path = "layer" },
+    })
+    Rows(cards["trinket.place_card"], {
+        { "dropdown", "trinketAnchor", defaults.anchor, { "Anchor", SIDE_CHOICES, controlW }, { 16, -54, controlW }, path = "anchor" },
+        { "slider", "trinketOffsetX", defaults.x, { "X offset", -offset, offset, 1, controlW }, { 16, -112, controlW }, path = "offset_x" },
+        { "slider", "trinketOffsetY", defaults.y, { "Y offset", -offset, offset, 1, controlW }, { 16, -166, controlW }, path = "offset_y" },
+    }, controls)
     M.AddTooltip(controls.showTrinket, "Show PvP trinket",
         "Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too.",
         { hook = true, owner = "ANCHOR_RIGHT" })
@@ -85,7 +92,6 @@ UP.RegisterSection({
     placement = "after_inline_text",
     order = 40,
     units = { arena = true },
-    prepareShell = function(_, section, unit) Schema.Section(section, unit) end,
     build = BuildArenaTrinket,
 })
 
@@ -124,6 +130,8 @@ function TrinketPreview.CreateHandle(box, makeHandle)
         x = "trinketOffsetX", y = "trinketOffsetY", defaultX = defaults.x, defaultY = defaults.y,
         section = SECTION_ID, previewLayer = TrinketPreview.LAYER, resolveOffsetDelta = ClampedOffsetDelta,
     }, "PvP Trinket", HANDLE_COLOR)
+    Schema.Custom(box.handleArenaTrinket, { id = "unit.preview.arenaTrinket", kind = "unitPreviewHandle",
+        scope = "arena", applyDomain = "preview", owner = box.handleArenaTrinket })
     return box.handleArenaTrinket
 end
 

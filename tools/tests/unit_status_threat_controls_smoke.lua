@@ -88,6 +88,11 @@ local supportsThreat = MSUF.Client.SupportsThreatText == true
 -- file count, so a widget helper's own calls cannot stand in for them.
 local function FromSection()
     local info = debug.getinfo(3, "S")
+    -- A typed row reaches the same native constructor through the shared renderer.
+    -- Accept exactly that delegation from this section, not another page/helper.
+    if info and info.source:gsub("\\", "/"):find("Shell/Menu2/MSUF_Menu2_ControlSchema.lua", 1, true) then
+        info = debug.getinfo(4, "S")
+    end
     return info ~= nil and info.source:gsub("\\", "/"):find(SECTION, 1, true) ~= nil
 end
 local toggles, buttons, tooltips, sectionRefresh = {}, {}, {}, nil

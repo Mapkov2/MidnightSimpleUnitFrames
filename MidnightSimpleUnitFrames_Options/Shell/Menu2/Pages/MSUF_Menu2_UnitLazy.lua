@@ -3,6 +3,7 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
+local Schema = M.ControlSchema
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
 
@@ -130,6 +131,7 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
     if not sectionId then return spec.build(ctx, builder, unit, spec) end
     local shellBody = builder:CollapsibleSection(sectionId, title, height, defaultOpen)
     local shellEntry = shellBody and shellBody._msuf2CollapsibleEntry
+    if shellEntry then Schema.Section(shellBody, unit or ctx.key) end
     local searchRouteOpen = false
     local pendingSearchSections = M._msuf2SearchRouteOpenSections
     if shellEntry and type(pendingSearchSections) == "table"

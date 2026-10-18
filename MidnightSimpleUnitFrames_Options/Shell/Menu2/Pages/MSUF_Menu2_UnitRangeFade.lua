@@ -10,6 +10,7 @@ local floor = math.floor
 local max = math.max
 local SettingMeta = UP.SettingMeta
 local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet pettarget boss arena"
 local function RangeFadeSectionHeight(_, _, unit)
     return unit == "boss" and 350 or 230
@@ -47,33 +48,32 @@ local function BuildRangeFade(ctx, builder, unit)
     local leftW = floor((innerW - gap) * 0.48)
     local rightX = leftX + leftW + gap
     local rightW = innerW - leftW - gap
-    local mainCard = W.ControlCard(sec, "Behavior", nil, leftX, -38, leftW, 166)
-    local alphaCard = W.ControlCard(sec, "Out of range", nil, rightX, -38, rightW, 166)
+    local cards = Schema.Build(ctx, sec, {
+        { "card", "range_fade.behavior", nil, { "Behavior", nil, leftX, -38, leftW, 166 }, scope = unit, domain = "layout" },
+        { "card", "range_fade.alpha_card", nil, { "Out of range", nil, rightX, -38, rightW, 166 }, scope = unit, domain = "layout" },
+    })
+    local mainCard, alphaCard = cards["range_fade.behavior"], cards["range_fade.alpha_card"]
     local RefreshRangeControls = M.RefreshProxy()
-    local function Row(path, key, kind, label)
-        local meta = SettingMeta(ctx, path, unit, key)
-        return {
-            id = meta.controlId, kind = kind, labelKey = label, key = key, scope = unit,
-            settingPath = unit .. "." .. key, applyDomain = "range", meta = meta,
-            defaultSource = function() return Schema.Default(unit, key) end,
-        }
+    local function Row(path, key, kind, args, placement)
+        return { kind, key, Schema.Default(unit, key), args, placement,
+            meta = SettingMeta(ctx, path, unit, key), scope = unit, domain = "range" }
     end
-    local enabledRow = Row("range_fade.enabled", "rangeFadeEnabled", "toggle", "Enable Range Fade")
-    enabledRow.get = function() return ReadBool(unit, enabledRow.key, enabledRow.defaultSource()) end
+    local enabledRow = Row("range_fade.enabled", "rangeFadeEnabled", "flowToggle", { "Enable Range Fade" },
+        { 16, -54, leftW - 32, "LEFT" })
+    enabledRow.get = function() return ReadBool(unit, enabledRow[2], enabledRow[3]) end
     enabledRow.set = function(value)
-        Schema.SetUnit("range", unit, enabledRow.key, value, "MSUF2_RANGE_FADE", "toggle")
+        Schema.SetUnit("range", unit, enabledRow[2], value, "MSUF2_RANGE_FADE", "toggle")
         RefreshRangeControls()
     end
-    local enabled = Schema.Render(ctx, mainCard, enabledRow,
-        { x = 16, y = -54, width = leftW - 32, moveWidth = leftW - 32, align = "LEFT" })
-    local alphaRow = Row("range_fade.alpha", "rangeFadeAlpha", "slider", "")
+    Schema.Build(ctx, mainCard, { enabledRow }, ROW_OPTIONS)
+    local alphaRow = Row("range_fade.alpha", "rangeFadeAlpha", "slider", { "", 0, 1, 0.05, rightW - 58 })
     alphaRow.meta.label = "Out of range"
-    alphaRow.range, alphaRow.percent = { 0, 1, 0.05 }, true
-    alphaRow.get = function() return ReadNumber(unit, alphaRow.key, alphaRow.defaultSource()) end
+    alphaRow.beforeBind = M.UsePercentInput
+    alphaRow.get = function() return ReadNumber(unit, alphaRow[2], alphaRow[3]) end
     alphaRow.set = function(value)
-        Schema.SetUnit("range", unit, alphaRow.key, value, "MSUF2_RANGE_FADE_ALPHA", "slider")
+        Schema.SetUnit("range", unit, alphaRow[2], value, "MSUF2_RANGE_FADE_ALPHA", "slider")
     end
-    local slider = Schema.Render(ctx, alphaCard, alphaRow, { width = rightW - 58 })
+    local slider = Schema.Build(ctx, alphaCard, { alphaRow }, ROW_OPTIONS).rangeFadeAlpha
     if M.BindSliderDragPreview and M.SetRangeFadePreviewState then
         M.BindSliderDragPreview(slider, function(active, value)
             local layerMode = GetConf(unit).rangeFadeLayerMode == "health" and "health" or Schema.Default(unit, "rangeFadeLayerMode")
@@ -81,32 +81,33 @@ local function BuildRangeFade(ctx, builder, unit)
         end)
     end
     W.MoveWidget(slider, alphaCard, 16, -54, rightW - 58, "LEFT")
-    local modeRow = Row("range_fade.layer_mode", "rangeFadeLayerMode", "segment", "Affects")
-    modeRow.values = VT("frame", "Whole", "health", "HP")
-    modeRow.get = function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or Schema.Default(unit, "rangeFadeLayerMode") end
+    local modeRow = Row("range_fade.layer_mode", "rangeFadeLayerMode", "segment",
+        { "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32 }, { 16, -104, rightW - 32, "LEFT" })
+    modeRow.get = function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or modeRow[3] end
     modeRow.set = function(value)
-        Schema.SetUnit("range", unit, modeRow.key, value == "health" and "health" or modeRow.defaultSource(), "MSUF2_RANGE_FADE_LAYER", "segment")
+        Schema.SetUnit("range", unit, modeRow[2], value == "health" and "health" or modeRow[3], "MSUF2_RANGE_FADE_LAYER", "segment")
     end
-    local mode = Schema.Render(ctx, alphaCard, modeRow,
-        { x = 16, y = -104, width = rightW - 32, moveWidth = rightW - 32, align = "LEFT" })
+    local mode = Schema.Build(ctx, alphaCard, { modeRow }, ROW_OPTIONS).rangeFadeLayerMode
     local updateRate
     if unit == "boss" then
-        local updateCard = W.ControlCard(sec, "Boss update rate", nil, leftX, -220, innerW, 106)
-        local rateRow = Row("range_fade.update_rate", "rangeFadeUpdateRate", "slider", "Updates per second")
-        rateRow.range = { 0, 20, 1 }
+        local updateCard = Schema.Build(ctx, sec, {
+            { "card", "range_fade.update_card", nil, { "Boss update rate", nil, leftX, -220, innerW, 106 },
+                scope = unit, domain = "layout" },
+        })["range_fade.update_card"]
+        local rateRow = Row("range_fade.update_rate", "rangeFadeUpdateRate", "slider", { "Updates per second", 0, 20, 1, innerW - 58 })
         rateRow.meta.step, rateRow.meta.roundStep = 1, true
-        rateRow.get = function() return ReadNumber(unit, rateRow.key, rateRow.defaultSource()) end
+        rateRow.get = function() return ReadNumber(unit, rateRow[2], rateRow[3]) end
         rateRow.set = function(value)
             local rate = floor((tonumber(value) or 0) + 0.5)
             if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
-            Schema.SetUnit("range", unit, rateRow.key, rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")
+            Schema.SetUnit("range", unit, rateRow[2], rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")
             if updateRate and updateRate._msuf2SliderActive then
                 updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
             else
                 MaybeShowBossUpdateRateWarning(rate)
             end
         end
-        updateRate = Schema.Render(ctx, updateCard, rateRow, { width = innerW - 58 })
+        updateRate = Schema.Build(ctx, updateCard, { rateRow }, ROW_OPTIONS).rangeFadeUpdateRate
         if updateRate.SetValueBoxWidth then updateRate:SetValueBoxWidth(76) end
         if updateRate.SetValueFormatter then updateRate:SetValueFormatter(BossUpdateRateValue) end
         if updateRate.SetValueParser then
@@ -154,7 +155,6 @@ if type(UP.RegisterSection) == "function" then
         placement = "after_load_conditions",
         order = 10,
         units = RANGE_FADE_UNITS,
-        prepareShell = function(_, section, unit) Schema.Section(section, unit) end,
         build = BuildRangeFade,
     })
 end

@@ -15,6 +15,7 @@ local SetControlsEnabled = W.SetControlsEnabled
 local GetConf = UP.GetConf
 local GetGeneral = UP.GetGeneral
 local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 
 local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = true, arena = true }
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
@@ -191,15 +192,14 @@ local function PrepareSwitch(ctx, sec, unit, which)
     local def = MASTER_SWITCHES[which]
     local meta = Meta(ctx, unit, which .. ".enabled", def.key)
     local master
-    master = Schema.Render(ctx, sec, {
-        id = meta.controlId, kind = "toggle", view = "header", labelKey = def.label, meta = meta,
-        scope = unit, applyDomain = "dispel",
+    master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.label }, meta = meta,
+        scope = unit, domain = "dispel",
         get = function() return ReadValue(unit, def.key, false) == true end,
         set = function(value)
             SetDispelMasterValue(unit, def.key, value, def.reason)
             if master.refreshDetails then master.refreshDetails() end
         end,
-    })
+    }}, ROW_OPTIONS)[def.key]
     return master
 end
 
@@ -220,14 +220,13 @@ local function PreviewToggle(ctx, unit, card, which, x, y, width)
     local hook = PREVIEW_HOOKS[which]
     local function Active() return _G[hook.mode] == true and _G[hook.scope] == unit end
     local meta = Meta(ctx, unit, which .. ".preview", nil, "ephemeral")
-    local preview = Schema.Render(ctx, card, {
-        id = meta.controlId, kind = "toggle", view = "at", labelKey = hook.label, meta = meta,
-        scope = unit, applyDomain = "dispelPreview", get = Active,
+    local preview = Schema.Build(ctx, card, {{ "toggle", "preview", false, { hook.label, x, y, width }, meta = meta,
+        scope = unit, domain = "dispelPreview", get = Active,
         set = function(value)
             local fn = _G[hook.set]
             if type(fn) == "function" then fn(value and true or false, unit) end
         end,
-    }, { x = x, y = y, width = width })
+    }}, ROW_OPTIONS).preview
     preview:HookScript("OnHide", function(self)
         local fn = _G[hook.set]
         if Active() and type(fn) == "function" then
@@ -240,11 +239,14 @@ local function PreviewToggle(ctx, unit, card, which, x, y, width)
 end
 
 -- Rows keep the old per-card read/write rules: stored value, then general fallback.
-local function Row(ctx, unit, section, row, Sync)
+local function Row(ctx, unit, section, row, Sync, x, y, move, toggleWidth)
     local key, default, normalize = row.key, row.default, row.normalize
     local meta = Meta(ctx, unit, section .. "." .. key, key)
-    local spec = { id = meta.controlId, kind = row.kind, labelKey = row.label, key = key, meta = meta, scope = unit,
-        applyDomain = "dispel", values = row.values, range = row.range, view = "at", defaultSource = function() return default end }
+    local args, placement
+    if row.kind == "toggle" then args = { row.label, x, y, toggleWidth }
+    elseif row.kind == "dropdown" then args, placement = { row.label, row.values, 280 }, { x, y, move.dropdown, "LEFT" }
+    else args, placement = { row.label, row.range[1], row.range[2], row.range[3], 340 }, { x, y, move.slider, "CENTER" } end
+    local spec = { row.kind, key, default, args, placement, meta = meta, scope = unit, domain = "dispel" }
     if row.kind == "dropdown" then
         spec.get = function()
             local value = ReadValue(unit, key, default)
@@ -264,11 +266,6 @@ local function Row(ctx, unit, section, row, Sync)
     end
     return spec
 end
-local function Place(kind, x, y, move, toggleWidth)
-    if kind == "toggle" then return { x = x, y = y, width = toggleWidth } end
-    if kind == "dropdown" then return { x = x, y = y, width = 280, moveWidth = move.dropdown, align = "LEFT" } end
-    return { x = x, y = y, width = 340, moveWidth = move.slider, align = "CENTER" }
-end
 
 local OVERLAY_ROWS = {
     { kind = "dropdown", label = "Overlay detects", values = UNIT_DISPEL_TRIGGERS, key = "unitDispelOverlayTrigger",
@@ -285,7 +282,8 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     local section = Schema.Section(builder:CollapsibleSection("unit_dispel_overlay", "Dispel Overlay", OverlaySectionHeight(ctx), false), unit)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
-    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, 326)
+    local card = Schema.Build(ctx, section, {{ "card", "dispel.overlay.card", nil, { nil, nil, 20, -38, cardW, 326 },
+        scope = unit, domain = "layout" }})["dispel.overlay.card"]
     local Sync = M.RefreshProxy()
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(section, DISPEL_COLOR_REFERENCES, {
@@ -301,12 +299,11 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     local move = { dropdown = min(280, cardW - 32), slider = min(360, cardW - 72) }
     local controls = {}
     for _, row in ipairs(OVERLAY_ROWS) do
-        controls[#controls + 1] = Schema.Render(ctx, card, Row(ctx, unit, "overlay", row, Sync),
-            Place(row.kind, 16, row.y, move, cardW - 32))
+        controls[#controls + 1] = Schema.Build(ctx, card, { Row(ctx, unit, "overlay", row, Sync, 16, row.y, move, cardW - 32) }, ROW_OPTIONS)[row.key]
     end
     controls[#controls + 1] = PreviewToggle(ctx, unit, card, "overlay", 16, -246, cardW - 32)
-    local warning = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING, 16, -286, cardW - 32,
-        UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    local warning = Schema.Build(ctx, card, {{ "text", "dispel.overlay.warning", nil, { UNITFRAME_DISPEL_AURA_WARNING, 16, -286, cardW - 32,
+        UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = unit }})["dispel.overlay.warning"]
     if warning.SetWordWrap then warning:SetWordWrap(true) end
 
     M.TrackRefresh(ctx, Sync(function()
@@ -372,7 +369,8 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     local wide = cardW >= 760
-    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, wide and 368 or 646)
+    local card = Schema.Build(ctx, section, {{ "card", "dispel.symbol.card", nil, { nil, nil, 20, -38, cardW, wide and 368 or 646 },
+        scope = unit, domain = "layout" }})["dispel.symbol.card"]
     local Sync = M.RefreshProxy()
     symbolSyncByUnit[unit] = Sync
     EnsureSymbolMoveHandler()
@@ -425,12 +423,12 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     for _, row in ipairs(SYMBOL_ROWS) do
         row.sync = row.kind == "dropdown"
         local list = row.allMode and allModeControls or controls
-        list[#list + 1] = Schema.Render(ctx, card, Row(ctx, unit, "symbol", row, Sync),
-            Place(row.kind, row.col == 1 and leftX or rightX, wide and row.yWide or row.yNarrow, move))
+        list[#list + 1] = Schema.Build(ctx, card, { Row(ctx, unit, "symbol", row, Sync,
+            row.col == 1 and leftX or rightX, wide and row.yWide or row.yNarrow, move) }, ROW_OPTIONS)[row.key]
     end
     controls[#controls + 1] = preview
-    local warning = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING, 16, wide and -328 or -606, cardW - 32,
-        UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    local warning = Schema.Build(ctx, card, {{ "text", "dispel.symbol.warning", nil, { UNITFRAME_DISPEL_AURA_WARNING, 16, wide and -328 or -606, cardW - 32,
+        UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = unit }})["dispel.symbol.warning"]
     if warning.SetWordWrap then warning:SetWordWrap(true) end
 
     M.TrackRefresh(ctx, Sync(function()
@@ -458,7 +456,6 @@ if type(UP.RegisterSection) == "function" then
         units = SUPPORTED_UNITS,
         build = BuildUnitDispelOverlaySection,
         prepareShell = function(ctx, section, unit)
-            Schema.Section(section, unit)
             return PrepareSwitch(ctx, section, unit, "overlay")
         end,
     })
@@ -471,7 +468,6 @@ if type(UP.RegisterSection) == "function" then
         units = SUPPORTED_UNITS,
         build = BuildUnitDispelSymbolSection,
         prepareShell = function(ctx, section, unit)
-            Schema.Section(section, unit)
             return PrepareSwitch(ctx, section, unit, "symbol")
         end,
     })

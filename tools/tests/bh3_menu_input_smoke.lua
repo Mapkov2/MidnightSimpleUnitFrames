@@ -30,8 +30,10 @@ Enter("0.25")
 assert(math.abs(slider:GetValue() - 0.25) < 0.001, "decimal point regressed")
 local file = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitRangeFade.lua", "rb"))
 local source = file:read("*a"); file:close()
-assert(source:find("alphaRow.range, alphaRow.percent = { 0, 1, 0.05 }, true", 1, true),
+assert(source:find("alphaRow.beforeBind = M.UsePercentInput", 1, true),
     "Range Fade schema did not declare the shared percent parser")
+assert(source:find('"rangeFadeAlpha", "slider", { "", 0, 1, 0.05, rightW - 58 }', 1, true),
+    "Range Fade schema lost its fractional range")
 local schemaFile = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua", "rb"))
 local schema = schemaFile:read("*a"); schemaFile:close()
 assert(schema:find("if spec.percent then M.UsePercentInput(widget) end", 1, true),

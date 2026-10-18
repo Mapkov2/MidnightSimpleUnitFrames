@@ -5,6 +5,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local W = M.Widgets or {}
 local T = M.Theme or {}
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local UP = M.UnitPage or {}
 local VTP = M.ValueTextPairs
 local Tr = M.TranslateText or M.Tr
@@ -337,6 +339,13 @@ end
 M.ApplyTextureLayerPackConfig = ApplyTexturePackConfig
 M.TextureLayerPackItems = TEXLAYER_PACK_ITEMS
 
+-- Whole-number readout shared by the layer size sliders.
+local function WholeNumber(control)
+    if control.SetValueFormatter then
+        control:SetValueFormatter(function(v) return tostring(floor((tonumber(v) or 0) + 0.5)) end)
+    end
+end
+
 -- Texture Layer section. BuildTextureLayer runs a sequence of stages that share one state table (`s`):
 -- slot actions, shell and cards, binders, then the Setup, Advanced and HP & Visibility cards, the
 -- conditional refresh, the slot and category bars and the refresh. The stages create their widgets in
@@ -439,7 +448,7 @@ local function TextureLayerActions(ctx, unit, s)
 end
 local function TextureLayerShell(ctx, builder, s)
     local unit, boundSlot, Key, GetConf = s.unit, s.boundSlot, s.Key, s.GetConf
-    local sec = builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false)
+    local sec = Schema.Section(builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 20
     local innerW = max(320, sectionW - 40)
@@ -447,9 +456,12 @@ local function TextureLayerShell(ctx, builder, s)
     local colW = floor((innerW - 32 - colGap) / 2)
     local colX = 16 + colW + colGap
 
-    local setupCard = W.ControlCard(sec, "Basic setup", nil, leftX, TEXLAYER_CARD_Y, innerW, TEXLAYER_CARD_H)
-    local rulesCard = W.ControlCard(sec, "HP & Visibility", nil, leftX, TEXLAYER_CARD_Y, innerW, TEXLAYER_CARD_H)
-    local advancedCard = W.ControlCard(sec, "Advanced texture options", nil, leftX, TEXLAYER_CARD_Y, innerW, TEXLAYER_CARD_H)
+    local setupCard = Schema.Build(ctx, sec, {{ "card", "texture_layer.setup", nil, { "Basic setup", nil, leftX, TEXLAYER_CARD_Y, innerW,
+        TEXLAYER_CARD_H }, scope = unit, domain = "layout" }})["texture_layer.setup"]
+    local rulesCard = Schema.Build(ctx, sec, {{ "card", "texture_layer.rules", nil, { "HP & Visibility", nil, leftX, TEXLAYER_CARD_Y, innerW,
+        TEXLAYER_CARD_H }, scope = unit, domain = "layout" }})["texture_layer.rules"]
+    local advancedCard = Schema.Build(ctx, sec, {{ "card", "texture_layer.advanced", nil, { "Advanced texture options", nil, leftX,
+        TEXLAYER_CARD_Y, innerW, TEXLAYER_CARD_H }, scope = unit, domain = "layout" }})["texture_layer.advanced"]
     local cardsByTab = { setup = setupCard, rules = rulesCard, advanced = advancedCard }
 
     if W.AttachContextColorReferences then
@@ -506,58 +518,43 @@ local function TextureLayerBinders(ctx, s)
                 return true
             end)
     end
-    local function BindLayerToggle(parent, label, x, y, width, base, default, after)
-        local control = W.ToggleAt(parent, label, x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return ReadBool(unit, Key(base), default) end,
-            function(v)
-                SetBool(unit, Key(base), v, "MSUF2_TEXLAYER", { preview = true })
-                RefreshLayer()
-                if after then after() end
-            end,
-            LayerMeta(base))
-        return ExactSlot(control, parent, base)
-    end
-    local function BindLayerSlider(parent, label, x, y, width, minV, maxV, step, base, default, percent, after)
-        local control = W.Slider(parent, label, minV, maxV, step, width - 58)
-        if percent then
-            M.UsePercentInput(control)
-        elseif control.SetValueFormatter then
-            control:SetValueFormatter(function(v) return tostring(floor((tonumber(v) or 0) + 0.5)) end)
+    local function BuildRows(parent, rows)
+        for _, row in ipairs(rows) do
+            local kind, base, default = row[1], row[2], row[3]
+            row.scope, row.domain = unit, "textureLayer"
+            row.meta = row.meta or LayerMeta(base)
+            if not row.get then
+                row.get = function()
+                    if kind == "toggle" then return ReadBool(unit, Key(base), default) end
+                    if kind == "slider" then return ReadNumber(unit, Key(base), default) end
+                    local value = GetConf(unit)[Key(base)]
+                    if value == nil or value == "" then value = default end
+                    return value
+                end
+                row.set = function(value)
+                    if kind == "toggle" then SetBool(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
+                    elseif kind == "slider" then SetNumber(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
+                    else SetString(unit, Key(base), value or default, "MSUF2_TEXLAYER", { preview = true }) end
+                    RefreshLayer()
+                    if row.afterSet then row.afterSet() end
+                end
+            end
         end
-        local selectedValue1
-        if not (percent) then selectedValue1 = step end
-        M.BindNumberWidget(ctx, control,
-            function() return ReadNumber(unit, Key(base), default) end,
-            function(v)
-                SetNumber(unit, Key(base), v, "MSUF2_TEXLAYER", { preview = true })
-                RefreshLayer()
-                if after then after() end
-            end,
-            default,
-            LayerMeta(base, nil, selectedValue1))
-        W.MoveWidget(control, parent, x, y, width - 58, "LEFT")
-        return ExactSlot(control, parent, base)
+        local controls = Schema.Build(ctx, parent, rows, ROW_OPTIONS)
+        for _, row in ipairs(rows) do ExactSlot(controls[row[2]], parent, row[2]) end
+        return controls
     end
-    local function BindLayerDropdown(parent, label, x, y, width, values, base, default, after)
-        local control = W.Dropdown(parent, label, values, width)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local value = GetConf(unit)[Key(base)]
-                if value == nil or value == "" then value = default end
-                return value
-            end,
-            function(v)
-                SetString(unit, Key(base), v or default, "MSUF2_TEXLAYER", { preview = true })
-                RefreshLayer()
-                if after then after() end
-            end,
-            LayerMeta(base))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return ExactSlot(control, parent, base)
+    -- Static headings and hints: the shared font row, plus the search registration W.LabelAt performs.
+    local function Label(parent, id, text, color, x, y)
+        return Schema.Build(ctx, parent, {{ "font", id, nil, { "GameFontNormalSmall", text, color },
+            anchor = { "TOPLEFT", parent, "TOPLEFT", x, y }, scope = unit, beforeBind = function(label)
+                W._Shared.SetSearchText(label, text)
+                W.RegisterSearchObject(label, text, "text")
+                label:SetWidth(s.colW - 16)
+                label:SetJustifyH("LEFT")
+            end }})[id]
     end
-    s.dependentControls, s.Track, s.LayerMeta = dependentControls, Track, LayerMeta
-    s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown = BindLayerToggle, BindLayerSlider, BindLayerDropdown
+    s.dependentControls, s.Track, s.LayerMeta, s.BuildRows, s.Label = dependentControls, Track, LayerMeta, BuildRows, Label
 end
 local function TextureLayerSetupCard(ctx, s)
     local unit, Key, RefreshLayer, colW, colX, setupCard = s.unit, s.Key, s.RefreshLayer, s.colW, s.colX, s.setupCard
@@ -565,28 +562,31 @@ local function TextureLayerSetupCard(ctx, s)
     local ApplyPreset, SetHighlightTextureEnabled = s.ApplyPreset, s.SetHighlightTextureEnabled
     local CurrentPackValue, ApplyPackTexture, KeepManualSize = s.CurrentPackValue, s.ApplyPackTexture, s.KeepManualSize
     local Track, LayerMeta = s.Track, s.LayerMeta
-    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
+    local BuildRows, Label = s.BuildRows, s.Label
 
     -- Setup: the common path stays on one page. Presets are explicit actions;
     -- merely opening this section never rewrites an existing profile.
-    BindLayerToggle(setupCard, "Enable Texture Layer", 16, -54, colW - 16, "Enabled", false, function()
+    BuildRows(setupCard, { { "toggle", "Enabled", false, { "Enable Texture Layer", 16, -54, colW - 16 }, afterSet = function()
         M.RequestRefresh(ctx, "MSUF2_TEXLAYER_ENABLE")
-    end)
-    W.LabelAt(setupCard, "Quick setup", 16, -88, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
-    local textBackgroundPreset = T.Button(setupCard, "Text background", 142, 24)
+    end } })
+    Label(setupCard, "texture_layer.quick_setup_heading", "Quick setup", T.colors and T.colors.accent, 16, -88)
+    local function PresetButton(id, label, width)
+        return Schema.Build(ctx, setupCard, {{ "topButton", id, nil, { label, width, 24 }, scope = unit, domain = "textureLayer" }})[id]
+    end
+    local textBackgroundPreset = PresetButton("texture_layer.preset.text_background", "Text background", 142)
     textBackgroundPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 16, -108)
     textBackgroundPreset._msuf2HistoryLabel = "Text background"
     textBackgroundPreset:SetScript("OnClick", function()
         ApplyPreset(TEXT_BACKGROUND_PRESET, "MSUF2_TEXLAYER_TEXT_BACKGROUND_PRESET")
     end)
-    local highlightPreset = T.Button(setupCard, "Highlight", 112, 24)
+    local highlightPreset = PresetButton("texture_layer.preset.highlight", "Highlight", 112)
     highlightPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 166, -108)
     highlightPreset._msuf2HistoryLabel = "Highlight"
     highlightPreset:SetScript("OnClick", function()
         SetHighlightTextureEnabled(true)
     end)
     -- Third quick setup: the bundled MSUF textures, each listed with a preview.
-    local texturePackPreset = T.Button(setupCard, "MSUF textures", 132, 24)
+    local texturePackPreset = PresetButton("texture_layer.preset.msuf_texture", "MSUF textures", 132)
     texturePackPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 286, -108)
     texturePackPreset._msuf2HistoryLabel = "MSUF textures"
     texturePackPreset._msuf2DropdownPreferredWidth = 320
@@ -596,11 +596,6 @@ local function TextureLayerSetupCard(ctx, s)
             ApplyPackTexture(value)
         end)
     end)
-    if W.StyleTopActionButton then
-        W.StyleTopActionButton(textBackgroundPreset)
-        W.StyleTopActionButton(highlightPreset)
-        W.StyleTopActionButton(texturePackPreset)
-    end
     local packChevron = PixelLayoutRegion(texturePackPreset:CreateTexture(nil, "OVERLAY"))
     packChevron:SetTexture(T.media and T.media.dropdownChevron)
     packChevron:SetSize(12, 12)
@@ -624,37 +619,43 @@ local function TextureLayerSetupCard(ctx, s)
         UP.RegisterControl(textBackgroundPreset, ctx, "texture_layer.preset.text_background", "Text background", "button", "ephemeral")
         UP.RegisterControl(highlightPreset, ctx, "texture_layer.preset.highlight", "Highlight", "button", "ephemeral")
         UP.RegisterControl(texturePackPreset, ctx, "texture_layer.preset.msuf_texture", "MSUF textures", "button", "ephemeral")
+        for _, preset in ipairs({ textBackgroundPreset, highlightPreset, texturePackPreset }) do
+            Schema.Owned(preset, unit, "textureLayer")
+        end
     end
-    Track(BindLayerDropdown(setupCard, "Texture (SharedMedia)", 16, -164, colW - 16,
-        function() return M.StatusBarTextureItems("Use bar texture") end, "Texture", ""))
-    local customPath = W.TextInput(setupCard, "Custom texture path", colW - 16)
-    M.BindTextInput(ctx, customPath,
-        function() return tostring(GetConf(unit)[Key("CustomTexturePath")] or "") end,
-        function(v)
+    Track(BuildRows(setupCard, { { "dropdown", "Texture", "", { "Texture (SharedMedia)",
+        function() return M.StatusBarTextureItems("Use bar texture") end, colW - 16 }, { 16, -164, colW - 16, "LEFT" } } })["Texture"])
+    local customPath = Schema.Build(ctx, setupCard, {{ "textinput", "CustomTexturePath", "", { "Custom texture path", colW - 16 },
+        scope = unit, domain = "textureLayer", meta = LayerMeta("CustomTexturePath"), commitOnBlur = true,
+        get = function() return tostring(GetConf(unit)[Key("CustomTexturePath")] or "") end,
+        set = function(v)
             local path = tostring(v or "")
             -- The typed path is drawn; clearing it returns to the SharedMedia texture.
             SetString(unit, Key("SourceMode"), path == "" and "SHAREDMEDIA" or (TEXLAYER_PACK_BY_PATH[path] and "PACK" or "CUSTOM"),
                 "MSUF2_TEXLAYER", { preview = true })
             SetString(unit, Key("CustomTexturePath"), path, "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
-        end,
-        true,
-        LayerMeta("CustomTexturePath"))
+        end
+    }}, ROW_OPTIONS)["CustomTexturePath"]
     W.MoveWidget(customPath, setupCard, 16, -240, colW - 16, "LEFT")
     Track(customPath)
-    local colorMode = Track(BindLayerDropdown(setupCard, "Color mode", 16, -316, colW - 16,
-        TEXLAYER_COLOR_MODES, "ColorMode", "CUSTOM", function()
+    local colorMode = Track(BuildRows(setupCard, { { "dropdown", "ColorMode", "CUSTOM", { "Color mode", TEXLAYER_COLOR_MODES, colW - 16 }, { 16,
+        -316, colW - 16, "LEFT" }, afterSet = function()
             if s.RefreshConditional then s.RefreshConditional() end
-        end))
-    Track(BindLayerDropdown(setupCard, "Source color", 16, -392, colW - 16,
-        TEXLAYER_COLOR_TREATMENTS, "ColorTreatment", "ORIGINAL"))
-    Track(BindLayerDropdown(setupCard, "Anchor to", colX, -54, colW - 16, TEXLAYER_ANCHOR_TARGETS, "AnchorTarget", "FRAME"))
-    Track(BindLayerDropdown(setupCard, "Anchor", colX, -130, colW - 16, TEXLAYER_ANCHORS, "Anchor", "TOP"))
-    Track(BindLayerSlider(setupCard, "Width", colX, -214, colW, 0, 600, 1, "Width", 0, nil, KeepManualSize))
-    Track(BindLayerSlider(setupCard, "Height (0 = auto)", colX, -298, colW, 0, 220, 1, "Height", 16, nil, KeepManualSize))
-    Track(BindLayerSlider(setupCard, "Opacity", colX, -382, colW, 0, 1, 0.05, "Alpha", 1, true))
-    W.LabelAt(setupCard, "Use the colored Texture handle in Preview for exact placement.", colX, -342,
-        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
+        end } })["ColorMode"])
+    Track(BuildRows(setupCard, { { "dropdown", "ColorTreatment", "ORIGINAL", { "Source color", TEXLAYER_COLOR_TREATMENTS, colW - 16 }, { 16,
+        -392, colW - 16, "LEFT" } } })["ColorTreatment"])
+    Track(BuildRows(setupCard, { { "dropdown", "AnchorTarget", "FRAME", { "Anchor to", TEXLAYER_ANCHOR_TARGETS, colW - 16 }, { colX, -54,
+        colW - 16, "LEFT" } } })["AnchorTarget"])
+    Track(BuildRows(setupCard, { { "dropdown", "Anchor", "TOP", { "Anchor", TEXLAYER_ANCHORS, colW - 16 }, { colX, -130, colW - 16, "LEFT" } } })["Anchor"])
+    Track(BuildRows(setupCard, { { "slider", "Width", 0, { "Width", 0, 600, 1, colW - 58 }, { colX, -214, colW - 58, "LEFT" },
+        meta = LayerMeta("Width", nil, 1), beforeBind = WholeNumber, afterSet = KeepManualSize } })["Width"])
+    Track(BuildRows(setupCard, { { "slider", "Height", 16, { "Height (0 = auto)", 0, 220, 1, colW - 58 }, { colX, -298, colW - 58, "LEFT" },
+        meta = LayerMeta("Height", nil, 1), beforeBind = WholeNumber, afterSet = KeepManualSize } })["Height"])
+    Track(BuildRows(setupCard, { { "slider", "Alpha", 1, { "Opacity", 0, 1, 0.05, colW - 58 }, { colX, -382, colW - 58, "LEFT" },
+        beforeBind = M.UsePercentInput } })["Alpha"])
+    Label(setupCard, "texture_layer.placement_hint",
+        "Use the colored Texture handle in Preview for exact placement.", T.colors and T.colors.muted, colX, -342)
     if M.AddTooltip then
         M.AddTooltip(textBackgroundPreset, "Text background",
             "Creates a simple monochrome texture on the health bar. You can then choose any bar texture and place HP text above it.", { hook = true })
@@ -671,17 +672,18 @@ local function TextureLayerAdvancedCard(ctx, s)
     local ReadBool, SetBool, SetString = s.ReadBool, s.SetBool, s.SetString
     local SetControlEnabled, GetConf = s.SetControlEnabled, s.GetConf
     local Track, LayerMeta = s.Track, s.LayerMeta
-    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
+    local BuildRows, Label = s.BuildRows, s.Label
 
     -- Advanced: rendering and source-treatment details that are unnecessary
     -- for the common "texture behind text" path.
-    W.LabelAt(advancedCard, "Texture layers use the unit frame's strata. Use Layer (0-30) to set their order.",
-        16, -54, colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
-    Track(BindLayerSlider(advancedCard, "Layer (0-30)", 16, -138, colW, 0, 30, 1, "Level", 1))
-    Track(BindLayerDropdown(advancedCard, "Texture region", 16, -222, colW - 16,
-        TEXLAYER_CROP_MODES, "CropMode", "FULL"))
-    Track(BindLayerToggle(advancedCard, "Follow frame transparency", 16, -298, colW - 16, "FollowFrameAlpha", true))
-    Track(BindLayerToggle(advancedCard, "Clip to rounded frame", 16, -344, colW - 16, "RoundedClip", false))
+    Label(advancedCard, "texture_layer.strata_hint",
+        "Texture layers use the unit frame's strata. Use Layer (0-30) to set their order.", T.colors and T.colors.muted, 16, -54)
+    Track(BuildRows(advancedCard, { { "slider", "Level", 1, { "Layer (0-30)", 0, 30, 1, colW - 58 }, { 16, -138, colW - 58, "LEFT" },
+        meta = LayerMeta("Level", nil, 1), beforeBind = WholeNumber } })["Level"])
+    Track(BuildRows(advancedCard, { { "dropdown", "CropMode", "FULL", { "Texture region", TEXLAYER_CROP_MODES, colW - 16 }, { 16, -222,
+        colW - 16, "LEFT" } } })["CropMode"])
+    Track(BuildRows(advancedCard, { { "toggle", "FollowFrameAlpha", true, { "Follow frame transparency", 16, -298, colW - 16 } } })["FollowFrameAlpha"])
+    Track(BuildRows(advancedCard, { { "toggle", "RoundedClip", false, { "Clip to rounded frame", 16, -344, colW - 16 } } })["RoundedClip"])
 
     -- Directional overlay gradient with a Bars-style D-pad, blend, mirroring,
     -- and a four-edge feather mask.
@@ -701,13 +703,15 @@ local function TextureLayerAdvancedCard(ctx, s)
             SetControlEnabled(btn, on)
         end
     end
-    Track(BindLayerToggle(advancedCard, "Gradient", colX, -54, colW - 16, "GradientEnabled", false, RefreshGradientControls))
-    W.LabelAt(advancedCard, "Direction", colX, -88, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
+    Track(BuildRows(advancedCard, { { "toggle", "GradientEnabled", false, { "Gradient", colX, -54, colW - 16 },
+        afterSet = RefreshGradientControls } })["GradientEnabled"])
+    Label(advancedCard, "texture_layer.direction_heading", "Direction", T.colors and T.colors.accent, colX, -88)
     local padW, padH = 104, 78
     local padButtonW, padButtonH = 22, 18
     pad = T.Panel(advancedCard, nil, (T.colors and T.colors.panel2) or { 0.014, 0.038, 0.072, 0.55 }, T.colors and T.colors.borderSoft)
     pad:SetPoint("TOPLEFT", advancedCard, "TOPLEFT", colX, -110)
     pad:SetSize(padW, padH)
+    Schema.Custom(pad, { id = "texture_layer.gradient_pad", kind = "directionPad", scope = unit, applyDomain = "textureLayer", owner = pad })
     local padCenter = PixelLayoutRegion(pad:CreateTexture(nil, "ARTWORK"))
     padCenter:SetPoint("CENTER", pad, "CENTER", 0, 0)
     padCenter:SetSize(10, 10)
@@ -734,6 +738,7 @@ local function TextureLayerAdvancedCard(ctx, s)
             UP.RegisterControl(btn, ctx, "texture_layer.gradient_direction." .. value, "Gradient direction", "button",
                 value == "UP" and "action" or "ephemeral")
         end
+        Schema.Owned(btn, unit, "textureLayer")
         padButtons[value] = btn
         return btn
     end
@@ -744,61 +749,62 @@ local function TextureLayerAdvancedCard(ctx, s)
     PadButton("<", "LEFT", padCenterX - padSideOffset, -padCenterY)
     PadButton(">", "RIGHT", padCenterX + padSideOffset, -padCenterY)
     PadButton("v", "DOWN", padCenterX, -(padCenterY + padSideOffset))
-    local blend = W.ToggleAt(advancedCard, "Additive glow", colX, -210, colW - 16)
-    M.BindBoolWidget(ctx, blend,
-        function() return GetConf(unit)[Key("BlendMode")] == "ADD" end,
-        function(v)
+    local blend = Schema.Build(ctx, advancedCard, {{ "toggle", "BlendMode", false, { "Additive glow", colX, -210, colW - 16 },
+        scope = unit, domain = "textureLayer", meta = LayerMeta("BlendMode"),
+        get = function() return GetConf(unit)[Key("BlendMode")] == "ADD" end,
+        set = function(v)
             SetString(unit, Key("BlendMode"), v and "ADD" or "BLEND", "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
-        end,
-        LayerMeta("BlendMode"))
+        end
+    }}, ROW_OPTIONS)["BlendMode"]
     Track(blend)
-    Track(BindLayerToggle(advancedCard, "Mirror horizontally", colX, -256, colW - 16, "MirrorH", false))
-    Track(BindLayerToggle(advancedCard, "Mirror vertically", colX, -302, colW - 16, "MirrorV", false))
-    Track(BindLayerSlider(advancedCard, "Edge softness", colX, -360, colW, 0, 0.30, 0.02, "EdgeSoftness", 0, true))
-    W.LabelAt(advancedCard, "Fades all four outer edges; 0% keeps the original texture.", colX, -410,
-        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
+    Track(BuildRows(advancedCard, { { "toggle", "MirrorH", false, { "Mirror horizontally", colX, -256, colW - 16 } } })["MirrorH"])
+    Track(BuildRows(advancedCard, { { "toggle", "MirrorV", false, { "Mirror vertically", colX, -302, colW - 16 } } })["MirrorV"])
+    Track(BuildRows(advancedCard, { { "slider", "EdgeSoftness", 0, { "Edge softness", 0, 0.30, 0.02, colW - 58 }, { colX, -360, colW - 58,
+        "LEFT" }, beforeBind = M.UsePercentInput } })["EdgeSoftness"])
+    Label(advancedCard, "texture_layer.edge_softness_hint",
+        "Fades all four outer edges; 0% keeps the original texture.", T.colors and T.colors.muted, colX, -410)
     s.RefreshGradientControls = RefreshGradientControls
 end
 local function TextureLayerRulesCard(ctx, s)
     local unit, Key, RefreshLayer, colW, colX, rulesCard = s.unit, s.Key, s.RefreshLayer, s.colW, s.colX, s.rulesCard
     local SetBool, SetString, GetConf = s.SetBool, s.SetString, s.GetConf
     local Track, LayerMeta = s.Track, s.LayerMeta
-    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
+    local BuildRows, Label = s.BuildRows, s.Label
 
     -- HP response and visibility live together because the same threshold can
     -- drive color, opacity, and whether the texture is shown. Existing fields
     -- remain independent and visibility filters continue to combine with AND.
-    W.LabelAt(rulesCard, "Health behavior", 16, -48, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
-    local healthCondition = Track(BindLayerDropdown(rulesCard, "Show by health", 16, -70, colW - 16,
-        TEXLAYER_HEALTH_CONDITIONS, "HealthCondition", "ANY", function()
+    Label(rulesCard, "texture_layer.health_behavior_heading", "Health behavior", T.colors and T.colors.accent, 16, -48)
+    local healthCondition = Track(BuildRows(rulesCard, { { "dropdown", "HealthCondition", "ANY", { "Show by health", TEXLAYER_HEALTH_CONDITIONS,
+        colW - 16 }, { 16, -70, colW - 16, "LEFT" }, afterSet = function()
             if s.RefreshConditional then s.RefreshConditional() end
-        end))
-    local healthThreshold = Track(BindLayerSlider(rulesCard, "HP threshold", 16, -154, colW,
-        0.01, 1, 0.01, "HealthThreshold", 0.35, true, function()
+        end } })["HealthCondition"])
+    local healthThreshold = Track(BuildRows(rulesCard, { { "slider", "HealthThreshold", 0.35, { "HP threshold", 0.01, 1, 0.01, colW - 58 },
+        { 16, -154, colW - 58, "LEFT" }, beforeBind = M.UsePercentInput, afterSet = function()
             if s.RefreshConditional then s.RefreshConditional() end
-        end))
-    local aboveThreshold = Track(BindLayerDropdown(rulesCard, "Color above threshold", 16, -238, colW - 16,
-        TEXLAYER_ABOVE_THRESHOLD_MODES, "HealthAboveMode", "HEALTH", function()
+        end } })["HealthThreshold"])
+    local aboveThreshold = Track(BuildRows(rulesCard, { { "dropdown", "HealthAboveMode", "HEALTH", { "Color above threshold",
+        TEXLAYER_ABOVE_THRESHOLD_MODES, colW - 16 }, { 16, -238, colW - 16, "LEFT" }, afterSet = function()
             if s.RefreshConditional then s.RefreshConditional() end
-        end))
-    local lowAlphaEnabled = Track(BindLayerToggle(rulesCard, "Change opacity below threshold", 16, -314,
-        colW - 16, "HealthLowAlphaEnabled", false, function()
+        end } })["HealthAboveMode"])
+    local lowAlphaEnabled = Track(BuildRows(rulesCard, { { "toggle", "HealthLowAlphaEnabled", false, { "Change opacity below threshold", 16,
+        -314, colW - 16 }, afterSet = function()
             if s.RefreshConditional then s.RefreshConditional() end
-        end))
-    local lowAlpha = Track(BindLayerSlider(rulesCard, "Opacity below threshold", 16, -382, colW,
-        0, 1, 0.05, "HealthLowAlpha", 1, true))
+        end } })["HealthLowAlphaEnabled"])
+    local lowAlpha = Track(BuildRows(rulesCard, { { "slider", "HealthLowAlpha", 1, { "Opacity below threshold", 0, 1, 0.05, colW - 58 }, { 16,
+        -382, colW - 58, "LEFT" }, beforeBind = M.UsePercentInput } })["HealthLowAlpha"])
 
-    W.LabelAt(rulesCard, "Visibility", colX, -48, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
-    local combatState = W.Dropdown(rulesCard, "Combat state", TEXLAYER_VISIBILITY, colW - 16)
-    M.BindDropdownWidget(ctx, combatState,
-        function()
+    Label(rulesCard, "texture_layer.visibility_heading", "Visibility", T.colors and T.colors.accent, colX, -48)
+    local combatState = Schema.Build(ctx, rulesCard, {{ "dropdown", "Visibility", "ALWAYS", { "Combat state", TEXLAYER_VISIBILITY, colW - 16 },
+        scope = unit, domain = "textureLayer", meta = LayerMeta("Visibility", "combat_state"),
+        get = function()
             local value = GetConf(unit)[Key("Visibility")]
             if value == "TARGET" then return "ALWAYS" end
             if value ~= "COMBAT" and value ~= "OOC" then return "ALWAYS" end
             return value
         end,
-        function(value)
+        set = function(value)
             local conf = GetConf(unit)
             if conf[Key("Visibility")] == "TARGET" and conf[Key("TargetOnly")] == nil then
                 SetBool(unit, Key("TargetOnly"), true, "MSUF2_TEXLAYER", { preview = true })
@@ -806,18 +812,18 @@ local function TextureLayerRulesCard(ctx, s)
             SetString(unit, Key("Visibility"), value or "ALWAYS", "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
             if s.RefreshConditional then s.RefreshConditional() end
-        end,
-        LayerMeta("Visibility", "combat_state"))
+        end
+    }}, ROW_OPTIONS)["Visibility"]
     W.MoveWidget(combatState, rulesCard, colX, -70, colW - 16, "LEFT")
     Track(combatState)
 
-    local currentTargetOnly = W.ToggleAt(rulesCard, "Current target only", colX, -146, colW - 16)
-    M.BindBoolWidget(ctx, currentTargetOnly,
-        function()
+    local currentTargetOnly = Schema.Build(ctx, rulesCard, {{ "toggle", "TargetOnly", false, { "Current target only", colX, -146, colW - 16 },
+        scope = unit, domain = "textureLayer", meta = LayerMeta("TargetOnly", "current_target_only"),
+        get = function()
             local conf = GetConf(unit)
             return conf[Key("TargetOnly")] == true or conf[Key("Visibility")] == "TARGET"
         end,
-        function(enabled)
+        set = function(enabled)
             local conf = GetConf(unit)
             if conf[Key("Visibility")] == "TARGET" then
                 SetString(unit, Key("Visibility"), "ALWAYS", "MSUF2_TEXLAYER", { preview = true })
@@ -825,15 +831,12 @@ local function TextureLayerRulesCard(ctx, s)
             SetBool(unit, Key("TargetOnly"), enabled, "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
             if s.RefreshConditional then s.RefreshConditional() end
-        end,
-        LayerMeta("TargetOnly", "current_target_only"))
+        end
+    }}, ROW_OPTIONS)["TargetOnly"]
     Track(currentTargetOnly)
-    local conditionSummary = W.LabelAt(rulesCard, "Active: Always", colX, -204,
-        colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
-    W.LabelAt(rulesCard, "All selected visibility conditions must match (AND).", colX, -238,
-        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
-    local healthBehaviorSummary = W.LabelAt(rulesCard, "HP color: Off", colX, -292,
-        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
+    local conditionSummary = Label(rulesCard, "texture_layer.condition_summary", "Active: Always", T.colors and T.colors.accent, colX, -204)
+    Label(rulesCard, "texture_layer.condition_hint", "All selected visibility conditions must match (AND).", T.colors and T.colors.muted, colX, -238)
+    local healthBehaviorSummary = Label(rulesCard, "texture_layer.health_behavior_summary", "HP color: Off", T.colors and T.colors.muted, colX, -292)
 
     if M.AddTooltip then
         M.AddTooltip(healthCondition, "Show by health", "Below threshold hides this texture until the unit reaches the configured HP threshold.",
@@ -923,7 +926,7 @@ local function TextureLayerSelectors(ctx, s)
         { value = 2, text = "Texture 2" },
         { value = 3, text = "Texture 3" },
     }
-    local slotBar = W.ScopeOverrideBar(ctx, sec, {
+    local slotBar = Schema.Build(ctx, sec, {{ "scopebar", "texture_layer.slot_bar", nil, { {
         values = slotValues,
         width = sectionW,
         label = "Texture:",
@@ -948,15 +951,14 @@ local function TextureLayerSelectors(ctx, s)
             M.unitTexLayerSlot[unit] = previousSlot
             if M.RequestRefresh then M.RequestRefresh(ctx, "MSUF2_TEXLAYER_SLOT_RESTORE") end
         end,
-    })
-    if UP.RegisterControl then
-        UP.RegisterControl(slotBar, ctx, "texture_layer.slot_selector", "Texture", "segment", "ephemeral")
-    end
+    } }, scope = unit, beforeBind = function(control)
+        UP.RegisterControl(control, ctx, "texture_layer.slot_selector", "Texture", "segment", "ephemeral")
+    end }})["texture_layer.slot_bar"]
     local tabValues = {}
     for i = 1, #TEXLAYER_TABS do
         tabValues[i] = { value = TEXLAYER_TABS[i], text = TEXLAYER_TAB_TEXTS[TEXLAYER_TABS[i]] }
     end
-    local tabBar = W.ScopeOverrideBar(ctx, sec, {
+    local tabBar = Schema.Build(ctx, sec, {{ "scopebar", "texture_layer.tab_bar", nil, { {
         values = tabValues,
         width = sectionW,
         label = "Options:",
@@ -968,10 +970,9 @@ local function TextureLayerSelectors(ctx, s)
             M.unitTexLayerTab[unit] = NormalizeTab(value)
             ApplyTab()
         end,
-    })
-    if UP.RegisterControl then
-        UP.RegisterControl(tabBar, ctx, "texture_layer.category_selector", "Options", "segment", "ephemeral")
-    end
+    } }, scope = unit, beforeBind = function(control)
+        UP.RegisterControl(control, ctx, "texture_layer.category_selector", "Options", "segment", "ephemeral")
+    end }})["texture_layer.tab_bar"]
     s.ApplyTab = ApplyTab
     ApplyTab()
 end

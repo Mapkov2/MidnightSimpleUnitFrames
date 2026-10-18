@@ -93,8 +93,9 @@ local function LoadPages(client)
         -- The core's combat lock, which Support resolves on MSUF.Public.
         Public = { IsConfigCombatLocked = function() return false end, ShowConfigCombatLockMessage = function() end },
         MSUF2 = {
-            Widgets = { LabelAt = function() return Recorder() end },
-            Theme = { colors = { accent = { 1, 1, 1, 1 } } },
+            Widgets = { LabelAt = function() return Recorder() end,
+                _Shared = { SetSearchText = function() end }, RegisterSearchObject = function() end },
+            Theme = { colors = { accent = { 1, 1, 1, 1 } }, Font = function() return Recorder() end },
             UnitSectionsShared = {},
         },
     }
@@ -104,6 +105,8 @@ local function LoadPages(client)
     RequireFixture.StubRequirements(root, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     assert(loadfile(MENU .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local M = ns.MSUF2
+    ns.CPBuilders = { ExtraAuraDefaults = {} }
+    assert(loadfile(MENU .. "MSUF_Menu2_ControlSchema.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local db = { general = {} }
     M.EnsureDB = function() return db end
     M.GetUnitDB = function(unit) db[unit] = db[unit] or {}; return db[unit] end

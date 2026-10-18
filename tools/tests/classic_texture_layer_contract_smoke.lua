@@ -7,6 +7,8 @@ do
     local ns = { MSUF2 = {}, ExportPublic = function(name, value) _G[name] = value end }
     assert(loadfile(menu .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local M = ns.MSUF2
+    ns.CPBuilders = { ExtraAuraDefaults = {} }
+    assert(loadfile(menu .. "MSUF_Menu2_ControlSchema.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local section
     M.UnitPage = { RegisterSection = function(spec) section = spec end }
     local UP = M.UnitPage
