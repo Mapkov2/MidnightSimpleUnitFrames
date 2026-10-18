@@ -30,9 +30,15 @@ end
 local function FormatValues(label, x, y, width, height)
     if x == nil or y == nil then return tostring(label or "External frame") end
     if width ~= nil and height ~= nil then
-        return ("X %s     Y %s     W %s     H %s"):format(x, y, width, height)
+        return ("W %s     H %s"):format(width, height)
     end
-    return ("X %s     Y %s"):format(x, y)
+    return ""
+end
+
+local function ApplyPosition(axis, box)
+    if Blocked() or not (frame and frame._key) then return end
+    EM2.Ticker.SetExternalPosition(frame._key, axis, box:GetText())
+    Popup.Sync()
 end
 
 local function OpenSettings()
@@ -48,7 +54,7 @@ end
 --- Owner-declared quick controls (see extraControls in the public API) render
 --- as native MSUF stepper/toggle rows above the buttons. Widget sets are built
 --- once per control signature and shared by every element that declares it.
-local CONTROLS_TOP, CONTROL_ROW_H, BUTTONS_TOP, BASE_HEIGHT = -104, 40, -110, 224
+local CONTROLS_TOP, CONTROL_ROW_H, BUTTONS_TOP, BASE_HEIGHT = -144, 40, -150, 264
 
 local function ApplyNumberControl(id, box)
     if Blocked() or not (frame and frame._key) then return end
@@ -208,6 +214,10 @@ local function Build()
     frame._summaryFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -76)
     frame._summaryFS:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, -76)
     frame._summaryFS:SetJustifyH("LEFT")
+    frame._positionRow = Quick.ValuePairAt(frame, frame, 20, -104,
+        "X", "xBox", function() ApplyPosition("x", frame.xBox) end,
+        "Y", "yBox", function() ApplyPosition("y", frame.yBox) end,
+        { boxWidth = 48 })
 
     frame._settingsBtn = Quick.ButtonAt(frame, "Open settings", 20, BUTTONS_TOP, 252, 36, OpenSettings, {
         variant = "primary", hoverWash = true,
@@ -228,7 +238,17 @@ function Popup.Sync()
         return false
     end
     frame._titleFS:SetText(label)
-    frame._summaryFS:SetText(FormatValues(External.GetInspectorValues(frame._key)))
+    local title, x, y, width, height = External.GetInspectorValues(frame._key)
+    frame._summaryFS:SetText(FormatValues(title, x, y, width, height))
+    Quick.SetBoxText(frame.xBox, x ~= nil and x or "")
+    Quick.SetBoxText(frame.yBox, y ~= nil and y or "")
+    local enabled = External.GetPositionFrame(frame._key) ~= nil
+    frame._positionRow:SetAlpha(enabled and 1 or 0.42)
+    for _, child in ipairs({ frame._positionRow:GetChildren() }) do
+        child:EnableMouse(enabled)
+        if enabled then child:Enable() else child:Disable() end
+    end
+    if not enabled then frame.xBox:ClearFocus(); frame.yBox:ClearFocus() end
     local set = LayoutControls(frame._key)
     SyncControlValues(set, frame._key)
     local extra = set and set.height or 0

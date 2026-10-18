@@ -1036,6 +1036,65 @@ Kinds.Bind("subframe", BuildDrag, ApplySubframeDragPosition, FinishSubframeDrag)
 Kinds.Bind("group", BuildDrag, ApplyGroupDragPosition, FinishGroupDrag)
 Kinds.Bind("external", BuildDrag, ApplyExternalStrategy, FinishExternalDrag)
 
+--- A typed visual position is one complete drag transaction. Match the
+--- native center-facing X edge / top Y edge, retain the real mover bounds,
+--- and leave pixel rounding, preview, save and rollback with the drag owner.
+function Ticker.SetExternalPosition(key, axis, value)
+    if IsConfigCombatLocked() or not MSUF.EditModeAPI.IsActive() or activeDrag then return false end
+    if (_G.issecretvalue and _G.issecretvalue(value)) or (axis ~= "x" and axis ~= "y") then return false end
+    value = tonumber(value)
+    if not value or value ~= value or value <= -math.huge or value >= math.huge then return false end
+    local external, undo = EM2.ExternalElements, EM2.Undo
+    local cfg = EM2.Registry.Get(key)
+    if not (cfg and cfg.externalPublicElement and external and undo) then return false end
+    local bar = external.GetPositionFrame(key)
+    if not bar then return false end
+    local x, y = U.FramePositionValues(bar)
+    if value == (axis == "x" and x or y) then return false end
+    local left, right, top = MSUF.Geometry.EditRect(bar)
+    local uiLeft, uiRight, uiTop, uiBottom = MSUF.Geometry.EditRect(UIParent)
+    local centerX, centerY = (uiLeft + uiRight) * 0.5, (uiTop + uiBottom) * 0.5
+    local dx, dy = 0, 0
+    if axis == "x" then
+        local edge = value < 0 and right or value > 0 and left
+            or (right <= centerX and right or left >= centerX and left or nil)
+        if edge then dx = centerX + value - edge end
+    else
+        dy = centerY + value - top
+    end
+    local mover = EM2.Movers.Get(key)
+    if not mover then
+        EM2.Movers.SyncAll()
+        mover = EM2.Movers.Get(key)
+    end
+    if not mover then return false end
+    EM2.Movers.SyncKey(key)
+    local d = Kinds.external:beginDrag(mover, key, cfg, { bar = bar })
+    if not d then return false end
+    local cx = ClampCenterAxis(d.startCX + dx, d.halfW, d.screenW)
+    local cy = ClampCenterAxis(d.startCY + dy, d.halfH, d.screenH)
+    -- Typed steps remain meaningful below the pointer-release jitter threshold
+    -- at small UI scales. The owner still supplies the drag's pixel rounding.
+    if cx == d.startCX and cy == d.startCY then return false end
+    if undo.BeginChange("external", key, "Move") ~= true then return false end
+    SetActiveDragFlags(d, true)
+    local applied = d.strategy:applyDrag(d, cx, cy, d.uiScale, "preview")
+    SetActiveDragFlags(d, false)
+    if applied then
+        applied = d.strategy:commit(d, cx, cy, d.uiScale)
+    else
+        external.RestoreHistoryState({ key = key, data = d.externalStartState })
+    end
+    if applied then
+        undo.CommitChange()
+        NotifyGuidedEditModeMoved(key)
+    else
+        undo.CancelChange()
+    end
+    Ticker.RequestIdleSync()
+    return applied == true
+end
+
 function Ticker.BeginDrag(mover, key, cfg)
     if not tickerActive or activeDrag or not tickerFrame then return false end
     local drag = Kinds.For(key, cfg):beginDrag(mover, key, cfg)

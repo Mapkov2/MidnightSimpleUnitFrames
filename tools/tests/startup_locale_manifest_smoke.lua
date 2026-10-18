@@ -125,7 +125,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-19: 96b stacked on 98 (independent core bytes, summed): Mainline +26,342, Classic +24,090;
         -- Mainline/ruRU 10,073,032 -> 10,099,374, TBC/ruRU 7,947,738 -> 7,971,828.
         -- Ceilings: Mainline 10,073,320 -> 10,099,662; Classic 7,957,076 -> 7,981,166.
-        assert(bytes < (suffix == "Mainline" and 10099662 or 7981166),
+        -- 2026-10-19: Edit Mode external X/Y steppers (+4,412) and their review fixes (+549) add 4,961
+        -- LF bytes on every client: Mainline/ruRU 10,099,374 -> 10,104,335, TBC/ruRU 7,971,828 -> 7,976,789.
+        -- Mainline ceiling 10,099,662 -> 10,104,623 (exact +4,961); the Classic ceiling 7,981,166 still fits.
+        assert(bytes < (suffix == "Mainline" and 10104623 or 7981166),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

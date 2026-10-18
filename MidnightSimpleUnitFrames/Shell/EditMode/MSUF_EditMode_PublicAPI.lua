@@ -1,4 +1,6 @@
 --- Public registration bridge for frames owned by other addons.
+--- GetCapabilities/GetElementCapabilities: positionFields advertises host X/Y
+--- popup controls; unreadable geometry keeps owner inspector values read-only.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
@@ -24,6 +26,7 @@ local function Key(owner, id)
 end
 
 local function Finite(value)
+    if _G.issecretvalue and _G.issecretvalue(value) then return false end
     return type(value) == "number" and value == value
         and value > -math.huge and value < math.huge
 end
@@ -284,7 +287,7 @@ function API.GetVersion() return API.VERSION end
 function API.GetCapabilities()
     return { registration = true, drag = true, gridSnap = true, nudge = true,
         undoRedo = true, saveDiscard = true, reset = true, inspector = true,
-        settingsLink = true, popup = true, sessionCallbacks = true,
+        settingsLink = true, popup = true, positionFields = true, sessionCallbacks = true,
         resize = false, polling = false }
 end
 
@@ -300,6 +303,7 @@ function API.GetElementCapabilities(owner, id)
         reset = type(record.resetPosition) == "function",
         settings = type(record.openSettings) == "function",
         inspector = true,
+        positionFields = true,
         drag = true,
         nudge = true,
         undoRedo = true,
@@ -434,6 +438,23 @@ end
 
 function External.GetRecord(key) return records[key] end
 function External.CaptureState(key) return Capture(records[key]) end
+
+--- Position fields only consume readable geometry. Check before the shared
+--- geometry helpers do arithmetic, including on 12.x restricted frames.
+function External.GetPositionFrame(key)
+    local record = records[key]
+    local frame = record and Frame(record)
+    if _G.issecretvalue and _G.issecretvalue(frame) then return nil end
+    if type(frame) ~= "table" and type(frame) ~= "userdata" then return nil end
+    if frame.IsForbidden and frame:IsForbidden() then return nil end
+    if not (frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom
+        and frame.GetEffectiveScale) then return nil end
+    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    local scale = frame:GetEffectiveScale()
+    if not (Finite(left) and Finite(right) and Finite(top) and Finite(bottom) and Finite(scale))
+        or scale <= 0 or right <= left or top <= bottom then return nil end
+    return frame
+end
 
 function External.ApplyMove(key, startState, dx, dy, centerX, centerY, phase)
     local record = records[key]
@@ -585,8 +606,8 @@ end
 function External.GetInspectorValues(key)
     local record = records[key]
     if not record then return nil end
-    local frame = Frame(record)
-    if type(Util.FramePositionValues) == "function" then
+    local frame = External.GetPositionFrame(key)
+    if frame and type(Util.FramePositionValues) == "function" then
         local x, y, width, height = Util.FramePositionValues(frame)
         if x ~= nil then return record.label, x, y, width, height end
     end

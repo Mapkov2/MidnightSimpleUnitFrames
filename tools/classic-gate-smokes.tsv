@@ -243,7 +243,11 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_integration_toggle_smoke.lua	{root}	Edit Mode integration toggle smoke failed
 -	lua	tools/tests/editmode_session_contracts_smoke.lua	{root}	Edit Mode session contracts smoke failed
 -	lua	tools/tests/editmode_drag_alloc_smoke.lua	{root}	Edit Mode drag allocation smoke failed
--	lua	tools/tests/editmode_public_api_session_smoke.lua	{root}	Edit Mode public API session smoke failed
+-	lua	tools/tests/editmode_public_api_session_smoke.lua	{root} Mainline	Edit Mode public API and external X/Y smoke failed: Mainline
+-	lua	tools/tests/editmode_public_api_session_smoke.lua	{root} Forever	External popup X/Y smoke failed: Forever	nightly
+-	lua	tools/tests/editmode_public_api_session_smoke.lua	{root} Vanilla	External popup X/Y smoke failed: Vanilla	nightly
+-	lua	tools/tests/editmode_public_api_session_smoke.lua	{root} TBC	External popup X/Y smoke failed: TBC	nightly
+-	lua	tools/tests/editmode_public_api_session_smoke.lua	{root} Mists	External popup X/Y smoke failed: Mists	nightly
 -	lua	tools/tests/editmode_shell_labels_smoke.lua	{root}	Edit Mode shell labels smoke failed
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
 -	lua	tools/tests/menu_history_locale_smoke.lua	{root}	The menu history shows English or a split character on a German client
