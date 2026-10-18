@@ -889,8 +889,7 @@ local function BuildWindowShell()
     return { frame = f }
 end
 
-local function InstallMenuScaleControl(f)
-    if not (f and T) then return end
+local function CreateMenuScaleControl(f)
     local control = T.Panel(f, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(control, "status")
     control:SetSize(190, 22)
@@ -916,6 +915,12 @@ local function InstallMenuScaleControl(f)
     if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(false) end
     slider._msuf2CursorDrag = true
     T.StyleSlider(slider)
+    return control, label, slider
+end
+
+local function InstallMenuScaleControl(f)
+    if not (f and T) then return end
+    local control, label, slider = CreateMenuScaleControl(f)
 
     local function Percent(value)
         local pct = tonumber(value) or 100
