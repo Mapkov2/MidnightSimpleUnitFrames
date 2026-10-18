@@ -119,16 +119,16 @@ local function ResolveNavHeader(section)
     if aliasId and NAV_HEADER_SPECS[aliasId] then return aliasId, NAV_HEADER_SPECS[aliasId].label, nil end
     return nil
 end
-local function ReflowNavRail()
+local function ReflowNavRail(animate)
     local nav = M.nav
     if nav and type(nav._msuf2NavReflow) == "function" then
-        nav:_msuf2NavReflow()
+        nav:_msuf2NavReflow(animate)
         return true
     end
     local frame = M.frame
     nav = frame and (frame.nav or frame._msufNavRail or frame._msufNavStack)
     if nav and type(nav._msuf2NavReflow) == "function" then
-        nav:_msuf2NavReflow()
+        nav:_msuf2NavReflow(animate)
         return true
     end
     return false
@@ -148,7 +148,7 @@ function M.SetNavHeaderOpen(section, open)
         open = open and true or false
     end
     M.navHeaderState[id] = open
-    ReflowNavRail()
+    ReflowNavRail(true)
     local sectionName = tostring(label or id)
     return true, (open and M.Format("Opened %s navigation section.", sectionName)
         or M.Format("Closed %s navigation section.", sectionName)), open, id, label
@@ -161,7 +161,7 @@ function M.SetNavGroupOpen(id, open)
     M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
     if open == nil then open = M.navHeaderState[id] == false end
     M.navHeaderState[id] = open and true or false
-    ReflowNavRail()
+    ReflowNavRail(true)
     return true, M.navHeaderState[id]
 end
 function M.SetSearchIntroSeen(seen, keepVisible)
@@ -178,13 +178,121 @@ local function NavTooltipEnabled(btn)
     local label = btn._msuf2Label
     return btn._msuf2NavOff == true or (label and label.IsTruncated and label:IsTruncated())
 end
+local function NavMotionHidden(row)
+    if row._msuf2NavTitleText then
+        T.StyleFontString(row._msuf2NavTitleText, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
+    end
+end
+local function AttachNavMotion(row)
+    M.Widgets.AttachButtonMotion(row)
+    row:HookScript("OnHide", NavMotionHidden)
+end
+local function PaintNavFold(driver)
+    local list = driver:GetParent()
+    for i = 1, #driver.rows do
+        local item = driver.rows[i]
+        local frame, y, opacity = item.button or item.frame, item.foldY, item.foldOpacity
+        if opacity.value > 0 or opacity.target > 0 then
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT", list, "TOPLEFT", item.foldX, y.value)
+            frame:SetAlpha((frame._msuf2NavOff and 0.4 or 1) * max(0, math.min(1, opacity.value)))
+            M.Widgets.ShiftSelectionMotion(frame, y.value - item.displayY)
+            M.Widgets.UpdateSelectionAlpha(frame)
+            if not frame:IsShown() then frame:Show() end
+        elseif frame:IsShown() then
+            frame:Hide()
+        end
+        if item.kind ~= "history" then frame:EnableMouse(opacity.target > 0) end
+        item.displayY = y.value
+    end
+    list:SetHeight(driver.height.value)
+    if not driver:GetScript("OnUpdate") then
+        list._msuf2NavFolding = nil
+        local scroll = list:GetParent()
+        if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+    end
+end
+local function CaptureNavFold(list, rows)
+    local driver = list._msuf2NavFoldMotion
+    if not driver then
+        driver = M.Widgets.CreateLayoutMotion(list, PaintNavFold)
+        driver.rows = rows
+        driver.height = { value = list:GetHeight(), velocity = 0, target = list:GetHeight() }
+        driver.channels[1] = driver.height
+        for i = 1, #rows do
+            local item = rows[i]
+            item.foldY = { value = 0, velocity = 0, target = 0 }
+            item.foldOpacity = { value = 0, velocity = 0, target = 0 }
+            driver.channels[#driver.channels + 1] = item.foldY
+            driver.channels[#driver.channels + 1] = item.foldOpacity
+        end
+        list._msuf2NavFoldMotion = driver
+    end
+    local running = driver:GetScript("OnUpdate") ~= nil
+    for i = 1, #rows do
+        local item, frame = rows[i], rows[i].button or rows[i].frame
+        local _, _, _, x, y = frame:GetPoint(1)
+        item.foldX, item.displayY = x or NAV_ITEM_X, y or -4
+        if not running then
+            item.foldY.value, item.foldY.velocity = item.displayY, 0
+            item.foldOpacity.value, item.foldOpacity.velocity = frame:IsShown() and 1 or 0, 0
+        end
+    end
+    if not running then driver.height.value, driver.height.velocity = list:GetHeight(), 0 end
+    list._msuf2NavFolding, list._msuf2NavFoldPreparing = true, true
+    return driver
+end
+local function RetargetNavFold(driver)
+    local list, edge = driver:GetParent(), -4
+    for i = 1, #driver.rows do
+        local item, frame = driver.rows[i], driver.rows[i].button or driver.rows[i].frame
+        local shown = frame:IsShown()
+        local _, _, _, x, y = frame:GetPoint(1)
+        if shown then
+            item.foldX = x
+            if item.kind == "title" or item.kind == "header" then edge = y - frame:GetHeight() end
+        end
+        if shown and item.foldOpacity.value == 0 then
+            item.foldY.value, item.displayY = edge, edge
+        end
+        item.foldY.target, item.foldOpacity.target = shown and y or edge, shown and 1 or 0
+    end
+    driver.height.target = list:GetHeight()
+    list._msuf2NavFoldPreparing = nil
+    M.Widgets.PlayLayoutMotion(driver)
+    PaintNavFold(driver)
+end
+local function FinalizeNavMotion(parent, list, rows)
+    parent:_msuf2NavReflow()
+    M.RefreshNavAvailability()
+    M.Widgets.AttachSelectionMotion(list, M.navButtons, true)
+    local reflow = parent._msuf2NavReflow
+    parent._msuf2NavReflow = function(self, animate)
+        if animate and self:IsVisible() and not T.ReducedMotionEnabled() then
+            local driver = CaptureNavFold(list, rows)
+            reflow(self)
+            RetargetNavFold(driver)
+        else
+            if list._msuf2NavFoldMotion then list._msuf2NavFoldMotion:Stop() end
+            reflow(self)
+            for i = 1, #rows do
+                local item, frame = rows[i], rows[i].button or rows[i].frame
+                frame:SetAlpha(frame._msuf2NavOff and 0.4 or 1)
+                if item.kind ~= "history" then frame:EnableMouse(frame:IsShown()) end
+            end
+            M.Widgets.RefreshSelectionMotion(list, true)
+        end
+    end
+end
 local function CreateNavButton(parent, key, label, indent, availability)
     local btn = T.Button(parent, label, NavItemWidth(indent), NAV_BUTTON_H)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
         btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
     end
     T.StyleFontString(btn._msuf2Label, T.colors.text, 0, "navigation")
-    btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
+    btn:SetScript("OnClick", function(self)
+        M.SelectPage(ResolveNavClickTarget(key))
+    end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(btn, "navigation." .. tostring(key), label, "navigation",
             { navigationKey = ResolveNavClickTarget(key), help = "Opens this MSUF options page." })
@@ -197,6 +305,7 @@ local function CreateNavButton(parent, key, label, indent, availability)
     btn._msuf2NavAvailability = availability
     M.AddTooltip(btn, NavTooltipTitle, NavTooltipBody, { hook = true, enabled = NavTooltipEnabled })
     T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled())
+    AttachNavMotion(btn)
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn.RefreshVisual(btn) end
     return btn
@@ -208,6 +317,7 @@ end
 local function ApplyNavAvailabilityVisual(btn)
     local off = btn._msuf2NavOff == true
     btn:SetAlpha(off and 0.4 or 1)
+    M.Widgets.UpdateSelectionAlpha(btn)
     local badge = btn._msuf2NavOffBadge
     if off and not badge then
         badge = T.Font(btn, "GameFontDisableSmall", "", T.colors.dim)
@@ -217,6 +327,7 @@ local function ApplyNavAvailabilityVisual(btn)
     end
     if not badge then return end
     badge:SetText("Off")
+    M.Widgets.RaiseSelectionText(btn)
     badge:SetShown(off)
     local width = off and badge.GetStringWidth and tonumber(badge:GetStringWidth()) or 0
     if off and width <= 0 then width = 24 end
@@ -257,7 +368,7 @@ local function ApplyNavHeaderVisual(btn, open)
     if not btn then return end
     local arrow = btn._msuf2NavArrow
     if arrow then
-        if arrow.SetRotation then arrow:SetRotation(open and (math.pi * 0.5) or 0) end
+        T.ApplyCollapseRotation(arrow, open, not btn:GetParent()._msuf2NavFoldPreparing)
         if arrow.SetVertexColor then
             local c = open and T.colors.navArrowOpen or T.colors.navArrowClosed
             arrow:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
@@ -271,7 +382,12 @@ local function NavTitleHover(row, hover)
 end
 local function NavTitleOnEnter(row) NavTitleHover(row, true) end
 local function NavTitleOnLeave(row) NavTitleHover(row, false) end
-local function NavTitleOnClick(row) M.SetNavGroupOpen(row._msuf2NavTitleId, nil) end
+local function NavTitleOnClick(row)
+    M.SetNavGroupOpen(row._msuf2NavTitleId, nil)
+end
+local function NavHeaderOnClick(row)
+    M.SetNavHeaderOpen(row._msuf2NavHeaderId, nil)
+end
 local function NavTitleTooltip(row)
     return M.navHeaderState and M.navHeaderState[row._msuf2NavTitleId] == false and "Expand" or "Collapse"
 end
@@ -882,6 +998,7 @@ local function CreateNavList(parent)
             row:SetScript("OnClick", NavTitleOnClick)
             row:SetScript("OnEnter", NavTitleOnEnter)
             row:SetScript("OnLeave", NavTitleOnLeave)
+            AttachNavMotion(row)
             M.AddTooltip(row, NavTitleTooltip, nil, { hook = true })
             ApplyNavHeaderVisual(row, M.navHeaderState[id] ~= false)
             M.navTitles[id] = title
@@ -906,9 +1023,7 @@ local function CreateNavList(parent)
             arrow:SetPoint("LEFT", btn, "LEFT", 5, 0)
             arrow:SetTexture(T.media.collapseArrow)
             btn._msuf2NavArrow = arrow
-            btn:SetScript("OnClick", function(self)
-                M.SetNavHeaderOpen(self._msuf2NavHeaderId, nil)
-            end)
+            btn:SetScript("OnClick", NavHeaderOnClick)
             if M.RegisterMenuChromeControl then
                 M.RegisterMenuChromeControl(btn, "navigation.group." .. tostring(id), item.header, "ephemeral", {
                     kind = "toggle", historyMode = "none", help = "Expands or collapses this navigation group.",
@@ -924,6 +1039,7 @@ local function CreateNavList(parent)
                 })
             end
             btn._msuf2SkipHistoryCheckpoint = true
+            AttachNavMotion(btn)
             ApplyNavHeaderVisual(btn, M.navHeaderState[id])
             M.navHeaders[id] = btn
             created[#created + 1] = { kind = "header", id = id, button = btn }
@@ -936,8 +1052,7 @@ local function CreateNavList(parent)
         end
     end
     InstallNavReflow(parent, listScroll, list, created)
-    parent:_msuf2NavReflow()
-    M.RefreshNavAvailability()
+    FinalizeNavMotion(parent, list, created)
 end
 local function BuildNavRail(parent)
     M.EnsurePersistentMenuState()

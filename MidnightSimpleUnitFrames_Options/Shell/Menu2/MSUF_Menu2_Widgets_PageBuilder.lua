@@ -412,14 +412,97 @@ function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, l
         label:SetJustifyH("LEFT")
     end
 end
+-- User disclosures share the short rail spring. Search/focus and initial layout
+-- remain immediate; only visible interaction creates a finite driver.
+local ACCORDION_MOTION_LAYOUT = { skipStateRefresh = true, deferPreview = true }
+function PageBuilderStages.AccordionHeight(entry)
+    local height = entry.open and entry.contentHeight or 0
+    local driver = entry._msuf2AccordionMotion
+    if entry._msuf2MotionActive then
+        local channel = driver.channels[1]
+        channel.target = height
+        height = max(0, min(entry.contentHeight, channel.value))
+    end
+    return entry.headerHeight + height
+end
+function PageBuilderStages.UpdateAccordionBody(entry)
+    local driver = entry._msuf2AccordionMotion
+    local moving = entry._msuf2MotionActive == true
+    if not moving then T.ApplyCollapseRotation(entry.arrow, entry.open, true) end
+    if not moving and driver and driver:GetScript("OnUpdate") then driver:Stop() end
+    if entry._msuf2ClipMotion ~= moving then
+        entry._msuf2ClipMotion = moving
+        if moving then
+            entry._msuf2RestoreClipping = entry.outer:DoesClipChildren()
+            entry.outer:SetClipsChildren(true)
+        elseif driver then
+            entry.outer:SetClipsChildren(entry._msuf2RestoreClipping == true)
+        end
+    end
+    local shown = entry.open or moving
+    if entry.body._msuf2ShownState == shown then return false end
+    entry.body._msuf2ShownState = shown
+    if shown and not entry.bodySurface then
+        entry.bodySurface = PageBuilderStages.CreateBodySurface(entry.outer, entry.headerHeight, false)
+    end
+    entry.body:SetShown(shown)
+    if entry.bodySurface then entry.bodySurface:SetShown(shown) end
+    return true
+end
+function PageBuilderStages.PaintAccordionMotion(driver)
+    local entry = driver.entry
+    if not entry._msuf2MotionActive then return end
+    if not driver:GetScript("OnUpdate") then entry._msuf2MotionActive = nil end
+    entry.builder:RelayoutCollapsibles(entry._msuf2MotionActive and ACCORDION_MOTION_LAYOUT or nil)
+end
+function PageBuilderStages.PrepareAccordionMotion(entry, animated)
+    if animated and entry.outer:IsVisible() and not T.ReducedMotionEnabled() then
+        local driver = entry._msuf2AccordionMotion
+        if not driver then
+            driver = W.CreateLayoutMotion(entry.outer, PageBuilderStages.PaintAccordionMotion)
+            driver.entry = entry
+            driver.channels[1] = { value = 0, velocity = 0, target = 0 }
+            entry._msuf2AccordionMotion = driver
+        end
+        if not entry._msuf2MotionActive then
+            local channel = driver.channels[1]
+            channel.value = max(0, entry.outer:GetHeight() - entry.headerHeight)
+            channel.velocity = 0
+        end
+        entry._msuf2MotionActive = true
+        return driver
+    end
+    entry._msuf2MotionActive = nil
+    if entry._msuf2AccordionMotion then entry._msuf2AccordionMotion:Stop() end
+end
+function PageBuilderStages.SetAccordionOpen(entry, value, animated)
+    local wanted = value == true or value == 1
+        or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
+    if entry.open == wanted and not entry._msuf2MotionActive then return true end
+    local driver = PageBuilderStages.PrepareAccordionMotion(entry, animated)
+    entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+    if T.StopMotion then T.StopMotion(entry.body) end
+    entry._msuf2Closing = nil
+    entry.open = wanted
+    entry._msuf2RefreshHeaderTone(false)
+    M.accordionState[entry.stateKey] = wanted
+    entry.body:SetAlpha(1)
+    entry.builder:RelayoutCollapsibles()
+    if wanted and type(entry._msuf2SettleContentLayout) == "function" then
+        entry._msuf2SettleContentLayout()
+        entry.builder:RelayoutCollapsibles()
+    end
+    if driver then W.PlayLayoutMotion(driver) end
+    return entry.open == wanted
+end
 --- The builder's vertical-flow and relayout methods; installed once per build.
 function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
-    function b:RequestRelayoutCollapsibles()
+    function b:RequestRelayoutCollapsibles(opts)
         if ctx and ctx._msuf2Building then
             self._msuf2RelayoutPending = true
             return
         end
-        return self:RelayoutCollapsibles()
+        return self:RelayoutCollapsibles(opts)
     end
     function b:RelayoutCollapsibles(opts)
         opts = type(opts) == "table" and opts or nil
@@ -453,7 +536,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                 local open = entry.open and true or false
                 local openChanged = entry._msuf2RelayoutOpen ~= open
                 entry._msuf2RelayoutOpen = open
-                local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
+                local outerH = PageBuilderStages.AccordionHeight(entry)
                 if entry._msuf2RelayoutParent ~= self.parent or entry._msuf2RelayoutX ~= self.x
                     or entry._msuf2RelayoutY ~= y or entry._msuf2RelayoutH ~= outerH or openChanged
                 then
@@ -464,18 +547,10 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                     entry.outer:SetHeight(outerH)
                     layoutChanged = true
                 end
-                if entry.body._msuf2ShownState ~= open then
-                    entry.body._msuf2ShownState = open
-                    if open and not entry.bodySurface then
-                        entry.bodySurface = PageBuilderStages.CreateBodySurface(entry.outer, entry.headerHeight, false)
-                    end
-                    entry.body:SetShown(open)
-                    if entry.bodySurface then entry.bodySurface:SetShown(open) end
-                    layoutChanged = true
-                end
+                if PageBuilderStages.UpdateAccordionBody(entry) then layoutChanged = true end
                 if openChanged or (opts and opts.refreshVisuals) then
                     if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
-                    T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
+                    T.ApplyCollapseVisual(entry.arrow, entry.hint, open, not entry._msuf2MotionActive)
                     if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
                     if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
                     PageBuilderStages.NotifyCollapsibleSectionState(entry, open)
@@ -499,10 +574,10 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         local contentHeight = math.abs(y) + 42
         if self._msuf2LastContentHeight ~= contentHeight then
             self._msuf2LastContentHeight = contentHeight
-            UpdateContentHeight(contentHeight)
+            UpdateContentHeight(contentHeight, opts)
             layoutChanged = true
         end
-        if layoutChanged then QueueDockedPreviewOwnershipRefresh(M.scrollFrame) end
+        if layoutChanged and not (opts and opts.deferPreview) then QueueDockedPreviewOwnershipRefresh(M.scrollFrame) end
         return layoutChanged
     end
     --- opts.translated marks a title the caller composed from translated parts
@@ -695,7 +770,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             if active then
                 arrow:SetVertexColor(1, 1, 1, 0.98)
             elseif T.ApplyCollapseVisual then
-                T.ApplyCollapseVisual(arrow, nil, entry.open)
+                T.ApplyCollapseVisual(arrow, nil, entry.open, not entry._msuf2MotionActive)
             end
             local base = entry._msuf2HeaderBaseColor or liveSurface
             local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.64 or 0.58)
@@ -715,28 +790,12 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
         entry.kind = "collapsible"
         local function SetSectionOpenImmediate(value)
-            local wanted = value == true or value == 1
-                or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
-            if entry.open == wanted and not entry._msuf2MotionActive then return true end
-            entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
-            if T.StopMotion then T.StopMotion(body) end
-            entry._msuf2MotionActive = nil
-            entry._msuf2Closing = nil
-            entry.open = wanted
-            RefreshHeaderTone(false)
-            M.accordionState[stateKey] = wanted
-            if body.SetAlpha then body:SetAlpha(1) end
-            self:RelayoutCollapsibles()
-            if wanted and type(entry._msuf2SettleContentLayout) == "function" then
-                entry._msuf2SettleContentLayout()
-                self:RelayoutCollapsibles()
-            end
-            return entry.open == wanted
+            return PageBuilderStages.SetAccordionOpen(entry, value, false)
         end
         entry.SetOpenImmediate = SetSectionOpenImmediate
         entry.SetOpenByUser = function(value)
             entry._msuf2AutoOpened = nil
-            return SetSectionOpenImmediate(value)
+            return PageBuilderStages.SetAccordionOpen(entry, value, true)
         end
         header:SetScript("OnClick", function()
             local featureSwitch = entry.featureSwitch
@@ -1004,7 +1063,7 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
             entry.contentHeight = height
             if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
             if entry.outer and entry.outer.SetHeight then
-                entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+                entry.outer:SetHeight(PageBuilderStages.AccordionHeight(entry))
             end
             local owner = entry.builder or self
             if owner.RequestRelayoutCollapsibles then
@@ -1036,11 +1095,11 @@ function W.PageBuilder(ctx, opts)
     opts = type(opts) == "table" and opts or {}
     local contentX = tonumber(opts.contentX) or tonumber(ctx and ctx._msuf2ContentX) or 12
     local topInset = tonumber(opts.topInset) or tonumber(ctx and ctx._msuf2TopInset) or 0
-    local function UpdateContentHeight(height)
+    local function UpdateContentHeight(height, layoutOpts)
         if type(opts.onContentHeight) == "function" then
-            opts.onContentHeight(height)
+            opts.onContentHeight(height, layoutOpts)
         elseif ctx.SetContentHeight then
-            ctx:SetContentHeight(height)
+            ctx:SetContentHeight(height, layoutOpts)
         end
     end
     local b = {
@@ -1206,12 +1265,12 @@ local function CreateNestedAuraBuilder(ctx, parentBuilder, body)
         _msuf2ContentX = 12,
         _msuf2TopInset = 0,
     }, { __index = ctx })
-    function nestedCtx:SetContentHeight(height)
+    function nestedCtx:SetContentHeight(height, layoutOpts)
         height = max(80, math.ceil(tonumber(height) or 80))
         if entry.contentHeight == height then return end
         entry.contentHeight = height
         body:SetHeight(height)
-        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles() end
+        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles(layoutOpts) end
     end
     local nestedBuilder = W.PageBuilder(nestedCtx)
     entry._msuf2SettleContentLayout = function()

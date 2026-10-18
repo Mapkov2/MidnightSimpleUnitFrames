@@ -2461,6 +2461,11 @@ function H.RefreshLayerButton(btn, owner, opts)
     local available = LayerButtonAvailableFor(owner, btn.key, opts)
     local on = LayerButtonOnFor(owner, btn.key, opts)
     local selected = opts.IsSelected and opts.IsSelected(owner, btn.key) == true
+    if MSUF.MenuSkin then MSUF.MenuSkin.TrackPaint(btn, H.RefreshLayerButton, owner, opts) end
+    local widgets = M.Widgets
+    local hover = btn._msuf2LayerHovered == true
+    local state = (on and 1 or 0) + (selected and 2 or 0) + (available and 4 or 0) + (hover and 8 or 0)
+    local motion = widgets.BeginLayerMotion(btn, state, available)
     local c = btn.color or LAYER_BUTTON_FALLBACK_COLOR
     local textOn = opts.textOn or { 0.82, 0.88, 1.00, 0.98 }
     local textOff = opts.textOff or { 0.54, 0.61, 0.72, 0.78 }
@@ -2471,48 +2476,61 @@ function H.RefreshLayerButton(btn, owner, opts)
     end
     local quiet = opts.quiet == true
     local quietBase = opts.quietBase or PREVIEW_CHROME_FALLBACK.rowBase
-    if not available and quiet then
-        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.10)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.20)
+    local colors = (opts.T or M.Theme).colors
+    local selectedBg = opts.selectedBg or colors.pillActive or LAYER_BUTTON_SELECTED_BG
+    if MSUF.MenuSkin and MSUF.MenuSkin.IsActive() then
+        quietBase = colors.coreSurface or colors.panel
+        textOn, textOff, textDisabled = colors.text, colors.muted, colors.dim
+        selectedBg = colors.pillActive
+    end
+    if hover and available and not on and not selected then
+        local hoverColor = colors.coreRaised or opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover
+        widgets.SetLayerColor(btn, btn.bg, hoverColor[1], hoverColor[2], hoverColor[3], quiet and 0.42 or 0.58)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], quiet and 0.90 or 1)
+        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 1)
+    elseif not available and quiet then
+        widgets.SetLayerColor(btn, btn.bg, quietBase[1], quietBase[2], quietBase[3], 0.10)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.20)
         btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
         if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.62) end
     elseif selected and quiet then
-        local selectedBg = opts.selectedBg or LAYER_BUTTON_SELECTED_BG
-        btn.bg:SetColorTexture(selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], on and 1.00 or 0.38)
+        widgets.SetLayerColor(btn, btn.bg, selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], on and 1.00 or 0.38)
         btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
     elseif on and quiet then
-        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.94)
+        widgets.SetLayerColor(btn, btn.bg, c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.94)
         btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.96)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
     elseif quiet then
-        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.08)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.26)
+        widgets.SetLayerColor(btn, btn.bg, quietBase[1], quietBase[2], quietBase[3], 0.08)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.26)
         btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.74)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.72) end
     elseif not available then
-        btn.bg:SetColorTexture(0.010, 0.018, 0.030, 0.32)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.30)
+        widgets.SetLayerColor(btn, btn.bg, 0.010, 0.018, 0.030, 0.32)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.30)
         btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
         if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.72) end
     elseif selected then
-        btn.bg:SetColorTexture(0.08, 0.34, 0.72, 0.88)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], on and 1.00 or 0.42)
+        widgets.SetLayerColor(btn, btn.bg, selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], on and 1.00 or 0.42)
         btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
     elseif on then
-        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.94)
+        widgets.SetLayerColor(btn, btn.bg, c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.94)
         btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.98)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
     else
-        btn.bg:SetColorTexture(0.010, 0.018, 0.030, 0.26)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.42)
+        widgets.SetLayerColor(btn, btn.bg, 0.010, 0.018, 0.030, 0.26)
+        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.42)
         btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.78)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.78) end
     end
+    widgets.FinishControlMotion(motion)
+    btn._msuf2LayerPaintingMotion = nil
 end
 function H.RefreshSelectedLayerButtons(owner, selectedHandle, buttonsField)
     if not owner then return end
@@ -2610,17 +2628,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:SetScript("OnEnter", function(self)
         local available = LayerButtonAvailableFor(owner, self.key, opts)
         local on = LayerButtonOnFor(owner, self.key, opts)
-        local c = self.color or LAYER_BUTTON_FALLBACK_COLOR
-        if opts.quiet == true then
-            local hover = opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover
-            self.bg:SetColorTexture(hover[1], hover[2], hover[3], available and 0.42 or 0.18)
-            self.bar:SetColorTexture(c[1], c[2], c[3], available and 0.90 or 0.36)
-        else
-            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18
-                or 0.110, (available and on) and 0.74 or 0.58)
-            self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
-        end
-        self.fs:SetTextColor(0.90, 0.92, 1, 1)
+        self._msuf2LayerHovered = true
+        self:Refresh()
         if opts.OnEnter then
             opts.OnEnter(self, owner, available, on, tr)
         elseif GameTooltip then
@@ -2633,6 +2642,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     end)
     btn:SetScript("OnLeave", function(self)
         if GameTooltip then GameTooltip:Hide() end
+        self._msuf2LayerHovered = nil
         self:Refresh()
         if opts.OnLeave then opts.OnLeave(self, owner) end
     end)

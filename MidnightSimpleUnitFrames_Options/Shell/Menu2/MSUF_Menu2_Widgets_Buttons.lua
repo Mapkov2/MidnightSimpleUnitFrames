@@ -52,9 +52,13 @@ local function RefreshTopActionButtonStyle()
     style.activeTextColor = style.textColor
     return style
 end
-local function ApplyTopActionButtonVisual(btn, hover)
-    local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
-    local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
+local ApplyTopActionButtonVisual
+local function RepaintTopButton(btn, _, hover) ApplyTopActionButtonVisual(btn, hover) end
+ApplyTopActionButtonVisual = function(btn, hover)
+    if MSUF.MenuSkin and MSUF.MenuSkin.Button(btn, btn._msuf2TopActive, hover, RepaintTopButton) then return end
+    local surfaceActive = btn._msuf2TopActive and not btn._msuf2SelectionMotion
+    local bg = surfaceActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
+    local br = surfaceActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
     local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
     local mul = hover and 1.03 or 1
     if btn._msuf2Fill then
@@ -64,7 +68,7 @@ local function ApplyTopActionButtonVisual(btn, hover)
     end
     if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
-    if btn._msuf2TopStripe then btn._msuf2TopStripe:SetShown(btn._msuf2TopActive and true or false) end
+    if btn._msuf2TopStripe then btn._msuf2TopStripe:SetShown(btn._msuf2TopActive and not btn._msuf2SelectionMotion) end
 end
 local TOP_BUTTON_HOOKS = { OnEnter = function(self) ApplyTopActionButtonVisual(self, true) end, OnLeave = function(self) ApplyTopActionButtonVisual(self) end,
     OnEnable = function(self) ApplyTopActionButtonVisual(self) end, OnDisable = function(self) ApplyTopActionButtonVisual(self) end }
@@ -314,4 +318,491 @@ function W.SetCollapsibleCustomBadge(section, shown)
     if entry._msuf2CustomBadgeWanted == shown then return end
     entry._msuf2CustomBadgeWanted = shown
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() else badge:SetShown(shown) end
+end
+
+-- Selection/hover move only skin surfaces; rail folding moves complete rows.
+-- A critically damped spring preserves position and velocity when retargeted.
+-- Drivers have no OnUpdate script once settled.
+do
+    local exp, abs = math.exp, math.abs
+    local SPRING_RATE, CLICK_DURATION, HOVER_DURATION = 80, 0.14, 0.12
+    local TAB_RATE, TAB_DURATION = 65, 0.16
+    local carry = T.TrackMenuAnimationGroup({ channels = {}, Stop = function(self) self.key = nil end })
+    function W.BeginSelectionMotion(owner, value)
+        carry.key = nil
+        if T.ReducedMotionEnabled() then return end
+        local selections = owner._msuf2SelectionMotions
+        local selection = owner._msuf2SelectionMotion or (selections and #selections == 1 and selections[1])
+        local driver = selection and selection.driver
+        if not driver or not selection.seeded or not selection.selected or selection.selected._msuf2Value == value then return end
+        carry.key, carry.value, carry.time = selection.key, value, GetTime()
+        for i = 1, 4 do
+            local source = driver.channels[i]
+            local target = carry.channels[i] or {}
+            carry.channels[i] = target
+            target.value, target.velocity = source.value, source.velocity
+        end
+    end
+    local function RestoreSelection(selection, button, driver)
+        if not carry.key or carry.key ~= selection.key or carry.value ~= button._msuf2Value then return false end
+        local recent = GetTime() - carry.time <= 0.25
+        carry.key = nil
+        if not recent or T.ReducedMotionEnabled() then return false end
+        for i = 1, 4 do
+            local target, source = driver.channels[i], carry.channels[i]
+            target.value, target.velocity = source.value, source.velocity
+        end
+        selection.seeded = true
+        return true
+    end
+    local FOREGROUND_KEYS = { "_msuf2Label", "_msuf2NavIcon", "_msuf2NavArrow", "_msuf2NavOffBadge", "_msuf2NavTitleText" }
+    local SURFACE_KEYS = { "_msuf2NavItem", "_msuf2NavPillVisualWidth", "_msuf2SegmentChoice", "_msuf2SolidPill",
+        "_msuf2Danger", "_msuf2Primary", "_msuf2Success", "_msuf2TopBg", "_msuf2TopBorder", "_msuf2TopText",
+        "_msuf2TopHoverBg", "_msuf2TopHoverBorder", "_msuf2TopActiveBg", "_msuf2TopActiveBorder", "_msuf2TopActiveText" }
+    function W.RaiseSelectionText(button)
+        local host = button._msuf2MotionForeground
+        if not host then
+            host = PixelLayoutRegion(CreateFrame("Frame", nil, button), true)
+            host:SetAllPoints(button)
+            host:EnableMouse(false)
+            host:SetFrameLevel(button:GetFrameLevel() + 4)
+            host._msuf2ControlPartOf = button
+            button._msuf2MotionForeground = host
+        end
+        for i = 1, #FOREGROUND_KEYS do
+            local region = button[FOREGROUND_KEYS[i]]
+            if region and region:GetParent() ~= host then region:SetParent(host) end
+        end
+    end
+    local function PaintSurface(driver, button, active)
+        local surface = driver.art
+        for i = 1, #SURFACE_KEYS do
+            local key = SURFACE_KEYS[i]
+            surface[key] = button[key]
+        end
+        surface._msuf2Active, surface._msuf2TopActive = active, active
+        surface:SetAlpha(button:GetAlpha())
+        if button._msuf2TopBg then ApplyTopActionButtonVisual(surface)
+        else surface:RefreshVisual() end
+        surface._msuf2Label:Hide()
+    end
+    local function PaintMotion(driver)
+        -- A stale control driver rests under paint its owner already applied.
+        if driver.stale then return end
+        if driver.paint then driver.paint(driver) return end
+        local c, art = driver.channels, driver.art
+        if driver.button then
+            art:SetAlpha(max(0, min(1, c[1].value)) * 0.15)
+        else
+            art:ClearAllPoints()
+            art:SetPoint("TOPLEFT", driver, "TOPLEFT", c[1].value, c[2].value)
+            art:SetSize(max(1, c[3].value), max(1, c[4].value))
+        end
+    end
+    local function SettleMotion(driver, clear)
+        driver:SetScript("OnUpdate", nil)
+        for i = 1, #driver.channels do
+            local c = driver.channels[i]
+            if clear then c.target = 0 end
+            c.value, c.velocity = c.target, 0
+        end
+        driver.age = 0
+        PaintMotion(driver)
+    end
+    local function StopMotion(driver) SettleMotion(driver, driver.button ~= nil) end
+    local function StepMotion(driver, elapsed)
+        local selection = driver.selection
+        if selection and (not selection.selected or not selection.selected._msuf2MotionSelected
+            or not selection.selected:IsVisible()) then
+            driver:Stop()
+            driver.art:Hide()
+            selection.seeded = false
+            return
+        end
+        if not driver:IsVisible() or T.ReducedMotionEnabled() then
+            driver:Stop()
+            return
+        end
+        driver.age = driver.age + elapsed
+        local rate = driver.rate
+        local decay, settled = exp(-rate * elapsed), true
+        for i = 1, #driver.channels do
+            local c = driver.channels[i]
+            local offset = c.value - c.target
+            local b = c.velocity + rate * offset
+            c.value = c.target + (offset + b * elapsed) * decay
+            c.velocity = (c.velocity - rate * b * elapsed) * decay
+            if abs(c.value - c.target) > 0.01 or abs(c.velocity) > 0.1 then settled = false end
+        end
+        PaintMotion(driver)
+        if settled or driver.age + 0.000001 >= driver.duration then
+            -- Hover settles at its destination; explicit Stop clears feedback.
+            SettleMotion(driver)
+        end
+    end
+    function W.CreateLayoutMotion(parent, paint)
+        local driver = PixelLayoutRegion(CreateFrame("Frame", nil, parent), true)
+        driver:SetAllPoints(parent)
+        driver:EnableMouse(false)
+        driver.channels, driver.paint = {}, paint
+        driver.age, driver.duration, driver.Stop = 0, CLICK_DURATION, StopMotion
+        driver.rate = SPRING_RATE
+        driver:HookScript("OnHide", StopMotion)
+        T.TrackMenuAnimationGroup(driver)
+        return driver
+    end
+    local function NewMotion(parent, count, button)
+        local driver = W.CreateLayoutMotion(parent)
+        driver:SetFrameLevel(button:GetFrameLevel() + 1)
+        driver.art = T.Button(driver, "", button:GetWidth(), button:GetHeight(), { history = false, noSearch = true })
+        driver.art._msuf2MotionSurface = true
+        driver.art._msuf2ControlPartOf = parent
+        driver.art:EnableMouse(false)
+        driver.art._msuf2Label:Hide()
+        for i = 1, count do driver.channels[i] = { value = 0, velocity = 0, target = 0 } end
+        return driver
+    end
+    local function StartMotion(driver, snap)
+        driver.age = 0
+        if snap or T.ReducedMotionEnabled() or not driver:IsVisible() then
+            SettleMotion(driver)
+        else
+            driver:SetScript("OnUpdate", StepMotion)
+        end
+    end
+    W.PlayLayoutMotion = StartMotion
+    -- Small control transitions use the same interruptible spring. Capture the
+    -- current skin paint, let its owner choose the destination, then interpolate
+    -- only the existing regions. Initial/hidden/reduced-motion paint stays exact.
+    local function SetChannel(driver, index, value, seed)
+        local channel = driver.channels[index]
+        if not channel then
+            channel = { value = value, velocity = 0, target = value }
+            driver.channels[index] = channel
+        end
+        if seed then channel.value, channel.velocity = value, 0 end
+        if channel.target ~= value then driver.dirty = true end
+        channel.target = value
+    end
+    local function ColorChannels(driver, index, r, g, b, a, seed)
+        SetChannel(driver, index, r, seed)
+        SetChannel(driver, index + 1, g, seed)
+        SetChannel(driver, index + 2, b, seed)
+        SetChannel(driver, index + 3, a, seed)
+    end
+    local function ColorValue(channel) return max(0, min(1, channel.value)) end
+    local function PaintColor(region, channels, index, texture)
+        local r, g, b, a = ColorValue(channels[index]), ColorValue(channels[index + 1]),
+            ColorValue(channels[index + 2]), ColorValue(channels[index + 3])
+        if texture then
+            region._msuf2MotionR, region._msuf2MotionG, region._msuf2MotionB, region._msuf2MotionA = r, g, b, a
+            region:SetColorTexture(r, g, b, a)
+        else region:SetVertexColor(r, g, b, a) end
+    end
+    local function PaintSwitch(driver)
+        local button, channels = driver.owner, driver.channels
+        local knob, pad = button._msuf2SwitchKnob, button._msuf2SwitchKnobPad or 2
+        knob:ClearAllPoints()
+        if not driver:GetScript("OnUpdate") and channels[1].value == 1 then
+            knob:SetPoint("RIGHT", button, "RIGHT", -pad, 0)
+        else
+            local travel = max(0, button:GetWidth() - knob:GetWidth() - pad * 2)
+            knob:SetPoint("LEFT", button, "LEFT", pad + travel * ColorValue(channels[1]), 0)
+        end
+        PaintColor(button._msuf2SwitchFill, channels, 2)
+        PaintColor(button._msuf2SwitchEdge, channels, 6)
+        PaintColor(knob, channels, 10)
+    end
+    local function MotionAllowed(owner)
+        return owner:IsVisible() and not T.ReducedMotionEnabled()
+    end
+    function W.BeginSwitchMotion(button, checked)
+        local driver = button._msuf2SwitchMotion
+        if not MotionAllowed(button) or not button:IsEnabled() then
+            if driver and driver:GetScript("OnUpdate") then driver:Stop() end
+            return
+        end
+        local before = button._msuf2SwitchPaintedChecked
+        if before == nil or (before == (checked and true or false) and not (driver and driver:GetScript("OnUpdate"))) then return end
+        if not driver then
+            driver = W.CreateLayoutMotion(button, PaintSwitch)
+            driver.owner, driver.duration = button, 0.12
+            button._msuf2SwitchMotion = driver
+        end
+        if not driver:GetScript("OnUpdate") then
+            SetChannel(driver, 1, before and 1 or 0, true)
+            local r, g, b, a = button._msuf2SwitchFill:GetVertexColor()
+            ColorChannels(driver, 2, r, g, b, a, true)
+            r, g, b, a = button._msuf2SwitchEdge:GetVertexColor()
+            ColorChannels(driver, 6, r, g, b, a, true)
+            r, g, b, a = button._msuf2SwitchKnob:GetVertexColor()
+            ColorChannels(driver, 10, r, g, b, a, true)
+            driver.dirty, driver.stale = nil, nil
+        end
+        return driver
+    end
+    function W.FinishControlMotion(driver)
+        if not driver then return end
+        if driver.dirty then
+            driver.dirty = nil
+            PaintMotion(driver)
+            StartMotion(driver)
+        elseif driver:GetScript("OnUpdate") then
+            PaintMotion(driver)
+        end
+    end
+    function W.FinishSwitchMotion(driver, checked, snap)
+        if not driver then return end
+        if snap and not driver:GetScript("OnUpdate") then
+            -- Settled repaint: the owner painted the regions. Begin reseeds the
+            -- channels from them before any motion, so the sync waits until then.
+            driver.stale, driver.dirty = true, nil
+            return
+        end
+        local button = driver.owner
+        SetChannel(driver, 1, checked and 1 or 0, snap)
+        local r, g, b, a = button._msuf2SwitchFill:GetVertexColor()
+        ColorChannels(driver, 2, r, g, b, a, snap)
+        r, g, b, a = button._msuf2SwitchEdge:GetVertexColor()
+        ColorChannels(driver, 6, r, g, b, a, snap)
+        r, g, b, a = button._msuf2SwitchKnob:GetVertexColor()
+        ColorChannels(driver, 10, r, g, b, a, snap)
+        if snap then driver.dirty = nil else W.FinishControlMotion(driver) end
+    end
+    local function PaintDisclosure(driver)
+        driver.region:SetRotation(ColorValue(driver.channels[1]) * math.pi * 0.5)
+    end
+    function W.AnimateDisclosure(chevron, open, immediate)
+        local target = open and 1 or 0
+        local previous, driver = chevron._msuf2DisclosureTarget, chevron._msuf2DisclosureMotion
+        -- Every section relayout lands here: an unchanged, idle chevron costs nothing.
+        if previous == target and not (driver and driver:GetScript("OnUpdate")) then return end
+        local snap = immediate or previous == nil or not MotionAllowed(chevron)
+        chevron._msuf2DisclosureTarget = target
+        if previous == target and not snap then return end
+        if not driver and snap then chevron:SetRotation(target * math.pi * 0.5) return end
+        if not driver then
+            driver = W.CreateLayoutMotion(chevron:GetParent(), PaintDisclosure)
+            driver.region = chevron
+            SetChannel(driver, 1, previous, true)
+            chevron._msuf2DisclosureMotion = driver
+        end
+        SetChannel(driver, 1, target)
+        StartMotion(driver, snap)
+    end
+    local function PaintLayer(driver)
+        PaintColor(driver.owner.bg, driver.channels, 1, true)
+        PaintColor(driver.owner.bar, driver.channels, 5, true)
+    end
+    local function SeedLayerColor(driver, region, index)
+        ColorChannels(driver, index, region._msuf2MotionR, region._msuf2MotionG, region._msuf2MotionB, region._msuf2MotionA, true)
+    end
+    function W.BeginLayerMotion(button, state, available)
+        local before, driver = button._msuf2LayerPaintedState, button._msuf2LayerMotion
+        button._msuf2LayerPaintedState = state
+        button._msuf2LayerPaintingMotion = nil
+        if not MotionAllowed(button) or not available then
+            if driver and driver:GetScript("OnUpdate") then driver:Stop() end
+            return
+        end
+        if before == nil or (before == state and not (driver and driver:GetScript("OnUpdate"))) then return end
+        if not driver then
+            driver = W.CreateLayoutMotion(button, PaintLayer)
+            driver.owner, driver.duration, driver.rate = button, 0.10, 100
+            button._msuf2LayerMotion = driver
+        end
+        if not driver:GetScript("OnUpdate") then
+            SeedLayerColor(driver, button.bg, 1)
+            SeedLayerColor(driver, button.bar, 5)
+            driver.dirty, driver.stale = nil, nil
+        end
+        button._msuf2LayerPaintingMotion = driver
+        return driver
+    end
+    function W.SetLayerColor(button, region, r, g, b, a)
+        local driver = button._msuf2LayerPaintingMotion
+        if driver then
+            ColorChannels(driver, region == button.bg and 1 or 5, r, g, b, a)
+        else
+            local cached = button._msuf2LayerMotion
+            if cached then cached.stale, cached.dirty = true, nil end
+            region._msuf2MotionR, region._msuf2MotionG, region._msuf2MotionB, region._msuf2MotionA = r, g, b, a
+            region:SetColorTexture(r, g, b, a)
+        end
+    end
+    local function ButtonFeedback(button, target)
+        if not button:IsVisible() or not button:IsEnabled() or T.ReducedMotionEnabled() then
+            if button._msuf2ButtonMotion then button._msuf2ButtonMotion:Stop() end
+            return
+        end
+        local driver = button._msuf2ButtonMotion
+        if not driver then
+            if target == 0 then return end
+            driver = NewMotion(button, 1, button)
+            driver.button = button
+            driver.art:SetAllPoints(button)
+            driver.art:SetAlpha(0)
+            button._msuf2ButtonMotion = driver
+        end
+        PaintSurface(driver, button, true)
+        driver.art:SetAlpha(max(0, min(1, driver.channels[1].value)) * 0.15)
+        if driver.channels[1].target == target then return end
+        driver.channels[1].target = target
+        driver.duration = button._msuf2MotionPressed and CLICK_DURATION or HOVER_DURATION
+        StartMotion(driver)
+    end
+    local function ButtonEnter(button)
+        button._msuf2MotionHover = true
+        ButtonFeedback(button, 0.55)
+    end
+    local function ButtonLeave(button)
+        button._msuf2MotionHover, button._msuf2MotionPressed = nil, nil
+        ButtonFeedback(button, 0)
+    end
+    local function ButtonDown(button)
+        button._msuf2MotionPressed = true
+        ButtonFeedback(button, 1)
+    end
+    local function ButtonUp(button)
+        button._msuf2MotionPressed = nil
+        ButtonFeedback(button, button._msuf2MotionHover and 0.55 or 0)
+    end
+    local function ButtonReset(button)
+        button._msuf2MotionHover, button._msuf2MotionPressed, button._msuf2Hover = nil, nil, nil
+        if button._msuf2ButtonMotion then button._msuf2ButtonMotion:Stop() end
+        if button._msuf2TopBg then ApplyTopActionButtonVisual(button)
+        elseif button.RefreshVisual then button:RefreshVisual() end
+    end
+    function W.AttachButtonMotion(button)
+        if button._msuf2HasButtonMotion then return end
+        button._msuf2HasButtonMotion = true
+        W.RaiseSelectionText(button)
+        button:HookScript("OnEnter", ButtonEnter)
+        button:HookScript("OnLeave", ButtonLeave)
+        button:HookScript("OnMouseDown", ButtonDown)
+        button:HookScript("OnMouseUp", ButtonUp)
+        button:HookScript("OnHide", ButtonReset)
+        button:HookScript("OnDisable", ButtonReset)
+    end
+    local function RefreshSelection(selection, snap)
+        local button = selection.selected
+        if not button or not button._msuf2MotionSelected or not button:IsVisible() or not selection.owner:IsVisible() then
+            if selection.driver then
+                selection.driver:Stop()
+                selection.driver.art:Hide()
+            end
+            selection.seeded = false
+            return
+        end
+        local left, top = button:GetLeft(), button:GetTop()
+        local parentLeft, parentTop = selection.owner:GetLeft(), selection.owner:GetTop()
+        if not left or not top or not parentLeft or not parentTop then return end
+        local ratio = button:GetEffectiveScale() / selection.owner:GetEffectiveScale()
+        local x, y = left * ratio - parentLeft, top * ratio - parentTop
+        local width, height = button:GetWidth() * ratio, button:GetHeight() * ratio
+        local driver = selection.driver
+        if not driver then
+            driver = NewMotion(selection.owner, 4, button)
+            driver.selection, driver.vertical = selection, selection.vertical
+            if not selection.vertical then driver.rate, driver.duration = TAB_RATE, TAB_DURATION end
+            selection.driver = driver
+        end
+        local c = driver.channels
+        local restored = RestoreSelection(selection, button, driver)
+        local changed = c[1].target ~= x or c[2].target ~= y or c[3].target ~= width or c[4].target ~= height
+        c[1].target, c[2].target, c[3].target, c[4].target = x, y, width, height
+        PaintSurface(driver, button, true)
+        driver.art:Show()
+        if changed or snap or restored or not selection.seeded then
+            StartMotion(driver, not restored and (snap or not selection.seeded))
+        end
+        selection.seeded = true
+    end
+    local function SelectionSetActive(button, active)
+        button:_msuf2MotionSetActive(active)
+        button._msuf2MotionSelected = active and true or false
+        local selection = button._msuf2SelectionMotion
+        if active then
+            selection.selected = button
+            RefreshSelection(selection)
+        elseif selection.selected == button and selection.driver then
+            -- SetActive is called in a loop. Keep the in-flight position until
+            -- that loop supplies the next selected button, or clear next frame.
+            selection.driver:SetScript("OnUpdate", StepMotion)
+        end
+    end
+    -- Revealing an owner or button never starts a slide. A fill that was seeded
+    -- while the owner was still being built (SetActive runs during construction,
+    -- before the final layout) snaps to the laid-out geometry; only a fill that
+    -- is already moving (a carried page switch) keeps going.
+    local function RevealSelection(selection)
+        local driver = selection.driver
+        RefreshSelection(selection, not (driver and driver:GetScript("OnUpdate")))
+    end
+    local function SelectionShown(owner)
+        local selections = owner._msuf2SelectionMotions
+        for i = 1, #selections do RevealSelection(selections[i]) end
+    end
+    local function SelectionResized(owner)
+        if not owner._msuf2NavFolding then W.RefreshSelectionMotion(owner, true) end
+    end
+    function W.ShiftSelectionMotion(button, dy)
+        local selection = button._msuf2SelectionMotion
+        local driver = selection and selection.selected == button and selection.driver
+        if not driver then return end
+        if not selection.seeded then RefreshSelection(selection, true) return end
+        local c = driver.channels[2]
+        c.value, c.target = c.value + dy, c.target + dy
+        PaintMotion(driver)
+    end
+    function W.UpdateSelectionAlpha(button)
+        local selection = button._msuf2SelectionMotion
+        if selection and selection.selected == button and selection.driver then selection.driver.art:SetAlpha(button:GetAlpha()) end
+    end
+    local function SelectionButtonShown(button)
+        if button._msuf2SelectionMotion.owner._msuf2NavFoldPreparing then return end
+        if button._msuf2MotionSelected then RevealSelection(button._msuf2SelectionMotion) end
+    end
+    local function SelectionButtonHidden(button)
+        local selection = button._msuf2SelectionMotion
+        if selection.owner._msuf2NavFoldPreparing then return end
+        if selection.selected == button then
+            if selection.driver then
+                selection.driver:Stop()
+                selection.driver.art:Hide()
+            end
+            selection.seeded = false
+        end
+    end
+    function W.RefreshSelectionMotion(owner, snap)
+        local selections = owner._msuf2SelectionMotions
+        if not selections then return end
+        for i = 1, #selections do RefreshSelection(selections[i], snap) end
+    end
+    function W.AttachSelectionMotion(owner, buttons, vertical, key)
+        local values = { key or "" }
+        for i = 1, #buttons do values[#values + 1] = tostring(buttons[i]._msuf2Value) end
+        local selection = { owner = owner, vertical = vertical, key = table.concat(values, "\031") }
+        local selections = owner._msuf2SelectionMotions
+        if not selections then
+            selections = {}
+            owner._msuf2SelectionMotions = selections
+            owner:HookScript("OnShow", SelectionShown)
+            owner:HookScript("OnSizeChanged", SelectionResized)
+        end
+        selections[#selections + 1] = selection
+        for _, button in pairs(buttons) do
+            if not button._msuf2MotionSetActive then
+                button._msuf2MotionSetActive, button.SetActive = button.SetActive, SelectionSetActive
+                button._msuf2SelectionMotion = selection
+                button._msuf2MotionSelected = button._msuf2Active or button._msuf2TopActive or false
+                if button._msuf2MotionSelected then selection.selected = button end
+                W.AttachButtonMotion(button)
+                button:HookScript("OnShow", SelectionButtonShown)
+                button:HookScript("OnHide", SelectionButtonHidden)
+            end
+        end
+        RefreshSelection(selection, true)
+        return selection
+    end
 end

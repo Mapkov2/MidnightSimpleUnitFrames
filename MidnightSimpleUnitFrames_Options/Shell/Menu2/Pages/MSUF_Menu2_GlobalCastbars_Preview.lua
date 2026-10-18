@@ -172,7 +172,7 @@ end
         return tex
     end
     local function PreviewButtonGroup(parent, specs, buttonW, gap, onClick, semanticPath)
-        local buttons = {}
+        local buttons, ordered = {}, {}
         local holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         local width = 0
         for i = 1, #specs do
@@ -180,6 +180,8 @@ end
             local btn = T.CenterButtonLabel(T.Button(holder, spec.text, buttonW, 24))
             T.FitButtonWidth(btn, buttonW)
             local value = spec.key
+            btn._msuf2Value, btn._msuf2SegmentChoice = value, true
+            ordered[i] = btn
             btn._msuf2AllowCombatClick = true
             btn._msuf2SkipHistoryCheckpoint = true
             btn:SetPoint("LEFT", holder, "LEFT", width, 0)
@@ -189,6 +191,7 @@ end
             buttons[value] = btn
         end
         holder:SetSize(max(1, width - gap), 24)
+        W.AttachSelectionMotion(holder, ordered, false, semanticPath)
         return buttons, holder
     end
     local function MakeTrack(parent, width, height, x, y, fillColor)

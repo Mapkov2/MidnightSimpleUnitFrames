@@ -264,6 +264,7 @@ local function RefreshSwitchVisual(button, hover)
     local pressed = button._msuf2SwitchPressed and true or false
     local checked = button.GetChecked and button:GetChecked()
     local enabled = not button.IsEnabled or button:IsEnabled()
+    local motion = W.BeginSwitchMotion(button, checked)
     local onBg, onEdge, onKnob = SwitchOnColors()
     local bg = checked and onBg or SWITCH_BG_OFF
     local br = checked and onEdge or SWITCH_EDGE_OFF
@@ -292,6 +293,7 @@ local function RefreshSwitchVisual(button, hover)
         local tx = enabled and (hover and T.colors.title or T.colors.text) or (T.colors.disabled or T.colors.dim)
         button._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
     end
+    W.FinishSwitchMotion(motion or button._msuf2SwitchMotion, checked, not motion)
     button._msuf2SwitchPaintedChecked = checked and true or false
 end
 local function SetSwitchChecked(button, value)
@@ -706,6 +708,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             self:Refresh()
             return false
         end
+        W.BeginSelectionMotion(self, value)
         if type(opts.setValue) == "function" then opts.setValue(value) end
         if type(opts.onChange) == "function" then opts.onChange(value) end
         self:Refresh()
@@ -732,6 +735,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             end
         end
     end
+    W.AttachSelectionMotion(bar, bar.buttons, false, opts.label or "Editing:")
     M.TrackRefresh(ctx, function() bar:Refresh() end)
     return bar
 end
@@ -1084,7 +1088,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)
     return slider
 end
-function W.Segment(section, label, values, width)
+function W.Segment(section, label, values, width, opts)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
@@ -1121,6 +1125,7 @@ function W.Segment(section, label, values, width)
     function holder:GetValue()
         return self.value
     end
+    if not (opts and opts.multiSelect) then W.AttachSelectionMotion(holder, holder.buttons, false, label) end
     return holder
 end
 

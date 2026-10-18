@@ -510,6 +510,13 @@ do
         sectionSpec.build(narrowCtx, narrowBuilder, unit)
         assert(found and found.meta.settingKey == unit .. ".portraitBlizzardDirection", "direction setting for " .. unit)
         local pad = found.control
+        assert(not pad._msuf2SelectionMotions, "portrait multi-selection became an exclusive moving marker")
+        pad:SetValue("TOPLEFT")
+        assert(pad.buttons[1]._msuf2Active and pad.buttons[2]._msuf2Active,
+            "portrait direction lost simultaneous vertical/horizontal selection")
+        assert(not pad.buttons[1]._msuf2SelectionMotion and not pad.buttons[2]._msuf2SelectionMotion,
+            "portrait direction suppressed a stationary active fill")
+        pad:SetValue("AUTO")
         assert(#pad.buttons == 5 and pad:GetWidth() == 104 and pad:GetHeight() == 78, "five direction buttons")
         assert(pad._msuf2ExactTargetContracts.unitPortraitTab.border == unit .. ".portraitBlizzardDirection", "exact target")
         local surface = pad:GetParent()

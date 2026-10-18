@@ -124,8 +124,11 @@ local function OpenAnchorCollapsibles(region)
     local opened = false
     for i = #entries, 1, -1 do
         local entry = entries[i]
-        if entry and not entry.open and entry.header and entry.header.Click then
-            entry.header:Click()
+        if entry and not entry.open and entry.SetOpenImmediate then
+            -- Search and focus open at once; only a header click animates. An animated
+            -- open would make the scroll target below chase a page that is still growing.
+            entry._msuf2AutoOpened = nil
+            entry.SetOpenImmediate(true)
             opened = true
         end
     end

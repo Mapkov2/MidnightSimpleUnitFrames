@@ -144,6 +144,7 @@ end
 function Methods:SetClampedToScreen(clamped) self.clampedToScreen = clamped end
 function Methods:SetClampRectInsets() end
 function Methods:SetClipsChildren(clips) self.clipsChildren = clips end
+function Methods:DoesClipChildren() return self.clipsChildren == true end
 
 -- Layering -------------------------------------------------------------
 function Methods:SetFrameLevel(level) self.frameLevel = level end

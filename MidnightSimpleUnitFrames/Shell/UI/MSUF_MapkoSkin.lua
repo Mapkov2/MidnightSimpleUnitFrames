@@ -140,6 +140,7 @@ end
 function Skin.Button(button, selected, hover, paint)
     local record = Record(button, "button", paint, selected, hover)
     if not record or not active then return false end
+    local surfaceSelected = selected == true and not button._msuf2SelectionMotion
     local nav = button._msuf2NavItem == true
     local role = (button._msuf2Danger or button._msufUIDanger) and "buttonDanger"
         or (button._msuf2Success or button._msufUISuccess) and "buttonSuccess"
@@ -149,14 +150,15 @@ function Skin.Button(button, selected, hover, paint)
         -- Menu2 T.Button (the only setter of _msuf2RawSetScript) builds plain
         -- Buttons: no template, native state textures, Icon/Checked fields,
         -- dropdown mixin or Blizzard-gold text, and its pages never add them.
-        local ok, reason = client:SkinButton(button, { role = role, activeRole = nav and "button" or role,
-            useControlShape = true, active = selected == true, listItem = nav,
+        local ok, reason = client:SkinButton(button, { role = role,
+            activeRole = nav and "button" or role == "button" and "buttonPrimary" or role,
+            useControlShape = true, active = surfaceSelected, listItem = nav,
             ownedArt = button._msuf2RawSetScript ~= nil })
         if not ok or reason ~= "applied" then return false end
-        record.skinned, record.role, record.nav, record.selected = true, role, nav, selected == true
-    elseif record.selected ~= (selected == true) then
-        client:SetActive(button, selected == true)
-        record.selected = selected == true
+        record.skinned, record.role, record.nav, record.selected = true, role, nav, surfaceSelected
+    elseif record.selected ~= surfaceSelected then
+        client:SetActive(button, surfaceSelected)
+        record.selected = surfaceSelected
     end
     Suppress(button, record, buttonKeys)
     local label = button._msuf2Label or button._label

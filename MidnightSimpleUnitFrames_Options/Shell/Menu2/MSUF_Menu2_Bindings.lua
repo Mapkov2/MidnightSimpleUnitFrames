@@ -512,6 +512,7 @@ function M.BindSegment(ctx, segment, getValue, setValue, metadata)
                 segment:SetValue(self._msuf2Value)
                 return
             end
+            M.Widgets.BeginSelectionMotion(self, self._msuf2Value)
             CaptureWidgetChange(ctx, segment, nil, function()
                 setValue(self._msuf2Value)
             end)

@@ -79,6 +79,17 @@ end
 function Methods:Hide() self.shown = false end
 function Methods:SetShown(shown) if shown then self:Show() else self:Hide() end end
 function Methods:IsVisible() return Visible(self) end
+function Methods:SetClipsChildren(value) self.clipsChildren = value end
+function Methods:DoesClipChildren() return self.clipsChildren == true end
+local function TickAccordion(entry, elapsed)
+    local driver = Check(entry._msuf2AccordionMotion, "user disclosure has no motion driver")
+    local update = Check(driver:GetScript("OnUpdate"), "user disclosure has no finite update")
+    update(driver, elapsed)
+    local arrow = entry.arrow._msuf2DisclosureMotion
+    local rotate = arrow and arrow:GetScript("OnUpdate")
+    if rotate then rotate(arrow, elapsed) end
+    return driver
+end
 
 local errors = {}
 env.geterrorhandler = function() return function(message) errors[#errors + 1] = tostring(message) end end
@@ -246,11 +257,75 @@ Check(lab.refreshed.closed_a == 1 and #refreshers == refresherCount + 1, "the ne
 Check(Count("shell_refresh_a") == shellRefreshBefore + 1, "the state refresh on open did not reach the shell refresher once")
 Check(entryA._msuf2RefreshState == lab.shellRefresh and entryA._msuf2TrackedRefreshState == lab.shellRefresh,
     "the section did not get its tracked shell refresher back")
+local accordionDriver = Check(entryA._msuf2AccordionMotion, "ordinary header click did not start motion")
+Check(accordionDriver.duration == 0.14 and accordionDriver.rate == 80, "accordion lost the snappy rail timing")
+local arrowDriver = Check(entryA.arrow._msuf2DisclosureMotion, "accordion arrow has no motion")
+Check(arrowDriver.duration == 0.14 and arrowDriver.channels[1].value == 0, "accordion arrow jumped on first frame")
+Check(entryA.outer:GetHeight() == 32 and afterEntry._msuf2RelayoutY == afterY,
+    "lazy FinishSection flashed the fully expanded layout before the first tick")
+Check(entryA.outer:DoesClipChildren() and lab.bodies.closed_a:IsShown(), "opening content is not revealed by clipping")
+TickAccordion(entryA, 0.03)
+Check(entryA.outer:GetHeight() > 32 and entryA.outer:GetHeight() < 206, "accordion height did not interpolate")
+Check(arrowDriver.channels[1].value > 0 and arrowDriver.channels[1].value < 1, "accordion arrow did not rotate gradually")
+Check(math.abs(afterEntry._msuf2RelayoutY - (afterY - entryA.outer:GetHeight() + 32)) < 0.001,
+    "following section did not follow the animated height")
+TickAccordion(entryA, 0.11)
+Check(not accordionDriver:GetScript("OnUpdate") and not entryA._msuf2MotionActive,
+    "settled accordion left a persistent update")
+Check(not entryA.outer:DoesClipChildren(), "open content remained clipped after settling")
 Check(entryA.contentHeight == 174 and entryA.outer:GetHeight() == 32 + 174, "the opened section does not have its content height")
 Check(afterEntry._msuf2RelayoutY == afterY - 174, "the next section did not move below the grown section")
 entryA.header:Click()
 entryA.header:Click()
 Check(Count("closed_a") == 1 and lab.refreshed.closed_a == 1, "reopening rebuilt the content or re-ran its refreshers")
+
+TickAccordion(entryA, 0.14)
+-- Retarget the same live spring, preserving position and velocity. Whole skin
+-- surfaces stay attached to the wrapper; only geometry changes per tick.
+local warmFrames = mw:Frames()
+entryA.header:Click()
+TickAccordion(entryA, 0.025)
+local channel = accordionDriver.channels[1]
+local position, velocity = channel.value, channel.velocity
+local currentHeight = entryA.outer:GetHeight()
+local angle, angularVelocity = arrowDriver.channels[1].value, arrowDriver.channels[1].velocity
+local surface = entryA.bodySurface
+entryA.header:Click()
+Check(channel.value == position and channel.velocity == velocity and entryA.outer:GetHeight() == currentHeight,
+    "rapid reversal jumped or reset velocity")
+Check(arrowDriver.channels[1].value == angle and arrowDriver.channels[1].velocity == angularVelocity,
+    "accordion arrow reversal reset its angular velocity")
+TickAccordion(entryA, 0.14)
+Check(entryA.bodySurface == surface and mw:Frames() == warmFrames, "warm toggle allocated a new surface or driver")
+entryA.header:Click()
+Check(lab.bodies.closed_a:IsShown(), "closing body disappeared before the fold")
+TickAccordion(entryA, 0.14)
+Check(entryA.outer:GetHeight() == 32 and not lab.bodies.closed_a:IsShown() and not surface:IsShown(),
+    "closed accordion did not settle to its exact hidden state")
+entryA.header:Click()
+TickAccordion(entryA, 0.02)
+entryA.SetOpenImmediate(false)
+Check(not arrowDriver:GetScript("OnUpdate") and arrowDriver.channels[1].value == 0, "immediate disclosure left a rotating arrow")
+Check(not accordionDriver:GetScript("OnUpdate") and entryA.outer:GetHeight() == 32
+    and not entryA.outer:DoesClipChildren(), "immediate/search close did not cancel motion cleanly")
+for _, key in ipairs({ "reduceMotion", "reducedMotion" }) do
+    env.MSUF_DB.general[key] = true
+    entryA.header:Click()
+    Check(entryA.outer:GetHeight() == 206 and not accordionDriver:GetScript("OnUpdate"), "reduced motion did not snap")
+    entryA.header:Click()
+    env.MSUF_DB.general[key] = nil
+end
+entryA.header:Click()
+TickAccordion(entryA, 0.02)
+M.Theme.StopAllMenuAnimations()
+Check(entryA.outer:GetHeight() == 206 and not accordionDriver:GetScript("OnUpdate"), "menu shutdown did not settle motion")
+entryA.header:Click()
+-- Native OnHide propagation reaches the child driver; model it explicitly.
+MenuWorld.FireScript(accordionDriver, "OnHide")
+Check(entryA.outer:GetHeight() == 32 and not accordionDriver:GetScript("OnUpdate")
+    and not lab.bodies.closed_a:IsShown(), "hidden page retained active accordion work")
+entryA.SetOpenImmediate(true)
+
 
 ---------------------------------------------------------------------------
 -- Chained refresher: an open section whose body never showed.
@@ -298,6 +373,26 @@ Check(W.EnsureSectionContent(entryN) == true and Count("nested_n") == 1, "the ne
 Check(lab.nestedPending == true and lab.nestedBuilder._msuf2RelayoutPending == nil,
     "the nested builder's relayout did not stay pending during the build and settle after it")
 Check(entryN.contentHeight == 154, "the nested builder's height did not reach its section: " .. tostring(entryN.contentHeight))
+
+entryN.SetOpenImmediate(true)
+local nestedInner = lab.nestedBuilder.collapsibles[1]
+local parentHeight = entryN.outer:GetHeight()
+nestedInner.header:Click()
+local oldPreviews, oldRefresh = M._dockedPreviews, M.RefreshPinnedPreviews
+local previewRefreshes = 0
+M._dockedPreviews = { true }
+M.RefreshPinnedPreviews = function() previewRefreshes = previewRefreshes + 1 end
+TickAccordion(nestedInner, 0.03)
+Check(previewRefreshes == 0, "nested motion refreshed docked previews during an intermediate frame")
+Check(entryN.outer:GetHeight() < parentHeight and entryN.outer:GetHeight() > parentHeight - 60,
+    "nested fold did not propagate its intermediate height to the parent")
+TickAccordion(nestedInner, 0.11)
+Check(entryN.outer:GetHeight() == parentHeight - 60, "nested fold did not settle parent geometry")
+Check(previewRefreshes > 0, "settled nested motion did not refresh docked preview ownership")
+M._dockedPreviews, M.RefreshPinnedPreviews = oldPreviews, oldRefresh
+nestedInner.SetOpenImmediate(true)
+entryN.SetOpenImmediate(false)
+
 
 ---------------------------------------------------------------------------
 -- Exact search route: the hook builds the target section.
@@ -368,6 +463,28 @@ mw:Select(KEY)
 Check(Count("route_open") == 1 and lab.flags.route_open.incomplete == true, "the route-opened section did not build in the page build")
 Check(Count("closed_c") == 0, "a route rebuild built a closed section")
 ClearAccordion()
+
+-- The Colors category has its own height callback between inner and root
+-- builders. It must preserve the same deferred preview work as aura nesting.
+do
+    mw:Select("opt_colors")
+    local colorPage = Check(M.cache.opt_colors, "Colors page missing")
+    local resolve = Check(M.GetMissingSectionResolver(colorPage), "Colors resolver missing")
+    local body = Check(resolve("colors_classes"), "Colors class section missing")
+    local entry = body._msuf2CollapsibleEntry
+    if entry._msuf2EnsureVisible then entry._msuf2EnsureVisible(entry) end
+    entry.SetOpenImmediate(false)
+    entry.header:Click()
+    local previousList, previousRefresh = M._dockedPreviews, M.RefreshPinnedPreviews
+    local refreshCount = 0
+    M._dockedPreviews = { true }
+    M.RefreshPinnedPreviews = function() refreshCount = refreshCount + 1 end
+    TickAccordion(entry, 0.03)
+    Check(refreshCount == 0, "Colors category dropped deferred preview work during motion")
+    TickAccordion(entry, 0.11)
+    Check(refreshCount > 0, "Colors category did not refresh previews at settlement")
+    M._dockedPreviews, M.RefreshPinnedPreviews = previousList, previousRefresh
+end
 
 print("menu_lazy_accordion_smoke: ok (" .. flavor .. "; shells on the cold frame, synchronous open/eager/proxy/hidden builds,"
     .. " OnShow, refresher and EnsureContent triggers build once, combat lock stays armed, route hook, facade tab, raise recovery)")

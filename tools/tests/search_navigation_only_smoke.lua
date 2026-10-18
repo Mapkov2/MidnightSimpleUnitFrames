@@ -159,7 +159,9 @@ local oldSelect, oldCatalog = M.SelectPage, M.RuntimeControlCatalog
 local wrapper = { GetTop = function() end, GetRegions = function() error("routing scanned visible labels") end }
 local section = { GetTop = function() end, GetParent = function() return wrapper end }
 local revealed, opened = 0, 0
-section._msuf2CollapsibleEntry = { open = false, header = { Click = function() opened = opened + 1 end } }
+-- Search opens a section at once through its immediate setter; only a user's header click animates.
+section._msuf2CollapsibleEntry = { open = false, SetOpenImmediate = function(value) if value then opened = opened + 1 end end,
+    header = { Click = function() error("search clicked the section header") end } }
 M.cache.zz_navigation = { wrapper = wrapper, sections = { declared = section },
     _msuf2ResolveMissingSection = function(id)
         if id == "virtual" then revealed = revealed + 1; return section end

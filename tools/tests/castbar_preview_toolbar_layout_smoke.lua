@@ -40,6 +40,48 @@ local function Interrupt()
     end
     error("interrupt control missing")
 end
+local function TickMotion(driver, seconds)
+    for _ = 1, math.ceil(seconds / 0.01) do
+        local update = driver:GetScript("OnUpdate")
+        if update then update(driver, 0.01) end
+    end
+end
+local function VerifySelectionMotion(group, firstKey, secondKey, section)
+    local first, second = assert(group[firstKey]), assert(group[secondKey])
+    local holder = first:GetParent()
+    -- Resolve the real builder anchors, which the offline widgets do not compute.
+    local hx, hy, _, hh = Rect(holder, section)
+    holder.left, holder.bottom = hx, 500 - hy - hh
+    for _, button in pairs(group) do
+        local x, y, _, h = Rect(button, section)
+        button.left, button.bottom = x, 500 - y - h
+    end
+    first:Click()
+    local show = holder:GetScript("OnShow")
+    if show then show(holder) end
+    local selection = holder._msuf2SelectionMotions and holder._msuf2SelectionMotions[1]
+    Check(selection and selection.driver, "castbar preview selector motion missing")
+    local driver = selection.driver
+    TickMotion(driver, 0.16)
+    Check(not driver:GetScript("OnUpdate"), "castbar selection did not settle")
+    local c = driver.channels[1]
+    local start = c.value
+    second:Click()
+    Check(c.value == start and driver:GetScript("OnUpdate"), "castbar click snapped instead of moving")
+    Check(driver.duration == 0.16 and driver.rate == 65, "castbar top tabs lost softer timing")
+    TickMotion(driver, 0.06)
+    local progress = (c.value - start) / (c.target - start)
+    Check(progress > 0.89 and progress < 0.95, "castbar selection easing is not responsive and smooth")
+    local position, velocity = c.value, c.velocity
+    first:Click()
+    Check(c.value == position and c.velocity == velocity, "castbar reversal reset position or velocity")
+    TickMotion(driver, 0.16)
+    Check(c.value == start and not driver:GetScript("OnUpdate"), "castbar reversal did not settle")
+    Check(driver.art:GetWidth() == first:GetWidth() and driver.art:GetHeight() == first:GetHeight(),
+        "castbar selection does not move the whole skin fill")
+    Check(first._msuf2Label:GetParent():GetFrameLevel() > driver.art:GetFrameLevel(),
+        "castbar moving fill covers its label")
+end
 local function Verify(preview, section, width)
     local interrupt = Interrupt()
     local controls = { interrupt }
@@ -65,6 +107,8 @@ local function Verify(preview, section, width)
                 "preview controls overlap at width " .. width)
         end
     end
+    VerifySelectionMotion(preview.unitButtons, "player", "target", section)
+    VerifySelectionMotion(preview.typeButtons, "normal", "channel", section)
     preview.unitButtons.target:Click()
     Check(M._msuf2CastbarPreviewUnit == "target", "unit selection broke")
     preview.typeButtons.channel:Click()
@@ -90,4 +134,4 @@ mw:Select("home")
 mw:Select("opt_castbar")
 Verify(original, originalSection, originalSection._msuf2Width)
 Check(fields.Equal(before, mw.env.MSUF_DB), "preview interactions changed profile settings")
-print("castbar_preview_toolbar_layout_smoke: ok " .. flavor .. "/" .. locale .. " (8 layouts, selection and interrupt)")
+print("castbar_preview_toolbar_layout_smoke: ok " .. flavor .. "/" .. locale .. " (8 layouts, eased full-fill selection and interrupt)")

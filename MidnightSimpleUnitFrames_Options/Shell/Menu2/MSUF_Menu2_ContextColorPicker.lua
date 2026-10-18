@@ -672,12 +672,16 @@ function Picker.BuildAdvancedCard(panel)
     for i = 1, #tabSpecs do
         local spec = tabSpecs[i]
         local tab = T.Button(advancedCard, spec[2], 78, 20)
+        tab:SetPoint("TOPLEFT", 12 + (i - 1) * 82, -35)
+        tab._msuf2SegmentChoice, tab._msuf2Value = true, spec[1]
         if tab._msuf2Label then tab._msuf2Label:SetJustifyH("CENTER") end
         tab._msuf2SkipHistoryCheckpoint = true
         tab._msuf2PaletteKey = spec[1]
         tab:SetScript("OnClick", function(self) panel:SetPaletteTab(self._msuf2PaletteKey) end)
         panel.paletteTabs[i] = tab
     end
+
+    W.AttachSelectionMotion(advancedCard, panel.paletteTabs, false, "color-picker.palette")
 
     panel.spectrum = {}
     local tones = { { 0.96, 1.00 }, { 0.78, 0.90 }, { 0.56, 0.70 }, { 0.28, 0.56 } }
@@ -961,9 +965,6 @@ function Picker.DefineLayout(panel)
             self.opacityLabel:SetPoint("TOPLEFT", 12, -171)
             self.opacity:SetPoint("TOPLEFT", 12, -190)
             self.opacityValue:SetPoint("LEFT", self.opacity, "RIGHT", 8, 0)
-            for i = 1, #self.paletteTabs do
-                self.paletteTabs[i]:SetPoint("TOPLEFT", 12 + (i - 1) * 82, -35)
-            end
             for i = 1, #self.spectrum do
                 local swatch = self.spectrum[i]
                 local slot = i - 1
@@ -1024,8 +1025,8 @@ function Picker.DefineLayout(panel)
         self.advanced = advanced == true
         self._msuf2WindowState = self.advanced and "maximized" or "windowed"
         self:SetContextListShown(false)
-        self:Layout()
         if self.advanced and self._palettesDirty then self:RefreshPalettes() else self:RefreshSelectedSwatch() end
+        self:Layout()
         if M.RefreshWindowControls then M.RefreshWindowControls(self) end
     end
     function panel:SetPaletteTab(key)

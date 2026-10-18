@@ -217,7 +217,7 @@ end
 
 local function BuildPortraitDirection(ctx, card, unit, width, metadata)
     local values = VT("TOPLEFT", "Top left", "TOPRIGHT", "Top right", "BOTTOMLEFT", "Bottom left", "BOTTOMRIGHT", "Bottom right", "AUTO", "Auto")
-    local pad = W.Segment(card, "Blizzard frame direction", values, 340)
+    local pad = W.Segment(card, "Blizzard frame direction", values, 340, { multiSelect = true })
     W.MoveWidget(pad, card, 16, -202, 104)
     pad._msuf2Title:SetWidth(width - 32)
     pad._msuf2SearchText = "Blizzard portrait ring frame direction mirror corner top bottom left right automatic"

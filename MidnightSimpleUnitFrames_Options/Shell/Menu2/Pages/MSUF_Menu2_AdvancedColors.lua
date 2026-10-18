@@ -2158,12 +2158,12 @@ local function BuildColors(ctx)
     end
 
     local activeKey
-    local function UpdateHostHeight()
+    local function UpdateHostHeight(layoutOpts)
         local active = categories[activeKey]
         local height = max(1, tonumber(active and active.height) or 1)
         hostEntry.height = height
         if host:GetHeight() ~= height then host:SetHeight(height) end
-        b:RequestRelayoutCollapsibles()
+        b:RequestRelayoutCollapsibles(layoutOpts)
     end
     local ActivateCategory
     -- A live stage timer finishes the build on its own tick, so an activation
@@ -2201,11 +2201,11 @@ local function BuildColors(ctx)
             width = b.width,
             contentX = 0,
             topInset = 0,
-            onContentHeight = function(height)
+            onContentHeight = function(height, layoutOpts)
                 height = max(1, tonumber(height) or 1)
                 if category.height == height then return end
                 category.height = height
-                if activeKey == categoryKey then UpdateHostHeight() end
+                if activeKey == categoryKey then UpdateHostHeight(layoutOpts) end
             end,
         })
         local function FinishCategoryBuild()

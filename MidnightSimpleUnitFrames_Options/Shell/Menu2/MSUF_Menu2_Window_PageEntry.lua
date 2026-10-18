@@ -83,18 +83,23 @@ local SECONDARY_NAV_GAP = 12
 local SECONDARY_NAV_MIN_RAIL_WIDTH = 680
 local SECONDARY_NAV_TAB_PAD_X = 16
 local SECONDARY_NAV_TAB_PAD_Y = 4
-local function SecondaryNavButton(parent, label, width, active)
-    local style = {
-        bg = { 0.022, 0.032, 0.064, 0.94 },
-        border = { 0.090, 0.135, 0.250, 0.58 },
-        textColor = { 0.78, 0.87, 0.98, 1 },
-        hoverBg = { 0.032, 0.046, 0.086, 0.96 },
-        hoverBorder = { 0.120, 0.215, 0.405, 0.72 },
-        activeBg = { 0.040, 0.100, 0.240, 0.98 },
-        activeBorder = { 0.200, 0.430, 0.850, 0.94 },
-        activeTextColor = { 0.94, 0.98, 1.00, 1 },
-    }
-    return W.TopButton(parent, M.Tr(label), width, 24, style, active)
+local function SecondaryNavButton(parent, label, width, value)
+    local c = T.colors
+    local style = { bg = c.pillBase, border = c.pillEdge, textColor = c.pillText,
+        hoverBg = c.pillHover, hoverBorder = c.pillEdgeHover, activeBg = c.pillActive,
+        activeBorder = c.pillEdgeActive, activeTextColor = c.pillTextActive }
+    local button = W.TopButton(parent, M.Tr(label), width, 24, style)
+    button._msuf2Value = value
+    return button
+end
+local function SecondaryNavClick(button)
+    W.BeginSelectionMotion(button, button._msuf2Value)
+    M.SelectPage(button._msuf2Value)
+end
+local function FinishSecondaryMotion(owner, buttons, key, vertical)
+    owner.buttons = buttons
+    W.AttachSelectionMotion(owner, buttons, vertical, "secondary-navigation")
+    for i = 1, #buttons do buttons[i]:SetActive(buttons[i]._msuf2Value == key) end
 end
 local function BuildSecondaryTabs(ctx, key, group)
     if not (ctx and ctx.wrapper and group and group.tabs) then return end
@@ -102,20 +107,22 @@ local function BuildSecondaryTabs(ctx, key, group)
     local bar = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
     bar:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
     bar:SetSize(ctx.width or 720, 36)
-    local x = SECONDARY_NAV_TAB_PAD_X
+    local x, buttons = SECONDARY_NAV_TAB_PAD_X, {}
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
         local w = tonumber(tab.width) or 72
-        local btn = SecondaryNavButton(bar, tab.label, w, key == tab.key)
+        local btn = SecondaryNavButton(bar, tab.label, w, tab.key)
         btn._msuf2SkipHistoryCheckpoint = true
         btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -SECONDARY_NAV_TAB_PAD_Y)
-        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        btn:SetScript("OnClick", SecondaryNavClick)
+        buttons[#buttons + 1] = btn
         if M.RegisterMenuChromeControl then
             M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
                 { navigationKey = tab.key })
         end
         x = x + w + 8
     end
+    FinishSecondaryMotion(bar, buttons, key, false)
     ctx._msuf2SecondaryNav = bar
 end
 local function BuildSecondaryRail(ctx, key, group)
@@ -136,19 +143,21 @@ local function BuildSecondaryRail(ctx, key, group)
     title:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, -12)
     title:SetPoint("TOPRIGHT", rail, "TOPRIGHT", -12, -12)
     title:SetJustifyH("LEFT")
-    local y = -40
+    local y, buttons = -40, {}
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
-        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 24, key == tab.key)
+        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 24, tab.key)
         btn._msuf2SkipHistoryCheckpoint = true
         btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, y)
-        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        btn:SetScript("OnClick", SecondaryNavClick)
+        buttons[#buttons + 1] = btn
         if M.RegisterMenuChromeControl then
             M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
                 { navigationKey = tab.key })
         end
         y = y - 32
     end
+    FinishSecondaryMotion(rail, buttons, key, true)
     ctx._msuf2SecondaryNav = rail
 end
 local function BuildSecondaryPageNav(ctx, key)

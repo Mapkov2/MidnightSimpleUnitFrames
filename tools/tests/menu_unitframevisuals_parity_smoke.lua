@@ -9,6 +9,15 @@ local pipe = assert(io.popen('git -C "' .. root .. '" show ' .. parent .. ':' ..
 local source = pipe:read("*a")
 pipe:close()
 assert(source:find("local function BuildPortrait", 1, true), "immutable parent page unavailable")
+-- The pinned parent predates the menu selection motion, which opts the portrait direction pad out of
+-- exclusive selection ({ multiSelect = true }: several arrows are selected at once, so none may slide).
+-- The page under test carries that one-line edit; give the parent source the same one in memory, or the
+-- replay would build the parent's pad with the selection fill frames that the page under test never creates.
+local direction = 'W.Segment(card, "Blizzard frame direction", values, 340)'
+local directionAt = assert(source:find(direction, 1, true), "the parent's portrait direction pad moved")
+assert(not source:find(direction, directionAt + 1, true), "the parent has two portrait direction pads")
+source = source:sub(1, directionAt - 1) .. 'W.Segment(card, "Blizzard frame direction", values, 340, { multiSelect = true })'
+    .. source:sub(directionAt + #direction)
 local scratch = root .. "/.checks/unitframevisuals-parent-" .. flavor .. ".lua"
 local file = io.open(scratch, "wb")
 if not file then

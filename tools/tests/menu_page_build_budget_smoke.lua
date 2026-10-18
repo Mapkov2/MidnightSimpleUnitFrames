@@ -32,14 +32,21 @@ end
 -- 100-instruction granularity makes 2% meaningless) and its allocation at
 -- zero since the field-wise relayout comparison (C5.9).
 local BUDGETS = {
-    opt_colors = { build = 3352, refresh = 78.9, relayout = 0.8, relayoutKB = 0.05, select = 111.0 },
-    opt_bars = { build = 1540, refresh = 108.7, relayout = 0.5, relayoutKB = 0.05, select = 117.9 },
-    opt_misc = { build = 572, refresh = 23.1, relayout = 0.5, relayoutKB = 0.05, select = 32.1 },
-    uf_player = { build = 1085, refresh = 35.8, relayout = 0.8, relayoutKB = 0.05, select = 52.7 },
-    gf_layout = { build = 1302, refresh = 30.6, relayout = 1.0, relayoutKB = 0.05, select = 45.3 },
-    gf_auras = { build = 1834, refresh = 117.1, relayout = 0.2, relayoutKB = 0.05, select = 133.1 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+8.9 refresh, +0.5 relayout, +17.9 select measured)
+    opt_colors = { build = 3352, refresh = 87.8, relayout = 1.3, relayoutKB = 0.05, select = 128.9 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+1.4 refresh, +0.4 relayout, +1.7 select measured)
+    opt_bars = { build = 1540, refresh = 110.1, relayout = 0.9, relayoutKB = 0.05, select = 119.6 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+2.0 refresh, +0.4 relayout, +2.2 select measured)
+    opt_misc = { build = 572, refresh = 25.1, relayout = 0.9, relayoutKB = 0.05, select = 34.3 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+0.6 relayout measured)
+    uf_player = { build = 1085, refresh = 35.8, relayout = 1.4, relayoutKB = 0.05, select = 52.7 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+0.6 refresh, +0.6 relayout measured)
+    gf_layout = { build = 1302, refresh = 31.2, relayout = 1.6, relayoutKB = 0.05, select = 45.3 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+0.1 relayout measured)
+    gf_auras = { build = 1834, refresh = 117.1, relayout = 0.3, relayoutKB = 0.05, select = 133.1 },
     classpower = { build = 864, refresh = 19.6, relayout = 0.6, relayoutKB = 0.05, select = 35.1 },
-    home = { build = 137, refresh = 1.0, relayout = 0.1, relayoutKB = 0.05, select = 14.0 },
+    -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+0.2 select measured)
+    home = { build = 137, refresh = 1.0, relayout = 0.1, relayoutKB = 0.05, select = 14.2 },
 }
 local ORDER = { "opt_colors", "opt_bars", "opt_misc", "uf_player", "gf_layout", "gf_auras", "classpower", "home" }
 

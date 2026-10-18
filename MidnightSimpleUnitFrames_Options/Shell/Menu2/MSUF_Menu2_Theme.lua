@@ -1591,15 +1591,23 @@ local function CollapseHintLearned()
     if type(state) ~= "table" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
     return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
-function T.ApplyCollapseVisual(chevron, hint, open)
+function T.ApplyCollapseRotation(chevron, open, immediate)
+    local widgets = M.Widgets
+    if widgets and widgets.AnimateDisclosure then
+        widgets.AnimateDisclosure(chevron, open, immediate)
+    elseif chevron.SetRotation then
+        chevron:SetRotation(open and (math.pi * 0.5) or 0)
+    end
+end
+function T.ApplyCollapseVisual(chevron, hint, open, immediate)
     open = open and true or false
     if chevron then
+        T.ApplyCollapseRotation(chevron, open, immediate)
         local c = open and T.colors.accent or T.colors.accent2
         local a = open and 0.96 or 0.90
         local chevronKey = tostring(open) .. "\030" .. tostring(c[1]) .. "\030" .. tostring(c[2]) .. "\030" .. tostring(c[3]) .. "\030" .. tostring(a)
         if chevron._msuf2CollapseVisualKey ~= chevronKey then
             chevron._msuf2CollapseVisualKey = chevronKey
-            if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
             if chevron.SetVertexColor then chevron:SetVertexColor(c[1], c[2], c[3], a) end
         end
     end
@@ -2327,6 +2335,10 @@ local function PaintNavPillGlowArt(art, path, state)
     StopNavPillGlowPulse(art)
 end
 local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
+    if state == "active" and btn._msuf2SelectionMotion then
+        HideNavPillArt(btn)
+        return true
+    end
     -- Midnight owns the authored blue paint. Non-midnight themes use the
     -- compact procedural renderer for active and hover so both states can carry
     -- their class/preset accent without multiplying against baked blue pixels.
@@ -2432,7 +2444,7 @@ local function SetNavActiveFX(btn, active, hover)
 end
 local function SetSkinnedSelectionCue(btn, active)
     local cue = btn._msuf2SkinnedSelectionCue
-    if not active then
+    if not active or btn._msuf2SelectionMotion or btn._msuf2MotionSurface then
         if cue then
             cue.wash:Hide()
             cue.line:Hide()
@@ -2456,7 +2468,16 @@ local function SetSkinnedSelectionCue(btn, active)
     cue.wash:SetColorTexture(accent[1], accent[2], accent[3], 0.22)
     cue.line:SetColorTexture(accent[1], accent[2], accent[3], 0.94)
     cue.wash:Show()
-    cue.line:Show()
+    cue.line:SetShown(not btn._msuf2SelectionMotion)
+end
+local function PaintSelectedButton(btn, fill, edge, textOnlyHover)
+    local c, moving = T.colors, btn._msuf2SelectionMotion
+    local bg = moving and (btn._msuf2SolidPill and c.pillBaseSolid or c.pillBase) or c.pillActive
+    local br, tx = moving and c.pillEdge or c.pillEdgeActive, c.pillTextActive
+    if textOnlyHover then tx = c.navHeaderHover or tx end
+    if btn._msuf2NavStripe then btn._msuf2NavStripe:SetShown(not moving) end
+    PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, moving and 0.12 or 0.16, moving and -0.20 or -0.15, moving and 0.95 or 1)
+    PaintStoredNavIcon(btn, 1.00)
 end
 local function ButtonVisual(btn, active, hover)
     if MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual) then
@@ -2479,7 +2500,7 @@ local function ButtonVisual(btn, active, hover)
     -- Living in the painter rather than an OnEnter hook keeps it through the
     -- SetActive and RefreshVisual repaints that fire while the cursor is on it.
     local textOnlyHover = hover and btn._msuf2HoverTextAccent
-    local roleLit = active or (hover and not textOnlyHover)
+    local roleLit = (active and not btn._msuf2SelectionMotion) or (hover and not textOnlyHover)
     if not enabled then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
@@ -2555,7 +2576,7 @@ local function ButtonVisual(btn, active, hover)
             local bg = hover and c.navPillHover or c.navPillActive
             local br = hover and c.navPillEdgeHover or c.navPillEdgeActive
             local tx = hover and (c.navHeaderHover or c.navTextActive) or c.navTextActive
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:SetShown(not btn._msuf2SelectionMotion) end
             if SetNavPillArt(btn, "active", bg, hover and 0.20 or 0.17, -0.20) then
                 SetNavActiveFX(btn, false)
                 SetLabelColor(btn._msuf2Label, tx)
@@ -2593,11 +2614,7 @@ local function ButtonVisual(btn, active, hover)
     HideNavPillArt(btn)
     SetNavActiveFX(btn, false)
     if active then
-        if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
-        local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
-        if textOnlyHover then tx = c.navHeaderHover or tx end
-        PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
-        PaintStoredNavIcon(btn, 1.00)
+        PaintSelectedButton(btn, fill, edge, textOnlyHover)
     elseif hover and not textOnlyHover then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover

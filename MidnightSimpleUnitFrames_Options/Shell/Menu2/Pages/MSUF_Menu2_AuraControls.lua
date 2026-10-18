@@ -338,8 +338,10 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
         -- like its idle one, so a selected chip would look unselected.
         local btn = (buttonFactory and buttonFactory(parent, item, bw)) or UnitAuraWorkspaceTabButton(parent, item, bw)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
+        btn._msuf2Value = item.value
         btn:SetScript("OnClick", function()
             if item.value == getValue() then return end
+            W.BeginSelectionMotion(btn, item.value)
             setValue(item.value)
             -- Selecting a tab is menu state, not a page rebuild, so re-stamp
             -- the active chip here instead of waiting for a page refresh.
@@ -356,6 +358,7 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
             if buttons[i].SetActive then buttons[i]:SetActive(values[i].value == current) end
         end
     end
+    W.AttachSelectionMotion(parent, buttons, false, catalogPath)
     RefreshButtons()
     M.TrackRefresh(ctx, RefreshButtons)
     return getValue(), buttons, RefreshButtons
