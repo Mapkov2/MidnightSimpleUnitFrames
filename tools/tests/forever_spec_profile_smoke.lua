@@ -273,6 +273,19 @@ local M = {
 -- The Options addon namespace reads through to the core namespace
 -- (MSUF_OptionsLOD_Bootstrap.lua), which is where MSUF.Client lives.
 local optionsNamespace = setmetatable({ MSUF2 = M }, { __index = namespace })
+-- The page now constructs through the real shared schema and AdvancedPage owner.
+-- Keep the same native widget stubs and all specialization assertions below.
+optionsNamespace.CPBuilders = namespace.CPBuilders or { ExtraAuraDefaults = {} }
+M.ControlMeta = M.AdvancedPage.ControlMeta
+M.RegisterControlMetadata = function(widget, meta, label, kind)
+    widget._msuf2RuntimeControlRecord = { controlId = meta.controlId or label, kind = kind, label = label }
+    widget._msuf2SearchMeta = meta
+end
+M.Assign = function(target, values) for key, value in pairs(values) do target[key] = value end end
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
+    "MidnightSimpleUnitFrames_Options", optionsNamespace)
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Advanced.lua"))(
+    "MidnightSimpleUnitFrames_Options", optionsNamespace)
 -- The page requires its core collaborators at load (M.RequireGlobals).
 local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
 RequireFixture.Install(repo, optionsNamespace, M)
@@ -286,7 +299,11 @@ Check(pageSource:find("function ProfilesPage.Specializations(state)", 1, true) ~
 local ProfilesPage = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .. pagePath))(
     "MidnightSimpleUnitFrames_Options", optionsNamespace)
 
-local builder = Stub({ CollapsibleSection = function() return Stub() end })
+local builder = Stub({ CollapsibleSection = function()
+    return Stub({ _msuf2CollapsibleEntry = { header = Stub({
+        _msuf2RuntimeControlRecord = { controlId = "profiles.specializations", kind = "button", label = "Specialization Profiles" },
+    }) } })
+end })
 local function BuildSpecializations()
     cards, dropdowns, refreshes = {}, {}, {}
     ProfilesPage.Specializations({ ctx = {}, b = builder, contentW = 1000 })

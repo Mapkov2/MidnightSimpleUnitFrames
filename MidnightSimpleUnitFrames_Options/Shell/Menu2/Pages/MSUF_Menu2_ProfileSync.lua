@@ -1,6 +1,7 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
 local W,T=M.Widgets,M.Theme
+local AP=M.AdvancedPage
 local VariantPage,Fields,Sync= M.ProfileVariantPage,MSUF.ProfileFields,MSUF.ProfileSync
 local selected,selectedField,excludedField
 local labels={unitframes="Unitframes",groupframes="Group frames",castbars="Castbars",colors="Colors",
@@ -48,7 +49,8 @@ end
 local function Save(ctx,groups) return VariantPage.Result(ctx,Sync.Replace(groups)) end
 local function Exclusions(state,section,group,groups,y,width)
     local query=""
-    local input=W.TextInput(section,"Find a setting to exclude",width)
+    local input=AP.Row(nil, section, { "textinput", VariantPage.Meta("profiles_sync","sync.field.search").controlId, nil,
+        { "Find a setting to exclude",width }, bind = AP.NativeInput })
     W.MoveWidget(input,section,20,y,width)
     M.AdvancedPage.RegisterControl(input,VariantPage.Meta("profiles_sync","sync.field.search"),"Find a setting to exclude","editbox")
     input:HookScript("OnTextChanged",function(self) query=tostring(self:GetText() or ""):lower() end)
@@ -107,11 +109,15 @@ function M.ProfileSyncPageBuild(state)
     local width=math.max(180,math.floor((state.contentW-50)/2))
     local section=state.b:CollapsibleSection("profiles_sync","Profile synchronization",group
         and (950+rows*32+math.max(0,math.ceil(#Sync.Modules/2)-4)*32) or 250,true)
-    W.Text(section,"Share selected modules between profiles. Changes sync when switching profiles or logging out. Local variant settings and excluded fields stay independent.",
-        20,-40,state.contentW-40,T.colors.muted)
+    M.ControlSchema.Section(section, "profiles")
+    AP.Row(nil, section, { "text", "profilesync.text.2", nil,
+        { "Share selected modules between profiles. Changes sync when switching profiles or logging out."
+            .. " Local variant settings and excluded fields stay independent.",
+        20,-40,state.contentW-40,T.colors.muted } })
     VariantPage.Drop(state,section,"Sync group","sync.group.select",GroupValues,function() return selected or "" end,
         function(value) selected=value; selectedField=nil; excludedField=nil; VariantPage.Refresh(ctx) end,20,-108,width)
-    local input=W.TextInput(section,"New sync group name",width)
+    local input=AP.Row(nil, section, { "textinput", VariantPage.Meta("profiles_sync","sync.group.name").controlId, nil,
+        { "New sync group name",width }, bind = AP.NativeInput })
     W.MoveWidget(input,section,30+width,-108,width)
     M.AdvancedPage.RegisterControl(input,VariantPage.Meta("profiles_sync","sync.group.name"),"New sync group name","editbox")
     VariantPage.Button(state,section,"Create sync group","sync.group.create",30+width,-178,function()
@@ -123,19 +129,26 @@ function M.ProfileSyncPageBuild(state)
         return VariantPage.Result(ctx,ok,why)
     end,width)
     if not group then return end
-    W.Text(section,"Member profiles",20,-234,state.contentW-40,T.colors.text)
+    AP.Row(nil, section, { "text", "profilesync.text.4", nil,
+        { "Member profiles",20,-234,state.contentW-40,T.colors.text } })
     for i,name in ipairs(names) do
-        local toggle=W.SwitchAt(section,name,20+((i-1)%2)*(width+10),-266-math.floor((i-1)/2)*32,width,nil,true) -- a profile name, shown as typed
+        local toggle=AP.Row(nil, section, { "switch", VariantPage.Meta("profiles_sync","sync.member."..i).controlId, nil,
+            { name,20+((i-1)%2)*(width+10),-266-math.floor((i-1)/2)*32,width,"RIGHT",true },
+            bind = AP.NativeInput }) -- a profile name, shown as typed
         VariantPage.BindBool(ctx,toggle,function() return group.members[name]==true end,
             function(value) group.members[name]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.member."..i))
     end
     local y=-282-rows*32
-    W.Text(section,"Shared modules",20,y,state.contentW-40,T.colors.text)
+    AP.Row(nil, section, { "text", "profilesync.text.6", nil,
+        { "Shared modules",20,y,state.contentW-40,T.colors.text } })
     y=y-34
     for i,id in ipairs(Sync.Modules) do
-        local toggle=W.SwitchAt(section,M.ProfileSyncModuleLabel(id),20+((i-1)%2)*(width+10),y-math.floor((i-1)/2)*32,width)
-        VariantPage.BindBool(ctx,toggle,function() return group.modules[id]==true end,
-            function(value) group.modules[id]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.module."..id))
+        local toggle=AP.Row(nil, section, { "switch", "profilesync.toggle.7", nil,
+            { M.ProfileSyncModuleLabel(id),20+((i-1)%2)*(width+10),y-math.floor((i-1)/2)*32,width },
+            bind = function(toggle)
+                VariantPage.BindBool(ctx,toggle,function() return group.modules[id]==true end,
+                    function(value) group.modules[id]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.module."..id))
+            end })
     end
     y=y-20-math.ceil(#Sync.Modules/2)*32
     VariantPage.Button(state,section,"Save sync group","sync.group.save",20,y,function() return Save(ctx,groups) end,width)
@@ -155,8 +168,10 @@ function M.ProfileSyncPageBuild(state)
     VariantPage.Button(state,section,"Copy shared modules now","sync.initialize",30+width,y,
         function() return VariantPage.Result(ctx,Sync.Flush(true)) end,width)
     y=y-42
-    W.Text(section,"Copy shared modules now uses the active profile as the starting point for its groups. Existing local exclusions and variant values are preserved. Save the group first.",
-        20,y,state.contentW-40,T.colors.muted)
+    AP.Row(nil, section, { "text", "profilesync.text.8", nil,
+        { "Copy shared modules now uses the active profile as the starting point for its groups."
+            .. " Existing local exclusions and variant values are preserved. Save the group first.",
+        20,y,state.contentW-40,T.colors.muted } })
     Exclusions(state,section,group,groups,y-62,width)
 end
 M.ProfileSyncPage={Build=M.ProfileSyncPageBuild}

@@ -334,7 +334,9 @@ local M = {
     end,
     Widgets = W,
     Theme = T,
-    AdvancedPage = { RegisterControl = Noop, ControlMeta = function() return {} end },
+    AdvancedPage = { RegisterControl = Noop, ControlMeta = function(page, section, path)
+        return { controlId = table.concat({ "menu2", page, section, path }, ".") }
+    end },
     Tr = function(text) return text end,
     Format = function(fmt, ...) return string.format(fmt, ...) end,
     RequestRefresh = Noop,
@@ -358,6 +360,18 @@ local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .
 local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
 local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client,
     SuiteLink = namespace.SuiteLink }, M)
+-- Retain the native widget seams; load the page's new real construction owners.
+pageNamespace.CPBuilders = namespace.CPBuilders or { ExtraAuraDefaults = {} }
+M.ControlMeta = M.AdvancedPage.ControlMeta
+M.RegisterControlMetadata = function(widget, meta, label, kind)
+    widget._msuf2RuntimeControlRecord = { controlId = assert(meta.controlId), kind = kind, label = label }
+    widget._msuf2SearchMeta = meta
+end
+M.Assign = function(target, values) for key, value in pairs(values) do target[key] = value end end
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
+    "MidnightSimpleUnitFrames_Options", pageNamespace)
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Advanced.lua"))(
+    "MidnightSimpleUnitFrames_Options", pageNamespace)
 -- The menu's reload prompt (MSUF_Menu2_Support.lua) only asks; it never reloads.
 MSUF_ShowReloadRecommendedPopup = function() end
 RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })
@@ -824,7 +838,12 @@ do
         return toggle
     end
     local pageState = { ctx = {}, contentW = 760, b = {
-        CollapsibleSection = function(_, key) Check(key == "profiles_unit_selection", "wrong selection section"); return Stub() end,
+        CollapsibleSection = function(_, key)
+            Check(key == "profiles_unit_selection", "wrong selection section")
+            return Stub({ _msuf2CollapsibleEntry = { header = Stub({
+                _msuf2RuntimeControlRecord = { controlId = key, kind = "button", label = "Selected unitframes" },
+            }) } })
+        end,
     } }
     ProfilesPage.UnitSelection(pageState)
     Check(toggles.Player and toggles.Player.checked and toggles.Target and not toggles.Target.checked,

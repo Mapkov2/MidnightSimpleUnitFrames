@@ -56,47 +56,57 @@ local function MeleeSpecEnabled(g)
 end
 local function GameplayDeclarations(anchorValues,frameAnchors)
     return {
-        combatTimerAnchor = { kind = "dropdown", labelKey = "Anchor", values = anchorValues },
-        combatFontSize = { kind = "slider", labelKey = "Timer size", range = { 10, 64, 1 } },
-        lockCombatTimer = { kind = "toggle", labelKey = "Lock position" },
-        combatTimerClickThrough = { kind = "toggle", labelKey = "Click-through (ALT to drag when unlocked)" },
-        combatOffsetX = { kind = "slider", labelKey = "X offset", range = { -800, 800, 1 } },
-        combatOffsetY = { kind = "slider", labelKey = "Y offset", range = { -800, 800, 1 } },
-        lockCombatState = { kind = "toggle", labelKey = "Lock position" },
-        combatStateFontSize = { kind = "slider", labelKey = "Text size", range = { 10, 64, 1 } },
-        combatStateDuration = { kind = "slider", labelKey = "Duration (s)", range = { 0.5, 5.0, 0.5 } },
-        combatStateOffsetX = { kind = "slider", labelKey = "X offset", range = { -800, 800, 1 } },
-        combatStateOffsetY = { kind = "slider", labelKey = "Y offset", range = { -800, 800, 1 } },
-        playerTotemsIconSize = { kind = "slider", labelKey = "Icon size", range = { 8, 64, 1 } },
-        playerTotemsOffsetX = { kind = "slider", labelKey = "X offset", range = { -200, 200, 1 } },
-        playerTotemsOffsetY = { kind = "slider", labelKey = "Y offset", range = { -200, 200, 1 } },
-        playerTotemsAnchorFrom = { kind = "dropdown", labelKey = "From", values = frameAnchors },
-        playerTotemsAnchorTo = { kind = "dropdown", labelKey = "To", values = frameAnchors },
-        enableCombatCrosshairMeleeRangeColor = { kind = "toggle", labelKey = "Crosshair: color by melee range to target (green=in range, red=out)" },
-        meleeSpellPerClass = { kind = "toggle", labelKey = "Store per class" },
-        meleeSpellPerSpec = { kind = "toggle", labelKey = "Store per spec" },
-        crosshairThickness = { kind = "slider", labelKey = "Crosshair thickness", range = { 1, 12, 1 } },
-        crosshairSize = { kind = "slider", labelKey = "Crosshair size", range = { 20, 120, 2 } },
+        combatTimerAnchor = { "dropdown", "combatTimerAnchor", nil, { "Anchor", anchorValues } },
+        combatFontSize = { "slider", "combatFontSize", nil, { "Timer size", 10, 64, 1 } },
+        lockCombatTimer = { "flowToggle", "lockCombatTimer", nil, { "Lock position" } },
+        combatTimerClickThrough = { "flowToggle", "combatTimerClickThrough", nil, { "Click-through (ALT to drag when unlocked)" } },
+        combatOffsetX = { "slider", "combatOffsetX", nil, { "X offset", -800, 800, 1 } },
+        combatOffsetY = { "slider", "combatOffsetY", nil, { "Y offset", -800, 800, 1 } },
+        lockCombatState = { "flowToggle", "lockCombatState", nil, { "Lock position" } },
+        combatStateFontSize = { "slider", "combatStateFontSize", nil, { "Text size", 10, 64, 1 } },
+        combatStateDuration = { "slider", "combatStateDuration", nil, { "Duration (s)", 0.5, 5.0, 0.5 } },
+        combatStateOffsetX = { "slider", "combatStateOffsetX", nil, { "X offset", -800, 800, 1 } },
+        combatStateOffsetY = { "slider", "combatStateOffsetY", nil, { "Y offset", -800, 800, 1 } },
+        playerTotemsIconSize = { "slider", "playerTotemsIconSize", nil, { "Icon size", 8, 64, 1 } },
+        playerTotemsOffsetX = { "slider", "playerTotemsOffsetX", nil, { "X offset", -200, 200, 1 } },
+        playerTotemsOffsetY = { "slider", "playerTotemsOffsetY", nil, { "Y offset", -200, 200, 1 } },
+        playerTotemsAnchorFrom = { "dropdown", "playerTotemsAnchorFrom", nil, { "From", frameAnchors } },
+        playerTotemsAnchorTo = { "dropdown", "playerTotemsAnchorTo", nil, { "To", frameAnchors } },
+        enableCombatCrosshairMeleeRangeColor = { "flowToggle", "enableCombatCrosshairMeleeRangeColor", nil,
+            { "Crosshair: color by melee range to target (green=in range, red=out)" } },
+        meleeSpellPerClass = { "flowToggle", "meleeSpellPerClass", nil, { "Store per class" } },
+        meleeSpellPerSpec = { "flowToggle", "meleeSpellPerSpec", nil, { "Store per spec" } },
+        crosshairThickness = { "slider", "crosshairThickness", nil, { "Crosshair thickness", 1, 12, 1 } },
+        crosshairSize = { "slider", "crosshairSize", nil, { "Crosshair size", 20, 120, 2 } },
     }
 end
 local function GameplayRow(declarations,key,layout,apply,defaultApply)
-    local declaration = assert(declarations[key], "unknown Gameplay schema row")
-    local meta = Meta("setting." .. key)
-    return {
-        id = meta.controlId, kind = declaration.kind, labelKey = declaration.labelKey,
-        range = declaration.range, values = declaration.values, layout = layout,
-        key = key, settingPath = "gameplay." .. key, scope = "gameplay", applyDomain = "gameplay",
-        source = Gameplay, defaultSource = function() return Schema.Default("gameplay", key) end,
-        apply = apply or defaultApply, meta = meta,
-    }
+    local row = assert(declarations[key], "unknown Gameplay schema row")
+    local fallback = Schema.Default("gameplay", key)
+    row[3], row.meta, row.scope, row.domain = fallback, Meta("setting." .. key), "gameplay", "gameplay"
+    if row[1] == "slider" then row[4][5] = layout.width or 280
+    elseif row[1] == "dropdown" then row[4][3] = layout.width or 280 end
+    row[5] = { layout.x, layout.y }
+    row.get = function()
+        local value = Gameplay()[key]
+        if value == nil then return fallback end
+        if row[1] == "slider" then return tonumber(value) or fallback end
+        if row[1] == "flowToggle" then return value and true or false end
+        return value
+    end
+    row.set = function(value)
+        if row[1] == "dropdown" and not value then value = fallback end
+        return AP.SetValue(Gameplay(), key, value, apply or defaultApply)
+    end
+    return row
 end
 local function SwitchAt(ctx, section, label, x, y, width, key, apply, meta)
-    return Schema.Render(ctx, section, {
-        id = meta.controlId, kind = "toggle", view = "switch", labelKey = label,
-        scope = "gameplay", applyDomain = "gameplay", settingPath = "gameplay." .. key,
-        source = Gameplay, key = key, defaultSource = function() return Schema.Default("gameplay", key) end,
-        apply = apply, meta = meta,
-    }, { x = x, y = y, width = width })
+    local fallback = Schema.Default("gameplay", key)
+    return AP.Row(ctx, section, { "switch", key, fallback, { label, x, y, width },
+        meta = meta, scope = "gameplay", domain = "gameplay",
+        get = function() return AP.BoolValue(Gameplay(), key, fallback) end,
+        set = function(value) return AP.SetValue(Gameplay(), key, value, apply) end,
+    })
 end
 local function BindGameplayText(ctx,list,input,getValue,setValue,metadata,apply,label)
     Schema.Bind(ctx, input, {
@@ -543,8 +553,8 @@ local function BuildGameplay(ctx)
     end
     local function AddControls(list, section, specs)
         for _, spec in ipairs(specs) do
-            if spec.kind == "slider" then spec.meta.step, spec.meta.roundStep = spec.range[3], true end
-            list[#list + 1] = Schema.Render(ctx, section, spec)
+            if spec[1] == "slider" then spec.roundStep = true end
+            list[#list + 1] = AP.Row(ctx, section, spec)
         end
         return list
     end

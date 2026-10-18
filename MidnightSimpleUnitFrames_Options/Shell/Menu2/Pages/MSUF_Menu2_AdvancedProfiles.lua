@@ -25,7 +25,16 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local G, SetValue, ControlMeta = AP.G, AP.SetValue, AP.ControlMeta
-local RegisterControl = AP.RegisterControl
+local function RegisterControl(widget, ...)
+    AP.RegisterControl(widget, ...)
+    local declaration = widget._msuf2ControlSchema
+    M.ControlSchema.Owned(widget, "profiles", "profiles")
+    if declaration then
+        local current = widget._msuf2ControlSchema
+        current.get, current.set = current.get or declaration.get, current.set or declaration.set
+        current.action = current.action or declaration.action
+    end
+end
 local PROFILE_SETTING_BY_PATH = {
     ["specialization.auto_switch.enabled"] = "profiles.specAutoSwitch",
 }
@@ -350,7 +359,7 @@ function ProfilesPage.Prepare(ctx)
         right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0)
     end
     local function ProfileButton(parent, label, onClick, danger, semanticPath, confirmRequired, prepareValue, validateValue, directCommand, width)
-        local btn = T.Button(parent, label, width or buttonW, buttonH)
+        local btn = AP.Row(nil, parent, { "button", "advancedprofiles.btn.1", nil, { label, width or buttonW, buttonH } })
         if danger and T.SkinDangerButton then T.SkinDangerButton(btn) end
         if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
         btn:SetScript("OnClick", onClick)
@@ -415,12 +424,12 @@ function ProfilesPage.Prepare(ctx)
         end
         return true
     end
-    local function StatusPill(parent, width)
+    local function StatusPill(parent, width, key)
         local pill = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         pill:SetSize(width, 22)
         local fill, edge = T.CreateSuperellipseLayers(pill, "_msuf2ProfileStatusPill", 1, "ARTWORK", "OVERLAY")
         pill._msuf2Fill, pill._msuf2Edge = fill, edge
-        pill.text = T.Font(pill, "GameFontDisableSmall", "", T.colors.text)
+        pill.text = AP.Row(nil, pill, { "font", "advancedprofiles.status." .. key, nil, { "GameFontDisableSmall", "", T.colors.text } })
         pill.text:SetPoint("CENTER")
         pill.text:SetJustifyH("CENTER")
         return pill
@@ -500,25 +509,25 @@ function ProfilesPage.Hero(state)
     local profileMark = T.Panel(hero, nil, T.colors.panel2, T.colors.accent)
     profileMark:SetSize(54, 54)
     profileMark:SetPoint("TOPLEFT", hero, "TOPLEFT", 20, -24)
-    local markText = T.Font(profileMark, "GameFontNormalLarge", "P", T.colors.text)
+    local markText = AP.Row(nil, profileMark, { "font", "advancedprofiles.markText.3", nil, { "GameFontNormalLarge", "P", T.colors.text } })
     markText:SetPoint("CENTER")
-    W.LabelAt(hero, "ACTIVE PROFILE", 92, -21, 280, "GameFontDisableSmall", T.colors.accent)
-    local activeName = T.Font(hero, "GameFontNormalLarge", "", T.colors.text, "section")
+    AP.LabelAt(hero, "ACTIVE PROFILE", 92, -21, 280, "GameFontDisableSmall", T.colors.accent)
+    local activeName = AP.Row(nil, hero, { "font", "advancedprofiles.activeName.4", nil, { "GameFontNormalLarge", "", T.colors.text, "section" } })
     activeName:SetPoint("TOPLEFT", hero, "TOPLEFT", 92, -43)
     activeName:SetWidth(300)
-    W.LabelAt(hero, "Used by this character  \194\183  Account-wide profile", 92, -76, 360,
+    AP.LabelAt(hero, "Used by this character  \194\183  Account-wide profile", 92, -76, 360,
         "GameFontDisableSmall", T.colors.muted)
 
-    local profileCountPill = StatusPill(hero, 104)
-    local specStatePill = StatusPill(hero, 146)
-    local safetyPill = StatusPill(hero, 168)
+    local profileCountPill = StatusPill(hero, 104, "count")
+    local specStatePill = StatusPill(hero, 146, "specialization")
+    local safetyPill = StatusPill(hero, 168, "safety")
     local heroPillX = compactHero and 20 or min(max(430, floor(contentW * 0.45)), max(430, contentW - 690))
     profileCountPill:SetPoint("TOPLEFT", hero, "TOPLEFT", heroPillX, compactHero and -100 or -30)
     specStatePill:SetPoint("LEFT", profileCountPill, "RIGHT", 10, 0)
     safetyPill:SetPoint("TOPLEFT", hero, "TOPLEFT", heroPillX, compactHero and -132 or -64)
 
-    local heroExport = T.Button(hero, "Export backup", 150, 34, { noSearch = true })
-    local heroSwitch = T.Button(hero, "Switch profile", 168, 34, { noSearch = true })
+    local heroExport = AP.Row(nil, hero, { "button", "advancedprofiles.heroExport.5", nil, { "Export backup", 150, 34, { noSearch = true } } })
+    local heroSwitch = AP.Row(nil, hero, { "button", "advancedprofiles.heroSwitch.6", nil, { "Switch profile", 168, 34, { noSearch = true } } })
     if T.CenterButtonLabel then
         T.CenterButtonLabel(heroExport)
         T.CenterButtonLabel(heroSwitch)
@@ -530,7 +539,7 @@ function ProfilesPage.Hero(state)
     else
         heroExport:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -202, -34)
         heroSwitch:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -20, -34)
-        local combatHint = W.LabelAt(hero, "Profile actions are blocked in combat.", contentW - 390, -78, 370,
+        local combatHint = AP.LabelAt(hero, "Profile actions are blocked in combat.", contentW - 390, -78, 370,
             "GameFontDisableSmall", T.colors.muted)
         if combatHint and combatHint.SetJustifyH then combatHint:SetJustifyH("RIGHT") end
     end
@@ -558,6 +567,7 @@ function ProfilesPage.ManagementLayout(state)
     local managementMedium = not managementWide and contentW >= 720
     local managementH = managementWide and 444 or (managementMedium and 620 or 884)
     local current = b:CollapsibleSection("profiles_management", "Profile Management", managementH, true)
+    M.ControlSchema.Section(current, "profiles")
     local manageInset, manageGap = 20, 18
     local manageInnerW = max(320, contentW - (manageInset * 2))
     local currentCardX, currentCardY, currentCardW, currentCardH
@@ -582,12 +592,14 @@ function ProfilesPage.ManagementLayout(state)
         newCharCardX, newCharCardY, newCharCardW, newCharCardH = manageInset, -478, manageInnerW, 170
         dangerX, dangerY, dangerW, dangerH = manageInset, -666, manageInnerW, 196
     end
-    local currentCard = W.ControlCard(current, "Current profile", "Switch the profile used by this character.",
-        currentCardX, currentCardY, currentCardW, currentCardH)
-    local createCard = W.ControlCard(current, "Create or duplicate", "Use a clear name so you can return to this setup later.",
-        createCardX, createCardY, createCardW, createCardH)
-    local newCharCard = W.ControlCard(current, "New characters", "Choose the starting profile for new characters.",
-        newCharCardX, newCharCardY, newCharCardW, newCharCardH)
+    local currentCard = AP.Row(nil, current, { "card", "advancedprofiles.currentCard.7", nil, { "Current profile", "Switch the profile used by this character.",
+        currentCardX, currentCardY, currentCardW, currentCardH } })
+    local createCard = AP.Row(nil, current, { "card", "advancedprofiles.createCard.8", nil,
+        { "Create or duplicate", "Use a clear name so you can return to this setup later.",
+        createCardX, createCardY, createCardW, createCardH } })
+    local newCharCard = AP.Row(nil, current, { "card", "advancedprofiles.newCharCard.9", nil,
+        { "New characters", "Choose the starting profile for new characters.",
+        newCharCardX, newCharCardY, newCharCardW, newCharCardH } })
     local dangerColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 }
     local dangerPanel = T.Panel(current, nil,
         { 0.090, 0.018, 0.030, 0.94 },
@@ -599,15 +611,43 @@ function ProfilesPage.ManagementLayout(state)
     dangerAccent:SetPoint("BOTTOMLEFT", dangerPanel, "BOTTOMLEFT", 0, 2)
     dangerAccent:SetWidth(4)
     dangerAccent:SetColorTexture(dangerColor[1], dangerColor[2], dangerColor[3], 0.92)
-    W.LabelAt(dangerPanel, "!", 20, -22, 18, "GameFontNormal", dangerColor)
-    W.LabelAt(dangerPanel, "Danger zone", 48, -18, max(160, dangerW - 72), "GameFontNormal", T.colors.text)
-    W.LabelAt(dangerPanel, "These actions change or remove the complete active profile.", 48, -42,
+    AP.LabelAt(dangerPanel, "!", 20, -22, 18, "GameFontNormal", dangerColor)
+    AP.LabelAt(dangerPanel, "Danger zone", 48, -18, max(160, dangerW - 72), "GameFontNormal", T.colors.text)
+    AP.LabelAt(dangerPanel, "These actions change or remove the complete active profile.", 48, -42,
         max(220, dangerW - 72), "GameFontDisableSmall", T.colors.muted)
-    W.LabelAt(dangerPanel, "Export or copy the profile first if you may want to restore it later.", 20,
+    AP.LabelAt(dangerPanel, "Export or copy the profile first if you may want to restore it later.", 20,
         managementWide and -96 or -82, max(260, dangerW - 40), "GameFontDisableSmall", T.colors.text)
     state.current, state.managementWide, state.managementMedium = current, managementWide, managementMedium
     state.currentCard, state.createCard, state.newCharCard, state.dangerPanel = currentCard, createCard, newCharCard, dangerPanel
     state.currentCardW, state.createCardW, state.newCharCardW, state.dangerW = currentCardW, createCardW, newCharCardW, dangerW
+end
+local function BuildNewCharacterDefaults(state)
+    local ctx, newCharCard, newCharCardW = state.ctx, state.newCharCard, state.newCharCardW
+    -- "Active profile" above is a per-character binding into an account-wide
+    -- pool of profiles. This picks what a character that has never run MSUF
+    -- starts on. The engine validates the stored name on every login and falls
+    -- back to "Default" if the profile was deleted, so "None" is always safe.
+    local newCharW = max(180, newCharCardW - 40)
+    local newCharDrop = AP.Row(nil, newCharCard, { "dropdown", "advancedprofiles.newCharDrop.12", nil,
+        { "Default profile", function() return ProfileValues(true) end, newCharW },
+        bind = function(newCharDrop)
+        newCharDrop._msuf2StableSearchLabel = "Default profile"
+        MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
+        M.BindDropdownWidget(ctx, newCharDrop,
+            function()
+                local fn = _G.MSUF_GetDefaultProfileForNewCharacters
+                return (type(fn) == "function" and fn()) or NO_PROFILE
+            end,
+            function(v)
+                _G.MSUF_SetDefaultProfileForNewCharacters((v ~= NO_PROFILE) and v or nil)
+                RefreshAfterProfileChange(ctx)
+            end,
+            ProfilesMeta("new_character.default_profile", "action"))
+    end })
+    local newCharHelp = AP.Row(nil, newCharCard, { "text", "advancedprofiles.newCharHelp.13", nil, { "Existing characters are not changed.", 20, -146,
+        max(180, newCharCardW - 40), T.colors.muted } })
+    if newCharHelp and newCharHelp.SetWordWrap then newCharHelp:SetWordWrap(true) end
+
 end
 function ProfilesPage.ManagementControls(state)
     local ctx, buttonGap, heroSwitch = state.ctx, state.buttonGap, state.heroSwitch
@@ -619,7 +659,9 @@ function ProfilesPage.ManagementControls(state)
     local profileCountPill, specStatePill, safetyPill = state.profileCountPill, state.specStatePill, state.safetyPill
 
     local fieldW = max(180, currentCardW - 40)
-    local profileDrop = W.Dropdown(currentCard, "Active profile", {}, fieldW)
+    local profileDrop = AP.Row(nil, currentCard, { "dropdown", ProfilesMeta("active_profile.select").controlId, nil,
+        { "Active profile", {}, fieldW },
+        bind = AP.NativeInput })
     -- The selected value is a profile name; search keeps the control name.
     profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
@@ -648,12 +690,15 @@ function ProfilesPage.ManagementControls(state)
     end)
     local createFieldW = max(180, createCardW - 40)
     local createButtonW = max(120, floor((createCardW - 40 - buttonGap) / 2))
-    local nameInput = W.TextInput(createCard, "New profile name", createFieldW)
-    M.BindTextInput(ctx, nameInput,
-        function() return M.profileCreateCopyName or "" end,
-        function(value) M.profileCreateCopyName = Trim(value or "") end,
-        true,
-        ProfilesMeta("draft.create_copy_name", "ephemeral"))
+    local nameInput = AP.Row(nil, createCard, { "textinput", "advancedprofiles.nameInput.11", nil,
+        { "New profile name", createFieldW },
+        bind = function(nameInput)
+        M.BindTextInput(ctx, nameInput,
+            function() return M.profileCreateCopyName or "" end,
+            function(value) M.profileCreateCopyName = Trim(value or "") end,
+            true,
+            ProfilesMeta("draft.create_copy_name", "ephemeral"))
+    end })
     local PrepareProfileName = function(value)
 local name = Trim(value)
         local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
@@ -746,7 +791,7 @@ end
         end,
     }, dangerButtonW)
     MoveWidget(profileDrop, currentCard, 20, -78, fieldW)
-    local currentStatus = W.LabelAt(currentCard, "", 20, -150, max(180, currentCardW - 40),
+    local currentStatus = AP.LabelAt(currentCard, "", 20, -150, max(180, currentCardW - 40),
         "GameFontDisableSmall", T.colors.muted)
     MoveWidget(nameInput, createCard, 20, -78, createFieldW)
     StyleProfileInput(nameInput, createFieldW, 28, false)
@@ -755,27 +800,7 @@ end
     local dangerActionsY = managementWide and -70 or (managementMedium and -104 or -138)
     PlaceActionRow(dangerPanel, dangerActionsX, reset, delete, dangerActionsY)
 
-    -- "Active profile" above is a per-character binding into an account-wide
-    -- pool of profiles. This picks what a character that has never run MSUF
-    -- starts on. The engine validates the stored name on every login and falls
-    -- back to "Default" if the profile was deleted, so "None" is always safe.
-    local newCharW = max(180, newCharCardW - 40)
-    local newCharDrop = W.Dropdown(newCharCard, "Default profile", function() return ProfileValues(true) end, newCharW)
-    newCharDrop._msuf2StableSearchLabel = "Default profile"
-    MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
-    M.BindDropdownWidget(ctx, newCharDrop,
-        function()
-            local fn = _G.MSUF_GetDefaultProfileForNewCharacters
-            return (type(fn) == "function" and fn()) or NO_PROFILE
-        end,
-        function(v)
-            _G.MSUF_SetDefaultProfileForNewCharacters((v ~= NO_PROFILE) and v or nil)
-            RefreshAfterProfileChange(ctx)
-        end,
-        ProfilesMeta("new_character.default_profile", "action"))
-    local newCharHelp = W.Text(newCharCard, "Existing characters are not changed.", 20, -146,
-        max(180, newCharCardW - 40), T.colors.muted)
-    if newCharHelp and newCharHelp.SetWordWrap then newCharHelp:SetWordWrap(true) end
+    BuildNewCharacterDefaults(state)
 
     local function RefreshManagementState()
         local active = ActiveProfileName()
@@ -812,7 +837,8 @@ end
 function ProfilesPage.ProfileCleanup(state)
     local ctx, dangerPanel = state.ctx, state.dangerPanel
     local width = max(150, min(220, state.dangerW - 220))
-    local cleanup = T.Button(dangerPanel, "Delete several profiles", width, state.buttonH, { noSearch = true, history = false })
+    local cleanup = AP.Row(nil, dangerPanel, { "button", "advancedprofiles.cleanup.14", nil,
+        { "Delete several profiles", width, state.buttonH, { noSearch = true, history = false } } })
     T.SkinDangerButton(cleanup)
     T.CenterButtonLabel(cleanup)
     cleanup:SetPoint("TOPRIGHT", dangerPanel, "TOPRIGHT", -20, -14)
@@ -844,30 +870,33 @@ function ProfilesPage.Specializations(state)
     -- Spec-profile rows depend on WoW specialization APIs. The empty-state path keeps the
     -- page usable for low-level characters and offline smoke tests where those APIs are nil.
     local spec = b:CollapsibleSection("profiles_specs", "Specialization Profiles", specH, true)
+    M.ControlSchema.Section(spec, "profiles")
     local specInnerW = max(300, contentW - 40)
-    local autoCard = W.ControlCard(spec, "Automatic switching",
+    local autoCard = AP.Row(nil, spec, { "card", "advancedprofiles.autoCard.15", nil, { "Automatic switching",
         "MSUF switches after combat if specialization changes while combat-locked.",
-        20, -42, specInnerW, specAutoCardH)
-    local auto = W.SwitchAt(autoCard, "Auto-switch profile by specialization", 20, -66,
-        min(380, max(220, specInnerW - 40)))
-    M.BindBoolWidget(ctx, auto,
-        function()
-            return _G.MSUF_IsSpecAutoSwitchEnabled() or false
-        end,
-        function(v)
-            _G.MSUF_SetSpecAutoSwitchEnabled(v and true or false)
-            RefreshAfterProfileChange(ctx)
-        end,
-        ProfilesMeta("specialization.auto_switch.enabled"))
+        20, -42, specInnerW, specAutoCardH } })
+    local auto = AP.Row(nil, autoCard, { "switch", "advancedprofiles.auto.16", nil, { "Auto-switch profile by specialization", 20, -66,
+        min(380, max(220, specInnerW - 40)) }, bind = function(widget)
+        M.BindBoolWidget(ctx, widget,
+            function()
+                return _G.MSUF_IsSpecAutoSwitchEnabled() or false
+            end,
+            function(v)
+                _G.MSUF_SetSpecAutoSwitchEnabled(v and true or false)
+                RefreshAfterProfileChange(ctx)
+            end,
+            ProfilesMeta("specialization.auto_switch.enabled"))
+    end })
     W.SetControlEnabled(auto, #specs > 0)
     local assignHelpX = contentW >= 760 and min(430, floor(specInnerW * 0.47)) or 20
     local assignHelpY = contentW >= 760 and -73 or -112
-    W.Text(autoCard, "Assign one existing profile to each specialization. None keeps the current profile.",
-        assignHelpX, assignHelpY, max(220, specInnerW - assignHelpX - 20), T.colors.muted)
+    AP.Row(nil, autoCard, { "text", "advancedprofiles.text.17", nil, { "Assign one existing profile to each specialization. None keeps the current profile.",
+        assignHelpX, assignHelpY, max(220, specInnerW - assignHelpX - 20), T.colors.muted } })
     if #specs == 0 then
-        local emptyCard = W.ControlCard(spec, "No specialization data", nil, 20, specCardsY, specInnerW, specCardH)
-        W.Text(emptyCard, "Specialization data is not available for this character yet.", 18, -54,
-            max(220, specInnerW - 36), T.colors.dim)
+        local emptyCard = AP.Row(nil, spec, { "card", "advancedprofiles.emptyCard.18", nil,
+            { "No specialization data", nil, 20, specCardsY, specInnerW, specCardH } })
+        AP.Row(nil, emptyCard, { "text", "advancedprofiles.text.19", nil, { "Specialization data is not available for this character yet.", 18, -54,
+            max(220, specInnerW - 36), T.colors.dim } })
     else
         local specCardW = floor((specInnerW - ((specCols - 1) * specCardGap)) / specCols)
         for i, s in ipairs(specs) do
@@ -875,22 +904,26 @@ function ProfilesPage.Specializations(state)
             local row = floor((i - 1) / specCols)
             local x = 20 + (col * (specCardW + specCardGap))
             local y = specCardsY - (row * (specCardH + specCardGap))
-            local assignmentCard = W.ControlCard(spec, s.name, "Assigned profile", x, y, specCardW, specCardH)
+            local assignmentCard = AP.Row(nil, spec, { "card", "advancedprofiles.specialization." .. s.id .. ".card", nil,
+                { s.name, "Assigned profile", x, y, specCardW, specCardH } })
             local dropW = max(160, specCardW - 36)
-            local drop = W.Dropdown(assignmentCard, "Profile", function() return ProfileValues(true) end, dropW)
-            drop._msuf2StableSearchLabel = "Profile"
-            MoveWidget(drop, assignmentCard, 18, -58, dropW)
-            M.BindDropdownWidget(ctx, drop,
-                function()
-                    return _G.MSUF_GetSpecProfile(s.id) or NO_PROFILE
-                end,
-                function(v)
-                    _G.MSUF_SetSpecProfile(s.id, (v ~= NO_PROFILE) and v or nil)
-                    RefreshAfterProfileChange(ctx)
-                end,
-                ProfilesMeta("specialization.mapping.slot." .. tostring(i), "action", {
-                    actionKey = "set_spec_profile",
-                }))
+            local drop = AP.Row(nil, assignmentCard, { "dropdown", "advancedprofiles.drop.21", nil,
+                { "Profile", function() return ProfileValues(true) end, dropW },
+                bind = function(drop)
+                    drop._msuf2StableSearchLabel = "Profile"
+                    MoveWidget(drop, assignmentCard, 18, -58, dropW)
+                    M.BindDropdownWidget(ctx, drop,
+                        function()
+                            return _G.MSUF_GetSpecProfile(s.id) or NO_PROFILE
+                        end,
+                        function(v)
+                            _G.MSUF_SetSpecProfile(s.id, (v ~= NO_PROFILE) and v or nil)
+                            RefreshAfterProfileChange(ctx)
+                        end,
+                        ProfilesMeta("specialization.mapping.slot." .. tostring(i), "action", {
+                            actionKey = "set_spec_profile",
+                        }))
+                end })
         end
     end
     local function RefreshSpecState()
@@ -921,6 +954,7 @@ function ProfilesPage.ImportExport(state)
     local ioWide = contentW >= 980
     local ioH = ioWide and 462 or 824
     local io = b:CollapsibleSection("profiles_io", "Import & Export", ioH, false)
+    M.ControlSchema.Section(io, "profiles")
 
     -- Import/export shares one text box intentionally: exporting fills the field, importing
     -- reads it, and tests can exercise both paths without clipboard APIs. The field keeps its
@@ -937,12 +971,12 @@ function ProfilesPage.ImportExport(state)
         stringCardX, stringCardY, stringCardW, stringCardH = ioInset, -42, ioInnerW, 342
         actionsCardX, actionsCardY, actionsCardW, actionsCardH = ioInset, -402, ioInnerW, 398
     end
-    local stringCard = W.ControlCard(io, "Profile string",
+    local stringCard = AP.Row(nil, io, { "card", "advancedprofiles.stringCard.22", nil, { "Profile string",
         "Export fills this shared field; the string stays after an import so you can reuse it.",
-        stringCardX, stringCardY, stringCardW, stringCardH)
-    local actionsCard = W.ControlCard(io, "Export & import",
+        stringCardX, stringCardY, stringCardW, stringCardH } })
+    local actionsCard = AP.Row(nil, io, { "card", "advancedprofiles.actionsCard.23", nil, { "Export & import",
         "Create a backup first or import into a new profile for the safest workflow.",
-        actionsCardX, actionsCardY, actionsCardW, actionsCardH)
+        actionsCardX, actionsCardY, actionsCardW, actionsCardH } })
     local ioButtonW = max(140, min(240, floor((actionsCardW - 40 - buttonGap) / 2)))
     local exportKindW = min(280, max(180, stringCardW - 40))
     local exportValues = ProfileExportValues()
@@ -950,23 +984,27 @@ function ProfilesPage.ImportExport(state)
         "gameplay", "Gameplay", "groupframe", "Group Frames", "unitselection", "Selected unitframes")) do
         exportValues[#exportValues + 1] = item
     end
-    local exportKind = W.Dropdown(stringCard, "Export kind", exportValues, exportKindW)
-    M.BindDropdownWidget(ctx, exportKind,
-        function() return M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all") end,
-        function(v)
-            M.SetMenuStateValue("profileExportKind", v or "all")
-            if v == "unitselection" and state.unitSelectionSection and W.FocusCollapsibleSection then
-                W.FocusCollapsibleSection(state.unitSelectionSection)
-            end
-        end,
-        ProfilesMeta("export.kind", "ephemeral"))
-    local blob = W.TextInput(stringCard, "Profile string", max(220, stringCardW - 40))
-    blob._msuf2CommitOnBlur = false
-    M.BindTextInput(ctx, blob,
-        function() return M.profileImportString or "" end,
-        function(value) M.profileImportString = tostring(value or "") end,
-        false,
-        ProfilesMeta("import_export.buffer", "ephemeral"))
+    local exportKind = AP.Row(nil, stringCard, { "dropdown", "advancedprofiles.exportKind.24", nil,
+        { "Export kind", exportValues, exportKindW },
+        bind = function(exportKind)
+        M.BindDropdownWidget(ctx, exportKind,
+            function() return M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all") end,
+            function(v)
+                M.SetMenuStateValue("profileExportKind", v or "all")
+                if v == "unitselection" and state.unitSelectionSection and W.FocusCollapsibleSection then
+                    W.FocusCollapsibleSection(state.unitSelectionSection)
+                end
+            end,
+            ProfilesMeta("export.kind", "ephemeral"))
+    end })
+    local blob = AP.Row(nil, stringCard, { "textinput", "advancedprofiles.blob.25", nil, { "Profile string", max(220, stringCardW - 40) }, bind = function(blob)
+        blob._msuf2CommitOnBlur = false
+        M.BindTextInput(ctx, blob,
+            function() return M.profileImportString or "" end,
+            function(value) M.profileImportString = tostring(value or "") end,
+            false,
+            ProfilesMeta("import_export.buffer", "ephemeral"))
+    end })
     -- The box is multiline, so Enter inserts a newline instead of committing, and blur commits
     -- are off (a profile string in the undo history would be pure noise). Mirror user edits into
     -- the menu state directly: every refresh writes the state back into the box, so without this
@@ -983,7 +1021,7 @@ function ProfilesPage.ImportExport(state)
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroExport, export) end
     if T.ApplyButtonRole then T.ApplyButtonRole(export, "primary") end
     local importCreateNew, importProfileName
-    local import = T.Button(actionsCard, "Import to current profile", ioButtonW, buttonH)
+    local import = AP.Row(nil, actionsCard, { "button", "advancedprofiles.import.26", nil, { "Import to current profile", ioButtonW, buttonH } })
     if T.CenterButtonLabel then T.CenterButtonLabel(import) end
     RegisterControl(import, ProfilesMeta("import.execute", "action", {
         confirmRequired = true,
@@ -1017,13 +1055,15 @@ function ProfilesPage.ImportExport(state)
     }), "Import to current profile", "button")
     AddProfileTooltip(import, "Import to current profile",
         "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
-    importCreateNew = W.SwitchAt(actionsCard, "Import and create new profile", 20, -176,
-        max(220, actionsCardW - 40))
+    importCreateNew = AP.Row(nil, actionsCard, { "switch", ProfilesMeta("import.create_new_mode").controlId, nil, { "Import and create new profile", 20, -176,
+        max(220, actionsCardW - 40) }, bind = AP.NativeInput })
     RegisterControl(importCreateNew, ProfilesMeta("import.create_new_mode", "ephemeral"), "Import and create new profile", "toggle")
     AddProfileTooltip(importCreateNew, "Import and create new profile",
         "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importNameW = min(380, max(180, actionsCardW - 40))
-    importProfileName = W.TextInput(actionsCard, "New profile name", importNameW)
+    importProfileName = AP.Row(nil, actionsCard, { "textinput", ProfilesMeta("import.new_profile_name").controlId, nil,
+        { "New profile name", importNameW },
+        bind = AP.NativeInput })
     RegisterControl(importProfileName, ProfilesMeta("import.new_profile_name", "ephemeral"), "New profile name", "textinput")
     importProfileName._msuf2CommitOnBlur = false
     M.TrackRefresh(ctx, function()
@@ -1158,8 +1198,8 @@ function ProfilesPage.ImportActions(state)
     --- Blizzard Edit Mode data is opt-in per session for BOTH directions
     --- (never exported by default). The switch drives the two ProfileIO
     --- flags directly; nothing is persisted across reloads.
-    local includeBlizzEM = W.SwitchAt(actionsCard, "Include Blizzard Edit Mode layout", 20, -292,
-        max(220, actionsCardW - 40))
+    local includeBlizzEM = AP.Row(nil, actionsCard, { "switch", ProfilesMeta("import_export.blizzard_edit_mode").controlId, nil,
+        { "Include Blizzard Edit Mode layout", 20, -292, max(220, actionsCardW - 40) }, bind = AP.NativeInput })
     RegisterControl(includeBlizzEM, ProfilesMeta("import_export.blizzard_edit_mode", "ephemeral"),
         "Include Blizzard Edit Mode layout", "toggle")
     AddProfileTooltip(includeBlizzEM, "Include Blizzard Edit Mode layout",
@@ -1190,7 +1230,8 @@ function ProfilesPage.ImportActions(state)
     MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
     StyleProfileInput(importProfileName, importNameW, 28, false)
-    local importModeHelp = W.Text(actionsCard, "", 20, -336, max(220, actionsCardW - 40), T.colors.muted)
+    local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
+        { "", 20, -336, max(220, actionsCardW - 40), T.colors.muted } })
     if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
     local EXPORT_KIND_LABELS = {
         all = SuiteExportAvailable() and "MSUF only" or "Full profile",
@@ -1235,9 +1276,11 @@ end
 function ProfilesPage.UnitSelection(state)
     local ctx, b = state.ctx, state.b
     local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 246, false)
+    M.ControlSchema.Section(section, "profiles")
     state.unitSelectionSection = section
-    W.Text(section, "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
-        20, -44, max(220, state.contentW - 40), T.colors.muted)
+    AP.Row(nil, section, { "text", "advancedprofiles.text.31", nil,
+        { "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
+        20, -44, max(220, state.contentW - 40), T.colors.muted } })
     M.profileExportUnits = M.profileExportUnits or { player = true }
     local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
         "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
@@ -1248,7 +1291,9 @@ function ProfilesPage.UnitSelection(state)
             local column = index % 2
             local row = floor(index / 2)
             local width = max(140, floor((state.contentW - 60) / 2))
-            local toggle = W.SwitchAt(section, label, 20 + column * (width + 20), -92 - row * 28, width)
+            local toggle = AP.Row(nil, section, { "switch", ProfilesMeta("export.unit." .. unit).controlId, nil,
+                { label, 20 + column * (width + 20), -92 - row * 28, width },
+                bind = AP.NativeInput })
             RegisterControl(toggle, ProfilesMeta("export.unit." .. unit, "ephemeral"), label, "toggle")
             toggle:SetChecked(M.profileExportUnits[unit] == true)
             toggle:SetScript("OnClick", function(self)
@@ -1258,8 +1303,9 @@ function ProfilesPage.UnitSelection(state)
             index = index + 1
         end
     end
-    W.Text(section, "Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged.",
-        20, -214, max(220, state.contentW - 40), T.colors.muted)
+    AP.Row(nil, section, { "text", "advancedprofiles.text.33", nil,
+        { "Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged.",
+        20, -214, max(220, state.contentW - 40), T.colors.muted } })
 end
 function ProfilesPage.Build(ctx)
     local state = ProfilesPage.Prepare(ctx)
@@ -1280,21 +1326,20 @@ local function BuildModules(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Modules", "Optional MSUF style and visual modules.", 64)
     local style = b:CollapsibleSection("modules_style", "Style", 96, true)
-    local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
-    M.BindBoolWidget(ctx, enable,
-        function()
-            local v = _G.MSUF_StyleIsEnabled()
-            do
-return v and true or false
-end
-            return G().styleEnabled ~= false
-        end,
-        function(v)
-            _G.MSUF_SetStyleEnabled(v and true or false)
-            G().styleEnabled = v and true or false
-            _G.MSUF_ApplyModules()
-        end,
-        ModulesMeta("style.enabled"))
+    M.ControlSchema.Section(style, "modules")
+    local enable = AP.Row(nil, style, { "switch", "advancedprofiles.enable.34", nil, { "MSUF Style", 14, -38, 220 }, bind = function(enable)
+        M.BindBoolWidget(ctx, enable,
+            function()
+                local v = _G.MSUF_StyleIsEnabled()
+                return v and true or false
+            end,
+            function(v)
+                _G.MSUF_SetStyleEnabled(v and true or false)
+                G().styleEnabled = v and true or false
+                _G.MSUF_ApplyModules()
+            end,
+            ModulesMeta("style.enabled"))
+    end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("profiles", { title = "MSUF Profiles", build = ProfilesPage.Build, version = 7 })

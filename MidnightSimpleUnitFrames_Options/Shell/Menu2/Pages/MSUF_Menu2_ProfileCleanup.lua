@@ -11,6 +11,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua", {
     "MSUF_DeleteProfiles",
 })
 local T = M.Theme
+local AP = M.AdvancedPage
 local max = math.max
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
     if type(policy) == "string" then return region[policy](region, ...) end
@@ -115,7 +116,7 @@ local function EnsureRow(index)
     local row = rows[index]
     if row then return row end
     local content = popup._content
-    row = T.Button(content, "", content:GetWidth(), ROW_H, { noSearch = true, history = false })
+    row = AP.Row(nil, content, { "button", "profilecleanup.row." .. index, nil, { "", content:GetWidth(), ROW_H, { noSearch = true, history = false } } })
     row._msuf2SkipHistoryCheckpoint = true
     row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * ROW_STEP)
     local label = row._msuf2Label
@@ -123,7 +124,7 @@ local function EnsureRow(index)
     label:SetPoint("LEFT", row, "LEFT", 12, 0)
     label:SetPoint("RIGHT", row, "RIGHT", -(USAGE_W + 16), 0)
     if label.SetWordWrap then label:SetWordWrap(false) end
-    local usage = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    local usage = AP.Row(nil, row, { "font", "profilecleanup.usage." .. index, nil, { "GameFontDisableSmall", "", T.colors.muted } })
     usage:SetPoint("RIGHT", row, "RIGHT", -12, 0)
     usage:SetWidth(USAGE_W)
     usage:SetJustifyH("RIGHT")
@@ -204,8 +205,8 @@ local function ConfirmDelete()
     })
 end
 
-local function PopupButton(label, width, role)
-    local btn = T.Button(popup, label, width, 24, { noSearch = true, history = false })
+local function PopupButton(key, label, width, role)
+    local btn = AP.Row(nil, popup, { "button", "profilecleanup." .. key, nil, { label, width, 24, { noSearch = true, history = false } } })
     btn._msuf2SkipHistoryCheckpoint = true
     if role then T.ApplyButtonRole(btn, role) end
     T.CenterButtonLabel(btn)
@@ -226,24 +227,24 @@ end
 local function BuildPopup()
     popup = M.CreateMenuPopupPanel(UIParent)
     popup:SetSize(POPUP_W, POPUP_H)
-    local title = T.Font(popup, "GameFontNormal", "Delete profiles", T.colors.accent)
+    local title = AP.Row(nil, popup, { "font", "profilecleanup.title.4", nil, { "GameFontNormal", "Delete profiles", T.colors.accent } })
     title:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -14)
-    local help = T.Font(popup, "GameFontDisableSmall",
-        "Click profiles to select them. The active profile and Default cannot be deleted here.", T.colors.muted)
+    local help = AP.Row(nil, popup, { "font", "profilecleanup.help.5", nil, { "GameFontDisableSmall",
+        "Click profiles to select them. The active profile and Default cannot be deleted here.", T.colors.muted } })
     help:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -38)
     help:SetWidth(POPUP_W - 32)
     help:SetJustifyH("LEFT")
-    local close = PopupButton("x", 24, "danger")
+    local close = PopupButton("close", "x", 24, "danger")
     close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -10)
     close:SetScript("OnClick", function() popup:Hide() end)
     BuildList()
-    local unused = PopupButton("Select unused", 150)
+    local unused = PopupButton("selectUnused", "Select unused", 150)
     unused:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 14)
     unused:SetScript("OnClick", SelectUnused)
-    local clear = PopupButton("Clear selection", 150)
+    local clear = PopupButton("clearSelection", "Clear selection", 150)
     clear:SetPoint("LEFT", unused, "RIGHT", 8, 0)
     clear:SetScript("OnClick", ClearSelection)
-    local delete = PopupButton("Delete selected (%d)", 200, "danger")
+    local delete = PopupButton("deleteSelected", "Delete selected (%d)", 200, "danger")
     delete:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 14)
     delete:SetScript("OnClick", ConfirmDelete)
     popup._deleteBtn = delete

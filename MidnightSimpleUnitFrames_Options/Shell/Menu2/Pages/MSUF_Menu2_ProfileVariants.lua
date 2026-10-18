@@ -40,11 +40,11 @@ function P.EditorBar(ctx)
         editorBar:SetSize(460,86)
         editorBar:SetPoint("BOTTOM",UIParent,"BOTTOM",0,140)
         editorBar:SetFrameStrata("DIALOG")
-        editorBar.title=W.Text(editorBar,"",16,-14,428,T.colors.text)
-        local save=T.Button(editorBar,"Save variant values",206,26)
+        editorBar.title=AP.Row(nil, editorBar, { "text", "profilevariants.title.1", nil, { "",16,-14,428,T.colors.text } })
+        local save=AP.Row(nil, editorBar, { "button", "profilevariants.save.2", nil, { "Save variant values",206,26 } })
         save:SetPoint("TOPLEFT",editorBar,"TOPLEFT",16,-46)
         save:SetScript("OnClick",function() P.Result(editorBar.ctx,Variants.SaveRecording()) end)
-        local cancel=T.Button(editorBar,"Cancel variant editing",206,26)
+        local cancel=AP.Row(nil, editorBar, { "button", "profilevariants.cancel.3", nil, { "Cancel variant editing",206,26 } })
         cancel:SetPoint("TOPRIGHT",editorBar,"TOPRIGHT",-16,-46)
         cancel:SetScript("OnClick",function()
             if InCombatLockdown() then return end
@@ -81,23 +81,28 @@ function P.Button(state,section,label,path,x,y,fn,width)
     button:SetPoint("TOPLEFT",section,"TOPLEFT",x,y)
     local sectionKey=path:match("^sync%.") and "profiles_sync" or "profiles_variants"
     AP.RegisterControl(button,P.Meta(sectionKey,path),label,"button")
+    M.ControlSchema.Owned(button,"profiles","menuState")
     return button
 end
 -- Pickers whose selected value is a name the user typed: search keeps the control name.
 local NAME_PICKERS={["variant.select"]=true,["sync.group.select"]=true}
 function P.Drop(state,section,label,path,values,get,set,x,y,width)
-    local drop=W.Dropdown(section,label,values,width or 250)
-    if NAME_PICKERS[path] then drop._msuf2StableSearchLabel=label end
-    W.MoveWidget(drop,section,x,y,width or 250)
     local sectionKey=path:match("^sync%.") and "profiles_sync" or "profiles_variants"
     local meta=P.Meta(sectionKey,path)
-    M.BindDropdownWidget(state.ctx,drop,get,set,meta)
-    AP.RegisterControl(drop,meta,label,"dropdown",values)
-    return drop
+    return AP.Row(state.ctx, section, { "dropdown", meta.controlId, nil,
+        { label,values,width or 250 },
+        bind=function(drop)
+            if NAME_PICKERS[path] then drop._msuf2StableSearchLabel=label end
+            W.MoveWidget(drop,section,x,y,width or 250)
+            M.BindDropdownWidget(state.ctx,drop,get,set,meta)
+            AP.RegisterControl(drop,meta,label,"dropdown",values)
+        end,
+    })
 end
 function P.BindBool(ctx,widget,get,set,meta)
     M.BindBoolWidget(ctx,widget,get,set,meta)
     AP.RegisterControl(widget,meta,widget._msuf2SearchText or widget._msuf2SearchTitle,"toggle")
+    M.ControlSchema.Owned(widget,"profiles","menuState")
     return widget
 end
 local function VariantValues()
@@ -125,17 +130,23 @@ local function Conditions(state,section,entry,schema,width,specs)
             entry.hotkey=value~=0 and value or nil
             c.manual=value~=0
         end,left,-350,width)
-    local enabled=W.SwitchAt(section,"Enable variant",right,-350,width)
-    P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
-        function(value) entry.enabled=value==true end,P.Meta("profiles_variants","variant.enabled"))
-    W.Text(section,"Specializations: none selected means all. Matching conditions are combined; later variants take priority.",
-        20,-414,state.contentW-40,T.colors.muted)
+    local enabled=AP.Row(nil, section, { "switch", "profilevariants.enabled.5", nil,
+        { "Enable variant",right,-350,width }, bind = function(enabled)
+        P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
+            function(value) entry.enabled=value==true end,P.Meta("profiles_variants","variant.enabled"))
+    end })
+    AP.Row(nil, section, { "text", "profilevariants.text.6", nil,
+        { "Specializations: none selected means all. Matching conditions are combined; later variants take priority.",
+        20,-414,state.contentW-40,T.colors.muted } })
     c.specs=c.specs or {}
     for i,spec in ipairs(specs) do
         local id=tostring(spec.id)
-        local toggle=W.SwitchAt(section,spec.name,20+((i-1)%2)*(width+10),-454-math.floor((i-1)/2)*32,width)
-        P.BindBool(state.ctx,toggle,function() return c.specs[id]==true end,
-            function(value) c.specs[id]=value and true or nil end,P.Meta("profiles_variants","variant.spec."..i))
+        local toggle=AP.Row(nil, section, { "switch", "profilevariants.toggle.7", nil,
+            { spec.name,20+((i-1)%2)*(width+10),-454-math.floor((i-1)/2)*32,width },
+            bind = function(toggle)
+                P.BindBool(state.ctx,toggle,function() return c.specs[id]==true end,
+                    function(value) c.specs[id]=value and true or nil end,P.Meta("profiles_variants","variant.spec."..i))
+            end })
     end
     return -464-math.ceil(#specs/2)*32
 end
@@ -152,15 +163,19 @@ function P.Build(state,specs)
     M.ProfileSearch.Selecting("variant",selected)
     local width=math.max(180,math.floor((state.contentW-50)/2))
     local section=state.b:CollapsibleSection("profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
-    W.Text(section,"Override individual settings or layouts for several specializations, a location or a hotkey. The base profile stays intact.",
-        20,-40,state.contentW-40,T.colors.muted)
+    M.ControlSchema.Section(section, "profiles")
+    AP.Row(nil, section, { "text", "profilevariants.text.8", nil,
+        { "Override individual settings or layouts for several specializations, a location or a hotkey. The base profile stays intact.",
+        20,-40,state.contentW-40,T.colors.muted } })
     if schemaError then
-        W.Text(section,M.Format("The saved profile variants cannot be read (%s). They are kept unchanged, and editing them here is blocked.",
-            M.Tr(schemaError)),20,-62,state.contentW-40,T.colors.danger or T.colors.muted)
+        AP.Row(nil, section, { "text", "profilevariants.text.9", nil,
+            { M.Format("The saved profile variants cannot be read (%s). They are kept unchanged, and editing them here is blocked.",
+            M.Tr(schemaError)),20,-62,state.contentW-40,T.colors.danger or T.colors.muted } })
     end
     P.Drop(state,section,"Variant","variant.select",VariantValues,function() return selected or "" end,
         function(value) selected=value; fieldID=nil; P.Refresh(ctx) end,20,-98,width)
-    local input=W.TextInput(section,"New variant name",width)
+    local input=AP.Row(nil, section, { "textinput", P.Meta("profiles_variants","variant.name").controlId, nil,
+        { "New variant name",width }, bind = AP.NativeInput })
     W.MoveWidget(input,section,30+width,-98,width)
     AP.RegisterControl(input,P.Meta("profiles_variants","variant.name"),"New variant name","editbox")
     P.Button(state,section,"Create variant","variant.create",30+width,-168,function()
@@ -173,8 +188,9 @@ function P.Build(state,specs)
         return P.Result(ctx,ok,err)
     end,width)
     if not entry then return end
-    W.Text(section,"Change conditions below, then save them. Assign hotkey slots in the game's MSUF key bindings.",
-        20,-218,state.contentW-40,T.colors.muted)
+    AP.Row(nil, section, { "text", "profilevariants.text.11", nil,
+        { "Change conditions below, then save them. Assign hotkey slots in the game's MSUF key bindings.",
+        20,-218,state.contentW-40,T.colors.muted } })
     local y=Conditions(state,section,entry,schema,width,specs)
     P.Button(state,section,"Save conditions","variant.conditions.save",20,y,function() return Put(ctx,schema) end,width)
     P.Button(state,section,"Delete variant","variant.delete",30+width,y,function()
@@ -191,9 +207,9 @@ function P.Build(state,specs)
     end,width)
     y=y-64
     local editing=Variants.IsRecording()
-    local note=W.Text(section,not editing
+    local note=AP.Row(nil, section, { "text", "profilevariants.note.12", nil, { not editing
         and "Edit values records only changed settings. Removing an overridden value returns that setting to the base profile."
-        or "",20,y,state.contentW-40,T.colors.muted)
+        or "",20,y,state.contentW-40,T.colors.muted } })
     -- The line names the variant as typed, so the composed text is not looked up again.
     if editing then
         T.SetTranslatedText(note,M.Format("Editing %s: use the normal settings pages or Edit Mode, then return here to save or cancel.",
@@ -238,15 +254,20 @@ function P.Build(state,specs)
 end
 function P.Transport(state)
     local section=state.b:CollapsibleSection("profiles_variant_transport","Variant import and export",192,true)
-    W.Text(section,"Full-profile strings can include the base settings and their variants. Partial exports contain base settings only. Excluding variants on import keeps your existing variants.",
-        20,-42,state.contentW-40,T.colors.muted)
+    M.ControlSchema.Section(section, "profiles")
+    AP.Row(nil, section, { "text", "profilevariants.text.13", nil,
+        { "Full-profile strings can include the base settings and their variants. Partial exports contain base settings only."
+            .. " Excluding variants on import keeps your existing variants.",
+        20,-42,state.contentW-40,T.colors.muted } })
     for i,spec in ipairs({{"Export profile variants","profileExportVariants","MSUF_Profiles_SetExportVariants"},
         {"Import profile variants","profileImportVariants","MSUF_Profiles_SetImportVariants"}}) do
-        local toggle=W.SwitchAt(section,spec[1],20,-104-(i-1)*36,state.contentW-40)
-        P.BindBool(state.ctx,toggle,function() return M[spec[2]]~=false end,function(value)
-            M[spec[2]]=value==true
-            _G[spec[3]](value)
-        end,P.Meta("profiles_variant_transport",spec[2]))
+        local toggle=AP.Row(nil, section, { "switch", "profilevariants.toggle.14", nil,
+            { spec[1],20,-104-(i-1)*36,state.contentW-40 }, bind = function(toggle)
+            P.BindBool(state.ctx,toggle,function() return M[spec[2]]~=false end,function(value)
+                M[spec[2]]=value==true
+                _G[spec[3]](value)
+            end,P.Meta("profiles_variant_transport",spec[2]))
+        end })
     end
 end
 
