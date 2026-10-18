@@ -193,7 +193,9 @@ combat refusal and Reset section. Offline checks do not establish live rendering
 New page migrations use `Schema.Build(ctx, parent, rows, opts, refs)` with ordered
 rows. `Schema.Render` and `Schema.Flow` retain their existing named declarations
 for the already converted pilot sections; new pages do not mix the two formats.
-Additional row kinds must arrive with an actual page consumer and its tests.
+Additional row kinds require a concrete page consumer and its tests. The shared
+chrome kinds below consolidate the adapters in the four pending page migrations;
+those pages adopt them after the shared package is approved.
 
 The replacing tuple is `{ kind, key, UI fallback, { native arguments }, placement }`.
 The optional placement is `{ x, y, width, alignment }`; absence keeps native placement.
@@ -217,7 +219,7 @@ cached input or selection arguments. The record owner's `afterToggle()` fallback
 has the same zero-argument contract. This is distinct from the older named-row
 `spec.after(value)` interface retained by Render/Flow's unit adapters.
 
-Scope, preview and spell-tile factories are called directly with their existing
+Preview and spell-tile factories are called directly with their existing
 arguments. They keep their own controllers and lifecycle; there is no host row,
 `factory` field or `opts.builder`. Build's fifth argument may be an existing refs
 collector, as used by the Style owner's dependent-control refresh.
@@ -259,6 +261,37 @@ plus meta/stepMeta providers; rows do not carry a separate command object.
 GroupNestedBinding delegates to the existing nested-number binder. Colors forwards
 named title/note/historyLabel/historySource/offsetX/textSettings options unchanged
 to the original shortcut/reference controller, without a second binding owner.
+
+### Shared native chrome and unit rows
+
+| Kind | Native constructor / binding |
+| --- | --- |
+| sectionSwitch | `W.SectionSwitch`; normalizes to toggle for opts.bind. Reuses the header switch. |
+| flowToggle | `W.Toggle`; reserves the native 32-pixel row exactly once, then binds as toggle. |
+| segment | `W.Segment`; opts.bind receives segment, retaining central combat/history ownership. |
+| scopebar | `W.ScopeOverrideBar(ctx, parent, row[4][1])`; the one argument is its existing options table. Its own selection/refresh/history controller remains the only owner; opts.bind is not called. |
+| text / font | `W.Text` / `M.Theme.Font`, including heading template, color and role arguments. |
+| card | `W.ControlCard` with title/subtitle/x/y/width/height/style. Fixed seven argument positions preserve a nil subtitle or style. |
+| topButton / roleButton | Native `W.TopButton` / `W.RoleButton`; styles, active false and current click scripts remain native. |
+
+Static and styled-button rows declare their stable row key (or row.meta.controlId),
+row.scope (otherwise ctx.key/shared) and row.domain (otherwise presentation).
+A scopebar retains its native catalog identity and live GetValue/SetValue/values;
+row.domain defaults to menuState. Give cards domain=layout when that is their
+existing page declaration. Card headings/geometry stay inside ControlCard;
+ContextColors declares existing or later-attached shortcuts without creating them.
+The page still calls Colors with the original shortcut options at its original time.
+Font labels are native argument 2; other text labels are argument 1.
+
+`Schema.UnitOptions()` supplies the former UnitSections typed binding policy.
+Rows carry meta, scope/domain, get/set or unit, reason, commitOnBlur and roundStep;
+slider ranges come from native arguments 2/3/4. Fallback row[3] retains false and 0.
+The existing UnitPage readers/setters resolve profile data at input time. A unit
+row without custom get/set must name a supported SetUnit domain (e.g. layout).
+A row.bind callback keeps its original binding and declaration; if it supplies no
+declaration, the shared adapter declares its menuState ownership without rebinding.
+ClassPower workspace policies and the Group fixed-Party adapter remain page-owned.
+Existing kinds and hook order are unchanged. No row construction seeds saved data.
 
 ### Verification tiers
 

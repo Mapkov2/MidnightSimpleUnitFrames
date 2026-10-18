@@ -368,7 +368,7 @@
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ContextColorPicker.lua": [1354, 141, 65, 53, 20, 66, 19, 17, 1, 0, 5, 1, 0, 2],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua": [1096, 146, 65, 30, 19, 59, 0, 7, 0, 0, 0, 0, 0, 3],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlGates.lua": [79, 33, 8, 15, 6, 21, 0, 1, 0, 0, 0, 0, 0, 0],
-  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua": [485, 56, 22, 15, 11, 24, 0, 0, 0, 0, 0, 0, 0, 0],
+  "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua": [541, 56, 25, 15, 11, 27, 0, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua": [1372, 200, 44, 46, 13, 51, 22, 19, 1, 0, 0, 4, 2, 6],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua": [162, 55, 10, 22, 5, 21, 1, 1, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua": [1261, 114, 99, 49, 40, 100, 18, 13, 1, 1, 0, 1, 0, 4],

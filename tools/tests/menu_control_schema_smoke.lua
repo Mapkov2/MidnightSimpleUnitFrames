@@ -338,4 +338,132 @@ Probe(Schema.GroupOptions(), "ciEnabled", "scopeValue")
 M.BindBoolWidget = oldBool
 Check(callbacks == 3, "not every replacing callback owner ran")
 
+-- Shared rows exercise the real constructors/binders used by the pending pages.
+-- Default and explicit false/zero states must agree with direct native controls.
+local function SharedRows()
+    local W, S, T = M.Widgets, M.ControlSchema, M.Theme
+    M.SelectPage("uf_target")
+    local entry = M.cache.uf_target
+    local ctx = M.CreateContext("uf_target", entry.wrapper, entry)
+    local function Parent()
+        local p = env.CreateFrame("Frame", nil, env.UIParent)
+        p._msuf2Width, p._msuf2ContentX, p._msuf2CursorY = 720, 16, -40
+        return p
+    end
+    local function Meta(key)
+        return { controlId = "menu2.uf_target.shared_probe." .. key, settingKey = "target." .. key }
+    end
+    for _, edge in ipairs({ false, true }) do
+        local db, parent = env.MSUF_DB.target, Parent()
+        db.rangeFadeEnabled = edge and false or nil
+        if edge then db.rangeFadeEnabled = false end
+        db.hpBarAlpha, db.rangeFadeLayerMode = edge and 0 or nil, edge and "text" or nil
+        local before = F.CopySnapshot(env.MSUF_DB)
+        local rows = {
+            { "sectionSwitch", "rangeFadeEnabled", true, { "Range fade", "Enable" }, unit = "target", domain = "layout", meta = Meta("rangeFadeEnabled") },
+            { "slider", "hpBarAlpha", 1, { "Health bar alpha", 0, 1, 0.05, 240 }, unit = "target", domain = "alpha", roundStep = true, meta = Meta("hpBarAlpha") },
+            { "segment", "rangeFadeLayerMode", "frame", { "Layers", { { value = "frame", text = "Frame" }, { value = "text", text = "Text" } }, 240 },
+                unit = "target", domain = "range", meta = Meta("rangeFadeLayerMode") },
+        }
+        local refs = S.Build(ctx, parent, rows, S.UnitOptions())
+        M.Refresh(ctx)
+        Check(F.Equal(before, env.MSUF_DB), "shared unit construction seeded profile fields")
+        Check(refs.rangeFadeEnabled:GetChecked() == not edge, "unit default/false toggle drift")
+        Check(refs.hpBarAlpha:GetValue() == (edge and 0 or 1), "unit default/zero number drift")
+        local applies = unitRequests
+        M.ClearHistory()
+        Input(refs.rangeFadeEnabled, edge)
+        Check(db.rangeFadeEnabled == edge and unitRequests > applies, "shared toggle input/apply drift")
+        Check(M.Undo() and F.Equal(before, env.MSUF_DB), "shared unit undo changed other data")
+        Check(M.Redo() and env.MSUF_DB.target.rangeFadeEnabled == edge, "shared unit redo drift")
+        Input(refs.hpBarAlpha, 0.63)
+        Check(math.abs(env.MSUF_DB.target.hpBarAlpha - 0.63) < 0.00001, "fractional slider changed native non-rounding policy")
+        refs.rangeFadeLayerMode.buttons[2]:Click("LeftButton")
+        Check(env.MSUF_DB.target.rangeFadeLayerMode == "text", "segment did not write its unit field")
+        local stable = F.CopySnapshot(env.MSUF_DB)
+        M.ClearHistory()
+        core.Util.InCombat("PLAYER_REGEN_DISABLED")
+        env.InCombatLockdown = function() return true end
+        Input(refs.rangeFadeEnabled, not edge)
+        Input(refs.hpBarAlpha, 0.15)
+        refs.rangeFadeLayerMode.buttons[1]:Click("LeftButton")
+        Check(F.Equal(stable, env.MSUF_DB) and not M.Undo(), "shared combat refusal/history drift")
+        core.Util.InCombat("PLAYER_REGEN_ENABLED")
+        env.InCombatLockdown = function() return false end
+        mw:Fire("PLAYER_REGEN_ENABLED")
+        mw:RunTimers()
+    end
+    local parent, direct = Parent(), Parent()
+    local selection, changes, binds = "party", 0, 0
+    local opts = { values = { { value = "party", text = "Party" }, { value = "raid", text = "Raid" } },
+        getValue = function() return selection end,
+        setValue = function(value) selection, changes = value, changes + 1 end }
+    local flowMeta = Meta("alphaExcludeTextPortrait")
+    local shared = S.Build(ctx, parent, {
+        { "flowToggle", "alphaExcludeTextPortrait", false, { "Exclude text" }, meta = flowMeta,
+            get = function() return false end, set = function() end },
+        { "text", "shared.text", nil, { "Status", 10, -18, 120, T.colors.text } },
+        { "font", "shared.heading", nil, { "GameFontNormal", "Layout", T.colors.text, "section" } },
+        { "card", "shared.card", nil, { "Layout", nil, 10, -70, 320, 180, "group" }, domain = "layout" },
+        { "topButton", "shared.top", nil, { "Copy", 80, 24, {}, false } },
+        { "roleButton", "shared.role", nil, { "Reset", "danger", 80, 24 } },
+        { "scopebar", "shared.scope", nil, { opts }, domain = "scope", register = true },
+    }, { bind = function(...)
+        binds = binds + 1
+        return S.UnitBinding(...)
+    end, register = function(_, widget)
+        M.RegisterControlMetadata(widget, { controlId = "menu2.shared.scope" }, "Scope", "segment")
+    end })
+    local nativeFlow = W.Toggle(direct, "Exclude text")
+    Check(parent._msuf2CursorY == direct._msuf2CursorY, "flow row reserved a different cursor")
+    Check(shared.alphaExcludeTextPortrait:GetWidth() == nativeFlow:GetWidth(), "flow row geometry drift")
+    Check(binds == 1, "composite scope bar received a second input binding")
+    Check(shared["shared.text"]:GetText() == W.Text(direct, "Status", 10, -18, 120, T.colors.text):GetText(), "static text drift")
+    Check(shared["shared.heading"]:GetText() == "Layout", "font heading label drift")
+    local card = shared["shared.card"]
+    Check(card._msuf2ControlCardTitle == "Layout" and card._msuf2Width == 320
+        and card:GetHeight() == 180 and card._msuf2CursorY == -52, "card title/geometry drift")
+    Check(card._msuf2ControlSchema.applyDomain == "layout", "card declaration domain drift")
+    local late = T.Button(card, "Colors", 60, 24)
+    local clicked = 0
+    late:SetScript("OnClick", function() clicked = clicked + 1 end)
+    card._msuf2DeclareContextColorShortcut(late)
+    late._msuf2ControlSchema.action()
+    Check(clicked == 1 and late._msuf2ControlSchema.owner == late, "late card shortcut lost its native owner")
+    local button = shared["shared.role"]
+    button:SetScript("OnClick", function() clicked = clicked + 1 end)
+    button._msuf2ControlSchema.action()
+    Check(clicked == 2 and shared["shared.top"]._msuf2TopActive == false, "styled button action/false state drift")
+    local bar = shared["shared.scope"]
+    Check(bar._msuf2ControlSchema.id == "menu2.shared.scope", "scope declaration preceded its registry")
+    bar.buttons[2]:Click("LeftButton")
+    Check(selection == "raid" and changes == 1, "scope native selection was duplicated or replaced")
+    bar.buttons[2]:Click("LeftButton")
+    Check(changes == 1, "unchanged scope selection wrote again")
+    bar._msuf2ControlSchema.set("party")
+    Check(changes == 2 and bar._msuf2ControlSchema.get() == "party"
+        and bar._msuf2ControlSchema.values == opts.values, "scope declaration lost live owner values")
+    -- Preserve the integer-only rounding branch and the original owner escape.
+    local number, calls, declaration = 0, 0, { id = "original-declaration" }
+    local bound = S.Build(ctx, Parent(), {
+        { "slider", "integer", 0, { "Offset", -20, 20, 1, 200 }, meta = Meta("integer"), roundStep = true,
+            get = function() return number end, set = function(value) number = value end },
+        { "dropdown", "custom", false, { "Target", { { value = false, text = "None" } }, 120 },
+            bind = function(widget) calls = calls + 1; widget._msuf2ControlSchema = declaration end },
+        { "topButton", "active", nil, { "Party", 80, 24, {}, true } },
+    }, S.UnitOptions())
+    Input(bound.integer, 14.6)
+    Check(number == 15, "shared integer slider lost native rounding metadata")
+    Check(calls == 1 and bound.custom._msuf2ControlSchema == declaration, "custom binder was rebound or redeclared")
+    Check(bound.active._msuf2TopActive == true, "styled button active argument was lost")
+    -- SectionSwitch must reuse the lazy header; a new schema row must not make a second switch.
+    local section = Parent()
+    section._msuf2CollapsibleEntry = { header = Parent() }
+    local original = W.SectionSwitch(section, "Enable", "Enabled")
+    local native = S.Build(ctx, section, { { "sectionSwitch", "header", false, { "Enable", "Enabled" },
+        bind = function(widget) Check(widget == original, "section header identity changed") end } }, S.UnitOptions())
+    Check(native.header == original, "shared section switch recreated the native header")
+end
+SharedRows()
+
 print("menu_control_schema_smoke " .. flavor .. ": input/DB/apply/refresh/combat/history/reset/exact navigation OK")

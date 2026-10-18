@@ -235,9 +235,14 @@ local ROW_CREATORS = {
     switch = "SwitchAt", toggle = "ToggleAt",
     slider = "Slider", dropdown = "Dropdown",
     textinput = "TextInput", color = "Color",
+    sectionSwitch = "SectionSwitch", segment = "Segment", flowToggle = "Toggle",
+    text = "Text", topButton = "TopButton", roleButton = "RoleButton",
 }
 local ROW_KINDS = { switch = "toggle", toggle = "toggle",
-    slider = "slider", dropdown = "dropdown", textinput = "textinput", color = "color" }
+    slider = "slider", dropdown = "dropdown", textinput = "textinput", color = "color",
+    sectionSwitch = "toggle", flowToggle = "toggle", segment = "segment" }
+local ROW_CHROME = { text = "text", font = "font", card = "card",
+    scopebar = "segment", topButton = "button", roleButton = "button" }
 local function PlaceRow(widget, parent, row)
     local p = row[5]
     if not p then return end
@@ -247,12 +252,62 @@ local function RowFlags(widget, flags)
     if not flags then return end
     for key, value in pairs(flags) do widget[key] = value end
 end
+-- Composite rows call the native owner once; a scope bar must never receive
+-- a second segment binding. Cards declare existing and later-attached shortcuts.
+local function CreateCompositeRow(ctx, parent, row)
+    local kind, args = row[1], row[4]
+    if kind == "font" then return M.Theme.Font(parent, unpack(args)) end
+    if kind == "scopebar" then return W.ScopeOverrideBar(ctx, parent, args[1]) end
+    if kind == "card" then
+        return W.ControlCard(parent, args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+    end
+    error("unsupported replacing row")
+end
+local function DeclareRow(ctx, widget, row, kind)
+    local scope = row.scope or (ctx and ctx.key) or "shared"
+    if row[1] == "scopebar" then
+        Schema.Owned(widget, scope, row.domain or "menuState")
+        local spec = widget._msuf2ControlSchema
+        spec.get = function() return widget:GetValue() end
+        spec.set = function(value) return widget:SetValue(value) end
+        spec.values = widget.values
+        return
+    end
+    local meta = row.meta
+    local id = meta and meta.controlId or row[2]
+    Schema.Custom(widget, { id = id, kind = kind,
+        labelKey = row[1] == "font" and row[4][2] or row[4][1], meta = meta,
+        scope = scope, applyDomain = row.domain or "presentation", owner = widget,
+        action = kind == "button" and Schema.ButtonAction(widget) or nil })
+    if kind == "card" then Schema.ContextColors(widget, id .. ".colors", scope) end
+end
+-- The UnitSections typed policy, shared without changing its native binders.
+function Schema.UnitBinding(ctx, widget, row, kind)
+    if row.bind then
+        row.bind(widget)
+        if widget._msuf2ControlSchema then return widget end
+        return Schema.Custom(widget, { id = row[2], kind = kind, labelKey = row[4][1],
+            scope = row.scope or "shared", applyDomain = "menuState", owner = widget })
+    end
+    local meta = assert(row.meta, "unit row metadata missing")
+    local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
+        meta = meta, scope = row.scope or ctx.key, applyDomain = row.domain or "unit",
+        settingPath = meta.settingKey, get = row.get, set = row.set, unit = row.unit,
+        reason = row.reason, commitOnBlur = row.commitOnBlur,
+        defaultSource = function() return row[3] end, roundStep = row.roundStep }
+    if kind == "slider" then spec.range = { row[4][2], row[4][3], row[4][4] } end
+    return Schema.Bind(ctx, widget, spec)
+end
+function Schema.UnitOptions()
+    return { bind = Schema.UnitBinding }
+end
 function Schema.Build(ctx, parent, rows, opts, refs)
     opts, refs = opts or {}, refs or {}
     for _, row in ipairs(rows) do
         local widget, args = nil, row[4]
         if row[1] == "button" then widget = M.Theme.Button(parent, unpack(args))
-        else widget = assert(W[ROW_CREATORS[row[1]]], "unsupported replacing row")(parent, unpack(args)) end
+        elseif ROW_CREATORS[row[1]] then widget = W[ROW_CREATORS[row[1]]](parent, unpack(args))
+        else widget = CreateCompositeRow(ctx, parent, row) end
         refs[row[2]] = widget
         if row.anchor then widget:SetPoint(unpack(row.anchor)) end
         if row.center then M.Theme.CenterButtonLabel(widget) end
@@ -264,6 +319,7 @@ function Schema.Build(ctx, parent, rows, opts, refs)
         if row.tip and M.AddTooltip then M.AddTooltip(widget, unpack(row.tip)) end
         if row.action then widget:SetScript("OnClick", row.action) end
         if row.register then assert(opts.register, "schema row registry missing")(ctx, widget, row) end
+        if ROW_CHROME[row[1]] then DeclareRow(ctx, widget, row, ROW_CHROME[row[1]]) end
         PlaceRow(widget, parent, row)
     end
     return refs
