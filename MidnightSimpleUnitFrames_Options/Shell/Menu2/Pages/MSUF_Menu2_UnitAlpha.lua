@@ -5,7 +5,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 local max = math.max
-local SettingMeta = UP.SettingMeta
+local SettingMeta, ControlMeta = UP.SettingMeta, UP.ControlMeta
 local Schema = M.ControlSchema
 local ALPHA_ROWS = {
     { key = "hpBarAlpha", path = "transparency.hpBarAlpha", kind = "slider", labelKey = "Foreground",
@@ -49,38 +49,8 @@ local function AlphaMeta(ctx, path, unit, key, state)
     end
     return meta
 end
-local function AlphaColorCard(ctx, section, unit, key, ...)
-    local id = "menu2." .. ctx.key .. ".section.transparency.colors." .. key
-    return Schema.ContextColors(W.ControlCard(section, ...), id, unit)
-end
-local function BuildAlpha(ctx, builder, unit)
-    local tabState = { value = "combat" }
-    local ReadBool = UP.ReadBool
-    local ReadNumber = UP.ReadNumber
-    local GetConf = UP.GetConf
-    local GetGeneral = UP.GetGeneral
-    local GetBars = UP.GetBars
-    if not (ReadBool and ReadNumber) then return end
-    local sec = Schema.Section(builder:CollapsibleSection("transparency", "Transparency", nil, false), unit)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local gap = 16
-    local leftX = 20
-    local innerW = max(320, sectionW - 40)
-    local cardW = math.floor((innerW - (gap * 2)) / 3)
-    local cardH = 180
-    local healthX = leftX
-    local resourceX = healthX + cardW + gap
-    local optionsX = resourceX + cardW + gap
-    local optionsW = innerW - (cardW * 2) - (gap * 2)
-    -- State tab row: the base cards edit the general, always-on opacities,
-    -- the second tab holds the whole-frame out-of-combat fade. Menu-session
-    -- state only, never persisted.
-    local _, barY = W.NextRow(sec, 34)
-    local _, cardY = W.NextRow(sec, cardH)
-    local healthCard = AlphaColorCard(ctx, sec, unit, "health", "Health Bar", nil, healthX, cardY, cardW, cardH)
-    local resourceCard = AlphaColorCard(ctx, sec, unit, "resource", "Resource Bar", nil, resourceX, cardY, cardW, cardH)
-    local optionsCard = W.ControlCard(sec, "Options", nil, optionsX, cardY, optionsW, cardH)
-    local oocCard = W.ControlCard(sec, "Out of Combat", nil, healthX, cardY, innerW, cardH)
+local function AttachAlphaColors(unit, healthCard, resourceCard)
+    local GetConf, GetGeneral, GetBars = UP.GetConf, UP.GetGeneral, UP.GetBars
     if W.AttachContextColorReferences and GetGeneral then
         local function EffectiveHealthMode()
             local conf = GetConf and GetConf(unit) or {}
@@ -141,7 +111,43 @@ local function BuildAlpha(ctx, builder, unit)
             context = function() return { unit = unit } end,
         })
     end
-    local cards = { health = healthCard, resource = resourceCard, options = optionsCard, ooc = oocCard }
+end
+local function BuildAlpha(ctx, builder, unit)
+    local tabState = { value = "combat" }
+    local ReadBool = UP.ReadBool
+    local ReadNumber = UP.ReadNumber
+    if not (ReadBool and ReadNumber) then return end
+    local sec = Schema.Section(builder:CollapsibleSection("transparency", "Transparency", nil, false), unit)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local gap = 16
+    local leftX = 20
+    local innerW = max(320, sectionW - 40)
+    local cardW = math.floor((innerW - (gap * 2)) / 3)
+    local cardH = 180
+    local healthX = leftX
+    local resourceX = healthX + cardW + gap
+    local optionsX = resourceX + cardW + gap
+    local optionsW = innerW - (cardW * 2) - (gap * 2)
+    -- State tab row: the base cards edit the general, always-on opacities,
+    -- the second tab holds the whole-frame out-of-combat fade. Menu-session
+    -- state only, never persisted.
+    local _, barY = W.NextRow(sec, 34)
+    local _, cardY = W.NextRow(sec, cardH)
+    local cards = Schema.Build(ctx, sec, {
+        { "card", "health", nil, { "Health Bar", nil, healthX, cardY, cardW, cardH }, scope = unit, domain = "layout",
+            meta = ControlMeta(ctx, "transparency.health", "ephemeral") },
+        { "card", "resource", nil, { "Resource Bar", nil, resourceX, cardY, cardW, cardH }, scope = unit, domain = "layout",
+            meta = ControlMeta(ctx, "transparency.resource", "ephemeral") },
+        { "card", "options", nil, { "Options", nil, optionsX, cardY, optionsW, cardH }, scope = unit, domain = "layout",
+            meta = ControlMeta(ctx, "transparency.options", "ephemeral") },
+        { "card", "ooc", nil, { "Out of Combat", nil, healthX, cardY, innerW, cardH }, scope = unit, domain = "layout",
+            meta = ControlMeta(ctx, "transparency.ooc", "ephemeral") },
+    })
+    local healthCard, resourceCard, optionsCard, oocCard = cards.health, cards.resource, cards.options, cards.ooc
+    for _, key in ipairs({ "health", "resource" }) do
+        Schema.ContextColors(cards[key], "menu2." .. ctx.key .. ".section.transparency.colors." .. key, unit)
+    end
+    AttachAlphaColors(unit, healthCard, resourceCard)
     local widths = { health = cardW, resource = cardW, options = optionsW, ooc = cardW }
     local controls = {}
     for _, row in ipairs(ALPHA_ROWS) do
@@ -149,21 +155,21 @@ local function BuildAlpha(ctx, builder, unit)
         local function Default() return Schema.Default(unit, row.key) end
         local read = row.kind == "slider" and ReadNumber or ReadBool
         local width = widths[row.card]
-        controls[row.key] = Schema.Render(ctx, cards[row.card], {
-            id = meta.controlId, kind = row.kind, labelKey = row.labelKey, key = row.key,
-            settingPath = unit .. "." .. row.key, scope = unit, applyDomain = row.domain,
-            range = row.kind == "slider" and { 0, 1, 0.05 } or nil, percent = row.kind == "slider",
-            defaultSource = Default, meta = meta,
-            get = function() return read(unit, row.key, Default()) end,
-            set = function(value)
-                Schema.SetUnit(row.domain, unit, row.key, value, row.reason, row.kind)
-                if row.key == "oocFadeEnabled" then
-                    UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, row.key, Default()))
-                end
-            end,
-        }, { width = width, x = 16, y = row.y,
-            moveWidth = row.kind == "slider" and width - 58 or (row.key == "oocFadeEnabled" and width + 40 or width - 32),
-            align = "LEFT" })
+        local slider = row.kind == "slider"
+        Schema.Build(ctx, cards[row.card], {
+            { slider and "slider" or "flowToggle", row.key, Default(),
+                slider and { row.labelKey, 0, 1, 0.05, width } or { row.labelKey },
+                { 16, row.y, slider and width - 58 or (row.key == "oocFadeEnabled" and width + 40 or width - 32), "LEFT" },
+                meta = meta, scope = unit, domain = row.domain,
+                beforeBind = slider and M.UsePercentInput or nil,
+                get = function() return read(unit, row.key, Default()) end,
+                set = function(value)
+                    Schema.SetUnit(row.domain, unit, row.key, value, row.reason, row.kind)
+                    if row.key == "oocFadeEnabled" then
+                        UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, row.key, Default()))
+                    end
+                end },
+        }, Schema.UnitOptions(), controls)
     end
     UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, "oocFadeEnabled", Schema.Default(unit, "oocFadeEnabled")))
 
@@ -176,30 +182,28 @@ local function BuildAlpha(ctx, builder, unit)
         end
         W.SetControlShown(oocCard, ooc)
     end
-    local stateBar = W.ScopeOverrideBar(ctx, sec, {
-        values = {
-            { value = "combat", text = "General" },
-            { value = "ooc", text = "Out of Combat" },
-        },
-        width = sectionW,
-        label = "Editing:",
-        labelX = leftX,
-        labelWidth = 64,
-        centerY = barY - 16,
-        getValue = function() return tabState.value end,
-        setValue = function(value)
-            tabState.value = value == "ooc" and "ooc" or "combat"
-            tabState.apply()
-        end,
-    })
-    if UP.RegisterControl then
-        UP.RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
-    end
-    Schema.Custom(stateBar,{
-        id="menu2."..ctx.key..".unit.transparency.state_selector",kind="segment",labelKey="Editing",
-        scope=unit,applyDomain="navigation",values=stateBar.values,get=function() return stateBar:GetValue() end,
-        set=function(value) return stateBar:SetValue(value) end,
-    })
+    Schema.Build(ctx, sec, {
+        { "scopebar", "state", nil, { {
+            values = {
+                { value = "combat", text = "General" },
+                { value = "ooc", text = "Out of Combat" },
+            },
+            width = sectionW,
+            label = "Editing:",
+            labelX = leftX,
+            labelWidth = 64,
+            centerY = barY - 16,
+            getValue = function() return tabState.value end,
+            setValue = function(value)
+                tabState.value = value == "ooc" and "ooc" or "combat"
+                tabState.apply()
+            end,
+        } }, scope = unit, domain = "navigation", register = true },
+    }, { register = function(_, widget)
+        if UP.RegisterControl then
+            UP.RegisterControl(widget, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
+        end
+    end })
     tabState.apply()
     if builder.FinishSection then builder:FinishSection(sec, 48) end
 end

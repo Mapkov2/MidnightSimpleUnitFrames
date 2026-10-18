@@ -1,5 +1,5 @@
 The Options addon loads `MSUF_Menu2_ControlSchema.lua` after the existing
-bindings. SwingTimers, ResourceExtras, Gameplay, UnitAlpha and UnitRangeFade use
+bindings. SwingTimers, ResourceExtras, Gameplay and UnitRangeFade use
 named declarations with stable IDs, kinds, labels, setting routes or custom
 getters/setters, ranges/values, default sources, scope and apply domain. The
 renderer creates the existing widgets and delegates input, combat refusal,
