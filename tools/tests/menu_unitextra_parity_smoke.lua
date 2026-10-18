@@ -241,10 +241,17 @@ local function Replay(prior)
             local spec = w._msuf2ControlSchema
             if spec then
                 local what = section .. " " .. tostring(spec.id)
+                local entry = M.cache["uf_" .. unit].sections[section]._msuf2CollapsibleEntry
+                local shared = w == entry._msuf2UXSummary or w == entry._msuf2SectionActions
+                if shared then
+                    local id, kind = "section.summary", "font"
+                    if w == entry._msuf2SectionActions then id, kind = "section.actions", "button" end
+                    assert(spec.id == id and spec.kind == kind and spec.owner == w, what .. " shared section owner")
+                end
                 assert(type(spec.id) == "string" and spec.id:find("^[%l%d_%.]+$") and not spec.id:find("%.%d+$"),
                     what .. " has an unreadable id")
-                assert(spec.scope == unit, what .. " declares scope " .. tostring(spec.scope))
-                assert(spec.applyDomain == ExpectedDomain(section, spec),
+                assert(spec.scope == (shared and "shared" or unit), what .. " declares scope " .. tostring(spec.scope))
+                assert(spec.applyDomain == (shared and "presentation" or ExpectedDomain(section, spec)),
                     what .. " declares domain " .. tostring(spec.applyDomain))
             end
         end

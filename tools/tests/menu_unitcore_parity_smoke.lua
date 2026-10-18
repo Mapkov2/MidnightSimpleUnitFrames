@@ -140,6 +140,13 @@ local function Run(parent)
             end
         end })
     local M, env, core = mw.M, mw.env, mw.core
+    local shared = {}
+    local createNotice = M.UnitSectionsShared.CreateSectionNotice
+    M.UnitSectionsShared.CreateSectionNotice = function(...)
+        local notice, text, button = createNotice(...)
+        shared[text] = "notice.text font"
+        return notice, text, button
+    end
     local F = core.ProfileFields
     local factory = F.CopySnapshot(env.MSUF_DB)
     core.MSUF_CreateFactoryDefaultProfile = function() return F.CopySnapshot(factory) end
@@ -221,11 +228,16 @@ local function Run(parent)
         table.sort(out)
         return #out, Digest(table.concat(out, "\n"))
     end
-    -- Every schema declaration on an owned frame or region: scope is the unit, and the
-    -- id, kind and apply domain are pinned. Control declarations also match their record.
+    -- Page declarations retain unit scope; only the shared UX owner's actual
+    -- summary/action/notice widgets use shared scope and may repeat their IDs.
     local function CheckDeclarations(page, unit, rows)
         local prefix = "menu2." .. page .. "."
         local expected, actual, seen = {}, {}, {}
+        for _, section in pairs(M.cache[page].sections or {}) do
+            local entry = section._msuf2CollapsibleEntry
+            if entry and entry._msuf2UXSummary then shared[entry._msuf2UXSummary] = "section.summary font" end
+            if entry and entry._msuf2SectionActions then shared[entry._msuf2SectionActions] = "section.actions button" end
+        end
         for id, kind, domain in DECLARED:gmatch("(%S+) (%S+) (%S+)") do
             expected[id:gsub("^@%.", prefix)] = kind .. " " .. domain
         end
@@ -234,9 +246,14 @@ local function Run(parent)
             seen[f] = true
             local spec = f._msuf2ControlSchema
             if spec then
-                assert(spec.scope == unit, "declared scope " .. tostring(spec.id) .. " " .. tostring(spec.scope))
-                assert(actual[spec.id] == nil, "duplicate declaration " .. tostring(spec.id))
-                actual[spec.id] = spec.kind .. " " .. tostring(spec.applyDomain)
+                if shared[f] then
+                    assert(spec.id .. " " .. spec.kind == shared[f] and spec.scope == "shared"
+                        and spec.applyDomain == "presentation" and spec.owner == f, "shared section declaration " .. tostring(spec.id))
+                else
+                    assert(spec.scope == unit, "declared scope " .. tostring(spec.id) .. " " .. tostring(spec.scope))
+                    assert(actual[spec.id] == nil, "duplicate declaration " .. tostring(spec.id))
+                    actual[spec.id] = spec.kind .. " " .. tostring(spec.applyDomain)
+                end
             end
             for _, region in ipairs(f.regions or {}) do Visit(region) end
         end

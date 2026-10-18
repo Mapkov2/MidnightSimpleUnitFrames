@@ -216,6 +216,7 @@ local function Replay(parent)
             if not parent and w._msuf2CommandAction and Values(r, w) then
                 local declaration = assert(w._msuf2ControlSchema, "undeclared control " .. r.controlId)
                 assert(declaration.id == r.controlId, "declaration identity " .. r.controlId)
+                assert(declaration.scope == page:match("^uf_(.+)$"), "declaration scope " .. r.controlId)
             end
         end
         Row("gates", page, Gates(controls))
@@ -433,12 +434,14 @@ local function Replay(parent)
         api.Show(); local popup = api.GetPopup()
         if not parent then
             -- A caller's own declaration is the only one applied; the shared one is its fallback.
-            local domain = ({ unit = "copy", swing = "copyNavigation" })[opts.controlDomain] or "shared"
+            local domain = ({ unit = "copy", group = "copy", swing = "copyNavigation" })[opts.controlDomain] or "shared"
+            local scope = opts.controlDomain == "unit" and opts.controlPageKey:match("^uf_(.+)$") or opts.controlDomain
             for _, cb in ipairs(popup._checks) do
                 if cb._msuf2RuntimeControlRecord then
                     local declaration = assert(cb._msuf2ControlSchema, "copy popup control undeclared")
                     assert(declaration.applyDomain == domain and declaration.owner == cb,
                         "copy popup declaration " .. tostring(opts.controlDomain))
+                    assert(declaration.scope == scope, "copy popup scope " .. tostring(opts.controlDomain))
                 end
             end
         end
