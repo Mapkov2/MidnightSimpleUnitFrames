@@ -22,7 +22,7 @@ for name in ("AdvancedGameplay", "ResourceExtras", "UnitAlpha", "UnitRangeFade",
     page = (menu / f"Pages/MSUF_Menu2_{name}.lua").read_text(encoding="utf-8-sig")
     assert "NormalizeDefaults" not in page and "ExtraAuraDefaults" not in page, name
     if name == "SwingTimers":
-        assert "row.textAdapter = true" in page, "actual attack inputs bypass adapter"
+        assert "row.get = function() return get() or \"\" end" in page, "actual attack inputs lost the empty-string adapter policy"
     else:
         assert "Schema.Default(" in page, name
 assert "local MARK_DEFAULTS=Schema.MarkDefaults" in (menu / "Pages/MSUF_Menu2_ResourceExtras.lua").read_text()

@@ -95,18 +95,20 @@ local function AttachColors(section, hand, indices, ui)
         end,
     })
 end
-local function Position(widget, section, index, layout)
+local ROW_OPTIONS = Schema.UnitOptions()
+ROW_OPTIONS.register = function(_, widget, row)
+    M.RegisterControlMetadata(widget, row.meta, row[4][1], widget._msuf2ControlSchema.kind)
+end
+local function Position(index, layout)
     local column = (index - 1) % layout.columns
     local row = math.floor((index - 1) / layout.columns)
-    AP.MoveWidget(widget, section, 28 + column * (layout.controlWidth + 36), -44 - row * 58, layout.controlWidth)
+    return { 28 + column * (layout.controlWidth + 36), -44 - row * 58, layout.controlWidth }
 end
-local function HandRow(hand, key, kind, label, ui)
-    local meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
-        function() ui.SelectHand(hand) return true end)
-    return {
-        id = meta.controlId, kind = kind, labelKey = label, key = key, meta = meta,
-        settingPath = "swingTimers." .. hand .. "." .. key, scope = hand, applyDomain = "swing",
-        defaultSource = function() return Swing.Get(hand, key) end,
+local function HandRow(hand, key, kind, args, ui, placement)
+    return { kind, key, Swing.Get(hand, key), args, placement,
+        meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
+            function() ui.SelectHand(hand) return true end),
+        scope = hand, domain = "swing", register = true,
         get = function()
             local value = Swing.Get(hand, key)
             if (key == "texture" or key == "backgroundTexture") and value ~= "" then
@@ -115,22 +117,22 @@ local function HandRow(hand, key, kind, label, ui)
             return value
         end,
         set = function(value) Swing.Set(hand, key, value) ui.Paint() end,
-        register = true,
     }
 end
-local function BindSetting(ctx, section, hand, spec, ui, layout, index)
-    local row = HandRow(hand, spec.key, spec.kind, spec.labelKey, ui)
-    row.range, row.values = spec.range, spec.values
-    local widget = Schema.Render(ctx, section, row, { width = layout.controlWidth })
-    Position(widget, section, index, layout)
-    if M.AddTooltip and (spec.key == "texture" or spec.key == "backgroundTexture") then
-        M.AddTooltip(widget, spec.labelKey, "Use Preview and drag Swing Timers to see textures without attacking.")
+local function SettingRow(hand, spec, ui, layout, index)
+    local kind = spec.kind == "toggle" and "flowToggle" or spec.kind
+    local args = { spec.labelKey }
+    if spec.range then
+        args = { spec.labelKey, spec.range[1], spec.range[2], spec.range[3], layout.controlWidth }
+    elseif spec.values then args = { spec.labelKey, spec.values, layout.controlWidth } end
+    local row = HandRow(hand, spec.key, kind, args, ui, Position(index, layout))
+    if spec.key == "texture" or spec.key == "backgroundTexture" then
+        row.tip = { spec.labelKey, "Use Preview and drag Swing Timers to see textures without attacking." }
     end
+    return row
 end
 local function BindHeader(ctx, section, hand, key, label, ui)
-    local row = HandRow(hand, key, "toggle", label, ui)
-    row.view = "header"
-    Schema.Render(ctx, section, row)
+    Schema.Build(ctx, section, { HandRow(hand, key, "sectionSwitch", { label }, ui) }, ROW_OPTIONS)
 end
 local function AddHandSection(ctx, b, hand, id, title, height, open, ui)
     local section = b:CollapsibleSection(id, title, height, open)
@@ -155,14 +157,15 @@ local function BuildHand(ctx, b, hand, ui, layout)
         elseif group.key == "reach" then
             BindHeader(ctx, section, hand, "reachCheck", "Grey out while the target is out of reach", ui)
         end
+        local rows = {}
         for j = 1, #group.indices do
-            BindSetting(ctx, section, hand, SPECS[group.indices[j]], ui, layout, j)
+            rows[#rows + 1] = SettingRow(hand, SPECS[group.indices[j]], ui, layout, j)
         end
         if extra > 0 then
-            local lane = Schema.Render(ctx, section,
-                HandRow("main", "offhandLane", "toggle", "Show the off-hand timer as a lane in the main-hand bar", ui))
-            Position(lane, section, count, layout)
+            rows[#rows + 1] = HandRow("main", "offhandLane", "flowToggle",
+                { "Show the off-hand timer as a lane in the main-hand bar" }, ui, Position(count, layout))
         end
+        Schema.Build(ctx, section, rows, ROW_OPTIONS)
     end
 end
 local function BuildCue(ctx, b, ui, width)
@@ -170,23 +173,23 @@ local function BuildCue(ctx, b, ui, width)
     local cue = AddHandSection(ctx, b, "main", "swing_next", "Next-swing attacks", 90 + #attacks * 58, false, ui)
     BindHeader(ctx, cue, "main", "nextSwingCue", "Show the queued next-swing attack", ui)
     AttachColors(cue, "main", { 6 }, ui)
-    local cueText = Schema.Render(ctx, cue,
-        HandRow("main", "nextSwingText", "toggle", "Name the queued attack on the main-hand bar", ui))
-    AP.MoveWidget(cueText, cue, 28, -42)
+    local text = HandRow("main", "nextSwingText", "flowToggle",
+        { "Name the queued attack on the main-hand bar" }, ui, { 28, -42 })
+    text.tip = { "Name the queued attack on the main-hand bar",
+        "While an attack waits for your next swing, the main-hand bar's title shows its name in the cue color, or the text you set for that attack below." }
+    local rows = { text }
     for i, attack in ipairs(attacks) do
-        local key = attack.key
         local label = M.Format("Text for %s (empty: spell name)", attack.name or tostring(attack.id))
-        local row = HandRow("main", key, "textinput", label, ui)
+        local row = HandRow("main", attack.key, "textinput", { label, math.min(400, width - 80), true },
+            ui, { 28, -82 - (i - 1) * 58 })
         row.commitOnBlur = true
-        row.textAdapter = true
-        row.translatedLabel = true
-        Schema.Render(ctx, cue, row, { x = 28, y = -82 - (i - 1) * 58, width = math.min(400, width - 80) })
-
+        -- Keep the Support text adapter's empty-string policy in the row's own accessors.
+        local get, set = row.get, row.set
+        row.get = function() return get() or "" end
+        row.set = function(value) set(value or "") end
+        rows[#rows + 1] = row
     end
-    if M.AddTooltip then
-        M.AddTooltip(cueText, "Name the queued attack on the main-hand bar",
-            "While an attack waits for your next swing, the main-hand bar's title shows its name in the cue color, or the text you set for that attack below.")
-    end
+    Schema.Build(ctx, cue, rows, ROW_OPTIONS)
 end
 local function CopySettings(ctx, ui, target, scopes)
     if (target ~= "all" and not LABELS[target]) or target == ui.selected then return false end
@@ -269,24 +272,19 @@ local function Build(ctx)
     ui.selected = LABELS[M.swingTimerHand] and M.swingTimerHand or "main"
     local module = b:CollapsibleSection("swing_module", "Swing Timers (Forever)", 90, false)
     Schema.Section(module, "swing")
-    local enabledMeta = Meta("enabled", "swingTimers.enabled")
-    local enabled = Schema.Render(ctx, module, {
-        id = enabledMeta.controlId, kind = "toggle", labelKey = "Enable Swing Timer module", view = "header",
-        scope = "swing", applyDomain = "swingModule", settingPath = "swingTimers.enabled", meta = enabledMeta,
-        get = Swing.GetEnabled, set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
-    })
-    local previewMeta = Meta("preview", nil, "ephemeral")
-    local preview = Schema.Render(ctx, module, {
-        id = previewMeta.controlId, kind = "toggle", labelKey = "Preview and drag Swing Timers",
-        scope = "swing", applyDomain = "preview", meta = previewMeta, get = Swing.GetPreview, set = Swing.SetPreview,
-    })
-    AP.MoveWidget(preview, module, 28, -42)
-    if M.AddTooltip then
-        M.AddTooltip(enabled, "Swing Timers (Forever)",
-            "Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility.")
-        M.AddTooltip(preview, "Preview and drag Swing Timers",
-            "Enable the module, then drag the selected bars outside combat. Main Hand and Off Hand can be shown together. Positions are saved in this MSUF profile.")
-    end
+    Schema.Build(ctx, module, {
+        { "sectionSwitch", "enabled", nil, { "Enable Swing Timer module" },
+            meta = Meta("enabled", "swingTimers.enabled"), scope = "swing", domain = "swingModule",
+            get = Swing.GetEnabled, set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
+            tip = { "Swing Timers (Forever)",
+                "Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility." } },
+        { "flowToggle", "preview", nil, { "Preview and drag Swing Timers" }, { 28, -42 },
+            meta = Meta("preview", nil, "ephemeral"), scope = "swing", domain = "preview",
+            get = Swing.GetPreview, set = Swing.SetPreview,
+            tip = { "Preview and drag Swing Timers",
+                "Enable the module, then drag the selected bars outside combat. "
+                    .. "Main Hand and Off Hand can be shown together. Positions are saved in this MSUF profile." } },
+    }, ROW_OPTIONS)
     ui.section:HookScript("OnHide", function() Swing.SetPreview(false) end)
     local function SelectHand(hand)
         if not LABELS[hand] then return false end
@@ -311,14 +309,13 @@ local function Build(ctx)
     ui.SelectHand = SelectHand
     for i = 1, #HANDS do BuildHand(ctx, b, HANDS[i], ui, layout) end
     BuildCue(ctx, b, ui, width)
-    local selectorMeta = Meta("previewHand", nil, "ephemeral")
-    ui.selector = Schema.Render(ctx, ui.section, {
-        id = selectorMeta.controlId, kind = "segment", labelKey = "Swing Timers (Forever)",
-        scope = "swing", applyDomain = "navigation", meta = selectorMeta,
-        values = M.ValueTextList("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged"),
-        get = function() return ui.selected end, set = SelectHand,
-    }, { width = math.min(420, width - 150), x = 16, y = -14,
-        moveWidth = math.min(420, width - 150), align = "LEFT" })
+    ui.selector = Schema.Build(ctx, ui.section, {
+        { "segment", "hand", nil, { "Swing Timers (Forever)",
+            M.ValueTextList("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged"), math.min(420, width - 150) },
+            { 16, -14, math.min(420, width - 150), "LEFT" },
+            meta = Meta("previewHand", nil, "ephemeral"), scope = "swing", domain = "navigation",
+            get = function() return ui.selected end, set = SelectHand },
+    }, ROW_OPTIONS).hand
     ui.selector._msuf2Title:Hide()
     BuildCopy(ctx, ui, width)
     ui.builder = b

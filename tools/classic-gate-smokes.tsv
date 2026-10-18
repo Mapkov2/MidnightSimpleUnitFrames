@@ -811,3 +811,5 @@ clients+Forever	lua	tools/tests/menu_unitcore_parity_smoke.lua	{root} {flavor}	U
 clients+Forever	lua	tools/tests/menu_unitextra_parity_smoke.lua	{root} {flavor}	Unit extra replacing controls match parent inputs history and combat: {flavor}	nightly
 -	lua	tools/tests/menu_global_parity_smoke.lua	{root} Mainline	Global batch parent input DB apply refresh history combat parity: Mainline	push
 clients+Forever	lua	tools/tests/menu_global_parity_smoke.lua	{root} {flavor}	Global batch parent input DB apply refresh history combat parity: {flavor}	nightly
+-	lua	tools/tests/menu_resources_parity_smoke.lua	{root} Mainline	Resource extras and Swing controls differ from immutable parent: Mainline	push
+clients+Forever	lua	tools/tests/menu_resources_parity_smoke.lua	{root} {flavor}	Resource extras and Swing controls differ from immutable parent: {flavor}	nightly
