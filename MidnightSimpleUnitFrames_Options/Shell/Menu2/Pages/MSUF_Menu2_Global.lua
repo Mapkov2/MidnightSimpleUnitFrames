@@ -20,6 +20,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Global.lua", {
 -- Provides DB readers/writers, scope override helpers, and apply fanout used by the global
 -- fonts/bars/castbars/misc pages. Page files should reuse these helpers for consistent state.
 local W = M.Widgets
+local Schema = M.ControlSchema
 local T = M.Theme
 local VTP = M.ValueTextPairs
 
@@ -623,17 +624,27 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     local hintY = overrideY - 34
     local scope = builder:Section("", math.max(opts.minHeight or 128, math.abs(hintY) + (opts.heightPad or 42)))
     if scope.title then scope.title:Hide() end
-    local segment = W.ScopeOverrideBar(ctx, scope, scopeOpts)
-    RegisterControl(segment, opts.selectorMeta, opts.selectorLabel or "Editing:", "segment", values)
-    local override = W.ToggleAt(scope, opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260)
-    M.BindBoolWidget(ctx, override, opts.getOverride, opts.setOverride or M.Noop, opts.overrideMeta)
-    local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
-    local reset = T.Button(scope, opts.resetLabel or "Reset", opts.resetWidth or 76, 22)
-    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -16, overrideY + 8)
-    T.CenterButtonLabel(reset)
-    if type(opts.reset) == "function" then reset:SetScript("OnClick", opts.reset) end
-    RegisterControl(reset, opts.resetMeta, opts.resetLabel or "Reset", "button")
-    local hint = W.Text(scope, opts.hint or "", 14, hintY, ctx.width - 28, T.colors.muted)
+    local rowOptions = Schema.UnitOptions()
+    rowOptions.register = function(_, widget, row)
+        RegisterControl(widget, row.meta, row.label, row.kind, row.values)
+        if row.kind == "button" then Schema.Owned(widget, ctx.key, "global") end
+    end
+    local scopeId = "menu2." .. ctx.key .. ".scope."
+    local controls = Schema.Build(ctx, scope, {
+        { "scopebar", scopeId .. "selector", nil, { scopeOpts }, register = true,
+            meta = opts.selectorMeta, label = opts.selectorLabel or "Editing:", kind = "segment", values = values },
+        { "toggle", scopeId .. "override", false,
+            { opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260 },
+            get = opts.getOverride, set = opts.setOverride or M.Noop, meta = opts.overrideMeta, domain = "global" },
+        { "text", scopeId .. "overrideInfo", nil, { "", 14, overrideY, ctx.width - 130, T.colors.text } },
+        { "button", scopeId .. "reset", nil, { opts.resetLabel or "Reset", opts.resetWidth or 76, 22 },
+            anchor = { "TOPRIGHT", scope, "TOPRIGHT", -16, overrideY + 8 }, center = true, action = type(opts.reset) == "function" and opts.reset or nil,
+            register = true, meta = opts.resetMeta, label = opts.resetLabel or "Reset", kind = "button" },
+        { "text", scopeId .. "hint", nil, { opts.hint or "", 14, hintY, ctx.width - 28, T.colors.muted } },
+    }, rowOptions)
+    local segment, override, overrideInfo = controls[scopeId .. "selector"], controls[scopeId .. "override"],
+        controls[scopeId .. "overrideInfo"]
+    local reset, hint = controls[scopeId .. "reset"], controls[scopeId .. "hint"]
     M.TrackRefresh(ctx, function()
         local current = scopeOpts.getValue and scopeOpts.getValue() or "shared"
         local active = (type(opts.activeLabels) == "function" and opts.activeLabels()) or ScopeOverrideLabels(values, opts.hasOverride)

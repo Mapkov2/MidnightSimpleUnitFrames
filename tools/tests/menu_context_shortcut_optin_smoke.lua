@@ -2,7 +2,33 @@
 local root, flavor = assert(arg[1]), assert(arg[2])
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local OwnerAssert = assert(loadfile(root .. "/tools/tests/menu_button_owner_assert.lua"))()
-local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true })
+-- Misc declares its cards now. The real unconverted automatic card is the pre-conversion
+-- Misc page, pinned by blob so this fixture does not depend on which pages convert next.
+local MISC_FILE = "MSUF_Menu2_GlobalMisc.lua"
+local MISC_BLOB = "7fcf34bfa27269c65e550daa8ff12abd2f97f401"
+local scratch = root .. "/.checks"
+local windows = package.config:sub(1, 1) == "\\"
+local function Quote(text)
+    if windows then return '"' .. text .. '"' end
+    return "'" .. text:gsub("'", "'\\''") .. "'"
+end
+os.execute((windows and "if not exist " or "mkdir -p ") .. Quote(scratch)
+    .. (windows and (" mkdir " .. Quote(scratch)) or ""))
+local pipe = assert(io.popen("git -C " .. Quote(root) .. " cat-file blob " .. MISC_BLOB, "r"))
+local legacyMisc = pipe:read("*a")
+pipe:close()
+assert(#legacyMisc > 1000 and legacyMisc:find("local M =", 1, true), "pinned Misc page unavailable")
+local legacyPath = scratch .. "/optin-parent-" .. flavor .. "-" .. MISC_FILE
+local legacyFile = assert(io.open(legacyPath, "wb"))
+legacyFile:write(legacyMisc)
+legacyFile:close()
+local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCore = function(world)
+    local load = world.LoadFile
+    world.LoadFile = function(self, path, ...)
+        if path:match("([^/\\]+)$") == MISC_FILE then path = legacyPath end
+        return load(self, path, ...)
+    end
+end })
 local M, W = mw.M, mw.M.Widgets
 mw:Select("opt_misc")
 for _, section in pairs(M.cache.opt_misc.sections) do

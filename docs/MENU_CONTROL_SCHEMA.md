@@ -126,7 +126,7 @@ The real old/new picker opens during this replay. Only native ColorSelect
 texture/rendering methods are fixture adapters; Blizzard's loaded ColorPicker
 XML uses the same wheel/value engine. Targets, picker controls, context/text
 resolution, history and profile identity remain production owners. The opt-in
-smoke uses a real unconverted automatic Misc color card and checks unchanged
+smoke uses the pinned pre-conversion Misc page's automatic color card, unchanged
 callbacks plus late options. Section delegation probes exercise the real
 shared popup, Custom badge, reset, close/reopen, undo/redo and refusal. Their
 factory fixture explicitly seeds alpha so the existing Custom policy has a

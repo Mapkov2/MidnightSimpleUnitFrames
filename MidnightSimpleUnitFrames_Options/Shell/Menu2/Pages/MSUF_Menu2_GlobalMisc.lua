@@ -27,6 +27,8 @@ end
 -- Binds tooltip provider/anchor/modifier behavior and small global UI options. Tooltip
 -- rendering itself is handled by runtime tooltip modules.
 local W = M.Widgets
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local max = math.max
@@ -137,41 +139,46 @@ local MiscSection = {}
 function MiscSection.Binders(s)
     local ctx = s.ctx
     local function BindMiscToggle(parent, label, key, default, reason, x, y, width, opts, afterSet)
-        local control = W.Toggle(parent, label)
-        M.BindBoolWidget(ctx, control,
-            function() return ReadGBool(key, default) end,
-            function(v)
+        local control = Schema.Build(ctx, parent, {
+            { "flowToggle", key, default, { label },
+            get = function() return ReadGBool(key, default) end,
+            set = function(v)
                 SetGBool(key, v, reason, opts or PREVIEW_FALSE)
                 if afterSet then afterSet(v) end
             end,
-            Meta("setting." .. key))
+            meta = Meta("setting." .. key), domain = "global" },
+        }, ROW_OPTIONS)[key]
         if x then W.MoveWidget(control, parent, x, y, width, "LEFT") end
         return control
     end
     local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path)
-        local control = M.BindDropdownWidget(ctx, W.Dropdown(parent, label, values, width), getValue, setValue, Meta(path))
+        local control = Schema.Build(ctx, parent, {
+            { "dropdown", path, nil, { label, values, width },
+                get = getValue, set = setValue, meta = Meta(path), domain = "global" },
+        }, ROW_OPTIONS)[path]
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
     local function BindGroupTargetSwitch(parent, label, kind, x, y, width)
-        local control = W.SwitchAt(parent, label, x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function()
+        local control = Schema.Build(ctx, parent, {
+            { "switch", kind, true, { label, x, y, width },
+            get = function()
                 local groupPage = M.GroupPage
                 if groupPage and type(groupPage.Bool) == "function" then
                     return groupPage.Bool(kind, "targetIndicator", true)
                 end
                 return true
             end,
-            function(value)
+            set = function(value)
                 local groupPage = M.GroupPage
                 if groupPage and type(groupPage.Set) == "function" then
                     groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
                 end
             end,
-            Meta("group_target." .. kind, "setting", {
+            meta = Meta("group_target." .. kind, "setting", {
                 settingKey = "gf_" .. kind .. ".targetIndicator",
-            }))
+            }), domain = "global" },
+        }, ROW_OPTIONS)[kind]
         return control
     end
     s.BindMiscToggle, s.BindMiscDropdown = BindMiscToggle, BindMiscDropdown
@@ -179,7 +186,7 @@ function MiscSection.Binders(s)
 end
 function MiscSection.Language(s)
     local ctx, b, BindMiscDropdown = s.ctx, s.b, s.BindMiscDropdown
-    local language = b:CollapsibleSection("misc_language", "Language", 268, true)
+    local language = Schema.Section(b:CollapsibleSection("misc_language", "Language", 268, true), ctx.key)
     local languageW = language._msuf2Width or ctx.width or 720
     local languageDropW = max(260, min(360, languageW - 70))
     BindMiscDropdown(language, "Menu language", function()
@@ -195,8 +202,10 @@ function MiscSection.Language(s)
             SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
         end,
         "language.selection")
-    local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96,
-        languageW - 70, T.colors.muted)
+    local languageHelp = Schema.Build(ctx, language, {
+        { "text", "menu2.opt_misc.language.languageHelp", nil,
+            { "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted } },
+    })["menu2.opt_misc.language.languageHelp"]
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
     -- Number abbreviation belongs here, not on the Fonts page: it is a locale
     -- formatting rule and it is global. The Fonts page is scope-aware, so a
@@ -222,25 +231,34 @@ function MiscSection.Language(s)
         end
         abbrevSample:SetText(table.concat(parts, "   "))
     end
-    local abbrevSegment = W.Segment(language, "Number abbreviation", ABBREV_STYLES, abbrevSegW)
-    W.MoveWidget(abbrevSegment, language, 30, -134, abbrevSegW, "LEFT")
-    M.BindSegment(ctx, abbrevSegment, AbbrevStyle, function(value)
-        value = (value == "COMPACT") and "COMPACT" or "GAME"
-        -- Persist without a runtime apply, push the new style, then repaint
-        -- once - so the refresh already formats with the new options instead of
-        -- painting stale text and correcting it on the next unit event.
-        SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
-        local NumberFormat = MSUF.NumberFormat
-        if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
-        M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
-        MSUF.GF.RefreshVisuals()
-        RefreshAbbrevSample()
-    end, Meta("setting.numberAbbrevStyle"))
-    local abbrevHelp = W.Text(language,
-        "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.", 30,
-        -186, languageW - 70, T.colors.muted)
+    local abbrevSegment = Schema.Build(ctx, language, {
+        { "segment", "setting.numberAbbrevStyle", nil, { "Number abbreviation", ABBREV_STYLES, abbrevSegW },
+        get = AbbrevStyle,
+        set = function(value)
+            value = (value == "COMPACT") and "COMPACT" or "GAME"
+            -- Persist without a runtime apply, push the new style, then repaint
+            -- once - so the refresh already formats with the new options instead of
+            -- painting stale text and correcting it on the next unit event.
+            SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
+            local NumberFormat = MSUF.NumberFormat
+            if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
+            M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
+            MSUF.GF.RefreshVisuals()
+            RefreshAbbrevSample()
+        end,
+        meta = Meta("setting.numberAbbrevStyle"), domain = "global",
+        beforeBind = function(abbrevSegment)
+            W.MoveWidget(abbrevSegment, language, 30, -134, abbrevSegW, "LEFT")
+        end },
+    }, ROW_OPTIONS)["setting.numberAbbrevStyle"]
+    local abbrevHelp = Schema.Build(ctx, language, {
+        { "text", "menu2.opt_misc.language.abbrevHelp", nil,
+            { "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.",
+            30, -186, languageW - 70, T.colors.muted } },
+    })["menu2.opt_misc.language.abbrevHelp"]
     if abbrevHelp.SetWordWrap then abbrevHelp:SetWordWrap(true) end
-    abbrevSample = W.Text(language, "", 30, -232, languageW - 70, T.colors.text)
+    abbrevSample = Schema.Custom(W.Text(language, "", 30, -232, languageW - 70, T.colors.text),
+        { id = "menu2.opt_misc.language.abbrevSample", kind = "preview", scope = ctx.key, applyDomain = "preview" })
     RefreshAbbrevSample()
     if M.TrackRefresh then
         M.TrackRefresh(ctx, function()
@@ -255,13 +273,15 @@ end
 function MiscSection.MenuBehavior(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     local hasAppearancePresets = type(T.GetMenuAppearancePreset) == "function"
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true)
+    local menuBehavior = Schema.Section(b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true), ctx.key)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil,
         nil, nil, MENU_WRITE_OPTS)
-    local menuSnapHelp = W.Text(menuBehavior,
-        "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72,
-        menuBehaviorW - 70, T.colors.muted)
+    local menuSnapHelp = Schema.Build(ctx, menuBehavior, {
+        { "text", "menu2.opt_misc.menuBehavior.menuSnapHelp", nil,
+            { "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.",
+            30, -72, menuBehaviorW - 70, T.colors.muted } },
+    })["menu2.opt_misc.menuBehavior.menuSnapHelp"]
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
         function() M.RefreshAdvancedNavVisibility() end)
@@ -305,7 +325,9 @@ function MiscSection.MenuBehavior(s)
             end
         end,
         "menu.font")
-    menuFontPreview = W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178, menuBehaviorW - menuFontRightX - 30, T.colors.text)
+    menuFontPreview = Schema.Custom(W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178,
+        menuBehaviorW - menuFontRightX - 30, T.colors.text), { id = "menu2.opt_misc.menuBehavior.menuFontPreview",
+        kind = "preview", scope = ctx.key, applyDomain = "preview" })
     if menuFontPreview.SetHeight then menuFontPreview:SetHeight(24) end
     if menuFontPreview.SetJustifyV then menuFontPreview:SetJustifyV("MIDDLE") end
     s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW = hasAppearancePresets, menuBehavior, menuBehaviorW
@@ -373,18 +395,19 @@ function MiscSection.MenuAccent(s)
             AccentReloadCheck()
         end,
         "setting.menuAccent")
-    accentSwatch = W.Color(menuBehavior, "Custom accent color")
-    M.BindColor(ctx, accentSwatch,
-        function()
+    accentSwatch = Schema.Build(ctx, menuBehavior, {
+        { "color", "setting.menuAccentColor", nil, { "Custom accent color" },
+        get = function()
             local r, g2, b2 = T.MenuAccentHexToRGB(ReadG("menuAccentColor", "3b82f6"))
             if not r then r, g2, b2 = 0.231, 0.510, 0.965 end
             return r, g2, b2
         end,
-        function(r, g2, b2)
+        set = function(r, g2, b2)
             SetG("menuAccentColor", T.MenuAccentRGBToHex(r, g2, b2), "MSUF2_MENU_ACCENT_COLOR", MENU_WRITE_OPTS)
             QueueAccentReloadCheck()
         end,
-        Meta("setting.menuAccentColor"))
+        meta = Meta("setting.menuAccentColor"), domain = "global" },
+    }, ROW_OPTIONS)["setting.menuAccentColor"]
     if accentSwatch._msuf2Title then
         accentSwatch._msuf2Title:ClearAllPoints()
         accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, hasAppearancePresets and -312 or -256)
@@ -401,10 +424,12 @@ function MiscSection.MenuAccent(s)
             or "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change.",
         { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
-    local accentHelp = W.Text(menuBehavior, hasAppearancePresets
+    local accentHelp = Schema.Build(ctx, menuBehavior, {
+        { "text", "menu2.opt_misc.menuBehavior.accentHelp", nil, { hasAppearancePresets
         and "Background opacity changes the MSUF Forever background only; text stays fully opaque."
         or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, hasAppearancePresets and -450
-            or -330, menuBehaviorW - 70, T.colors.muted)
+            or -330, menuBehaviorW - 70, T.colors.muted } },
+    })["menu2.opt_misc.menuBehavior.accentHelp"]
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     if hasAppearancePresets then
         BindMiscDropdown(menuBehavior, "Menu appearance preset",
@@ -442,33 +467,39 @@ function MiscSection.MenuAccent(s)
                 })
             end,
             "setting.menuAppearancePreset")
-        local opacity = W.Slider(menuBehavior, "Background opacity", 80, 100, 1, 250)
-        if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
-        M.BindSlider(ctx, opacity,
-            function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end,
-            function(value)
-                SetG("menuBackgroundOpacity", value, "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS)
-                if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end
-            end, Meta("setting.menuBackgroundOpacity"))
+        local opacity = Schema.Build(ctx, menuBehavior, {
+            { "slider", "setting.menuBackgroundOpacity", nil, { "Background opacity", 80, 100, 1, 250 }, bind = function(widget)
+                M.BindSlider(ctx, widget, function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end, function(value)
+                    SetG("menuBackgroundOpacity", value, "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS)
+                    if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end
+                end, Meta("setting.menuBackgroundOpacity"))
+                Schema.Owned(widget, ctx.key, "global")
+            end, beforeBind = function(opacity)
+                if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
+            end },
+        }, ROW_OPTIONS)["setting.menuBackgroundOpacity"]
         W.MoveWidget(opacity, menuBehavior, 14, -372, 250, "LEFT")
         W.SetControlEnabled(opacity, T.classicAtlas == true)
     end
 end
 function MiscSection.Integrations(s)
     local ctx, b, BindMiscToggle, menuBehaviorW = s.ctx, s.b, s.BindMiscToggle, s.menuBehaviorW
-    local mapkoSkin = b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true)
+    local mapkoSkin = Schema.Section(b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true), ctx.key)
     BindMiscToggle(mapkoSkin, "Use MapkoSkin for MSUF menus", "mapkoSkinMenus", true,
         "MSUF2_MAPKOSKIN_MENUS", 14, -42, 360, MENU_WRITE_OPTS,
         function() if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end end)
-    W.Text(mapkoSkin, "Requires MapkoSkin API 2.1. Disabling restores the MSUF look; unit frames and profile colors are unchanged.",
-        30, -76, menuBehaviorW - 70, T.colors.muted)
-    local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
+    Schema.Build(ctx, mapkoSkin, {
+        { "text", "menu2.opt_misc.mapkoSkin.mapkoSkinHelp", nil,
+            { "Requires MapkoSkin API 2.1. Disabling restores the MSUF look; unit frames and profile colors are unchanged.",
+            30, -76, menuBehaviorW - 70, T.colors.muted } },
+    })
+    local startup = Schema.Section(b:CollapsibleSection("misc_startup", "Startup", 124, true), ctx.key)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,
         function()
             _G.MSUF_ApplyModules()
         end)
-    local nicknameIntegration = b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true)
+    local nicknameIntegration = Schema.Section(b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true), ctx.key)
     local nsrtNicknames = BindMiscToggle(nicknameIntegration, "Use NSRT nicknames on MSUF frames",
         "nsrtNicknameIntegration", true, "MSUF2_NSRT_NICKNAMES", 14, -42, 430, PREVIEW_FALSE,
         function()
@@ -481,7 +512,7 @@ function MiscSection.Integrations(s)
     -- Forever); the section exists only where it does and EllesmereUI is loaded.
     local ellesmereAvailable = MSUF.Optional("MSUF_EllesmereEditMode_IsAvailable")
     if ellesmereAvailable and ellesmereAvailable() then
-        local ellesmere = b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true)
+        local ellesmere = Schema.Section(b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true), ctx.key)
         local integration = BindMiscToggle(ellesmere, "Use EllesmereUI Unlock Mode for MSUF",
             "ellesmereEditModeIntegration", true, "MSUF2_ELLESMERE_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
             function(value)
@@ -490,15 +521,17 @@ function MiscSection.Integrations(s)
         M.AddTooltip(integration, "EllesmereUI Unlock Mode",
             "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.",
             { hook = true })
-        local ellesmereHelp = W.Text(ellesmere,
-            "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
-            30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+        local ellesmereHelp = Schema.Build(ctx, ellesmere, {
+            { "text", "menu2.opt_misc.ellesmere.ellesmereHelp", nil,
+                { "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
+                30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted } },
+        })["menu2.opt_misc.ellesmere.ellesmereHelp"]
         if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
     end
 end
 function MiscSection.ExternalEditMode(s)
     local ctx, b, BindMiscToggle = s.ctx, s.b, s.BindMiscToggle
-    local external = b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 298, true)
+    local external = Schema.Section(b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 298, true), ctx.key)
     local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
         "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
         function(value)
@@ -540,15 +573,17 @@ function MiscSection.ExternalEditMode(s)
     M.AddTooltip(blizzardEM, "Blizzard Edit Mode integration",
         "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.",
         { hook = true })
-    local externalHelp = W.Text(external,
-        "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
-        30, -232, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+    local externalHelp = Schema.Build(ctx, external, {
+        { "text", "menu2.opt_misc.external.externalHelp", nil,
+            { "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
+            30, -232, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted } },
+    })["menu2.opt_misc.external.externalHelp"]
     if externalHelp.SetWordWrap then externalHelp:SetWordWrap(true) end
 end
 function MiscSection.FrameHighlights(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     local BindGroupTargetSwitch = s.BindGroupTargetSwitch
-    local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
+    local mouseover = Schema.Section(b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true), ctx.key)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
             title = "Mouseover Highlight Color",
@@ -574,23 +609,26 @@ function MiscSection.FrameHighlights(s)
                 "MSUF2_MOUSEOVER_STYLE", MOUSEOVER_WRITE_OPTS)
         end,
         "mouseover.style")
-    local size = W.Slider(mouseover, "Effect size", 1, 16, 1, mouseoverRightW)
-    if size.SetValueFormatter then
-        size:SetValueFormatter(function(value) return M.Format("%d px", floor((tonumber(value) or 6) + 0.5)) end)
-    end
-    M.BindNumberWidget(ctx, size,
-        function() return floor((tonumber(ReadG("highlightThickness", 6)) or 6) + 0.5) end,
-        function(value)
+    local size = Schema.Build(ctx, mouseover, {
+        { "slider", "mouseover.size", 6, { "Effect size", 1, 16, 1, mouseoverRightW },
+        get = function() return floor((tonumber(ReadG("highlightThickness", 6)) or 6) + 0.5) end,
+        set = function(value)
             SetG("highlightThickness", floor((tonumber(value) or 6) + 0.5),
                 "MSUF2_MOUSEOVER_SIZE", MOUSEOVER_WRITE_OPTS)
         end,
-        6,
-        Meta("mouseover.size", "setting", { min = 1, max = 16, step = 1, format = "%d px" }))
+        meta = Meta("mouseover.size", "setting", { min = 1, max = 16, step = 1, format = "%d px" }), domain = "global",
+        beforeBind = function(size)
+            if size.SetValueFormatter then
+                size:SetValueFormatter(function(value) return M.Format("%d px", floor((tonumber(value) or 6) + 0.5)) end)
+            end
+        end },
+    }, ROW_OPTIONS)["mouseover.size"]
     W.MoveWidget(size, mouseover, mouseoverRightX, -58, mouseoverRightW, "CENTER")
-    local mouseoverHelp = W.Text(mouseover,
-        M.Format("Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in %s.",
-            M.NavPath("opt_colors", "Player & Target Frames")),
-        mouseoverLeftX, -142, mouseoverW - 68, T.colors.muted)
+    local mouseoverHelp = Schema.Build(ctx, mouseover, {
+        { "text", "menu2.opt_misc.mouseover.mouseoverHelp", nil,
+            { M.Format("Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in %s.",
+            M.NavPath("opt_colors", "Player & Target Frames")), mouseoverLeftX, -142, mouseoverW - 68, T.colors.muted } },
+    })["menu2.opt_misc.mouseover.mouseoverHelp"]
     if mouseoverHelp.SetWordWrap then mouseoverHelp:SetWordWrap(true) end
     local function RefreshMouseoverControls()
         local on = ReadGBool("highlightEnabled", true)
@@ -600,9 +638,10 @@ function MiscSection.FrameHighlights(s)
     if enabled and enabled.HookScript then enabled:HookScript("OnClick", RefreshMouseoverControls) end
     M.TrackRefresh(ctx, RefreshMouseoverControls)
     local targetCardW = max(320, mouseoverW - 28)
-    local targetCard = W.ControlCard(mouseover, "Group Target Highlight",
-        "Independent of mouseover. Marks your current target in the selected group-frame types.",
-        14, -198, targetCardW, 116)
+    local targetCard = Schema.Build(ctx, mouseover, {
+        { "card", "menu2.opt_misc.mouseover.targetCard", nil, { "Group Target Highlight",
+            "Independent of mouseover. Marks your current target in the selected group-frame types.", 14, -198, targetCardW, 116 }, domain = "layout" },
+    })["menu2.opt_misc.mouseover.targetCard"]
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(targetCard, { "group.target" }, {
             title = "Target Highlight Color",
@@ -620,7 +659,7 @@ end
 function MiscSection.Tooltips(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     -- Classic has no aura tooltip switch rows below the help text (-226 and -252).
-    local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", IS_MAINLINE and 290 or 226, false)
+    local tooltips = Schema.Section(b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", IS_MAINLINE and 290 or 226, false), ctx.key)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30
     local tooltipRightX = max(tooltipLeftX + 300, floor(tooltipW * 0.52))
@@ -651,7 +690,10 @@ function MiscSection.Tooltips(s)
         function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end,
         "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
-    local tooltipHelp = W.Text(tooltips, "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
+    local tooltipHelp = Schema.Build(ctx, tooltips, {
+        { "text", "menu2.opt_misc.tooltips.tooltipHelp", nil,
+            { "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted } },
+    })["menu2.opt_misc.tooltips.tooltipHelp"]
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
     -- Both aura tooltip switches drive client options through
     -- Runtime/MSUF_TooltipSpellIDs.lua, and only the Mainline TOC loads that file.
@@ -676,11 +718,11 @@ function MiscSection.Tooltips(s)
     end
 end
 function MiscSection.BlizzardFrames(s)
-    local b, BindMiscToggle = s.b, s.BindMiscToggle
+    local ctx, b, BindMiscToggle = s.ctx, s.b, s.BindMiscToggle
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.
-    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", IS_MAINLINE and 170 or 138, false)
+    local blizzard = Schema.Section(b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", IS_MAINLINE and 170 or 138, false), ctx.key)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
             _G.MSUF_SetMinimapIconEnabled(v)

@@ -15,6 +15,8 @@ local C_Timer = M.MenuTimer or _G.C_Timer
 -- Binds shared/scoped font family, size, outline, shadow, alpha, and baseline controls.
 -- Runtime font resolution and live font-string updates remain in the font runtime registry.
 local W = M.Widgets
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local VT = M.ValueTextList
@@ -420,8 +422,8 @@ end
 --- follows Shared), every other scope edits the unit name keys of its
 --- font scope. Split from BuildFonts, which hands in its row builder.
 local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
-    local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-        288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
+    local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+        288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
     names._msuf2CursorY = -40
     local shorten, side, chars, noEllipsis
     local function RefreshGFNameShorteningUI()
@@ -429,7 +431,8 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
     end
     local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
         function()
-            if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
+            if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled",
+                (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
             return SharedNameShorteningEnabled()
         end,
         function(v)
@@ -509,8 +512,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
     if IsGFScope(nameScope) then
         BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     else
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
+        local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
@@ -568,7 +571,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
                 FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
-        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
+        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis,
+            controls.scopeNotice; nameShorteningControls = { side, chars }
         if fontScopeReason and W.SetControlsDisabledReason then
             local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
             W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
@@ -661,23 +665,39 @@ local function BuildFontsScope(ctx, b)
 end
 
 local function BuildGlobalFont(ctx, b)
-    local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
+    local font = Schema.Section(b:CollapsibleSection("fonts_global_font", "Global Font", 146, true), ctx.key)
     local RefreshFontPreview
-    local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(false) end, 340)
-    if M.AddTooltip then
-        M.AddTooltip(fontDrop, "Font (SharedMedia)",
-            "The typeface for all unit and group frame text; every scope shares it. Fonts other addons register through SharedMedia also appear here.",
-            { hook = true })
-    end
-    if W.SetControlDisabledReason then
-        W.SetControlDisabledReason(fontDrop, function()
-            if CurrentFontScope() == "shared" then return nil end
-            return M.Tr("Font family is global and can be changed in Shared scope.")
-        end)
-    end
-    local fontScopeInfo = W.Text(font, "Font family is global and can be changed in Shared scope.", 374, -42, ctx.width - 402, T.colors.muted)
+    local fontDrop = Schema.Build(ctx, font, {
+        { "dropdown", "font.family", nil, { "Font (SharedMedia)", function() return FontValues(false) end, 340 },
+        get = function() return FontKeyGet() end,
+        set = function(v)
+            FontKeySet(v)
+            _G.MSUF_NormalizeStoredFontKeys()
+            ApplyFonts("MSUF2_FONT_KEY")
+            RefreshFontPreview()
+        end,
+        meta = Meta("font.family"), domain = "global",
+        beforeBind = function(fontDrop)
+            if M.AddTooltip then
+                M.AddTooltip(fontDrop, "Font (SharedMedia)",
+                    "The typeface for all unit and group frame text; every scope shares it. Fonts other addons register through SharedMedia also appear here.",
+                    { hook = true })
+            end
+            if W.SetControlDisabledReason then
+                W.SetControlDisabledReason(fontDrop, function()
+                    if CurrentFontScope() == "shared" then return nil end
+                    return M.Tr("Font family is global and can be changed in Shared scope.")
+                end)
+            end
+        end },
+    }, ROW_OPTIONS)["font.family"]
+    local fontScopeInfo = Schema.Build(ctx, font, {
+        { "text", "menu2.opt_fonts.font.fontScopeInfo", nil, { "Font family is global and can be changed in Shared scope.",
+            374, -42, ctx.width - 402, T.colors.muted } },
+    })["menu2.opt_fonts.font.fontScopeInfo"]
     if fontScopeInfo.SetShown then fontScopeInfo:SetShown(CurrentFontScope() ~= "shared") end
-    local preview = W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56, T.colors.text)
+    local preview = Schema.Custom(W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56,
+        T.colors.text), { id = "menu2.opt_fonts.font.preview", kind = "preview", scope = ctx.key, applyDomain = "preview" })
     if preview.SetHeight then preview:SetHeight(28) end
     if preview.SetJustifyV then preview:SetJustifyV("MIDDLE") end
     RefreshFontPreview = function()
@@ -698,21 +718,12 @@ local function BuildGlobalFont(ctx, b)
             preview:SetShadowOffset(0, 0)
         end
     end
-    M.BindDropdownWidget(ctx, fontDrop,
-        function() return FontKeyGet() end,
-        function(v)
-            FontKeySet(v)
-            _G.MSUF_NormalizeStoredFontKeys()
-            ApplyFonts("MSUF2_FONT_KEY")
-            RefreshFontPreview()
-        end,
-        Meta("font.family"))
     M.TrackRefresh(ctx, RefreshFontPreview)
     return RefreshFontPreview, RefreshShadowPreview
 end
 
 local function BuildShadowOpacity(ctx, text, RefreshShadowPreview)
-    local shadowOpacity = W.Slider(text, "Shadow opacity", 0.20, 1, 0.05, 300)
+    local shadowOpacity
     local shadowOpacityApplyTimer
     local shadowOpacityApplyPending
     local shadowOpacityApplyScope
@@ -748,18 +759,22 @@ local function BuildShadowOpacity(ctx, text, RefreshShadowPreview)
             FlushShadowOpacityApply()
         end
     end
-    if M.UsePercentInput then M.UsePercentInput(shadowOpacity) end
-    M.BindNumberWidget(ctx, shadowOpacity,
-        function()
+    shadowOpacity = Schema.Build(ctx, text, {
+        { "slider", "text_style.shadow.opacity", 1, { "Shadow opacity", 0.20, 1, 0.05, 300 },
+        get = function()
             local alpha = ShadowMetrics()
             return alpha
         end,
-        function(v)
+        set = function(v)
             SetShadowValueWithoutApply("fontShadowOpacity", NormalizeShadowOpacity(v))
             RefreshShadowPreview()
             QueueShadowOpacityApply()
         end,
-        1, Meta("text_style.shadow.opacity", "setting", { step = 0.05 }))
+        meta = Meta("text_style.shadow.opacity", "setting", { step = 0.05 }), domain = "global",
+        beforeBind = function(shadowOpacity)
+            if M.UsePercentInput then M.UsePercentInput(shadowOpacity) end
+        end },
+    }, ROW_OPTIONS)["text_style.shadow.opacity"]
     shadowOpacity:HookScript("OnMouseUp", FlushShadowOpacityApply)
     shadowOpacity:HookScript("OnHide", FlushShadowOpacityApply)
     return shadowOpacity
@@ -767,17 +782,64 @@ end
 
 local function BuildFontBaseline(ctx, text)
     W.NextRow(text, 8)
-    local baseline = W.Slider(text, "Baseline", -4, 4, 1, 300)
-    baseline:SetValueFormatter(function(v)
-        v = NormalizeBaselineOffset(v)
-        if v > 0 then return "+" .. tostring(v) .. " px" end
-        return tostring(v) .. " px"
-    end)
-    M.BindNumberWidget(ctx, baseline,
-        function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
-        function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
-        0, Meta("text_style.baseline", "setting", { step = 1, roundStep = true }))
+    local baseline = Schema.Build(ctx, text, {
+        { "slider", "text_style.baseline", 0, { "Baseline", -4, 4, 1, 300 },
+        get = function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
+        set = function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
+        meta = Meta("text_style.baseline", "setting", { step = 1, roundStep = true }), domain = "global",
+        beforeBind = function(baseline)
+            baseline:SetValueFormatter(function(v)
+                v = NormalizeBaselineOffset(v)
+                if v > 0 then return "+" .. tostring(v) .. " px" end
+                return tostring(v) .. " px"
+            end)
+        end },
+    }, ROW_OPTIONS)["text_style.baseline"]
     return baseline
+end
+
+local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide,
+    getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
+    local rows = {
+        { "flowToggle", "name_shortening.enabled", nil, { label },
+            get = getEnabled, set = setEnabled, meta = Meta("name_shortening.enabled"), domain = "global" },
+        { "segment", "name_shortening.style", nil,
+            { "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430 },
+            get = getSide, set = setSide, meta = Meta("name_shortening.style"), domain = "global" },
+        { "slider", "name_shortening.max_length", minChars or 4, { "Max name length", minChars or 4, 30, 1, 300 },
+            get = getChars, set = setChars,
+            meta = Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }), domain = "global",
+            beforeBind = function(widget)
+                if formatChars then widget:SetValueFormatter(formatChars) end
+            end },
+        { "flowToggle", "name_shortening.no_ellipsis", nil, { "No Ellipsis (truncate without ..)" },
+            get = getNoEllipsis, set = setNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
+    }
+    if CharacterNameParts then
+        rows[#rows + 1] = { "segment", "name_shortening.character_name_parts", nil,
+            { "Character names (all frames)", CharacterNameParts.values, 430 },
+            get = CharacterNameParts.Get, set = CharacterNameParts.Set,
+            meta = Meta("name_shortening.character_name_parts"), domain = "global" }
+    end
+    local built = Schema.Build(ctx, parent, rows, ROW_OPTIONS)
+    local controls = { shorten = built["name_shortening.enabled"], side = built["name_shortening.style"],
+        chars = built["name_shortening.max_length"], noEllipsis = built["name_shortening.no_ellipsis"],
+        nameParts = built["name_shortening.character_name_parts"] }
+    local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
+    controls.scopeNotice = Schema.Build(ctx, parent, {
+        { "text", "menu2.opt_fonts.name_shortening.scopeNotice", nil, { "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted } },
+    })["menu2.opt_fonts.name_shortening.scopeNotice"]
+    if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
+    if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
+    if M.AddControlTooltip then
+        M.AddControlTooltip(controls.side, "Truncation style",
+            "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
+        M.AddControlTooltip(controls.chars, "Max name length",
+            "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
+        M.AddControlTooltip(controls.noEllipsis, "No Ellipsis (truncate without ..)",
+            "Shortened names end at the cut without the .. marker. Only names that are actually too long are affected.", { hook = true, labelHit = true })
+    end
+    return controls
 end
 
 local function BuildFonts(ctx)
@@ -786,24 +848,29 @@ local function BuildFonts(ctx)
     local ActiveFontOverrideLabels = BuildFontsScope(ctx, b)
     local RefreshFontPreview, RefreshShadowPreview = BuildGlobalFont(ctx, b)
     local RefreshScopedFontControls = M.RefreshProxy()
-    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 430, true)
+    local text = Schema.Section(b:CollapsibleSection("fonts_text_style", "Text Style", 430, true), ctx.key)
     local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
-        local control = W.Segment(text, label, values, width)
-        M.BindSegment(ctx, control, getValue, function(v)
-            setValue(v)
-            RefreshFontPreview()
-            if afterSet then afterSet() end
-        end, Meta(path))
+        local control = Schema.Build(ctx, text, {
+            { "segment", path, nil, { label, values, width },
+            get = getValue,
+            set = function(v)
+                setValue(v)
+                RefreshFontPreview()
+                if afterSet then afterSet() end
+            end,
+            meta = Meta(path), domain = "global" },
+        }, ROW_OPTIONS)[path]
         return control
     end
-    local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
-    M.BindSegment(ctx, outline,
-        function() return FontOutlineGetFor(CurrentFontScope()) end,
-        function(v)
+    local outline = Schema.Build(ctx, text, {
+        { "segment", "text_style.outline", nil, { "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420 },
+        get = function() return FontOutlineGetFor(CurrentFontScope()) end,
+        set = function(v)
             FontOutlineSetFor(CurrentFontScope(), v)
             RefreshFontPreview()
         end,
-        Meta("text_style.outline"))
+        meta = Meta("text_style.outline"), domain = "global" },
+    }, ROW_OPTIONS)["text_style.outline"]
     local rendering = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp / Pixel", "SLUG", "Slug"), 420,
         FontRenderingMode,
         SetFontRenderingMode,
@@ -833,8 +900,12 @@ local function BuildFonts(ctx)
         "text_style.opacity")
     local baseline = BuildFontBaseline(ctx, text)
     local function BindFontDropdown(parent, label, values, getValue, setValue, width, path)
-        local control = W.Dropdown(parent, label, values, width or 280)
-        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
+        local control = Schema.Build(ctx, parent, {
+            { "dropdown", path, nil, { label, values, width or 280 },
+            get = getValue,
+            set = setValue,
+            meta = Meta(path), domain = "global" },
+        }, ROW_OPTIONS)[path]
         return control
     end
     local function BindFontColorModeDropdown(parent, label, values, kind, path)
@@ -844,35 +915,10 @@ local function BuildFonts(ctx)
             nil,
             path)
     end
-    local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
-        local controls = {}
-        controls.shorten = W.Toggle(parent, label)
-        M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled, Meta("name_shortening.enabled"))
-        controls.side = W.Segment(parent, "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430)
-        M.BindSegment(ctx, controls.side, getSide, setSide, Meta("name_shortening.style"))
-        controls.chars = W.Slider(parent, "Max name length", minChars or 4, 30, 1, 300)
-        if formatChars then controls.chars:SetValueFormatter(formatChars) end
-        M.BindNumberWidget(ctx, controls.chars, getChars, setChars, minChars or 4,
-            Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }))
-        controls.noEllipsis = W.Toggle(parent, "No Ellipsis (truncate without ..)")
-        M.BindBoolWidget(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis, Meta("name_shortening.no_ellipsis"))
-        if CharacterNameParts then
-            controls.nameParts = W.Segment(parent, "Character names (all frames)", CharacterNameParts.values, 430)
-            M.BindSegment(ctx, controls.nameParts, CharacterNameParts.Get, CharacterNameParts.Set,
-                Meta("name_shortening.character_name_parts"))
-        end
-        local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
-        controls.scopeNotice = W.Text(parent, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
-        if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
-        if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
-        if M.AddControlTooltip then
-            M.AddControlTooltip(controls.side, "Truncation style", "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
-            M.AddControlTooltip(controls.chars, "Max name length", "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
-            M.AddControlTooltip(controls.noEllipsis, "No Ellipsis (truncate without ..)", "Shortened names end at the cut without the .. marker. Only names that are actually too long are affected.", { hook = true, labelHit = true })
-        end
-        return controls
+    local function BuildNameShorteningControls(...)
+        return FontNameControls(ctx, ...)
     end
-    local colors = b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true)
+    local colors = Schema.Section(b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true), ctx.key)
     local nameColor = BindFontColorModeDropdown(colors, "Player Name Color", NameColorValues, "name", "colors.player_name")
     local npcColor = BindFontColorModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npc", "colors.npc_name")
     local healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
@@ -888,12 +934,18 @@ local function BuildFonts(ctx)
     local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
     if M.AddControlTooltip then
         local tip = { hook = true }
-        M.AddControlTooltip(outline, "Outline", "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
-        M.AddControlTooltip(shadow, "Text shadow", "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
-        M.AddControlTooltip(baseline, "Baseline", "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
-        M.AddControlTooltip(nameColor, "Player Name Color", "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
-        M.AddControlTooltip(npcColor, "NPC / Boss Name Color", "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
-        M.AddControlTooltip(healthColor, "HP Text Color", "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
+        M.AddControlTooltip(outline, "Outline",
+            "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
+        M.AddControlTooltip(shadow, "Text shadow",
+            "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
+        M.AddControlTooltip(baseline, "Baseline",
+            "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
+        M.AddControlTooltip(nameColor, "Player Name Color",
+            "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
+        M.AddControlTooltip(npcColor, "NPC / Boss Name Color",
+            "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
+        M.AddControlTooltip(healthColor, "HP Text Color",
+            "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
     end
     -- Hover reasons: a scope without its own settings locks this page; the
     -- shadow sliders also wait for Text shadow (Slug is explained on hover).

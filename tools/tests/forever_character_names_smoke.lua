@@ -364,15 +364,15 @@ do
         '        values = VT("FULL", "Full name", "FIRST", "First name", "SURNAME", "Surname"),',
         '            G().characterNameParts = (value == "FIRST" or value == "SURNAME") and value or nil',
         '        resolved.settingKey = resolved.settingKey or "general.characterNameParts"',
-        '        if CharacterNameParts then\n            controls.nameParts = W.Segment(parent, "Character names (all frames)", CharacterNameParts.values, 430)',
+        '    if CharacterNameParts then\n        rows[#rows + 1] = { "segment", "name_shortening.character_name_parts", nil,\n            { "Character names (all frames)", CharacterNameParts.values, 430 },',
     }) do
         Check(fonts:find(line, 1, true), "the Fonts page no longer has: " .. line)
     end
     -- Helper extraction may change indentation, but not the section owner or height expression.
     local fontsLines = fonts:gsub("\n[ \t]+", "\n")
     for _, baseHeight in ipairs({ 288, 294 }) do
-        local section = 'local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",\n'
-            .. baseHeight .. " + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)"
+        local section = 'local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",\n'
+            .. baseHeight .. " + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)"
         Check(fontsLines:find(section, 1, true), "the Fonts page no longer has the name-shortening section: " .. section)
     end
     Check(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua")

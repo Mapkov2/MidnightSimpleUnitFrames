@@ -807,3 +807,5 @@ clients+Forever	lua	tools/tests/menu_classpower_parity_smoke.lua	{root} {flavor}
 clients+Forever	lua	tools/tests/menu_unitcore_parity_smoke.lua	{root} {flavor}	Unit core replacing rows retain parent controls and behavior: {flavor}	nightly
 -	lua	tools/tests/menu_unitextra_parity_smoke.lua	{root} Mainline	Unit extra replacing controls match parent inputs history and combat: Mainline	push
 clients+Forever	lua	tools/tests/menu_unitextra_parity_smoke.lua	{root} {flavor}	Unit extra replacing controls match parent inputs history and combat: {flavor}	nightly
+-	lua	tools/tests/menu_global_parity_smoke.lua	{root} Mainline	Global batch parent input DB apply refresh history combat parity: Mainline	push
+clients+Forever	lua	tools/tests/menu_global_parity_smoke.lua	{root} {flavor}	Global batch parent input DB apply refresh history combat parity: {flavor}	nightly
