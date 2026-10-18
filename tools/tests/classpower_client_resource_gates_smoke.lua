@@ -47,13 +47,13 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     end
     -- Capture exactly what Page:Controls gives the real widget builder.
     local offered = {}
-    local AP = M.AdvancedPage
-    local originalBuilder = AP.BuildTableControlSpecs
-    AP.BuildTableControlSpecs = function(_, _, _, _, specs)
+    local schema = M.ControlSchema
+    local originalBuilder = schema.Build
+    schema.Build = function(_, _, specs)
         local controls = {}
         for _, spec in ipairs(specs) do
-            offered[spec[4]] = true
-            controls[spec[1]] = env.CreateFrame("Frame")
+            offered[spec.field] = true
+            controls[spec[2]] = env.CreateFrame("Frame")
         end
         return controls
     end
@@ -62,14 +62,19 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local Page = chunk("MidnightSimpleUnitFrames_Options", ns)
     local page = setmetatable({ width = 1000, kinds = {}, ctx = {}, groups = { cp = {} }, refresh = function() end,
         b = {
-            CollapsibleSection = function() return env.CreateFrame("Frame") end,
+            CollapsibleSection = function()
+                local section, header = env.CreateFrame("Frame"), env.CreateFrame("Button")
+                section._msuf2CollapsibleEntry = { header = header }
+                header._msuf2RuntimeControlRecord = { controlId = "fixture.behavior", kind = "button" }
+                return section
+            end,
             FinishSection = function(_, section, bottomPad)
                 assert(section._msuf2CursorY < -38, "behavior height was not derived from its rows")
                 section:SetHeight(-section._msuf2CursorY + bottomPad)
             end,
         } }, { __index = Page })
     page:BuildClassBehavior()
-    AP.BuildTableControlSpecs = originalBuilder
+    schema.Build = originalBuilder
     local gated = { showChargedComboPoints = modern, runeShowTime = modern or mists,
         showSweepingStrikes = modern, showEleMaelstrom = modern, showEbonMight = modern,
         showShadowMana = modern, showGuardianIronfur = modern, guardianIronfurShowHashLines = modern,

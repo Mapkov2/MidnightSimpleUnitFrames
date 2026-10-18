@@ -264,22 +264,6 @@ function Workspace.Bind(kind, ctx, widget, get, set, fallback, meta)
     AP.RegisterControl(widget, meta, nil, kind)
     return widget
 end
-function Workspace.BindBoolWidget(ctx, widget, get, set, meta)
-    return Workspace.Bind("toggle", ctx, widget, get, set, nil, meta)
-end
 function Workspace.BindDropdownWidget(ctx, widget, get, set, meta)
     return Workspace.Bind("dropdown", ctx, widget, get, set, nil, meta)
-end
-function Workspace.BindNumberWidget(ctx, widget, get, set, fallback, meta)
-    return Workspace.Bind("slider", ctx, widget, get, set, fallback, meta)
-end
-function Workspace.BindColor(ctx, widget, get, set, meta)
-    return Workspace.Bind("color", ctx, widget, get, set, nil, meta)
-end
-function Workspace.RegisterSpec(control, spec)
-    local kinds = { alpha = "slider", playerPowerOutline = "slider", detachedPowerWidth = "slider",
-        comboColorMode = "dropdown", nilDefaultDropdown = "dropdown", detachedTextOnBar = "toggle", detachedTextPreset = "dropdown" }
-    local kind = kinds[spec[2]] or spec[2]
-    if kind == "dropdown" then control._msuf2StableSearchLabel = control._msuf2StableSearchLabel or spec[3] end
-    AP.RegisterControl(control, spec.meta, spec[3], kind, kind == "dropdown" and spec[4] or nil)
 end

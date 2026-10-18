@@ -801,3 +801,5 @@ clients+Forever	lua	tools/tests/menu_group_parity_smoke.lua	{root} {flavor}	Grou
 clients+Forever	lua	tools/tests/menu_unitframevisuals_parity_smoke.lua	{root} {flavor}	Unit visual controls preserve parent inputs, DB, apply, refresh, history and combat: {flavor}	nightly
 -	lua	tools/tests/menu_unitsections_parity_smoke.lua	{root} Mainline	Unit sections and shared controls differ from their parent: Mainline	push
 clients+Forever	lua	tools/tests/menu_unitsections_parity_smoke.lua	{root} {flavor}	Unit sections and shared controls differ from their parent: {flavor}	nightly
+-	lua	tools/tests/menu_classpower_parity_smoke.lua	{root} Mainline	ClassPower replacing-row parent parity failed: Mainline	push
+clients+Forever	lua	tools/tests/menu_classpower_parity_smoke.lua	{root} {flavor}	ClassPower replacing-row parent parity failed: {flavor}	nightly

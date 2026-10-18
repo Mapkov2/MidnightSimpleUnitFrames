@@ -22,13 +22,9 @@ local max = math.max
 local min = math.min
 local RefreshClassPowerInlinePreview = M.RefreshProxy()
 local Bars, BoolValue, NumValue, SetValue = AP.Bars, AP.BoolValue, AP.NumValue, AP.SetValue
-local DeepCopyTable, BuildTableControlSpecs, SwitchAt = AP.DeepCopyTable, AP.BuildTableControlSpecs, AP.SwitchAt
+local DeepCopyTable = AP.DeepCopyTable
+local Schema = M.ControlSchema
 local SetControlEnabled, ControlMeta, RegisterControl = AP.SetControlEnabled, AP.ControlMeta, AP.RegisterControl
-SwitchAt = function(ctx, parent, label, x, y, width, source, key, default, apply, meta)
-    local control = AP.SwitchAt(ctx, parent, label, x, y, width and width - 22, source, key, default, apply, meta)
-    AP.RegisterControl(control, meta, label, "toggle")
-    return control
-end
 local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["visibility.independent"] = "bars.classPowerIndependentVisibility",
     ["detached_power.visibility.independent"] = "bars.playerPowerIndependentVisibility",
@@ -183,6 +179,7 @@ local function RegisterSegment(segment, path, values, classification)
                 item.text or item.label or item.value or "", "button")
         end
     end
+    if path == "style.workspace_tab" then Schema.Owned(segment, "classpower", "selection") end
     return segment
 end
 local function MoveWidget(widget, parent, x, y, width, titleJustify)
@@ -353,26 +350,6 @@ RefreshClassPowerInlinePreview = RefreshClassPowerInlinePreview(function()
     local preview = M._msuf2ClassPowerInlinePreview
     if preview and preview.Refresh then preview:Refresh() end
 end)
-local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, step, metadata)
-    local slider = W.Slider(section, label, 0, 100, step or 5, 300)
-    local opts = {}
-    if type(metadata) == "table" then for metaKey, value in pairs(metadata) do opts[metaKey] = value end end
-    opts.step, opts.roundStep = step or 5, true
-    M.ClassPowerWorkspace.BindNumberWidget(ctx, slider,
-        function()
-            local value = NumValue(Bars(), key, default or 0)
-            if value <= 1 then value = value * 100 end
-            if value < 0 then value = 0 elseif value > 100 then value = 100 end
-            return floor(value + 0.5)
-        end,
-        function(v)
-            v = tonumber(v) or ((default or 0) * 100)
-            if v < 0 then v = 0 elseif v > 100 then v = 100 end
-            SetValue(Bars(), key, v / 100, apply)
-        end,
-        (default or 0) * 100, opts)
-    return slider
-end
 local APPLY_DETACHED_POWER = { preview = true, power = true, detachedPowerBar = true, applyAll = false, unit = "player", classpowerApplied = true }
 local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false, unit = "player", classpowerApplied = true }
 -- detachedPowerBarWidthMode lives in the shared bars table and is compiled for
@@ -787,12 +764,21 @@ local function BuildInlineClassPowerPreview(ctx, b)
     -- Keeping only this loader guard prevents a second renderer from drifting out of sync.
     if ctx and ctx.hiddenBuild then
         local section = W.FixedPreviewSection(ctx, b, { title = "Preview", height = 64 })
-        W.Text(section, "Class resource preview is built when this page is opened.", 14, -38, ctx.width - 28, T.colors.muted)
+        Schema.Build(ctx, section, { { "text", "menu2.classpower.preview.placeholder", nil,
+            { "Class resource preview is built when this page is opened.", 14, -38, ctx.width - 28, T.colors.muted }, scope = "classpower" } })
         return section
     end
     local preview = M.ClassPowerStackPreview and M.ClassPowerStackPreview.Create
     if type(preview) == "function" then return preview(ctx, b) end
     return W.FixedPreviewSection(ctx, b, { title = "Preview", height = 64 })
+end
+local function Card(parent, title, ...)
+    local section = parent
+    while section and not section._msuf2SectionId do section = section:GetParent() end
+    local id = "menu2.classpower.card." .. (section and section._msuf2SectionId or "style")
+        .. "." .. tostring(title):lower():gsub("[^%w]+", ".")
+    return Schema.Build(nil, parent, { { "card", id, nil, { title, ... },
+        scope = "classpower", domain = "layout" } })[id]
 end
 local Page = {}
 Page.__index = Page
@@ -840,8 +826,9 @@ function Page.New(ctx)
     for _, key in ipairs({ "cp", "cpText", "detached", "detachedPlayer", "detachedText", "detachedSlot", "hp", "hpText", "hpCustomText", "hpTextPosition",
         "hpManual", "hpOrb", "hpTexture", "altMana" }) do groups[key] = {} end
     local self = setmetatable({ ctx = ctx, b = W.PageBuilder(ctx), width = ctx.width or 900, groups = groups, refresh = M.RefreshProxy() }, Page)
-    self.kinds = self:CreateControlKinds()
     self.workspace = M.ClassPowerWorkspace.Attach(self, CLASSPOWER_SETTING_KEY_BY_PATH)
+    Schema.Custom(self.workspace, { id = "menu2.classpower.workspace", kind = "workspace",
+        scope = "classpower", applyDomain = "workspace", owner = self.workspace })
     self.applyWorkspace = function()
         ApplyClassPower()
         ApplyDetachedPowerBar()
@@ -858,112 +845,107 @@ function Page:WithRefresh(apply)
         self.refresh()
     end
 end
-function Page:Controls(parent, source, apply, prefix, specs)
-    if prefix == "behavior" and MSUF.Client and MSUF.Client.SupportsClassResourceSetting then
-        local supported = {}
-        for _, spec in ipairs(specs) do
-            if MSUF.Client.SupportsClassResourceSetting("bars." .. spec[4]) then supported[#supported + 1] = spec end
-        end
-        specs = supported
+-- Local policies keep the original saved-value semantics; the shared binder owns
+-- input refusal and history. Sources are resolved again for every input/read.
+function Page.BindRow(ctx, widget, row, kind)
+    local meta = row.meta
+    local spec = { id = meta.controlId, kind = kind, key = row.field or row[2],
+        labelKey = row[4][1], scope = "classpower", applyDomain = "classpower",
+        meta = meta, get = row.get, set = row.set, source = row.source, apply = row.apply,
+        defaultSource = function() return row[3] end, workspace = row.workspace }
+    if kind == "slider" then
+        spec.range = { row[4][2], row[4][3], row[4][4] }
+        spec.roundStep = row.roundStep
     end
-    for i = 1, #specs do specs[i].meta = specs[i].meta or Meta(prefix .. "." .. tostring(specs[i][1])) end
-    local controls = BuildTableControlSpecs(self.ctx, parent, source, apply, specs, self.kinds)
-    for i = 1, #specs do
-        local spec, control = specs[i], controls[specs[i][1]]
-        M.ClassPowerWorkspace.RegisterSpec(control, spec)
-        if spec.help then AddTooltip(control, spec.helpTitle or spec[3], spec.help) end
-        for group in tostring(spec.group or ""):gmatch("%S+") do self:Add(group, control) end
+    Schema.Bind(ctx, widget, spec)
+end
+Page.RowOptions = { bind = Page.BindRow }
+local function SwitchAt(ctx, parent, label, x, y, width, source, key, default, apply, meta)
+    local row = { "switch", key, default, { label, x, y, width and width - 22 }, meta = meta,
+        get = function() return BoolValue(source(), key, default) end,
+        set = function(value) SetValue(source(), key, value, apply) end }
+    local widget = Schema.Build(ctx, parent, { row }, Page.RowOptions)[row[2]]
+    RegisterControl(widget, meta, label, "toggle")
+    return widget
+end
+function Page.RowAccessors(page, row, source, apply)
+    local key, default, kind, policy = row.field, row[3], row[1], row.policy
+    apply = row.apply or apply
+    row.source, row.apply = source, apply
+    row.roundStep = kind == "slider"
+    if not policy then return end
+    row.workspace = "classpower"
+    if policy == "comboColorMode" then
+        return function() return M.ColorsPage.GetClassPowerSlotMode("COMBO_POINTS") end,
+            function(value) M.ColorsPage.SetClassPowerSlotMode("COMBO_POINTS", value) end
+    elseif policy == "playerPowerOutline" then
+        row.roundStep = false
+        return PlayerPowerOutline, function(value) SetPlayerPowerOutline(value, apply) end
+    elseif policy == "alpha" then
+        row[3] = (default or 0) * 100
+        return function()
+            local value = NumValue(Bars(), key, default or 0)
+            if value <= 1 then value = value * 100 end
+            if value < 0 then value = 0 elseif value > 100 then value = 100 end
+            return floor(value + 0.5)
+        end, function(value)
+            value = tonumber(value) or ((default or 0) * 100)
+            if value < 0 then value = 0 elseif value > 100 then value = 100 end
+            SetValue(Bars(), key, value / 100, apply)
+        end
+    elseif policy == "detachedPowerWidth" then
+        row[3] = nil
+        return function() return tonumber(source()[key]) or PlayerFrameWidth() end,
+            function(value)
+                local player = source()
+                player.detachedPowerBarSyncClassPower = false
+                SetValue(player, key, value, apply)
+            end
+    elseif policy == "nilDefaultDropdown" then
+        return function() return source()[key] or default end,
+            function(value) source()[key] = value ~= default and value or nil; apply() end
+    elseif policy == "detachedTextOnBar" then
+        return function() return BoolValue(source(), key, default) end, function(value)
+            local function Write()
+                local player, changed = source(), false
+                value = value and true or false
+                if player[key] ~= value then player[key], changed = value, true end
+                if changed then apply() end
+                return changed
+            end
+            if type(M.RunWithHistory) == "function" then return M.RunWithHistory(tostring(key), "classpower:detachedPowerText:" .. key, Write) end
+            return Write()
+        end
+    elseif policy == "detachedTextPreset" then
+        return function() return NormalizeDetachedPowerTextPreset(Player()) end,
+            function(value) SetDetachedPowerTextPreset(value); apply(); page.refresh() end
+    end
+end
+function Page:Controls(parent, source, apply, prefix, rows)
+    local controls = {}
+    for _, row in ipairs(rows) do
+        if prefix ~= "behavior" or not (MSUF.Client and MSUF.Client.SupportsClassResourceSetting)
+            or MSUF.Client.SupportsClassResourceSetting("bars." .. row.field) then
+            row.meta = row.meta or Meta(prefix .. "." .. row[2])
+            row.get, row.set = Page.RowAccessors(self, row, source, apply)
+            if row.help then row.tip = { row.helpTitle or row[4][1], row.help, { hook = true, owner = "ANCHOR_RIGHT" } } end
+            local control = Schema.Build(self.ctx, parent, { row }, Page.RowOptions)[row[2]]
+            controls[row[2]] = control
+            if row[1] == "dropdown" then control._msuf2StableSearchLabel = control._msuf2StableSearchLabel or row[4][1] end
+            local kind = row[1] == "flowToggle" and "toggle" or row[1]
+            RegisterControl(control, row.meta, row[4][1], kind, kind == "dropdown" and row[4][2] or nil)
+            for group in tostring(row.group or ""):gmatch("%S+") do self:Add(group, control) end
+        end
     end
     return controls
 end
 function Page:SourceToggle(parent, label, source, key, apply, prefix)
-    local control = W.Toggle(parent, label)
-    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, control, function() return HidePercentValue(source(), key) end,
-        function(value)
+    return Schema.Build(self.ctx, parent, { { "flowToggle", key, false, { label }, workspace = "classpower",
+        meta = Meta(prefix .. "." .. key), get = function() return HidePercentValue(source(), key) end,
+        set = function(value)
             value = value and true or false
             if source == Player then SetPlayerTextValue(key, value, apply) else SetValue(source(), key, value, apply) end
-        end, Meta(prefix .. "." .. key))
-    return control
-end
-
-function Page:CreateControlKinds()
-    return {
-        comboColorMode = function(_, parent, _, _, spec)
-            local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
-            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control,
-                function() return M.ColorsPage.GetClassPowerSlotMode("COMBO_POINTS") end,
-                function(value) M.ColorsPage.SetClassPowerSlotMode("COMBO_POINTS", value) end, spec.meta)
-            return control
-        end,
-        playerPowerOutline = function(_, parent, _, apply, spec)
-            local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
-            M.ClassPowerWorkspace.BindNumberWidget(self.ctx, control, PlayerPowerOutline,
-                function(value) SetPlayerPowerOutline(value, spec[10] or apply) end,
-                spec[9], spec.meta)
-            return control
-        end,
-        alpha = function(_, parent, _, apply, spec)
-            return BindBarsAlphaPercent(self.ctx, parent, spec[3], spec[4], spec[5], spec[6] or apply, spec[7], spec.meta)
-        end,
-        detachedPowerWidth = function(_, parent, source, apply, spec)
-            local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
-            local key = spec[8]
-            local setApply = spec[10] or apply
-            -- Mirror the ordinary slider binding so this one snaps to whole
-            -- pixels like every other geometry slider on the page.
-            local opts = {}
-            if type(spec.meta) == "table" then
-                for metaKey, metaValue in pairs(spec.meta) do opts[metaKey] = metaValue end
-            end
-            opts.step, opts.roundStep = spec[6], true
-            M.ClassPowerWorkspace.BindNumberWidget(self.ctx, control,
-                function()
-                    local player = source()
-                    return tonumber(player[key]) or PlayerFrameWidth()
-                end,
-                function(value)
-                    local player = source()
-                    -- Width sync outranks an explicit width, so an untouched
-                    -- profile would swallow this drag. Release the sync the same
-                    -- way the unit page does; the toggle above repaints with it.
-                    player.detachedPowerBarSyncClassPower = false
-                    SetValue(player, key, value, setApply)
-                end,
-                nil, opts)
-            return control
-        end,
-        nilDefaultDropdown = function(_, parent, source, apply, spec)
-            local control, key, default = W.Dropdown(parent, spec[3], spec[4], spec[5]), spec[6], spec[7]
-            apply = spec[8] or apply
-            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control, function() return source()[key] or default end,
-                function(value) source()[key] = value ~= default and value or nil; apply() end, spec.meta)
-            return control
-        end,
-        detachedTextOnBar = function(_, parent, source, apply, spec)
-            local control, key, default = W.Toggle(parent, spec[3]), spec[4], spec[5]
-            apply = spec[6] or apply
-            M.ClassPowerWorkspace.BindBoolWidget(self.ctx, control, function() return BoolValue(source(), key, default) end,
-                function(value)
-                    local function Write()
-                        local player, changed = source(), false
-                        value = value and true or false
-                        if player[key] ~= value then player[key], changed = value, true end
-                        if changed then apply() end
-                        return changed
-                    end
-                    if type(M.RunWithHistory) == "function" then return M.RunWithHistory(tostring(key), "classpower:detachedPowerText:" .. key, Write) end
-                    return Write()
-                end, spec.meta)
-            return control
-        end,
-        detachedTextPreset = function(_, parent, _, apply, spec)
-            local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
-            apply = spec[6] or apply
-            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control, function() return NormalizeDetachedPowerTextPreset(Player()) end,
-                function(value) SetDetachedPowerTextPreset(value); apply(); self.refresh() end, spec.meta)
-            return control
-        end,
-    }
+        end } }, Page.RowOptions)[key]
 end
 
 function Page:BuildHeader()
@@ -973,6 +955,7 @@ function Page:BuildHeader()
     head:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
     head._msuf2Width = b.width
     local selectorH = M.ClassPowerWorkspace.BuildSelector(self.workspace, head, b.width)
+    Schema.Owned(self.workspace.selector, "classpower", "workspace")
     local headerH = selectorH + 82
     head:SetSize(b.width, headerH)
     if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, head, "Class resource preview and quick setup") end
@@ -990,20 +973,27 @@ function Page:BuildHeader()
     preview:SetValue(M.GetClassPowerPreviewSpecKey())
     AddTooltip(preview, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.")
     M.TrackRefresh(ctx, function() preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
-    local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24, { history = true })
-    if W.StyleTopSuccessButton then W.StyleTopSuccessButton(quick) elseif W.StyleTopActionButton then W.StyleTopActionButton(quick) end
-    quick:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -selectorH - 16)
-    quick:SetScript("OnClick", function()
-        M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_CONFIRM", {
-            text = M.Format(
-                "Set up Class Resources and Player Power?\n\nChanges visibility, anchors, sizes and positions.\nPlacement: %s.\n\nUndo is available.",
-                M.Tr("Essential Cooldowns or screen center")),
-            accept = M.Tr("Setup Now"), cancel = CANCEL, onAccept = ExecuteQuickSetup,
-        })
-    end)
+    Schema.Owned(preview, "classpower", "preview")
+    local quick = Schema.Build(ctx, head, {
+        { "button", "quick", nil, { "Quick Setup: Class Bar", 158, 24, { history = true } },
+            anchor = { "TOPRIGHT", head, "TOPRIGHT", -16, -selectorH - 16 },
+            beforeBind = function(widget)
+                if W.StyleTopSuccessButton then W.StyleTopSuccessButton(widget)
+                elseif W.StyleTopActionButton then W.StyleTopActionButton(widget) end
+            end,
+            action = function()
+                M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_CONFIRM", {
+                    text = M.Format(
+                        "Set up Class Resources and Player Power?\n\nChanges visibility, anchors, sizes and positions.\nPlacement: %s.\n\nUndo is available.",
+                        M.Tr("Essential Cooldowns or screen center")),
+                    accept = M.Tr("Setup Now"), cancel = CANCEL, onAccept = ExecuteQuickSetup,
+                })
+            end },
+    }).quick
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
+    Schema.Owned(quick, "classpower", "quickSetup")
     M.ResourceExtrasPreview.BuildHeader(self, head, selectorH, b.width, preview, quick)
     -- Dock the selector strip like the unit pages' Editing strip and the
     -- Colors category bar: both selector and preview occupy the fixed stack,
@@ -1024,28 +1014,30 @@ end
 
 function Page:BuildClassLayout()
     local compact, width = self.width < 680, self.width
-    local section = self.b:CollapsibleSection("classpower_display", "Layout", compact and 760 or 440, true)
+    local section = self:Section("classpower_display", "Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     local applySourceRefresh = self:WithRefresh(ApplyClassPowerSource)
-    self.cpEnable = W.SectionSwitch(section, "Class Resource")
-    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.cpEnable, function() return BoolValue(Bars(), "showClassPower", true) end,
-        function(value) SetValue(Bars(), "showClassPower", value, applySourceRefresh) end, Meta("layout.enabled"))
+    self.cpEnable = Schema.Build(self.ctx, section, { { "sectionSwitch", "cpEnable", nil, { "Class Resource" },
+        workspace = "classpower", meta = Meta("layout.enabled"),
+        get = function() return BoolValue(Bars(), "showClassPower", true) end,
+        set = function(value) SetValue(Bars(), "showClassPower", value, applySourceRefresh) end } }, Page.RowOptions).cpEnable
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
-        { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260,
-            "classPowerShape", "BAR", applyRefresh },
-        { "height", "slider", "Height", 1, 40, 1, 300, "classPowerHeight", 4 },
-        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility",
-            "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applySourceRefresh,
-            help = "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps." },
-        { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
-        { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
-        { "y", "slider", "Offset Y", -800, 800, 1, 300, "classPowerOffsetY", 0 },
-        { "level", "slider", "Class Resource layer", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
+        { "dropdown", "shape", "BAR", { "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260 },
+            field = "classPowerShape", apply = applyRefresh },
+        { "slider", "height", 4, { "Height", 1, 40, 1, 300 }, field = "classPowerHeight" },
+        { "dropdown", "widthMode", "player", { "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown",
+            "Essential Cooldowns", "utility",
+            "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260 }, field = "classPowerWidthMode",
+                apply = applySourceRefresh, help = "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps." },
+        { "slider", "width", 0, { "Width", 30, 800, 1, 300 }, field = "classPowerWidth" },
+        { "slider", "x", 0, { "Offset X", -800, 800, 1, 300 }, field = "classPowerOffsetX" },
+        { "slider", "y", 0, { "Offset Y", -800, 800, 1, 300 }, field = "classPowerOffsetY" },
+        { "slider", "level", 5, { "Class Resource layer", 0, 30, 1, 300 }, field = "classPowerFrameLevelOffset" },
     })
     local alignValues = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
-    self.cpAlign = W.Segment(section, "Shape alignment", alignValues, 300)
-    M.BindSegment(self.ctx, self.cpAlign, function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
-        function(value) Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value); ApplyClassPower() end, Meta("layout.shape_alignment"))
+    self.cpAlign = Schema.Build(self.ctx, section, { { "segment", "alignment", nil, { "Shape alignment", alignValues, 300 },
+        meta = Meta("layout.shape_alignment"), get = function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
+        set = function(value) Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value); ApplyClassPower() end } }, Page.RowOptions).alignment
     RegisterSegment(self.cpAlign, "layout.shape_alignment", alignValues, "setting")
     self:Add("cp", self.cp.shape, self.cp.height, self.cp.widthMode, self.cpAlign, self.cp.x, self.cp.y, self.cp.level)
     AddTooltip(self.cp.level, "Class Resource Layer", "Orders the Class Resource bar and pips. Its numeric, Rune and Ebon duration text uses the separate Class Resource text layer under Appearance > Text.")
@@ -1053,34 +1045,37 @@ function Page:BuildClassLayout()
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
     local controlW = min(300, leftW, rightW)
-    W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370, "group")
-    W.ControlCard(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286, "group")
+    Card(section, "Shape & Size", nil, 18, -38, leftW + 28, 370, "group")
+    Card(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286, "group")
     PlaceColumn(section, 32, -116, 54, controlW, "LEFT", self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
     PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cp.x, self.cp.y, self.cp.level)
 end
 
 function Page:BuildClassBehavior()
-    local section = self.b:CollapsibleSection("classpower_behavior", "Behavior", 282, false)
+    local section = self:Section("classpower_behavior", "Behavior", 282, false)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     local fields = self:Controls(section, Bars, ApplyClassPower, "behavior", {
-        { "anchor", "toggle", "Anchor to Essential Cooldown", "classPowerAnchorToCooldown", false, group = "cp" },
-        { "charged", "toggle", "Show empowered combo points", "showChargedComboPoints", true, group = "cp" },
-        { "text", "toggle", "Show resource text", "classPowerShowText", false, group = "cp" },
-        { "rune", "toggle", "Show rune time (per rune)", "runeShowTime", true, group = "cp" },
-        { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false, group = "cp" },
-        { "sweeping", "toggle", "Show Sweeping Strikes (Arms)", "showSweepingStrikes", false, applyRefresh, group = "cp",
-            helpTitle = "Sweeping Strikes", help = "Arms only. Shows actual aura charges in a segmented bar, using the same native display as Fury Whirlwind. These two trackers use a bar with static dividers; aura values are never read by the addon. Appearance changes during combat apply after combat." },
-        { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
-        { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp",
+        { "flowToggle", "anchor", false, { "Anchor to Essential Cooldown" }, field = "classPowerAnchorToCooldown", group = "cp" },
+        { "flowToggle", "charged", true, { "Show empowered combo points" }, field = "showChargedComboPoints", group = "cp" },
+        { "flowToggle", "text", false, { "Show resource text" }, field = "classPowerShowText", group = "cp" },
+        { "flowToggle", "rune", true, { "Show rune time (per rune)" }, field = "runeShowTime", group = "cp" },
+        { "flowToggle", "reverse", false, { "Fill right-to-left" }, field = "classPowerFillReverse", group = "cp" },
+        { "flowToggle", "sweeping", false, { "Show Sweeping Strikes (Arms)" }, field = "showSweepingStrikes", apply = applyRefresh, group = "cp",
+            helpTitle = "Sweeping Strikes",
+            help = "Arms only. Shows actual aura charges in a segmented bar, using the same native display as Fury Whirlwind. These two trackers use a bar with static dividers; aura values are never read by the addon. Appearance changes during combat apply after combat." },
+        { "flowToggle", "ele", false, { "Show Maelstrom bar (Ele)" }, field = "showEleMaelstrom", group = "cp" },
+        { "flowToggle", "ebon", true, { "Show Ebon Might duration (Aug)" }, field = "showEbonMight", group = "cp",
             helpTitle = "Ebon Might On Player Power",
             help = "Augmentation Evoker only. The Player power bar shows the remaining Ebon Might duration instead of Mana, and uses the Player Power settings below for width, height, position, textures and text. Essence stays an ordinary Class Resource, and Mana is available through Alternative Mana. Turn this off to get a normal Mana bar back." },
-        { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
-        { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, applyRefresh, group = "cp",
-            helpTitle = "Guardian Ironfur Tracker", help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
-        { "ironfurHashes", "toggle", "Show Ironfur cast markers", "guardianIronfurShowHashLines", true, group = "cp",
-            helpTitle = "Ironfur Cast Markers", help = "Shows one moving marker per tracked Ironfur cast. The 30 Hz motion ticker exists only while the optional tracker has active casts." },
-        { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true, group = "cp" },
-        { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", false, ApplyClassPowerSmoothing, group = "cp",
+        { "flowToggle", "shadow", false, { "Show Insanity bar (Shadow)" }, field = "showShadowMana", group = "cp" },
+        { "flowToggle", "ironfur", false, { "Show Ironfur tracker (Guardian)" }, field = "showGuardianIronfur", apply = applyRefresh, group = "cp",
+            helpTitle = "Guardian Ironfur Tracker",
+            help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
+        { "flowToggle", "ironfurHashes", true, { "Show Ironfur cast markers" }, field = "guardianIronfurShowHashLines", group = "cp",
+            helpTitle = "Ironfur Cast Markers",
+            help = "Shows one moving marker per tracked Ironfur cast. The 30 Hz motion ticker exists only while the optional tracker has active casts." },
+        { "flowToggle", "prediction", true, { "Show resource prediction" }, field = "classPowerShowPrediction", group = "cp" },
+        { "flowToggle", "smooth", false, { "Smooth fill" }, field = "classPowerSmoothFill", apply = ApplyClassPowerSmoothing, group = "cp",
             helpTitle = "Class Resource Smooth Fill", help = "Smooths resource changes. Runes, Essence recharge, and timers keep their own animation." },
     })
     local twoColumns = self.width >= 680
@@ -1109,7 +1104,7 @@ function Page:BuildClassBehavior()
 end
 
 function Page:BuildClassStyle()
-    local section = self.b:CollapsibleSection("classpower_visuals", "Appearance", 482, false)
+    local section = self:Section("classpower_visuals", "Appearance", 482, false)
     local width, inner = section._msuf2Width or self.width, max(320, (section._msuf2Width or self.width) - 64)
     local cardW, frames = min(540, width - 36), {}
     local controlW = cardW - 32
@@ -1120,37 +1115,37 @@ function Page:BuildClassStyle()
     self.workspace.selectStyle = selectStyle
     RegisterSegment(tabs, "style.workspace_tab", values)
     M.Assign(self.cp, self:Controls(resources, Bars, ApplyClassPowerVisuals, "style.resources", {
-        { "color", "toggle", "Color by resource type", "classPowerColorByType", true, group = "cp" },
-        { "comboColor", "comboColorMode", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260,
-            "classPowerComboPointColorMode", "default", group = "cp" },
-        { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300,
-            "classPowerTexture", "", group = "cp" },
-        { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300,
-            "classPowerBgTexture", "", group = "cp" },
+        { "flowToggle", "color", true, { "Color by resource type" }, field = "classPowerColorByType", group = "cp" },
+        { "dropdown", "comboColor", "default", { "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom",
+            "Custom slots"), 260 }, field = "classPowerComboPointColorMode", policy = "comboColorMode", group = "cp" },
+        { "dropdown", "fgTex", "", { "Foreground texture", function() return TextureValues("Use global bar texture") end, 300 },
+            field = "classPowerTexture", group = "cp" },
+        { "dropdown", "bgTex", "", { "Background texture", function() return TextureValues("Use foreground texture") end, 300 },
+            field = "classPowerBgTexture", group = "cp" },
     }))
     M.Assign(self.cp, self:Controls(text, Bars, ApplyClassPowerText, "style.text", {
-        { "mode", "dropdown", "Resource text", CLASS_POWER_TEXT_MODE_VALUES, 300, "classPowerTextMode", "AUTO", group = "cpText" },
-        { "font", "slider", "Font size", 6, 32, 1, 300, "classPowerFontSize", 16, group = "cpText" },
-        { "layer", "slider", "Class Resource text layer", 0, 30, 1, 300, "classPowerTextLayer", 5, ApplyClassPower, group = "cpText" },
-        { "textX", "slider", "Text X", -200, 200, 1, 300, "classPowerTextOffsetX", 0, group = "cpText" },
-        { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0, group = "cpText" },
+        { "dropdown", "mode", "AUTO", { "Resource text", CLASS_POWER_TEXT_MODE_VALUES, 300 }, field = "classPowerTextMode", group = "cpText" },
+        { "slider", "font", 16, { "Font size", 6, 32, 1, 300 }, field = "classPowerFontSize", group = "cpText" },
+        { "slider", "layer", 5, { "Class Resource text layer", 0, 30, 1, 300 }, field = "classPowerTextLayer", apply = ApplyClassPower, group = "cpText" },
+        { "slider", "textX", 0, { "Text X", -200, 200, 1, 300 }, field = "classPowerTextOffsetX", group = "cpText" },
+        { "slider", "textY", 0, { "Text Y", -200, 200, 1, 300 }, field = "classPowerTextOffsetY", group = "cpText" },
     }))
     AddTooltip(self.cp.mode, "Resource Text", "Automatic keeps each resource's established text, such as Current for Combo Points and Current / Maximum for Vengeance Soul Fragments. The explicit modes override only the central resource value; Rune timers, Ebon Might duration and the Ironfur stack counter keep their native formats.")
     AddTooltip(self.cp.layer, "Class Resource Text Layer",
         "Orders Class Resource numeric text, Rune times and the Ebon Might duration text independently from the Class Resource bar and Player Power text.")
     M.Assign(self.cp, self:Controls(opacity, Bars, ApplyClassPower, "style.opacity", {
-        { "bg", "alpha", "BG opacity", "classPowerBgAlpha", .3, nil, 1, group = "cp" },
-        { "filled", "alpha", "Filled %", "classPowerFilledAlpha", 1, nil, 5, group = "cp" },
-        { "empty", "alpha", "Empty %", "classPowerEmptyAlpha", .3, nil, 5, group = "cp" },
+        { "slider", "bg", .3, { "BG opacity", 0, 100, 1, 300 }, field = "classPowerBgAlpha", policy = "alpha", group = "cp" },
+        { "slider", "filled", 1, { "Filled %", 0, 100, 5, 300 }, field = "classPowerFilledAlpha", policy = "alpha", group = "cp" },
+        { "slider", "empty", .3, { "Empty %", 0, 100, 5, 300 }, field = "classPowerEmptyAlpha", policy = "alpha", group = "cp" },
     }))
     M.Assign(self.cp, self:Controls(pips, Bars, ApplyClassPower, "style.pips", {
-        { "separator", "slider", "Separator", 0, 4, 1, 300, "classPowerTickWidth", 1, group = "cp" },
-        { "outline", "slider", "Outline", 0, 4, 1, 300, "classPowerOutline", 1, group = "cp" },
-        { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0, group = "cp" },
+        { "slider", "separator", 1, { "Separator", 0, 4, 1, 300 }, field = "classPowerTickWidth", group = "cp" },
+        { "slider", "outline", 1, { "Outline", 0, 4, 1, 300 }, field = "classPowerOutline", group = "cp" },
+        { "slider", "gap", 0, { "Pip gap", 0, 8, 1, 300 }, field = "classPowerGap", group = "cp" },
     }))
     local resourcesCard, textCard, pipsCard
     for _, card in ipairs({ { resources, "Resource & Textures", 252 }, { text, "Text", 318 }, { opacity, "Opacity", 214 }, { pips, "Pips & Border", 230 } }) do
-        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW, card[3], "group")
+        local controlCard = Card(card[1], card[2], nil, 18, -38, cardW, card[3], "group")
         if card[1] == resources then resourcesCard = controlCard end
         if card[1] == text then textCard = controlCard end
         if card[1] == pips then pipsCard = controlCard end
@@ -1206,9 +1201,9 @@ function Page:BuildClassStyle()
 end
 
 function Page:BuildClassVisibility()
-    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 280, false)
+    local section = self:Section("classpower_visibility", "Auto-Hide", 280, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
-    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 206)
+    Card(section, "Auto-Hide Rules", nil, 14, -54, width, 206)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     for i, spec in ipairs({
         { "Hide out of combat", "classPowerHideOOC", "out_of_combat" },
@@ -1231,9 +1226,9 @@ function Page:BuildClassVisibility()
 end
 
 function Page:BuildResourceVisibility(id, path, prefix, group, apply, combatOnly)
-    local section = self.b:CollapsibleSection(id, "Auto-Hide", combatOnly and 184 or 248, false)
+    local section = self:Section(id, "Auto-Hide", combatOnly and 184 or 248, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
-    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, combatOnly and 110 or 174)
+    Card(section, "Auto-Hide Rules", nil, 14, -54, width, combatOnly and 110 or 174)
     local specs = {
         { "Independent of Player Frame visibility", "IndependentVisibility", "independent" },
         { "Hide out of combat", "HideOOC", "out_of_combat" },
@@ -1258,8 +1253,14 @@ local function DetachedPowerSectionHeight(width)
     return width < 680 and 1060 or 834
 end
 
+function Page:Section(...)
+    local section = self.b:CollapsibleSection(...)
+    if not section._msuf2CollapsibleEntry.header._msuf2ControlSchema then Schema.Section(section, "classpower") end
+    return section
+end
+
 function Page:BarArea(id, title, height, open)
-    local section = self.b:CollapsibleSection(id, title, height, open)
+    local section = self:Section(id, title, height, open)
     local cardW = min(650, (section._msuf2Width or self.width) - 28)
     local twoColumns = self.width >= 680 and cardW >= 620
     local controlW = twoColumns and floor((cardW - 56) / 2) or min(360, cardW - 36)
@@ -1268,10 +1269,12 @@ end
 
 function Page:BuildDetachedPower()
     local layout, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power", "Layout", self.width < 680 and 932 or 600)
-    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 880)
-    self.dpbUse = W.SectionSwitch(layout, "Detached player power")
-    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
-        function(value)
+    Card(layout, "Detached Player Power",
+        "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 880)
+    self.dpbUse = Schema.Build(self.ctx, layout, { { "sectionSwitch", "dpbUse", nil, { "Detached player power" },
+        workspace = "classpower", meta = Meta("detached_power.enabled"),
+        get = function() return Player().powerBarDetached == true end,
+        set = function(value)
             local player = Player()
             player.powerBarDetached = value and true or false
             if value then
@@ -1284,59 +1287,61 @@ function Page:BuildDetachedPower()
                 player.detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6
             end
             ApplyDetachedPowerSource(); self.refresh()
-        end, Meta("detached_power.enabled"))
+        end } }, Page.RowOptions).dpbUse
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
-    self.dpbSource = W.Dropdown(layout, "Displayed resource", PLAYER_POWER_SOURCE_VALUES, 300)
-    self.dpbSource._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
     local sourceMeta = Meta("detached_power.layout.resource_source", "setting", {
         label = M.PlayerPowerSourceSearchLabel,
         historySource = "classpower:playerPowerSource",
     })
-    M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, self.dpbSource,
-        function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
-        function(value)
+    self.dpbSource = Schema.Build(self.ctx, layout, { { "dropdown", "resource_source", nil, { "Displayed resource", PLAYER_POWER_SOURCE_VALUES, 300 },
+        workspace = "classpower", meta = sourceMeta, flagsBefore = { _msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel },
+        get = function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
+        set = function(value)
             local player = Player()
             value = NormalizePlayerPowerSource(value)
             if player.playerPowerSource == value then return end
             player.playerPowerSource = value
             M.ApplyPlayerPowerSource("MSUF2_CLASSPOWER_PLAYER_POWER_SOURCE")
-        end,
-        sourceMeta)
+        end } }, Page.RowOptions).resource_source
     RegisterControl(self.dpbSource, sourceMeta,
         M.PlayerPowerSourceSearchLabel, "dropdown", PLAYER_POWER_SOURCE_VALUES)
     MoveWidget(self.dpbSource, layout, 32, twoColumns and -154 or -188, controlW, "LEFT")
     AddTooltip(self.dpbSource, "Displayed resource",
         M.PlayerPowerSourceTooltip)
     local mode = self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout", {
-        { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", self:WithRefresh(ApplyDetachedPowerWidthMode), group = "detached" },
+        { "dropdown", "mode", "manual", { "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns",
+            "tracked_buffs", "Tracked Buffs"), 260 }, field = "detachedPowerBarWidthMode", policy = "nilDefaultDropdown",
+            apply = self:WithRefresh(ApplyDetachedPowerWidthMode), group = "detached" },
     })
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
-        { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
-        { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerSource, group = "detachedPlayer" },
-        { "width", "detachedPowerWidth", "Power width", 20, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
-        { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
-        { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
-        { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
-        { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
-        { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
+        { "flowToggle", "anchor", false, { "Anchor to Class Resource" }, field = "detachedPowerBarAnchorToClassPower", group = "detachedPlayer" },
+        { "flowToggle", "sync", true, { "Sync width to Class Resource" }, field = "detachedPowerBarSyncClassPower", apply = ApplyDetachedPowerSource,
+            group = "detachedPlayer" },
+        { "slider", "width", 0, { "Power width", 20, 800, 1, 300 }, field = "detachedPowerBarWidth", policy = "detachedPowerWidth",
+            apply = self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
+        { "slider", "orbSize", 54, { "Orb size", 20, 160, 1, 300 }, field = "detachedPowerOrbSize", group = "detachedPlayer" },
+        { "slider", "x", 0, { "Power X", -1000, 1000, 1, 300 }, field = "detachedPowerBarOffsetX", group = "detachedPlayer" },
+        { "slider", "y", -4, { "Power Y", -1000, 1000, 1, 300 }, field = "detachedPowerBarOffsetY", group = "detachedPlayer" },
+        { "slider", "height", 6, { "Power height", 2, 80, 1, 300 }, field = "detachedPowerBarHeight", group = "detachedPlayer" },
+        { "slider", "layer", 6, { "Player Power layer", 0, 30, 1, 300 }, field = "detachedPowerBarFrameLevelOffset", group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. In Automatic mode, Augmentation Evoker uses this bar for Ebon Might; an explicit Mana selection keeps it as Mana.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.width, "Power Width", "Manual width for the detached Player power bar. Available while Width mode is Manual; dragging it releases Sync width to Class Resource, because that sync would otherwise win. Unset, the bar inherits the Player frame width.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")
-    self.cpPowerShape = W.Dropdown(layout, "Powerbar shape (independent)", VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300)
-    M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, self.cpPowerShape,
-        function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
-        function(value)
+    self.cpPowerShape = Schema.Build(self.ctx, layout, { { "dropdown", "cpPowerShape", nil, { "Powerbar shape (independent)", VT("BAR", "Bar", "ROUND",
+        "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300 },
+        workspace = "classpower", meta = Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }),
+        get = function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
+        set = function(value)
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
             ApplyDetachedPowerSource()
             self.refresh()
-        end,
-        Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
+        end } }, Page.RowOptions).cpPowerShape
     AddTooltip(self.cpPowerShape, "Independent Powerbar Shape",
         "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
     self:Add("detachedPlayer", self.cpPowerShape)
@@ -1348,7 +1353,7 @@ end
 
 function Page:BuildDetachedPowerText()
     local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power_text", "Text", self.width < 680 and 1020 or 700)
-    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 962)
+    local powerTextCard = Card(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 962)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(powerTextCard, {
             title = "Player Power Text Settings",
@@ -1363,54 +1368,60 @@ function Page:BuildDetachedPowerText()
     end
     local textStateRefresh = self:WithRefresh(ApplyDetachedPowerText)
     self.dpbText = self:Controls(text, Player, ApplyDetachedPowerText, "detached_power.text", {
-        { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false, textStateRefresh, group = "detachedPlayer" },
-        { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300, group = "detachedPlayer" },
-        { "right", "dropdown", "Right slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextRight", "CURPERCENT", textStateRefresh, group = "detachedText" },
-        { "left", "dropdown", "Left slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextLeft", "NONE", textStateRefresh, group = "detachedText" },
-        { "center", "dropdown", "Center slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextCenter", "NONE", textStateRefresh, group = "detachedText" },
-        { "sep", "dropdown", "Delimiter", DETACHED_POWER_SEPARATORS, 180, "powerTextSeparator", "", group = "detachedText" },
-        { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14, group = "detachedText" },
-        { "x", "slider", "Text X", -300, 300, 1, 300, "powerOffsetX", -4, group = "detachedText" },
-        { "y", "slider", "Text Y", -300, 300, 1, 300, "powerOffsetY", 4, group = "detachedText" },
-        { "layer", "slider", "Player Power text layer", 0, 30, 1, 300, "powerTextLayer", 2, group = "detachedText" },
+        { "flowToggle", "onBar", false, { "Power text on bar" }, field = "detachedPowerBarTextOnBar", policy = "detachedTextOnBar",
+            apply = textStateRefresh, group = "detachedPlayer" },
+        { "dropdown", "preset", nil, { "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300 }, policy = "detachedTextPreset", group = "detachedPlayer" },
+        { "dropdown", "right", "CURPERCENT", { "Right slot", DETACHED_POWER_SLOT_VALUES, 300 }, field = "powerTextRight", apply = textStateRefresh,
+            group = "detachedText" },
+        { "dropdown", "left", "NONE", { "Left slot", DETACHED_POWER_SLOT_VALUES, 300 }, field = "powerTextLeft", apply = textStateRefresh,
+            group = "detachedText" },
+        { "dropdown", "center", "NONE", { "Center slot", DETACHED_POWER_SLOT_VALUES, 300 }, field = "powerTextCenter", apply = textStateRefresh,
+            group = "detachedText" },
+        { "dropdown", "sep", "", { "Delimiter", DETACHED_POWER_SEPARATORS, 180 }, field = "powerTextSeparator", group = "detachedText" },
+        { "slider", "size", 14, { "Power text size", 6, 48, 1, 300 }, field = "powerFontSize", group = "detachedText" },
+        { "slider", "x", -4, { "Text X", -300, 300, 1, 300 }, field = "powerOffsetX", group = "detachedText" },
+        { "slider", "y", 4, { "Text Y", -300, 300, 1, 300 }, field = "powerOffsetY", group = "detachedText" },
+        { "slider", "layer", 2, { "Player Power text layer", 0, 30, 1, 300 }, field = "powerTextLayer", group = "detachedText" },
     })
     self.dpbHide = {
         self:SourceToggle(text, "Hide right % sign", Player, "powerTextRightHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
         self:SourceToggle(text, "Hide left % sign", Player, "powerTextLeftHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
         self:SourceToggle(text, "Hide center % sign", Player, "powerTextCenterHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
     }
-    local fontOutline = W.Segment(text, "Player text outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, controlW)
-    M.BindSegment(self.ctx, fontOutline, function()
+    local fontOutline = Schema.Build(self.ctx, text, { { "segment", "outline", nil, { "Player text outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, controlW },
+        meta = Meta("detached_power.text.outline", "setting"), get = function()
         local globalPage = M.GlobalPage
         if globalPage and type(globalPage.FontOutlineGetFor) == "function" then
             return globalPage.FontOutlineGetFor("player")
         end
         return "OUTLINE"
-    end, function(value)
+    end, set = function(value)
         local globalPage = M.GlobalPage
         if globalPage and type(globalPage.FontOutlineSetFor) == "function" then
             globalPage.FontOutlineSetFor("player", value, "MSUF2_DETACHED_POWER_TEXT_OUTLINE")
         end
         self.refresh()
-    end, Meta("detached_power.text.outline", "setting"))
+    end } }, Page.RowOptions).outline
     RegisterSegment(fontOutline, "detached_power.text.outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, "setting")
     M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
-    local slot = W.Segment(text, "Slot", TEXT_SLOT_VALUES, controlW)
-    M.BindSegment(self.ctx, slot, CurrentDetachedTextSlot, function(value)
+    local slot = Schema.Build(self.ctx, text, { { "segment", "slot", nil, { "Slot", TEXT_SLOT_VALUES, controlW },
+        meta = Meta("detached_power.text.slot_selector", "ephemeral"), get = CurrentDetachedTextSlot, set = function(value)
         M.classPowerDetachedPowerTextSlot = value or "center"
         if M.RequestRefresh then M.RequestRefresh(self.ctx, "classpower-detached-power-text-slot") elseif M.Refresh then M.Refresh(self.ctx) end
-    end, Meta("detached_power.text.slot_selector", "ephemeral"))
+    end } }, Page.RowOptions).slot
     RegisterSegment(slot, "detached_power.text.slot_selector", TEXT_SLOT_VALUES, "ephemeral")
     local offsets = {}
     for index, axis in ipairs({ "X", "Y" }) do
-        local slider = W.Slider(text, "Slot " .. axis, -300, 300, 1, 300)
-        M.ClassPowerWorkspace.BindNumberWidget(self.ctx, slider, function()
-            local x, y = DetachedTextOffsetKeys()
-            return tonumber(Player()[index == 1 and x or y]) or 0
-        end, function(value)
-            local x, y = DetachedTextOffsetKeys()
-            SetPlayerTextValue(index == 1 and x or y, value, ApplyDetachedPowerText)
-        end, 0, Meta("detached_power.text.slot_offset." .. axis:lower(), "setting", { step = 1, roundStep = true }))
+        local slider = Schema.Build(self.ctx, text, { { "slider", "slider", 0, { "Slot " .. axis, -300, 300, 1, 300 },
+            workspace = "classpower", meta = Meta("detached_power.text.slot_offset." .. axis:lower(), "setting", { step = 1, roundStep = true }),
+            get = function()
+                local x, y = DetachedTextOffsetKeys()
+                return tonumber(Player()[index == 1 and x or y]) or 0
+            end,
+            set = function(value)
+                local x, y = DetachedTextOffsetKeys()
+                SetPlayerTextValue(index == 1 and x or y, value, ApplyDetachedPowerText)
+            end } }, Page.RowOptions).slider
         offsets[index] = slider
     end
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
@@ -1431,7 +1442,7 @@ function Page:BuildDetachedPowerTextures()
     local textures, controlW, _, _, cardW = self:BarArea("classpower_detached_power_textures", "Appearance", 240)
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
-    local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
+    local powerTexturesCard = Card(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(powerTexturesCard, function()
             local refs = { "power.current" }
@@ -1450,7 +1461,8 @@ function Page:BuildDetachedPowerTextures()
         })
     end
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
-        { "outline", "playerPowerOutline", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
+        { "slider", "outline", 1, { "Power bar outline", 0, 8, 1, 300 }, field = "detachedPowerBarOutline", policy = "playerPowerOutline",
+            apply = ApplyDetachedPowerBarOutline, group = "detached" },
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
@@ -1459,23 +1471,24 @@ end
 
 function Page:BuildPlayerHP()
     local layout, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_player_hp", "Layout", self.width < 680 and 840 or 600)
-    W.ControlCard(layout, "Visibility & Position", nil, 14, -38, cardW, twoColumns and 500 or 760)
+    Card(layout, "Visibility & Position", nil, 14, -38, cardW, twoColumns and 500 or 760)
     local applyRefresh = self:WithRefresh(ApplyPlayerHPBar)
-    self.hpUse = W.SectionSwitch(layout, "Extra Health Bar")
-    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.hpUse, function() return BoolValue(Bars(), "playerHPBarEnabled", false) end,
-        function(value) SetValue(Bars(), "playerHPBarEnabled", value, applyRefresh) end, Meta("player_hp.enabled"))
+    self.hpUse = Schema.Build(self.ctx, layout, { { "sectionSwitch", "hpUse", nil, { "Extra Health Bar" },
+        workspace = "classpower", meta = Meta("player_hp.enabled"),
+        get = function() return BoolValue(Bars(), "playerHPBarEnabled", false) end,
+        set = function(value) SetValue(Bars(), "playerHPBarEnabled", value, applyRefresh) end } }, Page.RowOptions).hpUse
     self.hp = self:Controls(layout, Bars, ApplyPlayerHPBar, "player_hp.layout", {
-        { "anchor", "dropdown", "Anchor", PLAYER_HP_ANCHOR_VALUES, 300, "playerHPBarAnchor", "CLASS_TOP" },
-        { "widthMode", "dropdown", "Width mode", PLAYER_HP_WIDTH_VALUES, 300, "playerHPBarWidthMode", "class", applyRefresh },
-        { "manualWidth", "slider", "Custom width", 20, 1200, 1, 300, "playerHPBarWidth", 0 },
-        { "shape", "dropdown", "HP shape", PLAYER_HP_SHAPE_VALUES, 300, "playerHPBarShape", "BAR", applyRefresh },
-        { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "playerHPBarOrbSize", 54 },
-        { "height", "slider", "Height", 2, 80, 1, 300, "playerHPBarHeight", 6 },
-        { "smooth", "toggle", "Smooth fill", "playerHPBarSmoothFill", false },
-        { "gap", "slider", "Gap", 0, 60, 1, 300, "playerHPBarGap", 2 },
-        { "x", "slider", "Offset X", -1000, 1000, 1, 300, "playerHPBarOffsetX", 0 },
-        { "y", "slider", "Offset Y", -1000, 1000, 1, 300, "playerHPBarOffsetY", 0 },
-        { "layer", "slider", "Frame layer", 0, 30, 1, 300, "playerHPBarFrameLevelOffset", 7 },
+        { "dropdown", "anchor", "CLASS_TOP", { "Anchor", PLAYER_HP_ANCHOR_VALUES, 300 }, field = "playerHPBarAnchor" },
+        { "dropdown", "widthMode", "class", { "Width mode", PLAYER_HP_WIDTH_VALUES, 300 }, field = "playerHPBarWidthMode", apply = applyRefresh },
+        { "slider", "manualWidth", 0, { "Custom width", 20, 1200, 1, 300 }, field = "playerHPBarWidth" },
+        { "dropdown", "shape", "BAR", { "HP shape", PLAYER_HP_SHAPE_VALUES, 300 }, field = "playerHPBarShape", apply = applyRefresh },
+        { "slider", "orbSize", 54, { "Orb size", 20, 160, 1, 300 }, field = "playerHPBarOrbSize" },
+        { "slider", "height", 6, { "Height", 2, 80, 1, 300 }, field = "playerHPBarHeight" },
+        { "flowToggle", "smooth", false, { "Smooth fill" }, field = "playerHPBarSmoothFill" },
+        { "slider", "gap", 2, { "Gap", 0, 60, 1, 300 }, field = "playerHPBarGap" },
+        { "slider", "x", 0, { "Offset X", -1000, 1000, 1, 300 }, field = "playerHPBarOffsetX" },
+        { "slider", "y", 0, { "Offset Y", -1000, 1000, 1, 300 }, field = "playerHPBarOffsetY" },
+        { "slider", "layer", 7, { "Frame layer", 0, 30, 1, 300 }, field = "playerHPBarFrameLevelOffset" },
     })
     PlaceColumn(layout, 32, -154, 54, controlW, "LEFT", self.hp.anchor, self.hp.widthMode, self.hp.manualWidth, self.hp.shape, self.hp.orbSize,
         self.hp.height, self.hp.smooth)
@@ -1498,7 +1511,7 @@ end
 
 function Page:BuildPlayerHPTextures()
     local textures, controlW, _, _, cardW = self:BarArea("classpower_player_hp_textures", "Appearance", 440)
-    local hpTexturesCard = W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
+    local hpTexturesCard = Card(textures, "HP Textures", nil, 14, -38, cardW, 346)
     if W.AttachContextColorReferences then
         local function PlayerHPColorMode()
             local mode = tostring(Bars().playerHPBarColorMode or "GLOBAL"):upper()
@@ -1521,13 +1534,13 @@ function Page:BuildPlayerHPTextures()
         if M.Refresh then M.Refresh(self.ctx) end
     end
     local texture = self:Controls(textures, Bars, ApplyPlayerHPBar, "player_hp.textures", {
-        { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL", ApplyPlayerHPColorMode },
-        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "",
-            ApplyPlayerHPTextures },
-        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "playerHPBarBgTexture", "",
-            ApplyPlayerHPTextures },
-        { "bgAlpha", "alpha", "BG opacity", "playerHPBarBgAlpha", .35, ApplyPlayerHPBar, 1 },
-        { "outline", "slider", "Outline", 0, 8, 1, 300, "playerHPBarOutline", 1 },
+        { "dropdown", "color", "GLOBAL", { "HP color", PLAYER_HP_COLOR_VALUES, 300 }, field = "playerHPBarColorMode", apply = ApplyPlayerHPColorMode },
+        { "dropdown", "fg", "", { "Foreground texture", function() return TextureValues("Use global bar texture") end, 300 },
+            field = "playerHPBarTexture", apply = ApplyPlayerHPTextures },
+        { "dropdown", "bg", "", { "Background texture", function() return TextureValues("Use foreground texture") end, 300 },
+            field = "playerHPBarBgTexture", apply = ApplyPlayerHPTextures },
+        { "slider", "bgAlpha", .35, { "BG opacity", 0, 100, 1, 300 }, field = "playerHPBarBgAlpha", policy = "alpha", apply = ApplyPlayerHPBar },
+        { "slider", "outline", 1, { "Outline", 0, 8, 1, 300 }, field = "playerHPBarOutline" },
     })
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.color, texture.fg, texture.bg, texture.bgAlpha, texture.outline)
     self:AddNamed("hp", texture, "color fg bg bgAlpha outline")
@@ -1541,7 +1554,7 @@ end
 
 function Page:BuildPlayerHPText()
     local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_player_hp_text", "Text", self.width < 680 and 800 or 620)
-    local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 722)
+    local hpTextCard = Card(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 722)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(hpTextCard, {
             title = "Extra Health Text Settings",
@@ -1581,14 +1594,14 @@ function Page:BuildPlayerHPText()
     self.hpTextEnable = SwitchAt(self.ctx, text, "Show HP text", 32, -104, controlW, Bars, "playerHPBarTextEnabled", true, textRefresh, Meta("player_hp.text.enabled"))
     local shared = SwitchAt(self.ctx, text, "Use Player HP text", 32, -136, controlW, Bars, "playerHPBarUsePlayerText", true, textRefresh, Meta("player_hp.text.use_player_text"))
     self.hpText = self:Controls(text, Bars, ApplyPlayerHPText, "player_hp.text", {
-        { "right", "dropdown", "Right slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextRight", "CURPERCENT", textRefresh },
-        { "left", "dropdown", "Left slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextLeft", "NONE", textRefresh },
-        { "center", "dropdown", "Center slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextCenter", "NONE", textRefresh },
-        { "sep", "dropdown", "Delimiter", PLAYER_HP_SEPARATORS, 180, "playerHPBarTextSeparator", "" },
-        { "reverse", "toggle", "Reverse order", "playerHPBarTextReverse", false },
-        { "size", "slider", "Text size", 6, 48, 1, 300, "playerHPBarTextSize", 14 },
-        { "x", "slider", "Text X", -300, 300, 1, 300, "playerHPBarTextOffsetX", 0 },
-        { "y", "slider", "Text Y", -300, 300, 1, 300, "playerHPBarTextOffsetY", 0 },
+        { "dropdown", "right", "CURPERCENT", { "Right slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextRight", apply = textRefresh },
+        { "dropdown", "left", "NONE", { "Left slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextLeft", apply = textRefresh },
+        { "dropdown", "center", "NONE", { "Center slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextCenter", apply = textRefresh },
+        { "dropdown", "sep", "", { "Delimiter", PLAYER_HP_SEPARATORS, 180 }, field = "playerHPBarTextSeparator" },
+        { "flowToggle", "reverse", false, { "Reverse order" }, field = "playerHPBarTextReverse" },
+        { "slider", "size", 14, { "Text size", 6, 48, 1, 300 }, field = "playerHPBarTextSize" },
+        { "slider", "x", 0, { "Text X", -300, 300, 1, 300 }, field = "playerHPBarTextOffsetX" },
+        { "slider", "y", 0, { "Text Y", -300, 300, 1, 300 }, field = "playerHPBarTextOffsetY" },
     })
     self.hpHide = {
         self:SourceToggle(text, "Hide right % sign", Bars, "playerHPBarTextRightHidePercentSymbol", ApplyPlayerHPText, "player_hp.text"),
@@ -1609,10 +1622,10 @@ function Page:BuildPlayerHPText()
 end
 
 function Page:BuildAlternativeMana()
-    local section = self.b:CollapsibleSection("classpower_alt_mana", "Layout", 402, false)
+    local section = self:Section("classpower_alt_mana", "Layout", 402, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 346)
+    local manaCard = Card(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 346)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(manaCard, { "class_power.alt_mana" }, {
             title = "Alternative Mana Color",
@@ -1620,22 +1633,23 @@ function Page:BuildAlternativeMana()
         })
     end
     local applyRefresh = self:WithRefresh(ApplyClassPower)
-    self.altToggle = W.SectionSwitch(section, "Show mana bar (dual resource)")
-    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.altToggle, function() return BoolValue(Bars(), "showAltMana", false) end,
-        function(value) SetValue(Bars(), "showAltMana", value, applyRefresh) end, Meta("alternative_mana.enabled"))
+    self.altToggle = Schema.Build(self.ctx, section, { { "sectionSwitch", "altToggle", nil, { "Show mana bar (dual resource)" },
+        workspace = "classpower", meta = Meta("alternative_mana.enabled"),
+        get = function() return BoolValue(Bars(), "showAltMana", false) end,
+        set = function(value) SetValue(Bars(), "showAltMana", value, applyRefresh) end } }, Page.RowOptions).altToggle
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
-        { "widthMode", "dropdown", "Width mode", ALT_MANA_WIDTH_VALUES, 300, "altManaWidthMode", "player", applyRefresh },
-        { "width", "slider", "Custom width", 20, 1200, 1, 300, "altManaWidth", 0 },
-        { "height", "slider", "Height", 2, 30, 1, 300, "altManaHeight", 4 },
-        { "x", "slider", "X offset", -1000, 1000, 1, 300, "altManaOffsetX", 0 },
-        { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },
+        { "dropdown", "widthMode", "player", { "Width mode", ALT_MANA_WIDTH_VALUES, 300 }, field = "altManaWidthMode", apply = applyRefresh },
+        { "slider", "width", 0, { "Custom width", 20, 1200, 1, 300 }, field = "altManaWidth" },
+        { "slider", "height", 4, { "Height", 2, 30, 1, 300 }, field = "altManaHeight" },
+        { "slider", "x", 0, { "X offset", -1000, 1000, 1, 300 }, field = "altManaOffsetX" },
+        { "slider", "y", -2, { "Y offset", -50, 50, 1, 300 }, field = "altManaOffsetY" },
     })
     PlaceColumn(section, 32, -104, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
     self.altManaWidth = fields.width
     self:AddNamed("altMana", fields, "widthMode width height x y")
 end
 function Page:BuildAlternativeManaBehavior()
-    local section = self.b:CollapsibleSection("classpower_alt_mana_behavior", "Behavior", 96, false)
+    local section = self:Section("classpower_alt_mana_behavior", "Behavior", 96, false)
     local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -40, 280, Bars, "altManaSmoothFill", false,
         ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     self:Add("altMana", smooth)
@@ -1757,7 +1771,12 @@ function Page:LazySection(id, title, height, method, prepareShell)
             title = title,
             height = height,
             defaultOpen = false,
-            prepareShell = prepareShell,
+            prepareShell = function(...)
+                local refresh = prepareShell and prepareShell(...)
+                local section = select(2, ...)
+                if section and section._msuf2CollapsibleEntry then Schema.Section(section, "classpower") end
+                return refresh
+            end,
             build = function(_, proxyBuilder)
                 local outerBuilder = page.b
                 page.b = proxyBuilder
@@ -1776,7 +1795,9 @@ end
 
 function Page:Build()
     self:BuildHeader()
-    BuildInlineClassPowerPreview(self.ctx, self.b)
+    local preview = BuildInlineClassPowerPreview(self.ctx, self.b)
+    Schema.Custom(preview, { id = "menu2.classpower.preview", kind = "preview",
+        scope = "classpower", applyDomain = "preview", owner = preview })
     self:BuildClassLayout()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 482, Page.BuildClassStyle)
