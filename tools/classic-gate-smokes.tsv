@@ -795,3 +795,5 @@ clients+Forever	lua	tools/tests/group_preview_scene_isolation_smoke.lua	{root} {
 -	lua	tools/tests/preview_kit_smoke.lua	{root}	The preview kit lost its closed-host silence, request coalescing or frame pools contract
 clients+Forever	lua	tools/tests/group_preview_scene_lifecycle_smoke.lua	{root} {flavor}	A preview scene root listened or showed while closed, ignored combat, followed the shared preview animation, or called a unit API: {flavor}
 clients+Forever	python	tools/tests/menu_group_indicators_parity_smoke.py	{root} {flavor}	Complete group indicator controls and every status or spell selection preserve original full-page observations: {flavor}	nightly
+-	lua	tools/tests/menu_group_parity_smoke.lua	{root} Mainline	Group controls preserve parent input, history, combat, layout and copy behavior: Mainline	push
+clients+Forever	lua	tools/tests/menu_group_parity_smoke.lua	{root} {flavor}	Group controls preserve parent input, history, combat, layout and copy behavior: {flavor}	nightly

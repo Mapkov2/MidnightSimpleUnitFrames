@@ -15,6 +15,7 @@ local C_Timer = M.MenuTimer or _G.C_Timer
 -- Owns party/raid/mythicraid option binding and preview sync. Apply work is routed through
 -- the shared Menu2 ApplyService when available; the page-local queue remains as a fallback.
 local W = M.Widgets
+local Schema = M.ControlSchema
 local T = M.Theme
 local ControlGates = M.ControlGates or {}
 local Shared = M.UnitSectionsShared or {}
@@ -854,6 +855,24 @@ local function RefreshScopeContext(ctx, previousScope)
         RefreshContext(ctx)
     end
 end
+local function PriorityScopeNote(ctx, builder, sec, noteY, pageW)
+    local note = Schema.Build(ctx, sec, {
+        { "text", "note", nil, { "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
+            16, noteY, pageW - 32, T.colors.muted },
+            meta = GroupControlMeta(ctx, "scope.priority_note"), scope = "group", domain = "layout" },
+    }).note
+    if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(sec, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = builder,
+            ctx = ctx,
+            flowGap = 8,
+        })
+    end
+end
 local function ScopeSection(ctx, builder, opts)
     opts = opts or {}
     local priorityMode = opts.priorityMode == true
@@ -929,47 +948,38 @@ local function ScopeSection(ctx, builder, opts)
     local command = sec
     pageOpts.getValue = function() return ctx and ctx.key end
     pageOpts.setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end
-    local pageBar = W.ScopeOverrideBar(ctx, command, pageOpts)
-    RegisterGroupControl(pageBar, ctx, "navigation.section.selector", "Page", "segment", "ephemeral")
+    Schema.Build(ctx, command, {
+        { "scopebar", "page", nil, { pageOpts }, scope = "group", domain = "navigation",
+            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "navigation.section.selector", "Page", "segment", "ephemeral") end },
+    })
 
     if priorityMode then
-        local note = W.Text(sec,
-            "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
-            16, noteY, pageW - 32, T.colors.muted)
-        if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
-        if W.AttachStickyPageHeader then
-            W.AttachStickyPageHeader(sec, {
-                pageKey = ctx and ctx.key,
-                wrapper = ctx and ctx.wrapper,
-                gap = 4,
-                builder = builder,
-                ctx = ctx,
-                flowGap = 8,
-            })
-        end
+        PriorityScopeNote(ctx, builder, sec, noteY, pageW)
         return sec
     end
 
-    local copy = (W.RoleButton and W.RoleButton(sec, "Copy To", "success", 86, 24)) or W.TopButton(sec, "Copy To", 86, 24, {})
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
+    local copyPopup
+    local copy = Schema.Build(ctx, sec, {
+        { W.RoleButton and "roleButton" or "topButton", "copy", nil,
+            W.RoleButton and { "Copy To", "success", 86, 24 } or { "Copy To", 86, 24, {} },
+            anchor = { "TOPRIGHT", sec, "TOPRIGHT", -16, -16 },
+            action = function(self) if copyPopup then copyPopup.Show(self) end end,
+            meta = GroupControlMeta(ctx, "copy.open", "ephemeral"), scope = "group", domain = "copy" },
+    }).copy
     local scopeBtns = {}
-    local scopeBar = W.ScopeOverrideBar(ctx, command, {
-        values = scopeValues,
-        width = pageW,
-        label = "",
-        labelWidth = 0,
-        startX = 16,
-        centerY = scopeCenterY,
-        getValue = CurrentScope,
-        setValue = SelectScope,
-    })
-    RegisterGroupControl(scopeBar, ctx, "scope.selector", "Editing", "segment", "ephemeral")
+    local scopeBar = Schema.Build(ctx, command, {
+        { "scopebar", "scope", nil, { { values = scopeValues, width = pageW, label = "", labelWidth = 0,
+            startX = 16, centerY = scopeCenterY, getValue = CurrentScope, setValue = SelectScope } },
+            scope = "group", domain = "scope",
+            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "scope.selector", "Editing", "segment", "ephemeral") end },
+    }).scope
     for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
-    local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
+    copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
+        declareControl = function(widget) Schema.Owned(widget, "group", "copy") end,
         width = 430,
         height = 334,
         categories = GF_COPY_CATEGORIES,
@@ -999,7 +1009,6 @@ local function ScopeSection(ctx, builder, opts)
         end,
     })
     RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true }) -- searchable opener
-    copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
     if type(M.RegisterGuidedCopyPopup) == "function" then
         M.RegisterGuidedCopyPopup("group", ctx.key, M.CreateGuidedCopyOpener(copyPopup, copy))
     end
@@ -1093,32 +1102,44 @@ local function BindScopeDropdown(ctx, widget, key, default, mode, semanticPath)
     return widget
 end
 local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify, semanticPath)
-    local control = BindScopeDropdown(ctx, W.Dropdown(parent, label, values, width), key, default, mode, semanticPath)
-    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "LEFT") end
-    return control
+    local row = { "dropdown", key, default, { label, values, width },
+        x and { x, y, placeWidth or width, justify or "LEFT" }, domain = mode }
+    -- Callers may supply their complete metadata, including search keys.
+    local options = { bind = function(c, widget, spec)
+        BindScopeDropdown(c, widget, spec[2], spec[3], spec.domain, semanticPath)
+        Schema.Owned(widget, "group", spec.domain or "visual")
+    end }
+    return Schema.Build(ctx, parent, { row }, options)[key]
 end
 local function ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify, semanticPath)
-    local control = BindScopeSlider(ctx, W.Slider(parent, label, minValue, maxValue, step, width), key, default, mode, semanticPath)
-    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
-    return control
+    local row = { "slider", key, default, { label, minValue, maxValue, step, width },
+        x and { x, y, placeWidth or width, justify or "CENTER" }, domain = mode }
+    local options = { bind = function(c, widget, spec)
+        BindScopeSlider(c, widget, spec[2], spec[3], spec.domain, semanticPath)
+        Schema.Owned(widget, "group", spec.domain or "visual")
+    end }
+    return Schema.Build(ctx, parent, { row }, options)[key]
 end
 local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults, mode, x, y, placeWidth, justify, semanticPath)
-    local control = W.Color(parent, label)
     defaults = defaults or {}
-    M.BindColor(ctx, control,
-        function()
-            return Num(CurrentScope(), rKey, defaults[1] or 1),
-                Num(CurrentScope(), gKey, defaults[2] or 1),
-                Num(CurrentScope(), bKey, defaults[3] or 1)
-        end,
-        function(r, g, b)
-            local conf = Conf(CurrentScope())
-            conf[rKey], conf[gKey], conf[bKey] = r, g, b
-            QueueGF(CurrentScope(), mode or "visual")
-        end,
-        ResolveGroupControlMeta(ctx, semanticPath, "color." .. tostring(rKey):gsub("[Rr]$", "")))
-    if x then W.MoveWidget(control, parent, x, y, placeWidth or width or 220, justify or "LEFT") end
-    return control
+    local options = { bind = function(c, widget)
+        M.BindColor(c, widget,
+            function()
+                return Num(CurrentScope(), rKey, defaults[1] or 1),
+                    Num(CurrentScope(), gKey, defaults[2] or 1), Num(CurrentScope(), bKey, defaults[3] or 1)
+            end,
+            function(r, g, b)
+                local conf = Conf(CurrentScope())
+                conf[rKey], conf[gKey], conf[bKey] = r, g, b
+                QueueGF(CurrentScope(), mode or "visual")
+            end,
+            ResolveGroupControlMeta(c, semanticPath, "color." .. tostring(rKey):gsub("[Rr]$", "")))
+        Schema.Owned(widget, "group", mode or "visual")
+    end }
+    return Schema.Build(ctx, parent, {
+        { "color", rKey, defaults, { label },
+            x and { x, y, placeWidth or width or 220, justify or "LEFT" } },
+    }, options)[rKey]
 end
 
 --- Party portrait workspace. Bindings are intentionally fixed to gf_party
@@ -1133,21 +1154,22 @@ local function PreparePartyPortraitSwitch(ctx, sec)
         RefreshContext(ctx)
     end
     M._msuf2LastGroupPortraitSide = M._msuf2LastGroupPortraitSide or "LEFT"
-    local portraitEnable = W.SectionSwitch(sec, "Portrait")
-    local portraitEnableMeta = GroupControlMeta(ctx, "portrait.enabled")
-    M.BindBoolWidget(ctx, portraitEnable,
-        function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
-        function(value)
-            local mode = Val(kind, "portraitMode", "OFF")
-            if value then
-                SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
-            else
-                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastGroupPortraitSide = mode end
-                SetValue("portraitMode", "OFF")
-            end
-            if portraitEnable.refreshDetails then portraitEnable.refreshDetails() end
-        end,
-        portraitEnableMeta)
+    local portraitEnable
+    portraitEnable = Schema.Build(ctx, sec, {
+        { "sectionSwitch", "portraitMode", nil, { "Portrait" },
+            meta = GroupControlMeta(ctx, "portrait.enabled"), scope = kind, domain = "config",
+            get = function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
+            set = function(value)
+                local mode = Val(kind, "portraitMode", "OFF")
+                if value then
+                    SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
+                else
+                    if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastGroupPortraitSide = mode end
+                    SetValue("portraitMode", "OFF")
+                end
+                if portraitEnable.refreshDetails then portraitEnable.refreshDetails() end
+            end },
+    }, Schema.UnitOptions()).portraitMode
     portraitEnable:SetChecked(Val(kind, "portraitMode", "OFF") ~= "OFF")
     return portraitEnable
 end
@@ -1207,6 +1229,7 @@ function PortraitBuild.Shell(ctx, builder)
     M.unitPortraitTabSelection[stateKey] = currentTab
     local initialHeight = tabH[currentTab] or tabH.general
     local sec = builder:CollapsibleSection("portrait", "Portrait", initialHeight, false)
+    Schema.Section(sec, "party")
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local cardX = 16
     local cardW = max(260, min(620, sectionW - 32))
@@ -1265,69 +1288,41 @@ function PortraitBuild.Binders(ctx, s)
     end
     RegisterPreviewOffsetVirtual("x", "portraitOffsetX", "Party Portrait X Offset")
     RegisterPreviewOffsetVirtual("y", "portraitOffsetY", "Party Portrait Y Offset")
-    local function BindDropdown(parent, label, values, x, y, width, key, defaultValue, normalize, after)
-        local control = W.Dropdown(parent, label, values, 220)
-        W.MoveWidget(control, parent, x, y, width)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local value = Val(kind, key, defaultValue)
-                return normalize and normalize(value) or value
-            end,
-            function(value)
-                value = normalize and normalize(value or defaultValue) or (value or defaultValue)
-                SetValue(key, value)
-                if after then after() end
-            end,
-            PortraitMeta(key, key))
-        return AttachPortraitFocus(control)
-    end
-    local function BindNumber(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, percent, after)
-        local control = W.Slider(parent, label, minValue, maxValue, step, 280)
-        if percent and M.UsePercentInput then M.UsePercentInput(control) end
-        W.MoveWidget(control, parent, x, y, width, "CENTER")
-        local meta = PortraitMeta(key, key)
-        meta.step, meta.roundStep = step, true
-        M.BindNumberWidget(ctx, control,
-            function() return Num(kind, key, defaultValue) end,
-            function(value)
-                SetValue(key, tonumber(value) or defaultValue)
-                if after then after() end
-            end,
-            defaultValue, meta)
-        return AttachPortraitFocus(control)
-    end
-    local function BindToggle(parent, label, x, y, width, key, defaultValue, after)
-        local control = W.ToggleAt(parent, label, x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return Bool(kind, key, defaultValue) end,
-            function(value)
-                SetValue(key, value and true or false)
-                if after then after() end
-            end,
-            PortraitMeta(key, key))
-        return AttachPortraitFocus(control)
-    end
-    local function BindColor(parent, label, x, y, width, prefix, defaults)
-        local control = W.Color(parent, label)
-        local rKey, gKey, bKey = prefix .. "R", prefix .. "G", prefix .. "B"
-        local settingKeys = { "gf_party." .. rKey, "gf_party." .. gKey, "gf_party." .. bKey }
-        M.BindColor(ctx, control,
-            function()
-                return Num(kind, rKey, defaults[1]), Num(kind, gKey, defaults[2]), Num(kind, bKey, defaults[3])
-            end,
-            function(r, g, b)
+    -- Fixed Party access is deliberate: these controls must never follow gfScope.
+    s.rowOptions = { bind = function(c, widget, row, controlKind)
+        local key, default = row[2], row[3]
+        local meta = row.meta or PortraitMeta(key, key)
+        local get, set = row.get, row.set
+        if controlKind == "color" then
+            local rKey, gKey, bKey = key .. "R", key .. "G", key .. "B"
+            meta = PortraitMeta(key, nil, { "gf_party." .. rKey, "gf_party." .. gKey, "gf_party." .. bKey })
+            get = function() return Num(kind, rKey, default[1]), Num(kind, gKey, default[2]), Num(kind, bKey, default[3]) end
+            set = function(r, g, b)
                 local conf = Conf(kind)
                 if conf[rKey] == r and conf[gKey] == g and conf[bKey] == b then return end
                 conf[rKey], conf[gKey], conf[bKey] = r, g, b
                 QueueGF(kind, "config")
                 RefreshContext(ctx)
-            end,
-            PortraitMeta(prefix, nil, settingKeys))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return AttachPortraitFocus(control)
-    end
+            end
+        elseif not get then
+            get = function()
+                local read = controlKind == "toggle" and Bool or controlKind == "slider" and Num or Val
+                local value = read(kind, key, default)
+                return row.normalize and row.normalize(value) or value
+            end
+            set = function(value)
+                if controlKind == "toggle" then value = value and true or false
+                elseif controlKind == "slider" then value = tonumber(value) or default
+                else value = row.normalize and row.normalize(value or default) or (value or default) end
+                SetValue(key, value)
+                if row.afterSet then row.afterSet() end
+            end
+        end
+        Schema.UnitBinding(c, widget, { row[1], key, default, row[4], meta = meta,
+            scope = "party", domain = "config", get = get, set = set, roundStep = controlKind == "slider" }, controlKind)
+        AttachPortraitFocus(widget)
+    end }
     s.AttachPortraitFocus, s.PortraitMeta, s.SetValue = AttachPortraitFocus, PortraitMeta, SetValue
-    s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor = BindDropdown, BindNumber, BindToggle, BindColor
 end
 function PortraitBuild.Tabs(ctx, s)
     local stateKey = s.stateKey
@@ -1358,11 +1353,15 @@ function PortraitBuild.Tabs(ctx, s)
     local tabFrames = {}
     local generalTab, geometryTab, placementTab, borderTab, advancedTab =
         Shared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced")
-    local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, cardX, -4, cardW, cardH.main)
-    local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, cardX, -4, cardW, cardH.geometry)
-    local placementCard = W.ControlCard(placementTab, "Placement", nil, cardX, -4, cardW, cardH.placement)
-    local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, cardX, -4, cardW, cardH.border)
-    local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, cardX, -4, cardW, cardH.style)
+    local cards = {}
+    for _, card in ipairs({ { generalTab, "main", "Visibility & Mode" }, { geometryTab, "geometry", "Geometry" },
+        { placementTab, "placement", "Placement" }, { borderTab, "border", "Shape & Border" }, { advancedTab, "style", "Class & Background" } }) do
+        Schema.Build(ctx, card[1], {
+            { "card", card[2], nil, { card[3], nil, cardX, -4, cardW, cardH[card[2]] },
+                meta = GroupControlMeta(ctx, "portrait.card." .. card[2]), scope = "group", domain = "layout" },
+        }, nil, cards)
+    end
+    local mainCard, geometryCard, placementCard, borderCard, styleCard = cards.main, cards.geometry, cards.placement, cards.border, cards.style
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "group.portrait.border" }, {
             title = "Portrait Border Color",
@@ -1388,6 +1387,7 @@ function PortraitBuild.Tabs(ctx, s)
     if portraitTabs._msuf2Title then portraitTabs._msuf2Title:Hide() end
     AttachPortraitFocus(portraitTabs)
     RegisterGroupControl(portraitTabs, ctx, "portrait.workspace_tab", "Portrait area", "segment", "ephemeral")
+    Schema.Owned(portraitTabs, "group", "navigation")
     sec._msuf2GuidedSelectTab = function(tab)
         tab = NormalizeTab(tab)
         if type(ReadTab) == "function" and ReadTab() == tab then return true end
@@ -1409,93 +1409,90 @@ function PortraitBuild.Controls(ctx, s)
     local mainCard, geometryCard, placementCard, borderCard, styleCard = s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard
     local renderValues, sizeModeValues, shapeValues, borderValues = s.renderValues, s.sizeModeValues, s.shapeValues, s.borderValues
     local placementValues, ClassStyleValues = s.placementValues, s.ClassStyleValues
-    local RefreshPortraitControls, AttachPortraitFocus, PortraitMeta, SetValue = s.RefreshPortraitControls, s.AttachPortraitFocus, s.PortraitMeta, s.SetValue
-    local BindDropdown, BindNumber, BindToggle, BindColor = s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor
-    local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
-    W.MoveWidget(side, mainCard, 16, -62, min(220, cardW - 32))
-    M.BindSegment(ctx, side,
-        function() return Val(kind, "portraitMode", "OFF") == "RIGHT" and "RIGHT" or "LEFT" end,
-        function(value)
-            value = value == "RIGHT" and "RIGHT" or "LEFT"
-            M._msuf2LastGroupPortraitSide = value
-            SetValue("portraitMode", value)
-            RefreshPortraitControls()
-        end,
-        PortraitMeta("position", "portraitMode"))
-    AttachPortraitFocus(side)
-    local render = BindDropdown(mainCard, "Render", renderValues, 16, -116, min(220, cardW - 32), "portraitRender", "2D", nil, RefreshPortraitControls)
-    local clickable = BindToggle(mainCard, "Clickable portrait", 16, -174, cardW - 32, "portraitClickable", false)
-    clickable._msuf2SearchText = "Clickable portrait group frame target right click menu click casting mouseover"
-    local shape = BindDropdown(borderCard, "Shape", shapeValues, 16, -58, min(220, cardW - 32), "portraitShape", "SQUARE", nil, RefreshPortraitControls)
-    local sizeMode = W.Segment(geometryCard, "Size mode", sizeModeValues, min(360, cardW - 32))
-    W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, cardW - 32))
-    M.BindSegment(ctx, sizeMode,
-        function()
-            local conf = Conf(kind)
-            local mode = conf.portraitSizeMode
-            if mode == "UNIFORM" or mode == "SEPARATE" then return mode end
-            return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
-                and "SEPARATE" or "UNIFORM"
-        end,
-        function(value)
-            SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
-            RefreshPortraitControls()
-        end,
-        PortraitMeta("portraitSizeMode", "portraitSizeMode"))
-    AttachPortraitFocus(sizeMode)
-    local size = BindNumber(geometryCard, "Size override", 16, -116, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
-    local width = BindNumber(geometryCard, "Width override", 16, -170, cardW - 58, 0, 256, 1, "portraitWidth", 0)
-    local height = BindNumber(geometryCard, "Height override", 16, -224, cardW - 58, 0, 256, 1, "portraitHeight", 0)
-    -- 100-300 %, the range the portrait runtime clamps to and the unit page offers.
-    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 300, 1, "portraitZoom", 100)
-    local panX = BindNumber(geometryCard, "Zoom center X", 16, -332, cardW - 58, -100, 100, 1, "portraitPanX", 0)
-    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -386, cardW - 58, -100, 100, 1, "portraitPanY", 0)
-    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil,
-        RefreshPortraitControls)
-    placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
-    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32),
-        "portraitDetachedPoint", "RIGHT")
-    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32),
-        "portraitDetachedTo", "LEFT")
-    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32),
-        "portraitOverlayAlign", "LEFT")
-    local level = BindNumber(placementCard, "Layer offset", 16, -274, cardW - 58, 0, 30, 1, "portraitLevelOffset", 7)
-    level._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
-    local alpha = BindNumber(placementCard, "Portrait opacity", 16, -328, cardW - 58, 0, 100, 1, "portraitAlpha", 100)
-    local border = BindDropdown(borderCard, "Border", borderValues, 16, -112, min(220, cardW - 32), "portraitBorderStyle", "NONE", nil, RefreshPortraitControls)
-    local edgeSoftness = BindNumber(borderCard, "Portrait edge softness", 16, -166, cardW - 58, 0, 30, 2, "portraitEdgeSoftness", 0)
-    edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil,
-        RefreshPortraitControls)
-    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32),
-        "portraitBorderDirection", "UP")
-    local thickness = BindNumber(borderCard, "Border thickness", 16, -328, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
-    local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -396, cardW - 32, "portraitFillBorder", false)
-    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD",
-        M.NormalizePortraitClassStyle)
-    local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
-    local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
-    local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
-    local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
-    castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
-    s.controls = {
-        side = side, render = render, clickable = clickable, shape = shape, sizeMode = sizeMode,
-        size = size, width = width, height = height, zoom = zoom, panX = panX, panY = panY,
-        placement = placement, detachedPoint = detachedPoint, detachedTo = detachedTo, overlayAlign = overlayAlign,
-        level = level, alpha = alpha, border = border, edgeSoftness = edgeSoftness, borderArt = borderArt,
-        direction = direction, thickness = thickness, fill = fill, classStyle = classStyle,
-        background = background, backgroundColor = backgroundColor, backgroundAlpha = backgroundAlpha, castIcon = castIcon,
-    }
+    local RefreshPortraitControls, PortraitMeta, SetValue = s.RefreshPortraitControls, s.PortraitMeta, s.SetValue
+    local options, controls = s.rowOptions, {}
+    Schema.Build(ctx, mainCard, {
+        { "segment", "position", nil, { "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32) },
+            { 16, -62, min(220, cardW - 32) },
+            meta = PortraitMeta("position", "portraitMode"),
+            get = function() return Val(kind, "portraitMode", "OFF") == "RIGHT" and "RIGHT" or "LEFT" end,
+            set = function(value)
+                value = value == "RIGHT" and "RIGHT" or "LEFT"
+                M._msuf2LastGroupPortraitSide = value
+                SetValue("portraitMode", value)
+                RefreshPortraitControls()
+            end },
+        { "dropdown", "portraitRender", "2D", { "Render", renderValues, 220 }, { 16, -116, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
+        { "toggle", "portraitClickable", false, { "Clickable portrait", 16, -174, cardW - 32 },
+            flagsAfter = { _msuf2SearchText = "Clickable portrait group frame target right click menu click casting mouseover" } },
+    }, options, controls)
+    Schema.Build(ctx, borderCard, {
+        { "dropdown", "portraitShape", "SQUARE", { "Shape", shapeValues, 220 }, { 16, -58, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
+    }, options, controls)
+    Schema.Build(ctx, geometryCard, {
+        { "segment", "portraitSizeMode", nil, { "Size mode", sizeModeValues, min(360, cardW - 32) },
+            { 16, -62, min(360, cardW - 32) },
+            get = function()
+                local conf = Conf(kind)
+                local mode = conf.portraitSizeMode
+                if mode == "UNIFORM" or mode == "SEPARATE" then return mode end
+                return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
+                    and "SEPARATE" or "UNIFORM"
+            end,
+            set = function(value)
+                SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
+                RefreshPortraitControls()
+            end },
+        { "slider", "portraitSizeOverride", 0, { "Size override", 0, 128, 1, 280 }, { 16, -116, cardW - 58, "CENTER" } },
+        { "slider", "portraitWidth", 0, { "Width override", 0, 256, 1, 280 }, { 16, -170, cardW - 58, "CENTER" } },
+        { "slider", "portraitHeight", 0, { "Height override", 0, 256, 1, 280 }, { 16, -224, cardW - 58, "CENTER" } },
+        -- 100-300 %, matching the portrait runtime and unit controls.
+        { "slider", "portraitZoom", 100, { "Portrait zoom", 100, 300, 1, 280 }, { 16, -278, cardW - 58, "CENTER" } },
+        { "slider", "portraitPanX", 0, { "Zoom center X", -100, 100, 1, 280 }, { 16, -332, cardW - 58, "CENTER" } },
+        { "slider", "portraitPanY", 0, { "Zoom center Y", -100, 100, 1, 280 }, { 16, -386, cardW - 58, "CENTER" } },
+    }, options, controls)
+    Schema.Build(ctx, placementCard, {
+        { "dropdown", "portraitPlacement", "ATTACHED", { "Placement", placementValues.modes, 220 },
+            { 16, -58, min(220, cardW - 32) }, afterSet = RefreshPortraitControls,
+            flagsAfter = { _msuf2SearchText = "Portrait placement attached detached overlay free position anchor" } },
+        { "dropdown", "portraitDetachedPoint", "RIGHT", { "Portrait anchor point", placementValues.points, 220 }, { 16, -112, min(220, cardW - 32) } },
+        { "dropdown", "portraitDetachedTo", "LEFT", { "Attach to frame point", placementValues.points, 220 }, { 16, -166, min(220, cardW - 32) } },
+        { "dropdown", "portraitOverlayAlign", "LEFT", { "Overlay alignment", placementValues.overlay, 220 }, { 16, -220, min(220, cardW - 32) } },
+        { "slider", "portraitLevelOffset", 7, { "Layer offset", 0, 30, 1, 280 }, { 16, -274, cardW - 58, "CENTER" },
+            flagsAfter = { _msuf2SearchText = "Portrait layer offset frame level behind in front of bars" } },
+        { "slider", "portraitAlpha", 100, { "Portrait opacity", 0, 100, 1, 280 }, { 16, -328, cardW - 58, "CENTER" } },
+    }, options, controls)
+    Schema.Build(ctx, borderCard, {
+        { "dropdown", "portraitBorderStyle", "NONE", { "Border", borderValues, 220 }, { 16, -112, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
+        { "slider", "portraitEdgeSoftness", 0, { "Portrait edge softness", 0, 30, 2, 280 }, { 16, -166, cardW - 58, "CENTER" },
+            flagsAfter = { _msuf2SearchText = "Portrait edge softness feather fade borderless percent" } },
+        { "dropdown", "portraitBorderArt", "FLAT", { "Border art", placementValues.borderArt, 220 },
+            { 16, -220, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
+        { "dropdown", "portraitBorderDirection", "UP", { "Border direction", placementValues.borderDirection, 220 }, { 16, -274, min(220, cardW - 32) } },
+        { "slider", "portraitBorderThickness", 2, { "Border thickness", 1, 12, 1, 280 }, { 16, -328, cardW - 58, "CENTER" } },
+        { "toggle", "portraitFillBorder", false, { "Fill border into frame gap", 16, -396, cardW - 32 } },
+    }, options, controls)
+    Schema.Build(ctx, styleCard, {
+        { "dropdown", "portraitClassStyle", "BLIZZARD", { "Class portrait style", ClassStyleValues, 220 },
+            { 16, -58, min(220, cardW - 32) }, normalize = M.NormalizePortraitClassStyle },
+        { "toggle", "portraitBgEnabled", false, { "Portrait background", 16, -112, cardW - 32 }, afterSet = RefreshPortraitControls },
+        { "color", "portraitBgColor", { 0.05, 0.05, 0.05 }, { "Portrait Background Color" }, { 16, -158, min(260, cardW - 32), "LEFT" } },
+        { "slider", "portraitBgColorA", 0.85, { "Background opacity", 0, 1, 0.05, 280 }, { 16, -210, cardW - 58, "CENTER" }, beforeBind = M.UsePercentInput },
+        { "toggle", "portraitCastSpellIcon", false, { "Show cast spell icon in portrait", 16, -274, cardW - 32 },
+            flagsAfter = { _msuf2SearchText = "Portrait cast spell icon casting channel empower" } },
+    }, options, controls)
+    s.controls = controls
 end
 function PortraitBuild.Gates(ctx, s)
     local kind, sec, portraitEnable, RefreshPortraitControls = s.kind, s.sec, s.portraitEnable, s.RefreshPortraitControls
     local c = s.controls
-    local side, render, clickable, shape, sizeMode = c.side, c.render, c.clickable, c.shape, c.sizeMode
-    local size, width, height, zoom, panX, panY = c.size, c.width, c.height, c.zoom, c.panX, c.panY
-    local placement, detachedPoint, detachedTo, overlayAlign = c.placement, c.detachedPoint, c.detachedTo, c.overlayAlign
-    local level, alpha, border, edgeSoftness, borderArt = c.level, c.alpha, c.border, c.edgeSoftness, c.borderArt
-    local direction, thickness, fill, classStyle = c.direction, c.thickness, c.fill, c.classStyle
-    local background, backgroundColor, backgroundAlpha, castIcon = c.background, c.backgroundColor, c.backgroundAlpha, c.castIcon
+    local side, render, clickable, shape, sizeMode = c.position, c.portraitRender, c.portraitClickable, c.portraitShape, c.portraitSizeMode
+    local size, width, height, zoom, panX, panY = c.portraitSizeOverride, c.portraitWidth, c.portraitHeight, c.portraitZoom, c.portraitPanX, c.portraitPanY
+    local placement, detachedPoint, detachedTo, overlayAlign = c.portraitPlacement, c.portraitDetachedPoint, c.portraitDetachedTo, c.portraitOverlayAlign
+    local level, alpha, border, edgeSoftness, borderArt =
+        c.portraitLevelOffset, c.portraitAlpha, c.portraitBorderStyle, c.portraitEdgeSoftness, c.portraitBorderArt
+    local direction, thickness, fill, classStyle = c.portraitBorderDirection, c.portraitBorderThickness, c.portraitFillBorder, c.portraitClassStyle
+    local background, backgroundColor, backgroundAlpha, castIcon = c.portraitBgEnabled, c.portraitBgColor, c.portraitBgColorA, c.portraitCastSpellIcon
     local activeControls = {
         render, clickable, shape, sizeMode, size, width, height, placement, level, alpha,
         border, edgeSoftness, background, castIcon,
@@ -1563,6 +1560,7 @@ end
 --- cached page. Restoring the original geometry makes scope switching cheap
 --- and keeps Raid/Mythic controls completely inaccessible.
 function GroupPage.PreparePortraitShell(ctx, section)
+    Schema.Section(section, "party")
     PreparePartyPortraitSwitch(ctx, section)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return end
@@ -1602,16 +1600,19 @@ local GROWTH_TILE_VALUES = {
 local function BuildGrowthDirectionTiles(ctx, section, opts)
     if not section then return nil end
     opts = opts or {}
-    local x = opts.x or section._msuf2ContentX or 14
-    local y = opts.y or section._msuf2CursorY or -38
+    local x, y = opts.x or section._msuf2ContentX or 14, opts.y or section._msuf2CursorY or -38
     local tileW, tileH, gap = opts.tileWidth or 64, opts.tileHeight or 64, opts.gap or 6
     if opts.advanceCursor ~= false then section._msuf2CursorY = y - tileH - 40 end
-    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", T.colors.accent)
-    label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
+    local label = Schema.Build(ctx, section, {
+        { "font", "label", nil, { "GameFontNormalSmall", "Growth Direction", T.colors.accent }, scope = "group", domain = "layout",
+            anchor = { "TOPLEFT", section, "TOPLEFT", x, y }, meta = GroupControlMeta(ctx, "growth.title") },
+    }).label
     local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
     holder:SetSize((tileW * 4) + (gap * 3), tileH)
     holder._msuf2Label = label
+    Schema.Custom(holder, { id = GroupControlMeta(ctx, "growth.tiles").controlId,
+        kind = "growthTiles", labelKey = "Growth Direction", scope = "group", applyDomain = "layout", owner = holder })
     local buttons = {}
     local SetTileVisual = W.SetTileVisual
     local function DrawMiniPreview(btn, info, raidLike)
@@ -1740,6 +1741,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
                 set = function(value) Set(CurrentScope(), "growth", value, "geometry"); RefreshGrowthTiles() end,
             },
         })
+        Schema.Owned(btn, "group", "geometry")
         buttons[info.value] = btn
     end
     M.TrackRefresh(ctx, RefreshGrowthTiles)
@@ -1782,14 +1784,22 @@ local function BuildRoleOrderRows(ctx, section, opts)
     local y = opts.y or section._msuf2CursorY or -146
     local listY = y
     if opts.hint or opts.title then
-        local title = T.Font(section, "GameFontNormalSmall", opts.title or "Role Priority", T.colors.text)
-        title:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
-        title:SetWidth(rowW)
-        title:SetJustifyH("LEFT")
-        local hint = T.Font(section, "GameFontDisableSmall", opts.hint or "Drag roles to reorder.", T.colors.dim)
-        hint:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 16)
-        hint:SetWidth(rowW + 80)
-        hint:SetJustifyH("LEFT")
+        Schema.Build(ctx, section, {
+            { "font", "title", nil, { "GameFontNormalSmall", opts.title or "Role Priority", T.colors.text },
+                anchor = { "TOPLEFT", section, "TOPLEFT", x, y },
+                meta = GroupControlMeta(ctx, "sorting.title"), scope = "group", domain = "layout",
+                beforeBind = function(widget)
+                    widget:SetWidth(rowW)
+                    widget:SetJustifyH("LEFT")
+                end },
+            { "font", "hint", nil, { "GameFontDisableSmall", opts.hint or "Drag roles to reorder.", T.colors.dim },
+                anchor = { "TOPLEFT", section, "TOPLEFT", x, y - 16 },
+                meta = GroupControlMeta(ctx, "sorting.hint"), scope = "group", domain = "layout",
+                beforeBind = function(widget)
+                    widget:SetWidth(rowW + 80)
+                    widget:SetJustifyH("LEFT")
+                end },
+        })
         listY = y - 38
     end
     if opts.advanceCursor ~= false then section._msuf2CursorY = listY - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10 end
@@ -1875,6 +1885,7 @@ local function BuildRoleOrderRows(ctx, section, opts)
         end,
     })
     rows = holder.rows
+    for _, row in ipairs(rows) do Schema.Owned(row.frame, "group", "rebuild") end
     holder.Refresh = LoadOrder
     M.TrackRefresh(ctx, LoadOrder)
     holder:SetRowsEnabled(false)

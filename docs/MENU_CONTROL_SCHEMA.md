@@ -71,7 +71,7 @@ The Swing Copy To button declares its existing OnClick owner without adding a
 search/catalog row. Its stable declaration ID is menu2.swingtimers.swing.copy.button;
 the twelve lazy popup IDs remain unchanged. The shared popup has an opt-in
 declareControl callback after each real control's script and metadata exist.
-Only Swing opts in; copy/filter/include scripts, source invalidation and target
+Swing and Group opt in; copy/filter/include scripts, source invalidation and target
 selection stay with their original owners. Schema.Owned retains their actual
 OnClick references and registered metadata without a second input binding.
 
