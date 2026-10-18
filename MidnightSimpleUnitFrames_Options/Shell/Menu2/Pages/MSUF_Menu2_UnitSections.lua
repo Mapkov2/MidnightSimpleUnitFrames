@@ -34,6 +34,7 @@ local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
 local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
 local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
 local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 -- Lazy shells declare their header before the body builds, as the pilot sections do.
 local function DeclareSection(_, section, unit) Schema.Section(section, unit) end
 local UNIT_ANCHOR_SECTION_HEIGHT = 306
@@ -332,7 +333,7 @@ local function BuildPreview(ctx, builder, unit)
         height = UNIT_PREVIEW_SECTION_HEIGHT,
         gap = 8,
     })
-    if not sec then return end
+    if not UnitSectionShared.DeclarePreview(sec, ctx.key, unit, previewHeaderTitle) then return end
     local createPreview = MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
     if not createPreview then
         W.Text(sec, "The shared unit preview module is not loaded.", 14, -56, ctx.width - 28, T.colors.muted)
@@ -684,10 +685,15 @@ local function BuildTopActions(ctx, builder, unit, label)
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
     local rowY = -15
-    local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
-    RegisterControl(scopeBar, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
-    local copy = (W.RoleButton and W.RoleButton(sec, "Copy To", "success", 82, 24))
-        or W.TopButton(sec, "Copy To", 82, 24, nil, false)
+    if W.ScopeOverrideBar then Schema.Build(ctx, sec, {
+        { "scopebar", "unit_page", nil, { scopeOpts }, scope = unit, domain = "navigation",
+            beforeBind = function(widget)
+                RegisterControl(widget, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
+            end },
+    }) end
+    local copy = Schema.Build(ctx, sec, {
+        { "roleButton", "copy", nil, { "Copy To", "success", 82, 24 } },
+    }).copy
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     -- Opening the selector is safe in combat. The actual copy remains guarded
     -- in onRun below, where a blocked click can produce visible feedback.
@@ -714,6 +720,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
+        declareControl = function(widget) Schema.Owned(widget, unit, "copy") end,
         width = 420,
         height = 304,
         categories = UF_COPY_CATEGORIES,
@@ -795,6 +802,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     copy:SetScript("OnClick", function(self)
         if copyPopup then copyPopup.Show(self) end
     end)
+    Schema.Owned(copy, unit, "copy")
     if type(M.RegisterGuidedCopyPopup) == "function" then
         M.RegisterGuidedCopyPopup("unit", ctx.key, M.CreateGuidedCopyOpener(copyPopup, copy))
     end
@@ -813,17 +821,22 @@ local function BuildTopActions(ctx, builder, unit, label)
     end
 end
 local function PrepareBasicsSwitch(ctx, sec, unit)
+    Schema.Section(sec, unit)
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry and entry.featureSwitch then return entry.featureSwitch end
-    local enable = W.SectionSwitch(sec, "Enable", "Enable")
-    enable._msuf2UnitFrameGateAlwaysEnabled = true
-    M.BindBoolWidget(ctx, enable,
-        function() return ReadBool(unit, "enabled", true) end,
-        function(v)
-            SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
-            M.Refresh(ctx)
-        end,
-        SettingMeta(ctx, "basics.enabled", unit, "enabled"))
+    local enable = Schema.Build(ctx, sec, {
+        { "sectionSwitch", "enabled", true, { "Enable", "Enable" },
+            beforeBind = function(widget)
+                widget._msuf2UnitFrameGateAlwaysEnabled = true
+            end,
+            get = function() return ReadBool(unit, "enabled", true) end,
+            set = function(v)
+                SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
+                M.Refresh(ctx)
+            end,
+            meta = SettingMeta(ctx, "basics.enabled", unit, "enabled"), scope = unit,
+        }
+    }, ROW_OPTIONS).enabled
     enable:SetChecked(ReadBool(unit, "enabled", true))
     return enable
 end
@@ -840,13 +853,88 @@ local function AttachBasicsHeaderStatus(sec, unit)
     Refresh()
     return Refresh
 end
+local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, labelW)
+    local colorMode = Schema.Build(ctx, sec, {
+        { "dropdown", "healthColorMode", HEALTH_COLOR_GLOBAL, { "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)) },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, x1, -116, math.min(270, math.max(220, colW * 2)))
+            end,
+            get = function()
+                return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
+            end,
+            set = function(v)
+                local conf = GetConf(unit)
+                conf.healthColorMode = NormalizeHealthColorMode(v)
+                M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
+                if M.Refresh then M.Refresh(ctx) end
+            end,
+            tip = { "Health Color Scheme",
+                "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.",
+                { hook = true, owner = "ANCHOR_RIGHT" } },
+            meta = SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"), scope = unit,
+        }
+    }, ROW_OPTIONS).healthColorMode
+
+    -- Shares the Health Color Scheme row so the section stays within its
+    -- declared height instead of overlapping the next accordion header. Snap to
+    -- the column grid when there is room, otherwise sit just right of the
+    -- width-capped Health Color Scheme dropdown; clamp the width so it never
+    -- runs into the third column (Pet keeps its class-color toggle there).
+    local fillDirW = math.min(270, math.max(220, colW * 2))
+    local fillDirX = math.max(x2, x1 + fillDirW + gap)
+    local fillDirFit = (x3 - gap) - fillDirX
+    if fillDirFit > 0 and fillDirW > fillDirFit then fillDirW = fillDirFit end
+    local fillDir = Schema.Build(ctx, sec, {
+        { "dropdown", "verticalFillBars", "lr", { "Fill Direction", FILL_DIRECTION_OPTIONS, fillDirW },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, fillDirX, -116, fillDirW)
+            end,
+            get = function()
+                return FillDirectionValue(ReadBool(unit, "reverseFillBars", false), ReadBool(unit, "verticalFillBars", false))
+            end,
+            set = function(v)
+                local state = FILL_DIRECTION_STATE[v] or FILL_DIRECTION_STATE.lr
+                -- Write both booleans, then a single apply/preview (mirrors the
+                -- Health Color Scheme setter) so a 4-way change never double-applies.
+                local conf = GetConf(unit)
+                conf.reverseFillBars = state.reverse
+                conf.verticalFillBars = state.vertical
+                M.RequestUnitDomains(unit, "MSUF2_FILL_DIRECTION", { preview = true })
+                if M.Refresh then M.Refresh(ctx) end
+            end,
+            tip = { "Fill Direction",
+                "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.",
+                { hook = true, owner = "ANCHOR_RIGHT" } },
+            meta = SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"), scope = unit,
+        }
+    }, ROW_OPTIONS).verticalFillBars
+
+    local petPlayerClassColor
+    if unit == "pet" then
+        petPlayerClassColor = Schema.Build(ctx, sec, {
+            { "toggle", "petFrameUsePlayerClassColor", false, { "Player Class Color", x3, -116, labelW },
+                get = function() return GetGeneral().petFrameUsePlayerClassColor == true end,
+                set = function(v)
+                    GetGeneral().petFrameUsePlayerClassColor = v and true or false
+                    M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+                    if M.Refresh then M.Refresh(ctx) end
+                end,
+                tip = { "Use player's class color for Pet Frame",
+                "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", { hook = true, owner = "ANCHOR_RIGHT" } },
+                meta = SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"), scope = unit,
+            }
+        }, ROW_OPTIONS).petFrameUsePlayerClassColor
+
+    end
+    return colorMode, fillDir, petPlayerClassColor
+end
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
     -- stack of closed headers; saved accordion state still wins afterwards.
     -- Leave a full footer gutter below the disabled-frame notice. The next
     -- accordion header is created later and can otherwise cover the notice's
     -- lower edge at some UI scales.
-    local sec = builder:CollapsibleSection("frame_basics", "Basics", 272, true)
+    local sec = Schema.Section(builder:CollapsibleSection("frame_basics", "Basics", 272, true), unit)
     if W.AttachContextColorReferences then
         local function EffectiveHealthMode()
             return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
@@ -916,27 +1004,32 @@ local function BuildBasics(ctx, builder, unit, label)
     local enable = PrepareBasicsSwitch(ctx, sec, unit)
     -- Fill Direction (axis + in-axis direction) is a 4-way dropdown placed on
     -- its own row below Health Color Scheme; Smooth takes the freed x2 slot.
-    local smooth = W.ToggleAt(sec, "Smooth fill", x1, row1, labelW)
-    M.BindBoolWidget(ctx, smooth,
-        function() return ReadBool(unit, "smoothFill", false) end,
-        function(v) SetHealthFillMode("smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
-        SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
-    local chunked = W.ToggleAt(sec, "Chunked health loss", x2, row1, labelW)
-    M.BindBoolWidget(ctx, chunked,
-        function() return ReadBool(unit, "chunkedFill", false) end,
-        function(v) SetHealthFillMode("chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
-        SettingMeta(ctx, "basics.chunked_fill", unit, "chunkedFill"))
-    local blizzard = W.SwitchAt(sec, "Force Blizzard frame on", x1, -76, math.max(196, colW + 24))
-    blizzard._msuf2UnitFrameGateAlwaysEnabled = true
-    M.BindBoolWidget(ctx, blizzard,
-        function() return ReadBool(unit, "useBlizzardFrame", false) end,
-        function(v)
-            if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
-            SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
-            local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
-            _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
-        end,
-        SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"))
+    local basics = Schema.Build(ctx, sec, {
+        { "toggle", "smoothFill", false, { "Smooth fill", x1, row1, labelW },
+            get = function() return ReadBool(unit, "smoothFill", false) end,
+            set = function(v) SetHealthFillMode("smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
+            meta = SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"), scope = unit,
+        },
+        { "toggle", "chunkedFill", false, { "Chunked health loss", x2, row1, labelW },
+            get = function() return ReadBool(unit, "chunkedFill", false) end,
+            set = function(v) SetHealthFillMode("chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
+            meta = SettingMeta(ctx, "basics.chunked_fill", unit, "chunkedFill"), scope = unit,
+        },
+        { "switch", "useBlizzardFrame", false, { "Force Blizzard frame on", x1, -76, math.max(196, colW + 24) },
+            beforeBind = function(widget)
+                widget._msuf2UnitFrameGateAlwaysEnabled = true
+            end,
+            get = function() return ReadBool(unit, "useBlizzardFrame", false) end,
+            set = function(v)
+                if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
+                SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
+                local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
+                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
+            end,
+            meta = SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"), scope = unit,
+        }
+    }, ROW_OPTIONS)
+    local smooth, chunked, blizzard = basics.smoothFill, basics.chunkedFill, basics.useBlizzardFrame
     local blizzardHint = "Independent from MSUF Enable; /reload required."
     if unit == "pettarget" then
         blizzardHint = "Blizzard has no native Pet Target frame."
@@ -945,7 +1038,7 @@ local function BuildBasics(ctx, builder, unit, label)
     elseif unit == "focustarget" then
         blizzardHint = "Also keeps Blizzard Focus visible; /reload required."
     end
-    W.Text(sec, blizzardHint, x2, -80, math.max(190, sectionW - x2 - 14), T.colors.muted)
+    Schema.Build(ctx, sec, { { "text", "unit.note.1", nil, { blizzardHint, x2, -80, math.max(190, sectionW - x2 - 14), T.colors.muted } } })
     if M.AddTooltip then
         local tooltip = M.Format("Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required.")
         if unit == "targettarget" then
@@ -956,67 +1049,7 @@ local function BuildBasics(ctx, builder, unit, label)
         if unit == "pettarget" then tooltip = M.Format("Blizzard has no native Pet Target frame.") end
         M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    local colorMode = W.Dropdown(sec, "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)))
-    UnitSectionShared.PlaceDropdown(sec, colorMode, x1, -116, math.min(270, math.max(220, colW * 2)))
-    M.BindDropdownWidget(ctx, colorMode,
-        function()
-            return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
-        end,
-        function(v)
-            local conf = GetConf(unit)
-            conf.healthColorMode = NormalizeHealthColorMode(v)
-            M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
-            if M.Refresh then M.Refresh(ctx) end
-        end,
-        SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
-    if M.AddTooltip then
-        M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
-    -- Shares the Health Color Scheme row so the section stays within its
-    -- declared height instead of overlapping the next accordion header. Snap to
-    -- the column grid when there is room, otherwise sit just right of the
-    -- width-capped Health Color Scheme dropdown; clamp the width so it never
-    -- runs into the third column (Pet keeps its class-color toggle there).
-    local fillDirW = math.min(270, math.max(220, colW * 2))
-    local fillDirX = math.max(x2, x1 + fillDirW + gap)
-    local fillDirFit = (x3 - gap) - fillDirX
-    if fillDirFit > 0 and fillDirW > fillDirFit then fillDirW = fillDirFit end
-    local fillDir = W.Dropdown(sec, "Fill Direction", FILL_DIRECTION_OPTIONS, fillDirW)
-    UnitSectionShared.PlaceDropdown(sec, fillDir, fillDirX, -116, fillDirW)
-    M.BindDropdownWidget(ctx, fillDir,
-        function()
-            return FillDirectionValue(ReadBool(unit, "reverseFillBars", false), ReadBool(unit, "verticalFillBars", false))
-        end,
-        function(v)
-            local state = FILL_DIRECTION_STATE[v] or FILL_DIRECTION_STATE.lr
-            -- Write both booleans, then a single apply/preview (mirrors the
-            -- Health Color Scheme setter) so a 4-way change never double-applies.
-            local conf = GetConf(unit)
-            conf.reverseFillBars = state.reverse
-            conf.verticalFillBars = state.vertical
-            M.RequestUnitDomains(unit, "MSUF2_FILL_DIRECTION", { preview = true })
-            if M.Refresh then M.Refresh(ctx) end
-        end,
-        SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"))
-    if M.AddTooltip then
-        M.AddTooltip(fillDir, "Fill Direction", "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
-    local petPlayerClassColor
-    if unit == "pet" then
-        petPlayerClassColor = W.ToggleAt(sec, "Player Class Color", x3, -116, labelW)
-        M.BindBoolWidget(ctx, petPlayerClassColor,
-            function() return GetGeneral().petFrameUsePlayerClassColor == true end,
-            function(v)
-                GetGeneral().petFrameUsePlayerClassColor = v and true or false
-                M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
-                if M.Refresh then M.Refresh(ctx) end
-            end,
-            SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"))
-        if M.AddTooltip then
-            M.AddTooltip(petPlayerClassColor, "Use player's class color for Pet Frame",
-                "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", { hook = true, owner = "ANCHOR_RIGHT" })
-        end
-    end
+    local colorMode, fillDir, petPlayerClassColor = BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, labelW)
     if W.AttachUnitEditFocus then
         for _, control in ipairs({ enable, smooth, chunked, blizzard, colorMode, fillDir, petPlayerClassColor }) do
             W.AttachUnitEditFocus(control, unit, "frame")
@@ -1050,6 +1083,7 @@ local function BuildBasics(ctx, builder, unit, label)
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
+    Schema.Owned(enableNow, unit, "unit")
     notice:Hide()
     local basicsDependentControls = { smooth, chunked, colorMode, fillDir }
     if W.SetControlsDisabledReason then
@@ -1074,7 +1108,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT, false)
+    local sec = Schema.Section(builder:CollapsibleSection("anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -1138,34 +1172,42 @@ local function BuildLayout(ctx, builder, unit)
     local function ApplyAnchorChange()
         M.RequestUnitDomains(unit, "MSUF2_ANCHORING", { preview = true })
     end
-    local anchorTo = W.Dropdown(sec, "Anchor To", AnchorValues, anchorControlW)
-    UnitSectionShared.PlaceDropdown(sec, anchorTo, anchorLeftX, -38, anchorControlW)
-    W.AttachUnitEditFocus(anchorTo, unit, "anchoring")
-    M.BindDropdownWidget(ctx, anchorTo,
-        AnchorValue,
-        function(v)
-            if v == "__CUSTOM" then return end
-            local conf = GetConf(unit)
-            conf.anchorToUnitframe = v or "GLOBAL"
-            conf.anchorFrameName = nil
-            ApplyAnchorChange()
-        end,
-        ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
-            "Changing the anchor target also clears any custom anchor frame name."))
-    local anchorPoint = W.Dropdown(sec, "Anchor Point", anchorPoints, anchorControlW)
-    UnitSectionShared.PlaceDropdown(sec, anchorPoint, anchorRightX, -38, anchorControlW)
-    W.AttachUnitEditFocus(anchorPoint, unit, "anchoring")
-    M.BindDropdownWidget(ctx, anchorPoint,
-        AnchorPointValue,
-        function(v)
-            local conf = GetConf(unit)
-            v = v or "CENTER"
-            conf.point = v
-            conf.relativePoint = v
-            ApplyAnchorChange()
-        end,
-        ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
-            "Changing the anchor point writes both point and relativePoint together."))
+    local anchorTo = Schema.Build(ctx, sec, {
+        { "dropdown", "anchorToUnitframe", "GLOBAL", { "Anchor To", AnchorValues, anchorControlW },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, anchorLeftX, -38, anchorControlW)
+                W.AttachUnitEditFocus(widget, unit, "anchoring")
+            end,
+            get = AnchorValue,
+            set = function(v)
+                if v == "__CUSTOM" then return end
+                local conf = GetConf(unit)
+                conf.anchorToUnitframe = v or "GLOBAL"
+                conf.anchorFrameName = nil
+                ApplyAnchorChange()
+            end,
+            meta = ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
+                "Changing the anchor target also clears any custom anchor frame name."), scope = unit,
+        }
+    }, ROW_OPTIONS).anchorToUnitframe
+    local anchorPoint = Schema.Build(ctx, sec, {
+        { "dropdown", "point", "CENTER", { "Anchor Point", anchorPoints, anchorControlW },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, anchorRightX, -38, anchorControlW)
+                W.AttachUnitEditFocus(widget, unit, "anchoring")
+            end,
+            get = AnchorPointValue,
+            set = function(v)
+                local conf = GetConf(unit)
+                v = v or "CENTER"
+                conf.point = v
+                conf.relativePoint = v
+                ApplyAnchorChange()
+            end,
+            meta = ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
+                "Changing the anchor point writes both point and relativePoint together."), scope = unit,
+        }
+    }, ROW_OPTIONS).point
     local function SetCustomAnchorValue(value)
         value = value or ""
         local conf = GetConf(unit)
@@ -1209,20 +1251,22 @@ local function BuildLayout(ctx, builder, unit)
     RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
         actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
     })
-    local cooldownAnchor = W.SwitchAt(sec, "Follow Blizzard's Essential Cooldowns", anchorLeftX, -184, anchorInnerW)
-    M.BindBoolWidget(ctx, cooldownAnchor,
-        CooldownAnchorEnabled,
-        function(enabled)
-            local setter = _G.MSUF_SetCooldownAnchorEnabled
-            if type(setter) == "function" then
-                setter(enabled, true)
-            else
-                local general = GetGeneral()
-                general.anchorToCooldown = enabled == true
-            end
-            M.RequestOrRefresh(ctx, "unit-anchoring-cooldown-manager")
-        end,
-        SettingMeta(ctx, "anchoring.cooldown_manager", "general", "anchorToCooldown"))
+    local cooldownAnchor = Schema.Build(ctx, sec, {
+        { "switch", "anchorToCooldown", false, { "Follow Blizzard's Essential Cooldowns", anchorLeftX, -184, anchorInnerW },
+            get = CooldownAnchorEnabled,
+            set = function(enabled)
+                local setter = _G.MSUF_SetCooldownAnchorEnabled
+                if type(setter) == "function" then
+                    setter(enabled, true)
+                else
+                    local general = GetGeneral()
+                    general.anchorToCooldown = enabled == true
+                end
+                M.RequestOrRefresh(ctx, "unit-anchoring-cooldown-manager")
+            end,
+            meta = SettingMeta(ctx, "anchoring.cooldown_manager", "general", "anchorToCooldown"), scope = unit,
+        }
+    }, ROW_OPTIONS).anchorToCooldown
     local automaticNotice = UnitSectionShared.CreateSectionNotice(sec, -238)
     local function RefreshLayoutState()
         local _, automaticProviderLabel = AutomaticCooldownProvider()
@@ -1273,12 +1317,14 @@ local function BuildLayout(ctx, builder, unit)
 end
 local function BuildInlineText(ctx, builder, unit)
     if unit ~= "target" then return end
-    local sec = builder:CollapsibleSection("inline_text", "Inline Text", 214, false)
+    local sec = Schema.Section(builder:CollapsibleSection("inline_text", "Inline Text", 214, false), unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local rightX = math.max(260, floor(sectionW * 0.52))
     local rightW = math.min(220, math.max(140, sectionW - rightX - 28))
     local RefreshInlineControlState
-    W.Text(sec, "Target of Target inline text is shown on the Target frame name line.", 14, -38, sectionW - 28, T.colors.muted)
+    Schema.Build(ctx, sec, {
+        { "text", "unit.note.2", nil, {
+            "Target of Target inline text is shown on the Target frame name line.", 14, -38, sectionW - 28, T.colors.muted } } })
     sec._msuf2CursorY = -72
     local inlineApplyFlags = { text = true, preview = true }
     local function ApplyToTInline(reason, forceToT, skipRefresh)
@@ -1309,64 +1355,78 @@ local function BuildInlineText(ctx, builder, unit)
             },
         })
     end
-    local show = W.Toggle(sec, "Show Target of Target text inline")
-    M.BindBoolWidget(ctx, show,
-        function() return GetConf("targettarget").showToTInTargetName == true end,
-        function(v)
-            local conf = GetConf("targettarget")
-            conf.showToTInTargetName = v and true or false
-            ApplyToTInline("MSUF2_TOT_INLINE")
-        end,
-        SettingMeta(ctx, "inline_text.show_target_of_target", "targettarget", "showToTInTargetName"))
-    local color = W.Dropdown(sec, "Inline color", ToTInlineColorOptions, rightW)
-    W.MoveWidget(color, sec, rightX, -72, rightW)
-    M.BindDropdownWidget(ctx, color,
-        function() return ToTInlineColorDropdownValue(GetConf("targettarget")) end,
-        function(v)
-            local conf = GetConf("targettarget")
-            conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
-            ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
-        end,
-        SettingMeta(ctx, "inline_text.color", "targettarget", "totInlineColorMode"))
-    local sep = W.Dropdown(sec, "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170)
-    W.MoveWidget(sep, sec, 14, -124, 170)
-    M.BindDropdownWidget(ctx, sep,
-        function() return ToTInlineSeparatorDropdownValue(GetConf("targettarget")) end,
-        function(v)
-            local conf = GetConf("targettarget")
-            if v == TOT_INLINE_CUSTOM_SEPARATOR then
-                conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
-                conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(conf.totInlineCustomSeparator)
-            else
-                conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
-            end
-            ApplyToTInline("MSUF2_TOT_INLINE_SEPARATOR", true)
-        end,
-        SettingMeta(ctx, "inline_text.separator", "targettarget", "totInlineSeparator"))
-    local customSep = W.TextInput(sec, "Custom separator", rightW)
-    W.MoveWidget(customSep, sec, rightX, -124, rightW)
-    if customSep.SetMaxLetters then customSep:SetMaxLetters(TOT_INLINE_CUSTOM_SEPARATOR_MAX) end
-    M.BindTextInput(ctx, customSep,
-        function()
-            local conf = GetConf("targettarget")
-            local token = conf and conf.totInlineSeparator
-            if token ~= TOT_INLINE_CUSTOM_SEPARATOR and type(token) == "string" and token ~= ""
-                and not TOT_INLINE_SEPARATOR_VALUES[token] then return CleanToTInlineCustomSeparator(token) end
-            return CleanToTInlineCustomSeparator(conf and conf.totInlineCustomSeparator)
-        end,
-        function(v)
-            local conf = GetConf("targettarget")
-            local token = conf and conf.totInlineSeparator
-            local isCustom = token == TOT_INLINE_CUSTOM_SEPARATOR
-                or (type(token) == "string" and token ~= "" and not TOT_INLINE_SEPARATOR_VALUES[token])
-            conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(v)
-            if isCustom then
-                conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
-                ApplyToTInline("MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", true, true)
-            end
-        end,
-        true,
-        SettingMeta(ctx, "inline_text.custom_separator", "targettarget", "totInlineCustomSeparator"))
+    local show = Schema.Build(ctx, sec, {
+        { "flowToggle", "showToTInTargetName", false, { "Show Target of Target text inline" },
+            get = function() return GetConf("targettarget").showToTInTargetName == true end,
+            set = function(v)
+                local conf = GetConf("targettarget")
+                conf.showToTInTargetName = v and true or false
+                ApplyToTInline("MSUF2_TOT_INLINE")
+            end,
+            meta = SettingMeta(ctx, "inline_text.show_target_of_target", "targettarget", "showToTInTargetName"), scope = unit,
+        }
+    }, ROW_OPTIONS).showToTInTargetName
+    local color = Schema.Build(ctx, sec, {
+        { "dropdown", "totInlineColorMode", TOT_INLINE_COLOR_AUTO, { "Inline color", ToTInlineColorOptions, rightW },
+            beforeBind = function(widget)
+                W.MoveWidget(widget, sec, rightX, -72, rightW)
+            end,
+            get = function() return ToTInlineColorDropdownValue(GetConf("targettarget")) end,
+            set = function(v)
+                local conf = GetConf("targettarget")
+                conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
+                ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
+            end,
+            meta = SettingMeta(ctx, "inline_text.color", "targettarget", "totInlineColorMode"), scope = unit,
+        }
+    }, ROW_OPTIONS).totInlineColorMode
+    local sep = Schema.Build(ctx, sec, {
+        { "dropdown", "totInlineSeparator", "|", { "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170 },
+            beforeBind = function(widget)
+                W.MoveWidget(widget, sec, 14, -124, 170)
+            end,
+            get = function() return ToTInlineSeparatorDropdownValue(GetConf("targettarget")) end,
+            set = function(v)
+                local conf = GetConf("targettarget")
+                if v == TOT_INLINE_CUSTOM_SEPARATOR then
+                    conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
+                    conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(conf.totInlineCustomSeparator)
+                else
+                    conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
+                end
+                ApplyToTInline("MSUF2_TOT_INLINE_SEPARATOR", true)
+            end,
+            meta = SettingMeta(ctx, "inline_text.separator", "targettarget", "totInlineSeparator"), scope = unit,
+        }
+    }, ROW_OPTIONS).totInlineSeparator
+    local customSep = Schema.Build(ctx, sec, {
+        { "textinput", "totInlineCustomSeparator", "", { "Custom separator", rightW },
+            beforeBind = function(widget)
+                W.MoveWidget(widget, sec, rightX, -124, rightW)
+                if widget.SetMaxLetters then widget:SetMaxLetters(TOT_INLINE_CUSTOM_SEPARATOR_MAX) end
+            end,
+            get = function()
+                local conf = GetConf("targettarget")
+                local token = conf and conf.totInlineSeparator
+                if token ~= TOT_INLINE_CUSTOM_SEPARATOR and type(token) == "string" and token ~= ""
+                    and not TOT_INLINE_SEPARATOR_VALUES[token] then return CleanToTInlineCustomSeparator(token) end
+                return CleanToTInlineCustomSeparator(conf and conf.totInlineCustomSeparator)
+            end,
+            set = function(v)
+                local conf = GetConf("targettarget")
+                local token = conf and conf.totInlineSeparator
+                local isCustom = token == TOT_INLINE_CUSTOM_SEPARATOR
+                    or (type(token) == "string" and token ~= "" and not TOT_INLINE_SEPARATOR_VALUES[token])
+                conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(v)
+                if isCustom then
+                    conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
+                    ApplyToTInline("MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", true, true)
+                end
+            end,
+            commitOnBlur = true,
+            meta = SettingMeta(ctx, "inline_text.custom_separator", "targettarget", "totInlineCustomSeparator"), scope = unit,
+        }
+    }, ROW_OPTIONS).totInlineCustomSeparator
     local totInlineBaseControls = { color, sep }
     RefreshInlineControlState = function()
         local conf = GetConf("targettarget")
@@ -1397,11 +1457,10 @@ local function BuildStatus(ctx, builder, unit)
 end
 local function BuildLoadConditions(ctx, builder, unit)
     local sec = Schema.Section(builder:CollapsibleSection("load_conditions", "Visibility", 210, false), unit)
-    local function Row(key, label)
-        local meta = SettingMeta(ctx, "load_condition." .. tostring(key), unit, key)
-        return { id = meta.controlId, kind = "toggle", view = "at", labelKey = label, key = key, meta = meta,
-            scope = unit, applyDomain = "loadCondition", settingPath = unit .. "." .. key,
-            defaultSource = function() return false end,
+    local function Row(key, label, x, y, width)
+        return { "toggle", key, false, { label, x, y, width },
+            meta = SettingMeta(ctx, "load_condition." .. tostring(key), unit, key),
+            scope = unit, domain = "loadCondition",
             get = function() return ReadBool(unit, key, false) end,
             set = function(v)
                 GetConf(unit)[key] = v and true or false
@@ -1410,16 +1469,18 @@ local function BuildLoadConditions(ctx, builder, unit)
             end }
     end
     local rows = {}
-    for i = 1, #LOAD_CONDITIONS do rows[i] = Row(LOAD_CONDITIONS[i].key, LOAD_CONDITIONS[i].label) end
     local colW = math.floor(((ctx.width or 720) - 42) / 3)
-    Schema.Flow(ctx, sec, rows, { columns = 3, x = 14, y = -42, width = colW - 34, gap = 34, rowHeight = 30 })
-    local label = "Show only below 100% health"
-    local toggle = Schema.Render(ctx, sec, Row("loadCondShowWhenInjured", label), { x = 14, y = -166, width = (ctx.width or 720) - 70 })
-    if M.AddTooltip then
-        M.AddTooltip(toggle, label,
-            "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
-            { hook = true, owner = "ANCHOR_RIGHT" })
+    for i, condition in ipairs(LOAD_CONDITIONS) do
+        rows[#rows + 1] = Row(condition.key, condition.label, 14 + ((i - 1) % 3) * colW,
+            -42 - math.floor((i - 1) / 3) * 30, colW - 34)
     end
+    local label = "Show only below 100% health"
+    local injured = Row("loadCondShowWhenInjured", label, 14, -166, (ctx.width or 720) - 70)
+    injured.tip = { label,
+        "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
+        { hook = true, owner = "ANCHOR_RIGHT" } }
+    rows[#rows + 1] = injured
+    Schema.Build(ctx, sec, rows, ROW_OPTIONS)
     local function RefreshLoadConditionState()
         SetSectionHeaderStatus(sec, nil)
     end
@@ -1553,12 +1614,12 @@ local function BuildStackedLayout(ctx, builder, unit, def)
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)
     local sliderW = math.min(300, math.max(220, rightX - leftX - 68))
-    local spacing = SettingMeta(ctx, def.id .. ".spacing", unit, "spacing")
-    Schema.Render(ctx, sec, {
-        id = spacing.controlId, kind = "slider", labelKey = def.spacingLabel, key = "spacing", meta = spacing,
-        scope = unit, unit = unit, applyDomain = "layout", reason = def.spacingReason, range = { -400, 0, 1 },
-        roundStep = true, defaultSource = function() return def.spacingDefault end,
-    }, { x = leftX, y = -42, width = 300, moveWidth = sliderW, align = "CENTER" })
+    Schema.Build(ctx, sec, {
+        { "slider", "spacing", def.spacingDefault, { def.spacingLabel, -400, 0, 1, 300 },
+            { leftX, -42, sliderW, "CENTER" },
+            meta = SettingMeta(ctx, def.id .. ".spacing", unit, "spacing"),
+            scope = unit, unit = unit, domain = "layout", reason = def.spacingReason, roundStep = true },
+    }, ROW_OPTIONS)
     local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8, def.tilesTitle)
     local meta = SettingMeta(ctx, def.id .. ".mode", unit, "bossLayoutMode")
     Schema.Bind(ctx, layout, {
@@ -1616,29 +1677,33 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
         { value = "BOTH_IN", text = "Both sides: > frame <" },
         { value = "BOTH_OUT", text = "Both sides: < frame >" },
     }
-    local function Row(kind, label, key, default, x, y, extra)
-        local meta = SettingMeta(ctx, "boss_target_highlight." .. key, unit, key)
-        local row = { id = meta.controlId, kind = kind, labelKey = label, key = key, meta = meta, scope = unit,
-            applyDomain = "bossHighlight", settingPath = unit .. "." .. key, defaultSource = function() return default end,
+    local function Row(kind, label, key, default, x, y, arguments)
+        local native = { label }
+        for _, value in ipairs(arguments) do native[#native + 1] = value end
+        native[#native + 1] = 270
+        return { kind, key, default, native,
+            kind == "slider" and { x, y, 270, "CENTER" } or nil,
+            beforeBind = kind == "dropdown" and function(widget) UnitSectionShared.PlaceDropdown(sec, widget, x, y, 270) end or nil,
+            meta = SettingMeta(ctx, "boss_target_highlight." .. key, unit, key), scope = unit,
+            domain = "bossHighlight", roundStep = kind == "slider",
             get = function() return kind == "slider" and ReadNumber(unit, key, default) or GetConf(unit)[key] or default end,
             set = function(v)
                 GetConf(unit)[key] = v
                 Apply()
-            end, x = x, y = y }
-        for field, value in pairs(extra) do row[field] = value end
-        return row
+            end }
     end
     local rows = {
-        Row("dropdown", "Marker anchor", "bossTargetIndicatorAnchor", "LEFT", 350, -42, { values = anchors }),
-        Row("dropdown", "Arrow direction", "bossTargetIndicatorDirection", "RIGHT", 14, -112, { values = directions }),
-        Row("slider", "Marker size", "bossTargetIndicatorSize", 24, 350, -112, { range = { 8, 96, 1 } }),
-        Row("slider", "Marker X offset", "bossTargetIndicatorOffsetX", -28, 14, -188, { range = { -500, 500, 1 } }),
-        Row("slider", "Marker Y offset", "bossTargetIndicatorOffsetY", 0, 350, -188, { range = { -500, 500, 1 } }),
-        Row("dropdown", "Marker layout", "bossTargetIndicatorLayout", "SINGLE", 14, -264, { values = layouts }),
+        Row("dropdown", "Marker anchor", "bossTargetIndicatorAnchor", "LEFT", 350, -42, { anchors }),
+        Row("dropdown", "Arrow direction", "bossTargetIndicatorDirection", "RIGHT", 14, -112, { directions }),
+        Row("slider", "Marker size", "bossTargetIndicatorSize", 24, 350, -112, { 8, 96, 1 }),
+        Row("slider", "Marker X offset", "bossTargetIndicatorOffsetX", -28, 14, -188, { -500, 500, 1 }),
+        Row("slider", "Marker Y offset", "bossTargetIndicatorOffsetY", 0, 350, -188, { -500, 500, 1 }),
+        Row("dropdown", "Marker layout", "bossTargetIndicatorLayout", "SINGLE", 14, -264, { layouts }),
     }
     local styleMeta = SettingMeta(ctx, "boss_target_highlight.style", "general", "bossTargetHighlightStyle")
-    table.insert(rows, 1, { id = styleMeta.controlId, kind = "dropdown", labelKey = "Highlight style",
-        meta = styleMeta, scope = unit, applyDomain = "bossHighlight", values = styles, x = 14, y = -42,
+    table.insert(rows, 1, { "dropdown", "bossTargetHighlightStyle", nil, { "Highlight style", styles, 270 },
+        beforeBind = function(widget) UnitSectionShared.PlaceDropdown(sec, widget, 14, -42, 270) end,
+        meta = styleMeta, scope = unit, domain = "bossHighlight",
         get = function()
             local g = GetGeneral()
             local conf = GetConf(unit)
@@ -1655,31 +1720,23 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
             if v ~= "OFF" then g.bossTargetHighlightStyle = v end
             Apply()
         end })
-    for _, row in ipairs(rows) do
-        row.roundStep = row.kind == "slider"
-        local x, y = row.x, row.y
-        if row.kind == "dropdown" then
-            row.beforeBind = function(widget) UnitSectionShared.PlaceDropdown(sec, widget, x, y, 270) end
-            Schema.Render(ctx, sec, row, { width = 270 })
-        else
-            Schema.Render(ctx, sec, row, { x = x, y = y, width = 270, moveWidth = 270, align = "CENTER" })
-        end
-    end
-    W.Text(sec, "Both sides mirror the X offset. Y moves both markers together. Drag the left marker to adjust the pair.", 350, -264, 280, T.colors.muted)
-    W.Text(sec, "Drag the marker in either boss preview to position it. Boss 1 shows the selected target.", 14, -340, 630, T.colors.muted)
-    local multipleMeta = SettingMeta(ctx, "boss_target_highlight.multiple_only", unit, "bossTargetMultipleOnly")
-    local multiple = Schema.Render(ctx, sec, {
-        id = multipleMeta.controlId, kind = "toggle", view = "at", labelKey = "Only highlight with multiple boss frames",
-        key = "bossTargetMultipleOnly", meta = multipleMeta, scope = unit, applyDomain = "bossHighlight",
-        settingPath = unit .. ".bossTargetMultipleOnly", defaultSource = function() return false end,
-        get = function() return GetConf(unit).bossTargetMultipleOnly == true end,
-        set = function(v)
-            GetConf(unit).bossTargetMultipleOnly = v == true
-            Apply()
-        end,
-    }, { x = 14, y = -390, width = 500 })
-    M.AddTooltip(multiple, "Only highlight with multiple boss frames",
-        "Requires at least two existing boss units, not two bosses taking damage. Updates during combat. Previews remain visible.")
+    Schema.Build(ctx, sec, rows, ROW_OPTIONS)
+    Schema.Build(ctx, sec, {
+        { "text", "unit.note.3", nil, {
+            "Both sides mirror the X offset. Y moves both markers together. Drag the left marker to adjust the pair.", 350, -264, 280, T.colors.muted } },
+        { "text", "unit.note.4", nil, {
+            "Drag the marker in either boss preview to position it. Boss 1 shows the selected target.", 14, -340, 630, T.colors.muted } },
+            { "toggle", "bossTargetMultipleOnly", false, { "Only highlight with multiple boss frames", 14, -390, 500 },
+            meta = SettingMeta(ctx, "boss_target_highlight.multiple_only", unit, "bossTargetMultipleOnly"),
+            scope = unit, domain = "bossHighlight",
+            get = function() return GetConf(unit).bossTargetMultipleOnly == true end,
+            set = function(v)
+                GetConf(unit).bossTargetMultipleOnly = v == true
+                Apply()
+            end,
+            tip = { "Only highlight with multiple boss frames",
+                "Requires at least two existing boss units, not two bosses taking damage. Updates during combat. Previews remain visible." } },
+    }, ROW_OPTIONS)
 end
 --- Arena reuses the boss stacked-container model and its exact key names
 --- (spacing/bossLayoutMode), so the same tile control edits the arena scope.
@@ -1768,7 +1825,8 @@ local function BuildUnitPage(info)
                 return refresh
             end,
         })
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = UNIT_ANCHOR_SECTION_HEIGHT })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = UNIT_ANCHOR_SECTION_HEIGHT,
+            prepareShell = DeclareSection })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.
@@ -1776,7 +1834,8 @@ local function BuildUnitPage(info)
         end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras") end
         if info.unit == "target" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214,
+                prepareShell = DeclareSection })
         end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)

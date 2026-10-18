@@ -57,12 +57,15 @@ local function NewFrame(text, shown)
 end
 
 local dropdowns, buttons = {}, {}
+local function NewButton(_, text)
+    local button = NewFrame(text)
+    buttons[#buttons + 1] = button
+    return button
+end
 local W = {
-    TopButton = function(_, text)
-        local button = NewFrame(text)
-        buttons[#buttons + 1] = button
-        return button
-    end,
+    TopButton = NewButton,
+    -- Production always has RoleButton; the copy popup builds its role buttons with it.
+    RoleButton = NewButton,
     Dropdown = function(_, label, values)
         local dropdown = NewFrame(label)
         dropdown.values = values
@@ -101,6 +104,9 @@ _G.UIParent = NewFrame()
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local sharedNamespace = RequireFixture.Install(root, { MSUF2 = M }, M)
 RequireFixture.StubRequirements(root, { OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua", OPTIONS .. "MSUF_Menu2_Unit.lua" })
+sharedNamespace.CPBuilders = { ExtraAuraDefaults = {} }
+assert(loadstring(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"), "@MSUF_Menu2_ControlSchema.lua"))(
+    "MidnightSimpleUnitFrames_Options", sharedNamespace)
 assert(loadstring(Read(OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua"), "@MSUF_Menu2_UnitSectionShared.lua"))(
     "MidnightSimpleUnitFrames_Options", sharedNamespace)
 local Shared = M.UnitSectionsShared

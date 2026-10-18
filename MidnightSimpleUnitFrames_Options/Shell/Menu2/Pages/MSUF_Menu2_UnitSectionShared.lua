@@ -13,6 +13,19 @@ local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
 M.UnitSectionsShared = Shared
 
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
+-- Chrome rows own no setting: one native widget per declaration, nothing to bind.
+local function Chrome(parent, kind, id, args)
+    return Schema.Build(nil, parent, { { kind, id, nil, args } })[id]
+end
+
+function Shared.DeclarePreview(widget, page, scope, label)
+    if not widget then return end
+    return Schema.Custom(widget, { id = "menu2." .. page .. ".unit.preview", kind = "preview",
+        labelKey = label, scope = scope, applyDomain = "preview", owner = widget })
+end
+
 -- Read-only summaries stay available while section bodies are still lazy.
 -- Each owner supplies exact field contracts; actions never infer settings from
 -- labels, runtime search records, or the position of a widget.
@@ -100,13 +113,60 @@ local function OffTargetText(text)
     return ("|cff%02x%02x%02x%s|r"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5), text)
 end
 
+local function CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices)
+    local popup = M.CreateMenuPopupPanel(_G.UIParent)
+    popup:SetClampedToScreen(true)
+    popup:SetSize(288, 174)
+    local title = Chrome(popup, "font", "section.popup.title", { "GameFontHighlight", "", T.colors.text })
+    title:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -12)
+    title:SetWidth(242)
+    title:SetWordWrap(false)
+    popup.title = title
+    local close = Chrome(popup, "topButton", "section.popup.close", { "x", 20, 20 })
+    close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -6, -6)
+    close:SetScript("OnClick", Close)
+    local reset = Chrome(popup, "topButton", "section.popup.reset", { "Reset section", 250, 24 })
+    reset:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -42)
+    reset:SetScript("OnClick", function() Change(nil) end)
+    popup._msuf2ResetButton = reset
+    reset:SetShown(spec.fields ~= nil or spec.prefixes ~= nil)
+    local values, destination = TargetChoices()
+    local select = Schema.Build(ctx, popup, {
+        { "dropdown", "section.destination", nil, { "Copy to another frame", values, 250 },
+            beforeBind = function(widget) W.MoveWidget(widget, popup, 14, -76, 250) end,
+            bind = function(widget)
+                widget:SetValue(destination)
+                widget:SetOnValueChanged(function(value) destination = value end)
+            end },
+    }, ROW_OPTIONS)["section.destination"]
+    local copy = Chrome(popup, "topButton", "section.popup.copy", { "Copy section", 250, 24 })
+    copy:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -132)
+    copy:SetScript("OnClick", function() if destination then Change(destination) end end)
+    local copyAllowed = spec.noCopy ~= true and #values > 0
+    select:SetShown(copyAllowed)
+    copy:SetShown(copyAllowed)
+    if not copyAllowed then popup:SetHeight(82) end
+    popup.RefreshTargets = function()
+        local choices
+        choices, destination = TargetChoices()
+        select:SetValues(choices)
+        -- With every target off, show the first one as marked and lock Copy.
+        select:SetValue(destination or (choices[1] and choices[1].value))
+        W.SetControlEnabled(copy, destination ~= nil)
+    end
+    popup._msuf2ResetSection = function() return Change(nil) end
+    popup._msuf2CopySection = function(target) return Change(target) end
+    return popup
+end
+
 function Shared.AttachSectionUX(ctx, opts)
     if not (ctx and ctx.entry) then return end
     for id, spec in pairs(opts.sections) do
         local section = ctx.entry.sections and ctx.entry.sections[id]
         local entry = section and section._msuf2CollapsibleEntry
         if entry and not entry._msuf2UXSummary then
-            local summary = T.Font(entry.header, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
+            local summary = Chrome(entry.header, "font", "section.summary",
+                { "GameFontHighlightSmall", "", T.colors.muted, "supporting" })
             summary:SetJustifyH("LEFT")
             summary:SetWordWrap(false)
             summary:SetMaxLines(1)
@@ -135,7 +195,7 @@ function Shared.AttachSectionUX(ctx, opts)
             entry.header:HookScript("OnShow", Refresh)
             entry.outer:HookScript("OnHide", Close)
             if spec.fields or spec.prefixes or spec.copy then
-                local more = W.TopButton(entry.header, "...", 24, 22)
+                local more = Chrome(entry.header, "topButton", "section.actions", { "...", 24, 22 })
                 if W.StyleSectionActionButton then W.StyleSectionActionButton(more) end
                 more:SetPoint("RIGHT", entry.header, "RIGHT", -10, 0)
                 more:SetFrameLevel(entry.header:GetFrameLevel() + 4)
@@ -194,47 +254,7 @@ function Shared.AttachSectionUX(ctx, opts)
                 more:SetScript("OnClick", function()
                     if popup and popup:IsShown() then Close(); return end
                     popupSource = opts.scope()
-                    if not popup then
-                        popup = M.CreateMenuPopupPanel(_G.UIParent)
-                        popup:SetClampedToScreen(true)
-                        popup:SetSize(288, 174)
-                        local title = T.Font(popup, "GameFontHighlight", "", T.colors.text)
-                        title:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -12)
-                        title:SetWidth(242)
-                        title:SetWordWrap(false)
-                        popup.title = title
-                        local close = W.TopButton(popup, "x", 20, 20)
-                        close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -6, -6)
-                        close:SetScript("OnClick", Close)
-                        local reset = W.TopButton(popup, "Reset section", 250, 24)
-                        reset:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -42)
-                        reset:SetScript("OnClick", function() Change(nil) end)
-                        popup._msuf2ResetButton = reset
-                        reset:SetShown(spec.fields ~= nil or spec.prefixes ~= nil)
-                        local values, destination = TargetChoices()
-                        local select = W.Dropdown(popup, "Copy to another frame", values, 250)
-                        W.MoveWidget(select, popup, 14, -76, 250)
-                        select:SetValue(destination)
-                        -- Use the widget's canonical callback, not a second settings binding.
-                        select:SetOnValueChanged(function(value) destination = value end)
-                        local copy = W.TopButton(popup, "Copy section", 250, 24)
-                        copy:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -132)
-                        copy:SetScript("OnClick", function() if destination then Change(destination) end end)
-                        local copyAllowed = spec.noCopy ~= true and #values > 0
-                        select:SetShown(copyAllowed)
-                        copy:SetShown(copyAllowed)
-                        if not copyAllowed then popup:SetHeight(82) end
-                        popup.RefreshTargets = function()
-                            local choices
-                            choices, destination = TargetChoices()
-                            select:SetValues(choices)
-                            -- With every target off, show the first one as marked and lock Copy.
-                            select:SetValue(destination or (choices[1] and choices[1].value))
-                            W.SetControlEnabled(copy, destination ~= nil)
-                        end
-                        popup._msuf2ResetSection = function() return Change(nil) end
-                        popup._msuf2CopySection = function(target) return Change(target) end
-                    end
+                    if not popup then popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices) end
                     popup.RefreshTargets()
                     T.SetTranslatedText(popup.title, opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
                     popup:ClearAllPoints()
@@ -290,10 +310,10 @@ local function SharedControlMeta(opts, suffix, classification)
 end
 local function RegisterSharedControl(widget, opts, suffix, label, kind, classification)
     local meta = SharedControlMeta(opts, suffix, classification)
-    if not (widget and meta and type(M.RegisterSearchWidget) == "function") then return widget end
+    if not (widget and meta and type(M.RegisterSearchWidget) == "function") then return false end
     meta.label, meta.kind = label, kind
     M.RegisterSearchWidget(widget, meta)
-    return widget
+    return true
 end
 local function NotifyGuidedInteraction(widget)
     if type(M.NotifyGuidedTourControlInteraction) == "function" then
@@ -385,13 +405,17 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(1)
     bottom:SetColorTexture(coreSurface[1], coreSurface[2], coreSurface[3], 0.48)
-    local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
+    local text = Chrome(notice, "font", "notice.text", { "GameFontDisableSmall", "", T.colors.dim })
     text:SetPoint("LEFT", notice, "LEFT", 12, 0)
     text:SetJustifyH("LEFT")
     local button
     if buttonLabel and buttonLabel ~= "" then
-        button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20)))
-            or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
+        button = Schema.Build(nil, notice, {
+            { "button", "notice", nil, { buttonLabel, buttonWidth or 92, 20 },
+                beforeBind = function(widget) if W.StyleTopActionButton then W.StyleTopActionButton(widget) end end },
+        }).notice
+        Schema.Custom(button, { id = "shared.notice.action", kind = "button", labelKey = buttonLabel,
+            scope = "shared", applyDomain = "notice", owner = button, action = Schema.ButtonAction(button) })
         button:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
         button[gateKey] = true
         text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 20, 0)
@@ -433,11 +457,10 @@ local COPY_POPUP_TARGET_STYLE = {
 local function CopyPopupButton(parent, text, width, role)
     local btn
     if role == "target" then
-        btn = W.TopButton(parent, text, width, 24, COPY_POPUP_TARGET_STYLE, false)
-    elseif W.RoleButton then
-        btn = W.RoleButton(parent, text, role == "danger" and "danger" or (role == "action" and "primary" or "normal"), width, 24)
+        btn = Chrome(parent, "topButton", "copy.popup.target", { text, width, 24, COPY_POPUP_TARGET_STYLE, false })
     else
-        btn = W.TopButton(parent, text, width, 24, nil, false)
+        btn = Chrome(parent, "roleButton", "copy.popup.button",
+            { text, role == "danger" and "danger" or (role == "action" and "primary" or "normal"), width, 24 })
     end
     btn:SetHeight(24)
     -- Popup chrome and selectors only edit transient menu state. Let their
@@ -464,9 +487,89 @@ local function CopyPopupCategoryLayout(opts, count)
     return rows, topY, rowHeight, height
 end
 -- Migrated popup callers declare actual owners after scripts and metadata exist.
-local function RegisterCopyPopupControl(widget, opts, suffix, label, kind, classification)
-    RegisterSharedControl(widget, opts, suffix, label, kind, classification)
-    if opts.declareControl then opts.declareControl(widget) end
+local function RegisterOwnedControl(widget, opts, suffix, label, kind, classification)
+    local registered = RegisterSharedControl(widget, opts, suffix, label, kind, classification)
+    if opts.declareControl then opts.declareControl(widget)
+    elseif registered and widget._msuf2RuntimeControlRecord then Schema.Owned(widget, opts.controlDomain, "shared") end
+end
+local function PopulateCopyPopup(popup, opts, api, scopes, categories, targets, TargetWidth, RefreshTargets, SetAll,
+    rowsPerColumn, categoryTopY, categoryRowHeight)
+    local title = Chrome(popup, "font", "copy.popup.title", { "GameFontNormal", "", T.colors.accent })
+    title:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -12)
+    popup._title = title
+    local close = CopyPopupButton(popup, "x", 20, "danger")
+    close:SetSize(20, 20)
+    close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -8)
+    close:SetScript("OnClick", function() popup:Hide() end)
+    RegisterOwnedControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
+    local destLabel = Chrome(popup, "font", "copy.popup.destination",
+        { "GameFontDisableSmall", opts.targetLabel or "Destination", T.colors.dim })
+    destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
+    popup._targetBtns = {}
+    for i = 1, #targets do
+        local item = targets[i]
+        local key = type(item) == "table" and (item.key or item.value) or item
+        local label = type(item) == "table" and (item.text or item.label) or nil
+        label = label or (opts.targetLabelText and opts.targetLabelText(key)) or tostring(key or "")
+        local btn = CopyPopupButton(popup, label, TargetWidth(key), "target")
+        btn._msuf2CopyTarget = key
+        btn:SetScript("OnClick", function()
+            NotifyGuidedInteraction(btn)
+            if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
+            RefreshTargets()
+        end)
+        RegisterOwnedControl(btn, opts, "target." .. tostring(key), M.Format("Copy target %s", M.Tr(label)),
+            "button", opts.runLabel and "ephemeral" or "action")
+        popup._targetBtns[key] = btn
+    end
+    local catLabel = Chrome(popup, "font", "copy.popup.categories",
+        { "GameFontDisableSmall", opts.categoryLabel or "Copy categories", T.colors.dim })
+    catLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.categoryLabelY or -90)
+    popup._checks = {}
+    for i = 1, #categories do
+        local cat = categories[i]
+        local col = math.floor((i - 1) / rowsPerColumn)
+        local row = (i - 1) % rowsPerColumn
+        local cb = Schema.Build(nil, popup, {
+            { "switch", cat.key, nil,
+                { cat.label, 16 + col * (opts.categoryColumnWidth or 198), categoryTopY - row * categoryRowHeight, opts.categoryWidth or 140 },
+                bind = function(widget)
+                    widget:SetChecked(scopes[cat.key] == true)
+                    widget:SetScript("OnClick", function(self)
+                        NotifyGuidedInteraction(self)
+                        scopes[cat.key] = self:GetChecked() and true or false
+                    end)
+                    RegisterOwnedControl(widget, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
+                end,
+                tip = cat.description and { cat.label, cat.description, { hook = true, titleAsLine = true } } or nil },
+        }, ROW_OPTIONS)[cat.key]
+        popup._checks[i] = cb
+    end
+    local allBtn = CopyPopupButton(popup, "All", 48, "normal")
+    allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
+    allBtn:SetScript("OnClick", function()
+        NotifyGuidedInteraction(allBtn)
+        SetAll(true, opts.allFeedback or "All copy categories selected")
+    end)
+    RegisterOwnedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
+    local noneBtn = CopyPopupButton(popup, "None", 58, "normal")
+    noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
+    noneBtn:SetScript("OnClick", function()
+        NotifyGuidedInteraction(noneBtn)
+        SetAll(false, opts.noneFeedback or "Copy categories cleared")
+    end)
+    RegisterOwnedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
+    if opts.runLabel then
+        local runBtn = CopyPopupButton(popup, opts.runLabel, opts.runWidth or 128, "action")
+        runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
+        runBtn:SetScript("OnClick", function()
+            NotifyGuidedInteraction(runBtn)
+            if opts.onRun then opts.onRun(api, popup) end
+        end)
+        RegisterOwnedControl(runBtn, opts, "run", opts.runLabel, "button", "action")
+        popup._runBtn = runBtn
+    end
+    if type(opts.onPopupCreated) == "function" then opts.onPopupCreated(popup, api) end
 end
 function Shared.MakeScopeCopyPopup(anchorButton, opts)
     -- Unit and group pages both expose a "copy this scope to another scope" popup.
@@ -539,76 +642,8 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             local rowsPerColumn, categoryTopY, categoryRowHeight, popupHeight = CopyPopupCategoryLayout(opts, #categories)
             popup = M.CreateMenuPopupPanel(UIParent)
             popup:SetSize(opts.width or 420, popupHeight)
-            local title = T.Font(popup, "GameFontNormal", "", T.colors.accent)
-            title:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -12)
-            popup._title = title
-            local close = CopyPopupButton(popup, "x", 20, "danger")
-            close:SetSize(20, 20)
-            close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -8)
-            close:SetScript("OnClick", function() popup:Hide() end)
-            RegisterCopyPopupControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
-            local destLabel = T.Font(popup, "GameFontDisableSmall", opts.targetLabel or "Destination", T.colors.dim)
-            destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
-            popup._targetBtns = {}
-            for i = 1, #targets do
-                local item = targets[i]
-                local key = type(item) == "table" and (item.key or item.value) or item
-                local label = type(item) == "table" and (item.text or item.label) or nil
-                label = label or (opts.targetLabelText and opts.targetLabelText(key)) or tostring(key or "")
-                local btn = CopyPopupButton(popup, label, TargetWidth(key), "target")
-                btn._msuf2CopyTarget = key
-                btn:SetScript("OnClick", function()
-                    NotifyGuidedInteraction(btn)
-                    if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
-                    RefreshTargets()
-                end)
-                RegisterCopyPopupControl(btn, opts, "target." .. tostring(key), M.Format("Copy target %s", M.Tr(label)), "button", opts.runLabel and "ephemeral" or "action")
-                popup._targetBtns[key] = btn
-            end
-            local catLabel = T.Font(popup, "GameFontDisableSmall", opts.categoryLabel or "Copy categories", T.colors.dim)
-            catLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.categoryLabelY or -90)
-            popup._checks = {}
-            for i = 1, #categories do
-                local cat = categories[i]
-                local col = math.floor((i - 1) / rowsPerColumn)
-                local row = (i - 1) % rowsPerColumn
-                local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), categoryTopY - row * categoryRowHeight, opts.categoryWidth or 140)
-                cb:SetChecked(scopes[cat.key] == true)
-                cb:SetScript("OnClick", function(self)
-                    NotifyGuidedInteraction(self)
-                    scopes[cat.key] = self:GetChecked() and true or false
-                end)
-                RegisterCopyPopupControl(cb, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
-                if cat.description and M.AddTooltip then
-                    M.AddTooltip(cb, cat.label, cat.description, { hook = true, titleAsLine = true })
-                end
-                popup._checks[i] = cb
-            end
-            local allBtn = CopyPopupButton(popup, "All", 48, "normal")
-            allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
-            allBtn:SetScript("OnClick", function()
-                NotifyGuidedInteraction(allBtn)
-                SetAll(true, opts.allFeedback or "All copy categories selected")
-            end)
-            RegisterCopyPopupControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
-            local noneBtn = CopyPopupButton(popup, "None", 58, "normal")
-            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
-            noneBtn:SetScript("OnClick", function()
-                NotifyGuidedInteraction(noneBtn)
-                SetAll(false, opts.noneFeedback or "Copy categories cleared")
-            end)
-            RegisterCopyPopupControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
-            if opts.runLabel then
-                local runBtn = CopyPopupButton(popup, opts.runLabel, opts.runWidth or 128, "action")
-                runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
-                runBtn:SetScript("OnClick", function()
-                    NotifyGuidedInteraction(runBtn)
-                    if opts.onRun then opts.onRun(api, popup) end
-                end)
-                RegisterCopyPopupControl(runBtn, opts, "run", opts.runLabel, "button", "action")
-                popup._runBtn = runBtn
-            end
-            if type(opts.onPopupCreated) == "function" then opts.onPopupCreated(popup, api) end
+            PopulateCopyPopup(popup, opts, api, scopes, categories, targets, TargetWidth, RefreshTargets, SetAll,
+                rowsPerColumn, categoryTopY, categoryRowHeight)
         end
         api.Refresh()
         M.ApplyPopupFramePriority(popup)
@@ -634,11 +669,13 @@ end
 function Shared.PlaceDropdown(parent, control, x, y, width) return W.MoveWidget(control, parent, x, y, width or 200, "LEFT") end
 function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, parent, x, y, width, "CENTER") end
 function Shared.TextCard(parent, title, subtitle, x, y, width, height)
-    return W.ControlCard(parent, title, subtitle, x, y, width, height)
+    return Schema.Build(nil, parent, {
+        { "card", "shared.textCard", nil, { title, subtitle, x, y, width, height } },
+    })["shared.textCard"]
 end
 function Shared.PreviewText(parent, text, x, y, width, color)
-    local label = W.Text(parent, "Preview", x, y, width, color or T.colors.dim)
-    local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
+    local label = Chrome(parent, "text", "shared.preview.label", { "Preview", x, y, width, color or T.colors.dim })
+    local value = Chrome(parent, "font", "preview.value", { "GameFontNormalSmall", text, T.colors.text })
     value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
     value:SetWidth(width or 220)
     value:SetJustifyH("LEFT")
@@ -788,7 +825,8 @@ end
 function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}
     local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
-    local label = T.Font(parent, "GameFontHighlightSmall", opts.label or "Custom Anchor Frame", opts.labelColor or { 0.62, 0.74, 0.96, 1 })
+    local label = Chrome(parent, "font", "anchor.label",
+        { "GameFontHighlightSmall", opts.label or "Custom Anchor Frame", opts.labelColor or { 0.62, 0.74, 0.96, 1 } })
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     label:SetJustifyH("LEFT")
     local box = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
@@ -816,7 +854,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     box:SetScript("OnEditFocusLost", Refresh)
     RegisterSharedControl(box, opts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
     local function SmallButton(after, labelText, widthText, gap, danger)
-        local btn = T.Button(parent, labelText, widthText, 24)
+        local btn = Schema.Build(ctx, parent, { { "button", "button", nil, { labelText, widthText, 24 } } }).button
         if danger and T.SkinDangerButton then
             btn = T.SkinDangerButton(btn)
         end
@@ -838,11 +876,14 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         end
         overlay:Show()
     end)
-    RegisterSharedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
+    RegisterOwnedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
     clear:SetScript("OnClick", function() if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end; box:SetText("") end)
-    RegisterSharedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
+    RegisterOwnedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
     M.TrackRefresh(ctx, Refresh)
+    Schema.Custom(box, { id = (box._msuf2RuntimeControlRecord or {}).controlId or "shared.customAnchor",
+        kind = "customAnchor", labelKey = opts.label or "Custom Anchor Frame", scope = opts.controlDomain or "shared",
+        applyDomain = "anchoring", owner = box, get = opts.getValue })
     return { label = label, box = box, pick = pick, clear = clear, Refresh = Refresh }
 end
 function Shared.MakeDragSortRows(parent, defs, opts)
@@ -953,11 +994,11 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         stripe:SetSize(4, rowH - 2)
         stripe:SetColorTexture(def.r or 0.30, def.g or 0.55, def.b or 0.85, 1)
         frame._stripe = stripe
-        local label = T.Font(frame, "GameFontHighlightSmall", def.label or "", T.colors.text)
+        local label = Chrome(frame, "font", "dragrow.label", { "GameFontHighlightSmall", def.label or "", T.colors.text })
         label:SetPoint("LEFT", stripe, "RIGHT", opts.labelOffsetX or 8, 0)
         label:SetJustifyH("LEFT")
         frame._label = label
-        local number = T.Font(frame, "GameFontNormalSmall", tostring(i), T.colors.dim)
+        local number = Chrome(frame, "font", "dragrow.number", { "GameFontNormalSmall", tostring(i), T.colors.dim })
         number:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
         number:SetJustifyH("RIGHT")
         frame._numText = number
@@ -965,10 +1006,12 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         frame:SetScript("OnLeave", OnLeave)
         frame:SetScript("OnDragStart", OnDragStart)
         frame:SetScript("OnDragStop", OnDragStop)
-        RegisterSharedControl(frame, opts, "row." .. tostring(def.key or i), def.label or tostring(def.key or i), "dragrow", "action")
+        RegisterOwnedControl(frame, opts, "row." .. tostring(def.key or i), def.label or tostring(def.key or i), "dragrow", "action")
         local row = { frame = frame, key = def.key or "", slotIndex = i, def = def }
         frame._msuf2DragRow, holder.rows[i] = row, row
     end
     holder:SnapRows()
+    Schema.Custom(holder, { id = (opts.controlPath or "shared") .. ".dragRows", kind = "dragRows",
+        labelKey = "Sorting", scope = opts.controlDomain or "shared", applyDomain = "sorting", owner = holder })
     return holder
 end

@@ -799,3 +799,5 @@ clients+Forever	python	tools/tests/menu_group_indicators_parity_smoke.py	{root} 
 clients+Forever	lua	tools/tests/menu_group_parity_smoke.lua	{root} {flavor}	Group controls preserve parent input, history, combat, layout and copy behavior: {flavor}	nightly
 -	lua	tools/tests/menu_unitframevisuals_parity_smoke.lua	{root} Mainline	Unit visual controls preserve parent inputs, DB, apply, refresh, history and combat: Mainline	push
 clients+Forever	lua	tools/tests/menu_unitframevisuals_parity_smoke.lua	{root} {flavor}	Unit visual controls preserve parent inputs, DB, apply, refresh, history and combat: {flavor}	nightly
+-	lua	tools/tests/menu_unitsections_parity_smoke.lua	{root} Mainline	Unit sections and shared controls differ from their parent: Mainline	push
+clients+Forever	lua	tools/tests/menu_unitsections_parity_smoke.lua	{root} {flavor}	Unit sections and shared controls differ from their parent: {flavor}	nightly
