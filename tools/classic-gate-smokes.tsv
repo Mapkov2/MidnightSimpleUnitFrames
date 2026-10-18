@@ -264,7 +264,7 @@ clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavo
 -	lua	tools/tests/menu_prompt_ownership_smoke.lua	{root}	An Options file writes StaticPopupDialogs, or a menu prompt lost its buttons, text or Escape rule
 -	lua	tools/tests/menu_discarded_values_smoke.lua	{root}	An Options local declares more values than names, or the history castbar fallback lost an owner
 -	lua	tools/tests/menu_control_catalog_contracts_smoke.lua	{root}	Menu control catalog contracts failed
--	lua	tools/tests/menu_color_picker_fallback_smoke.lua	{root}	Menu color picker fallback owner contract failed
+clients+Forever	lua	tools/tests/menu_color_picker_fallback_smoke.lua	{root} {flavor}	Menu color picker fallback owner contract failed: {flavor}
 -	lua	tools/tests/classic_unit_menu_runtime_parity_smoke.lua	{root/}	Classic unit menu runtime parity smoke failed
 -	lua	tools/tests/classic_unit_page_client_hunks_smoke.lua	{root/}	Classic unit page client hunks smoke failed
 clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {flavor}	Unit status threat controls smoke failed: {flavor}

@@ -126,39 +126,7 @@ local function ClassDisplayName(token)
     if name then return name end
     return (token:gsub("DEATHKNIGHT", "Death Knight"):gsub("DEMONHUNTER", "Demon Hunter"))
 end
-local function EnsureColorPickerPlus()
-    if colorPickerPlus or not _G.ColorPickerFrame then return colorPickerPlus end
-    local picker = _G.ColorPickerFrame
-    local panel = (T and T.Panel and T.Panel(picker, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft))
-        or PixelLayoutRegion(CreateFrame("Frame", nil, picker, "BackdropTemplate"))
-    colorPickerPlus = panel
-    panel:SetSize(344, 482)
-    panel:SetPoint("TOPLEFT", picker, "TOPRIGHT", 8, 0)
-    if panel.SetClampedToScreen then panel:SetClampedToScreen(true) end
-    panel:SetFrameStrata(picker:GetFrameStrata())
-    panel:SetFrameLevel((picker:GetFrameLevel() or 1) + 20)
-    if T and T.ApplySurface then T.ApplySurface(panel, "popup") end
-
-    local title = T.Font(panel, "GameFontNormalLarge", "Precision color editor", T.colors.text, "heading")
-    title:SetPoint("TOPLEFT", 16, -14)
-    local target = T.Font(panel, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
-    target:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    target:SetWidth(310)
-    target:SetJustifyH("LEFT")
-    panel._msuf2Target = target
-
-    local original = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
-    original:SetPoint("TOPLEFT", 16, -62)
-    original:SetSize(151, 34)
-    local current = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
-    current:SetPoint("TOPRIGHT", -16, -62)
-    current:SetSize(151, 34)
-    panel._msuf2Original, panel._msuf2Current = original, current
-    local oldLabel = T.Font(panel, "GameFontDisableSmall", "Original", T.colors.dim)
-    oldLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
-    local newLabel = T.Font(panel, "GameFontDisableSmall", "Current", T.colors.dim)
-    newLabel:SetPoint("BOTTOMRIGHT", current, "TOPRIGHT", 0, 2)
-
+local function BuildPickerPlusInputs(panel)
     local rgbLabel = T.Font(panel, "GameFontNormalSmall", "RGB", T.colors.muted)
     rgbLabel:SetPoint("TOPLEFT", 16, -108)
     local fields = {}
@@ -212,6 +180,41 @@ local function EnsureColorPickerPlus()
         if #store.saved < 27 then store.saved[#store.saved + 1] = value end
         panel:RefreshPalettes()
     end)
+end
+local function EnsureColorPickerPlus()
+    if colorPickerPlus or not _G.ColorPickerFrame then return colorPickerPlus end
+    local picker = _G.ColorPickerFrame
+    local panel = (T and T.Panel and T.Panel(picker, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft))
+        or PixelLayoutRegion(CreateFrame("Frame", nil, picker, "BackdropTemplate"))
+    colorPickerPlus = panel
+    panel:SetSize(344, 482)
+    panel:SetPoint("TOPLEFT", picker, "TOPRIGHT", 8, 0)
+    if panel.SetClampedToScreen then panel:SetClampedToScreen(true) end
+    panel:SetFrameStrata(picker:GetFrameStrata())
+    panel:SetFrameLevel((picker:GetFrameLevel() or 1) + 20)
+    if T and T.ApplySurface then T.ApplySurface(panel, "popup") end
+
+    local title = T.Font(panel, "GameFontNormalLarge", "Precision color editor", T.colors.text, "heading")
+    title:SetPoint("TOPLEFT", 16, -14)
+    local target = T.Font(panel, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
+    target:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    target:SetWidth(310)
+    target:SetJustifyH("LEFT")
+    panel._msuf2Target = target
+
+    local original = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
+    original:SetPoint("TOPLEFT", 16, -62)
+    original:SetSize(151, 34)
+    local current = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
+    current:SetPoint("TOPRIGHT", -16, -62)
+    current:SetSize(151, 34)
+    panel._msuf2Original, panel._msuf2Current = original, current
+    local oldLabel = T.Font(panel, "GameFontDisableSmall", "Original", T.colors.dim)
+    oldLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
+    local newLabel = T.Font(panel, "GameFontDisableSmall", "Current", T.colors.dim)
+    newLabel:SetPoint("BOTTOMRIGHT", current, "TOPRIGHT", 0, 2)
+
+    BuildPickerPlusInputs(panel)
 
     local recentTitle = T.Font(panel, "GameFontNormalSmall", "Recent", T.colors.text)
     recentTitle:SetPoint("TOPLEFT", 16, -176)

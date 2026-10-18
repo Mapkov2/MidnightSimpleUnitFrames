@@ -1,4 +1,4 @@
--- menu_color_picker_fallback_smoke.lua <repoRoot>
+-- menu_color_picker_fallback_smoke.lua <repoRoot> [flavor] [parentColorPickerPath]
 --
 -- The plain color buttons fall back to Blizzard's shared ColorPickerFrame
 -- when the menu's own context picker is unavailable. That path marks the
@@ -11,7 +11,7 @@
 -- Interface/AddOns/Blizzard_FrameXML/Classic/ColorPickerFrame.xml), and the
 -- cancel needs the owner to restore the old color.
 --
--- Boots the real Classic Era core and Options graph. Plain Lua 5.1, repo root.
+-- Boots the real core and Options graph of the selected client. Plain Lua 5.1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
@@ -21,7 +21,15 @@ local function Check(condition, message)
     return condition
 end
 
-local world = World.New(root, "Vanilla")
+local world = World.New(root, arg[2] or "Vanilla")
+-- Optional authentic parent source for the refactor's same-test comparison.
+if arg[3] then
+    local originalLoad, parentPath = world.LoadFile, arg[3]
+    function world:LoadFile(path, addonName, namespace)
+        if path:match("/MSUF_Menu2_ColorPicker%.lua$") then path = parentPath end
+        return originalLoad(self, path, addonName, namespace)
+    end
+end
 -- Edit box surface the picker's side panel uses and the shared stubs leave out.
 local widgetMethods = getmetatable(world.env.UIParent).__index
 for _, name in ipairs({ "SetAutoFocus", "SetMaxLetters", "SetTextInsets", "SetNumeric", "ClearFocus",
@@ -142,6 +150,90 @@ Check(active == begins, "an old hide callback committed a reopened native visual
 Check(W.CloseMenuOwnedColorPicker() == true and not picker:IsShown(), "closing the menu left its own picker open")
 world.widgets:RunTimers()
 Check(picker._msuf2ColorOwner == nil, "the menu's close kept the MSUF owner")
+-- 4. Precision editor inputs retain geometry, callbacks, saved colours and owner routing.
+do
+    function widgetMethods:SetFocus() self.fixtureFocused = true end
+    function widgetMethods:ClearFocus() self.fixtureFocused = false end
+    function widgetMethods:HasFocus() return self.fixtureFocused == true end
+    button:SetRGB(0.2, 0.4, 0.6)
+    button:GetScript("OnClick")(button)
+    local plus
+    for _, frame in ipairs(world.widgets.frames) do
+        if rawget(frame, "_msuf2RGB") then plus = frame; break end
+    end
+    Check(plus and plus:IsShown(), "native picker must open the precision editor")
+    local fields, hex = plus._msuf2RGB, plus._msuf2Hex
+    Check(#fields == 3 and hex and hex:GetWidth() == 118 and hex:GetHeight() == 22, "RGB/HEX fields lost geometry")
+    for i = 1, 3 do
+        local point, parent, _, x, y = fields[i]:GetPoint()
+        Check(fields[i]:GetWidth() == 58 and fields[i]:GetHeight() == 22 and point == "TOPLEFT"
+            and parent == plus and x == 52 + (i - 1) * 66 and y == -104, "RGB field anchor changed")
+    end
+    Check(tonumber(fields[1]:GetText()) == 51 and tonumber(fields[2]:GetText()) == 102
+        and tonumber(fields[3]:GetText()) == 153 and hex:GetText() == "#336699", "initial RGB/HEX text is wrong")
+    local function Input(field, text, script, user)
+        field:SetText(text)
+        field:GetScript(script)(field, user)
+    end
+    Input(fields[1], "300", "OnEnterPressed")
+    Check(ButtonIs(1, 0.4, 0.6), "RGB input must clamp the selected component above255")
+    Input(fields[2], "-10", "OnEnterPressed")
+    Check(ButtonIs(1, 0, 0.6), "RGB input must clamp the selected component below0")
+    Input(fields[3], "not a number", "OnEnterPressed")
+    Check(ButtonIs(1, 0, 0.6), "invalid RGB input must keep the current component")
+    Input(fields[3], "128", "OnTextChanged", false)
+    Check(ButtonIs(1, 0, 0.6), "programmatic RGB text must not apply")
+    Input(fields[3], "128", "OnTextChanged", true)
+    Check(ButtonIs(1, 0, 128 / 255), "user RGB text must apply to its own component")
+    Input(hex, "#12ab34", "OnTextChanged", true)
+    Check(ButtonIs(18 / 255, 171 / 255, 52 / 255), "complete HEX live input must apply all components")
+    Input(hex, "#12", "OnTextChanged", true)
+    Check(ButtonIs(18 / 255, 171 / 255, 52 / 255), "incomplete HEX text must not apply")
+    hex:GetScript("OnEnterPressed")(hex)
+    Check(hex:GetText() == "#12AB34", "invalid HEX Enter must restore the current value")
+    hex:SetFocus()
+    hex:SetText("draft")
+    picker:SetColorRGB(0.5, 0.25, 0.75)
+    Check(hex:GetText() == "draft", "refresh must retain a focused edit")
+    hex:GetScript("OnEscapePressed")(hex)
+    Check(not hex:HasFocus() and hex:GetText() == "#8040BF", "Escape must clear focus and restore current HEX")
+    local copy, save
+    for _, frame in ipairs(world.widgets.frames) do
+        if frame:GetParent() == plus and frame._msuf2SearchText == "Copy" then copy = frame end
+        if frame:GetParent() == plus and frame._msuf2SearchText == "Save" then save = frame end
+    end
+    Check(copy and save and save._msuf2HistoryCheckpoint == true, "Copy and history-aware Save must exist")
+    copy:GetScript("OnClick")(copy)
+    Check(hex:HasFocus() and hex.fixtureHighlightText, "Copy must focus and highlight HEX")
+    hex:ClearFocus()
+    local store = M.EnsureDB().menu2ColorPicker
+    local savedCount = #store.saved
+    save:GetScript("OnClick")(save)
+    Check(#store.saved == savedCount + 1 and store.saved[#store.saved] == "#8040BF", "Save must store current picker colour")
+    save:GetScript("OnClick")(save)
+    Check(#store.saved == savedCount + 1, "Save must deduplicate colours")
+    store.saved = {}
+    for i = 1, 27 do store.saved[i] = string.format("#%06X", i) end
+    save:GetScript("OnClick")(save)
+    Check(#store.saved == 27 and store.saved[27] == "#00001B", "Save must retain the27-colour cap")
+    plus:RefreshPalettes()
+    local first = plus._msuf2SavedButtons[1]
+    first:GetScript("OnClick")(first, "RightButton")
+    Check(#store.saved == 26 and store.saved[1] == "#000002", "saved colour removal must retain its row index")
+    first:GetScript("OnClick")(first, "LeftButton")
+    Check(ButtonIs(0, 0, 2 / 255), "saved colour click must apply the refreshed row value")
+    picker:Cancel()
+    world.widgets:RunTimers()
+    Check(ButtonIs(0.2, 0.4, 0.6), "precision edits must still cancel back to the original owner colour")
+    local frameCount = #world.widgets.frames
+    for _ = 1, 5 do
+        button:GetScript("OnClick")(button)
+        Check(plus._msuf2RGB == fields and plus._msuf2Hex == hex, "reopen must retain the same inputs")
+        picker:Cancel()
+        world.widgets:RunTimers()
+    end
+    Check(#world.widgets.frames == frameCount, "warm reopen must not rebuild precision editor frames")
+end
 W.OpenColorContextPicker = contextPicker
 
 print("menu_color_picker_fallback_smoke: ok (owner kept through Classic Okay/Cancel, released afterwards)")
