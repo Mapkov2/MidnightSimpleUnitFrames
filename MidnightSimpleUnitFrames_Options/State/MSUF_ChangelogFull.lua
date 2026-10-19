@@ -8,12 +8,27 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7F55BD4413A35ECD17421EDE331EC5F362E6AFDB90D3049715EE04680725319A",
-    currentVersion = "6.503",
+    sourceSha256 = "F2AE8493CA89D0B42B78AF1A360EEEF344D1F6450BA5A338B74064B752AB460B",
+    currentVersion = "6.504-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.503",
+    previousVersion = "6.503",
+    rangeLabel = "6.503 -> 6.504-beta1",
     entries = {
+        {
+            version = "6.504-beta1",
+            date = "2026-10-19",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed buffs on the target, focus, boss and arena frames sometimes disappearing, or showing an old buff from an earlier target, until /reload while debuffs kept working.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.503",
             date = "2026-10-17",

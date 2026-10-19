@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.504-beta1 - 2026-10-19
+
+### Bug Fixes
+
+- Fixed buffs on the target, focus, boss and arena frames sometimes disappearing, or showing an old buff from an earlier target, until /reload while debuffs kept working.
+<!-- msuf-menu-link: none -->
+
 ## 6.503 - 2026-10-17
 
 Stable maintenance release for all supported clients.
