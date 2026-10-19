@@ -7255,6 +7255,9 @@ L["Second choice"] = "두 번째 선택"
 L["Third choice"] = "세 번째 선택"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "역할별로 축복을 최대 세 개 선택하세요.\n성기사는 배운 축복 중 첫 번째를 사용합니다. 다른 직업은 첫 번째 선택을 사용하며, 역할이 없는 구성원은 공격 담당으로 취급합니다."
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "직업 예외는 역할 우선순위를 대체합니다. 성기사는 선택한 축복을 알고 있어야 합니다."
+L["Sample effects shown: %s - not your live state"] = "예시 효과 표시 중: %s - 현재 실제 상태가 아닙니다"
+L["Click to hide these sample effects."] = "이 예시 효과를 숨기려면 클릭하십시오."
+L["Shows a sample effect your frame does not currently have."] = "현재 프레임에 없는 예시 효과를 표시합니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

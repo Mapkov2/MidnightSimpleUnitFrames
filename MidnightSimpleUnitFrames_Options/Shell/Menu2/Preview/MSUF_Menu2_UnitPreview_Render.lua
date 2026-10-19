@@ -38,6 +38,8 @@ local function ResolvePreviewBodyOffsets(centerX, centerY, scale, manualZoom, fr
         -math.floor(((tonumber(centerY) or 0) * scale) + 0.5)
 end
 Render.ResolvePreviewBodyOffsets = ResolvePreviewBodyOffsets
+-- The settings section that owns each sample-effect layer: it switches the layer on while it is open.
+Render.SAMPLE_LAYER_SECTIONS = { dispelOverlay = "unit_dispel_overlay", dispelSymbol = "unit_dispel_symbol" }
 
 -- The container width is the live class resource layout's rule (player frame
 -- width, custom width, pip auto-fit, Cooldown Manager viewer), shared with the
@@ -340,6 +342,9 @@ function Stage.ResolveInputs(st)
     --- profile switch cannot leave the already-built layer rail stale.
     if type(box.layerVisibility) == "table" then
         box.layerVisibility.guides = g.unitPreviewGuidesEnabled == true
+        -- The sample-effect layers follow their open settings section (an edge, so a chip click in between sticks).
+        PreviewHelpers.SyncSampleLayerSections(box, box.layerVisibility, box._msuf2PinnedPreviewPageKey,
+            Render.SAMPLE_LAYER_SECTIONS, MenuState.accordionState)
     end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.
@@ -1215,8 +1220,15 @@ function Stage.RenderSceneHandles(st, Preview)
             box.handleDispelSymbol:Show()
         else box.handleDispelSymbol:Hide() end
     end
-    st.box._previewDispelOverlayAvailable = body._msufSceneDispelOverlay and body._msufSceneDispelOverlay:IsShown()
-    st.box._previewDispelSymbolAvailable = symbol and symbol:IsShown()
+    -- A sample layer the layer filter hides is hidden, not missing: while its settings are on and the scene built
+    -- the region, the chip stays available so a click can bring it back.
+    local overlay, spec = body._msufSceneDispelOverlay, st.runtimeSpec
+    local specOn = spec ~= nil and spec.enabled ~= false
+    local overlayCfg, symbolCfg = spec and spec.dispelOverlay, spec and spec.dispelSymbol
+    box._previewDispelOverlayAvailable = overlay ~= nil
+        and (overlay:IsShown() or (specOn and overlayCfg ~= nil and overlayCfg.enabled == true))
+    box._previewDispelSymbolAvailable = symbol ~= nil
+        and (symbol:IsShown() or (specOn and symbolCfg ~= nil and symbolCfg.enabled == true))
     for i, handle in pairs(box.texLayerHandles) do
         local holder = mock.texLayers and mock.texLayers[i]
         if holder and holder:IsShown() then
@@ -1306,6 +1318,7 @@ function Stage.FinalizeLayersAndHandles(st)
         if button.key == "trinket" and button.SetShown then button:SetShown(key == "arena") end
         if button.refresh then button:refresh() end
     end
+    PreviewHelpers.RefreshSampleEffectHint(box)
     if box.LayoutLayerRail then box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24) end
     local nameHandleW = mock.nameText:GetStringWidth() + 10
     if mock.totInlineSep

@@ -103,6 +103,7 @@ function Core.ApplyLayerVisibility(box)
         castbar = { mock.cast, box.handleCastbar, box.handleCastbarIcon, box.handleCastbarText, box.handleCastbarTarget, box.handleCastbarTime },
         buff = { box.handleAuraBuffs }, debuff = { box.handleAuraDebuffs },
         auras = { box.handleAuraCustom1, box.handleAuraCustom2, box.handleAuraCustom3, box.handleAuraCustom4 },
+        dispelSymbol = { box.handleDispelSymbol },
     }
     for key, regions in pairs(layers) do
         if not On(key) then for _, region in pairs(regions) do Core.SetShownSafe(region, false) end end

@@ -7282,6 +7282,9 @@ L["Second choice"] = "Второй выбор"
 L["Third choice"] = "Третий выбор"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Выберите до трёх благословений для каждой роли.\nПаладины используют первый изученный вариант. Другие классы используют первый вариант; участники без роли считаются бойцами."
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Исключения для классов заменяют приоритеты ролей. Паладин должен знать выбранное благословение."
+L["Sample effects shown: %s - not your live state"] = "Показаны примерные эффекты: %s - это не ваше текущее состояние"
+L["Click to hide these sample effects."] = "Нажмите, чтобы скрыть эти примерные эффекты."
+L["Shows a sample effect your frame does not currently have."] = "Показывает примерный эффект, которого сейчас нет на вашем кадре."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)

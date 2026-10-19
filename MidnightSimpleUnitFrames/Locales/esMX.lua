@@ -7331,6 +7331,9 @@ L["Second choice"] = "Segunda opción"
 L["Third choice"] = "Tercera opción"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "Elige hasta tres bendiciones por rol.\nLos paladines usan la primera opción aprendida. Las demás clases usan la primera opción; los miembros sin rol cuentan como DPS."
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "Las excepciones de clase sustituyen las prioridades del rol. Los paladines deben conocer la bendición elegida."
+L["Sample effects shown: %s - not your live state"] = "Efectos de ejemplo mostrados: %s - no es tu estado actual"
+L["Click to hide these sample effects."] = "Haz clic para ocultar estos efectos de ejemplo."
+L["Shows a sample effect your frame does not currently have."] = "Muestra un efecto de ejemplo que tu marco no tiene actualmente."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)

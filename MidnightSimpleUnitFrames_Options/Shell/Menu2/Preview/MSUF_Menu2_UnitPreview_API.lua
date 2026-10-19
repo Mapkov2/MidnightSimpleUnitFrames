@@ -199,3 +199,15 @@ function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     return build(parent, panel, width, height)
 end
 ExportPublic("MSUF_Menu2_CreateUnitPreviewBox", MSUF.MSUF_Menu2_CreateUnitPreviewBox)
+
+-- A sample-effect layer follows its open settings section, so opening or closing one repaints the preview that
+-- shows that page (the render reads the persisted section state and applies the edge).
+local SAMPLE_LAYER_SECTION_IDS = { unit_dispel_overlay = true, unit_dispel_symbol = true }
+local previousSectionStateChanged = M.OnCollapsibleSectionStateChanged
+function M.OnCollapsibleSectionStateChanged(pageKey, sectionId, open, entry)
+    if previousSectionStateChanged then previousSectionStateChanged(pageKey, sectionId, open, entry) end
+    local active = Preview.active
+    if SAMPLE_LAYER_SECTION_IDS[sectionId] and active and active._msuf2PinnedPreviewPageKey == pageKey then
+        Preview.RequestRefresh("UNIT_PREVIEW_SAMPLE_LAYER")
+    end
+end

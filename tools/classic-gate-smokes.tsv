@@ -937,3 +937,13 @@ classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavo
 -	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} TBC	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): TBC	nightly
 -	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Mists	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Mists	nightly
 -	lua	tools/tests/aura_unit_sensor_owner_split_smoke.lua	{root}	Aura unit sensor owner split smoke failed
+-	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Mainline	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Mainline
+-	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Forever	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Forever	nightly
+-	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Vanilla	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Vanilla	nightly
+-	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} TBC	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: TBC	nightly
+-	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Mists	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Mists	nightly
+-	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} Mainline	Unit preview of a live unit with secret health no longer shows a full bar: Mainline
+-	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} Forever	Unit preview of a live unit with secret health no longer shows a full bar: Forever	nightly
+-	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} Vanilla	Unit preview of a live unit with secret health no longer shows a full bar: Vanilla	nightly
+-	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} TBC	Unit preview of a live unit with secret health no longer shows a full bar: TBC	nightly
+-	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} Mists	Unit preview of a live unit with secret health no longer shows a full bar: Mists	nightly

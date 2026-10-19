@@ -2659,6 +2659,133 @@ function H.LayerChipButtonOpts(Tr, colors, chrome, opts)
     return opts
 end
 
+--- Sample-effect layers paint a stand-in effect (a dispel wash, dispel symbols) that the frame does not carry right
+--- now. They start hidden in every preview, so the rail never tints a preview with an effect nobody asked for. They
+--- show on a chip click, or while the settings section that owns them is open, and a hint under the preview names
+--- whatever is painted and hides it again with one click.
+H.SAMPLE_EFFECT_LAYERS = { dispelOverlay = true, dispelSymbol = true }
+function H.IsSampleEffectLayer(key) return H.SAMPLE_EFFECT_LAYERS[key] == true end
+--- The chip tooltip line every sample-effect chip adds below its own description.
+function H.AddSampleEffectTooltipLine(key, tr)
+    if H.SAMPLE_EFFECT_LAYERS[key] ~= true or not GameTooltip then return end
+    GameTooltip:AddLine(tr("Shows a sample effect your frame does not currently have."), 0.95, 0.80, 0.40, true)
+end
+--- One edge of "the matching settings section opened/closed". Opening switches an off layer on and remembers that the
+--- section did it; closing switches that layer off again. A chip click clears the memory (state.auto[key] = nil), so a
+--- layer the user picked stays as picked. Returns true when the layer changed.
+function H.SyncSampleLayerSection(state, visibility, key, open)
+    if (state.open[key] == true) == open then return false end
+    state.open[key] = open
+    if open then
+        if visibility[key] ~= false then return false end
+        visibility[key], state.auto[key] = true, true
+        return true
+    end
+    if state.auto[key] ~= true then return false end
+    state.auto[key] = nil
+    visibility[key] = false
+    return true
+end
+--- Reads the open settings sections of one page (accordion = the persisted accordion states) for every sample layer in
+--- `sections` (layerKey -> sectionId) and applies the edges. `holder` keeps the per-surface state and the composed
+--- state keys, so a warm repaint allocates nothing. With activePage given, the sections count as open only while that
+--- page is the one shown (previews shared by several pages). Returns true when a layer changed.
+function H.SyncSampleLayerSections(holder, visibility, pageKey, sections, accordion, activePage)
+    if not (pageKey and type(accordion) == "table" and type(visibility) == "table") then return false end
+    local state = holder._msuf2SampleLayers
+    if not state then
+        state = { auto = {}, open = {}, keys = {} }
+        holder._msuf2SampleLayers = state
+    end
+    if state.page ~= pageKey then
+        state.page = pageKey
+        for layerKey, sectionId in pairs(sections) do state.keys[layerKey] = pageKey .. ":" .. sectionId end
+    end
+    local changed, onPage = false, activePage == nil or activePage == pageKey
+    for layerKey, stateKey in pairs(state.keys) do
+        if H.SyncSampleLayerSection(state, visibility, layerKey, onPage and accordion[stateKey] == true) then changed = true end
+    end
+    return changed
+end
+--- Registers the hint under a preview surface; the button itself is built the first time a sample effect paints, so a
+--- preview that never shows one carries no extra frame. opts: Tr, T, buttons (field on the box holding the layer
+--- chips), IsOn(box, key) (the chip's painting state), Hide(box) (what a click does: the same as clicking each
+--- painted chip).
+function H.SetupSampleEffectHint(box, surface, opts)
+    if not (box and surface) then return end
+    opts.surface = surface
+    box._msuf2SampleEffectOpts = opts
+end
+local function BuildSampleEffectHint(box, opts)
+    local surface = opts.surface
+    local T, tr = opts.T or M.Theme, opts.Tr or Fallbacks.Identity
+    local hint = PixelLayoutRegion(CreateFrame("Button", nil, surface, T and T.Template and T.Template() or "BackdropTemplate"))
+    hint:SetHeight(20)
+    hint:SetPoint("BOTTOMRIGHT", surface, "BOTTOMRIGHT", -8, 8)
+    if hint.SetFrameLevel and surface.GetFrameLevel then hint:SetFrameLevel((surface:GetFrameLevel() or 0) + 120) end
+    if hint.SetBackdrop then
+        PixelLayoutRegion(hint, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        hint:SetBackdropColor(0.012, 0.020, 0.040, 0.92)
+        hint:SetBackdropBorderColor(0.80, 0.62, 0.20, 0.90)
+    end
+    local color = { 0.96, 0.86, 0.58, 1 }
+    local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", color)
+        or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+    text:SetPoint("LEFT", hint, "LEFT", 8, 0)
+    text:SetPoint("RIGHT", hint, "RIGHT", -8, 0)
+    text:SetJustifyH("LEFT")
+    hint._text = text
+    hint:SetScript("OnClick", function() opts.Hide(box) end)
+    hint:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
+        GameTooltip:SetText(text:GetText() or "", 1, 1, 1, 1, true)
+        GameTooltip:AddLine(tr("Click to hide these sample effects."), 0.55, 0.68, 0.86, true)
+        GameTooltip:Show()
+    end)
+    hint:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    hint:Hide()
+    box._msuf2SampleEffectHint = hint
+    return hint
+end
+--- Shows the hint while at least one sample-effect chip paints, naming the painted layers. The label list is rebuilt
+--- only when the painted set changes.
+function H.RefreshSampleEffectHint(box)
+    local opts = box._msuf2SampleEffectOpts
+    if not opts then return end
+    local hint = box._msuf2SampleEffectHint
+    local buttons, mask, count = box[opts.buttons] or {}, 0, 0
+    for i = 1, #buttons do
+        local btn = buttons[i]
+        if btn.key and H.SAMPLE_EFFECT_LAYERS[btn.key] == true and opts.IsOn(box, btn.key) and (not btn.IsShown or btn:IsShown()) then
+            mask, count = mask + 2 ^ (i - 1), count + 1
+        end
+    end
+    if count == 0 then
+        if hint and hint._mask ~= 0 then
+            hint._mask = 0
+            hint:Hide()
+        end
+        return
+    end
+    hint = hint or BuildSampleEffectHint(box, opts)
+    if hint._mask ~= mask then
+        hint._mask = mask
+        local names = {}
+        for i = 1, #buttons do
+            if floor(mask / 2 ^ (i - 1)) % 2 == 1 then names[#names + 1] = buttons[i].fs:GetText() or buttons[i].key end
+        end
+        local tr = opts.Tr or Fallbacks.Identity
+        SetShownText(hint._text, string.format(tr("Sample effects shown: %s - not your live state"), table.concat(names, ", ")))
+        local width = (hint._text.GetStringWidth and hint._text:GetStringWidth() or 0) + 18
+        local surface = hint:GetParent()
+        local surfaceWidth = surface and surface.GetWidth and surface:GetWidth() or 0
+        if surfaceWidth > 40 and width > surfaceWidth - 16 then width = surfaceWidth - 16 end
+        hint:SetWidth(width)
+        hint:Show()
+    end
+end
+
 --- Lays out a preview box's layer chips: as the compact popover while the
 --- rail hangs under the "Layers" button (it owns its width then), otherwise
 --- flowed across the rail beside the optional rail header.

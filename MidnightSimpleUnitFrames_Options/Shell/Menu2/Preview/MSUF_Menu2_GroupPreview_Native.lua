@@ -1336,6 +1336,76 @@ function NativeBuild.Stage(state)
     box._bounds = bounds
     state.stage, state.bounds = stage, bounds
 end
+--- What a group layer chip does. The layer flags themselves live in M.gfPreviewLayerVisible, shared by every group preview.
+local GroupLayerChip = {}
+function GroupLayerChip.Available(owner, key)
+    return not (owner and owner._layerAvailable and owner._layerAvailable[key] == false)
+end
+function GroupLayerChip.On(owner, key)
+    if not GroupLayerChip.Available(owner, key) then return false end
+    if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == key end
+    return M.gfPreviewLayerVisible[key] ~= false
+end
+function GroupLayerChip.Refresh(owner)
+    for j = 1, #(owner._layerButtons or {}) do owner._layerButtons[j]:Refresh() end
+    PreviewHelpers.RefreshSampleEffectHint(owner)
+    if owner.RequestRefresh then owner:RequestRefresh("GROUP_PREVIEW_LAYER")
+    elseif owner.Refresh then owner:Refresh("GROUP_PREVIEW_LAYER") end
+end
+--- The sample-effect hint hides every painted sample layer exactly as a plain click on its chip would.
+function GroupLayerChip.HideSamples(owner)
+    local visible, state, changed = M.gfPreviewLayerVisible, M._msuf2SampleLayers, false
+    for i = 1, #(owner._layerButtons or {}) do
+        local key = owner._layerButtons[i].key
+        if PreviewHelpers.IsSampleEffectLayer(key) and GroupLayerChip.On(owner, key) then
+            M.gfPreviewSoloLayer = nil
+            visible[key], changed = false, true
+            if state then state.auto[key] = nil end
+        end
+    end
+    if changed then GroupLayerChip.Refresh(owner) end
+end
+function GroupLayerChip.Click(self, owner)
+    if not GroupLayerChip.Available(owner, self.key) then
+        if GameTooltip then GameTooltip:Hide() end
+        OpenGFSection(self._sectionKey)
+        return
+    end
+    local visible, sampleState = M.gfPreviewLayerVisible, M._msuf2SampleLayers
+    if IsShiftKeyDown and IsShiftKeyDown() then
+        local solo
+        if M.gfPreviewSoloLayer ~= self.key then solo = self.key end
+        M.gfPreviewSoloLayer = solo
+        -- Soloing a sample layer is asking for it, so it has to paint.
+        if solo and PreviewHelpers.IsSampleEffectLayer(solo) and visible[solo] == false then
+            visible[solo] = true
+            if sampleState then sampleState.auto[solo] = nil end
+        end
+    else
+        M.gfPreviewSoloLayer = nil
+        visible[self.key] = visible[self.key] == false
+        -- A chip click is the user's own choice: the settings section no longer owns this layer's state.
+        if sampleState then sampleState.auto[self.key] = nil end
+    end
+    GroupLayerChip.Refresh(owner)
+end
+function GroupLayerChip.Enter(self, owner, available, on, tr)
+    local label = self.fs and self.fs:GetText() or tr("Layer")
+    if available and PreviewHelpers.IsSampleEffectLayer(self.key) and GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(label, 1, 1, 1)
+        PreviewHelpers.AddSampleEffectTooltipLine(self.key, tr)
+        GameTooltip:Show()
+    end
+    if not owner._hint then return end
+    if not available then
+        owner._hint:SetText(string.format(tr("%s is off in settings. Click to open its options."), label))
+        return
+    end
+    local solo = M.gfPreviewSoloLayer == self.key
+    local action = solo and "Shift-click clears solo layer" or (on and "click to hide - Shift-click to solo" or "click to show")
+    owner._hint:SetText(label .. " - " .. tr(action))
+end
 function NativeBuild.LayerRail(state)
     local Deps, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
     local T, M = Deps.T, Deps.M
@@ -1372,8 +1442,9 @@ function NativeBuild.LayerRail(state)
         si = true,
         auraText = true,
         text = true,
-        dispelOverlay = true,
-        dispelSymbol = true,
+        -- Sample-effect layers stay off until a chip click or their open settings section asks for them.
+        dispelOverlay = false,
+        dispelSymbol = false,
     }
     if type(M.gfPreviewLayerVisible) ~= "table" then M.gfPreviewLayerVisible = {} end
     for key, value in pairs(layerDefaults) do
@@ -1405,43 +1476,10 @@ function NativeBuild.LayerRail(state)
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
     local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Deps.Tr, layerColors, chrome, {
-        IsAvailable = function(owner, key)
-            return not (owner and owner._layerAvailable and owner._layerAvailable[key] == false)
-        end,
-        IsOn = function(owner, key)
-            if owner and owner._layerAvailable and owner._layerAvailable[key] == false then return false end
-            if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == key end
-            return layerVisibility[key] ~= false
-        end,
-        OnClick = function(self, owner)
-            if owner and owner._layerAvailable and owner._layerAvailable[self.key] == false then
-                if GameTooltip then GameTooltip:Hide() end
-                OpenGFSection(self._sectionKey)
-                return
-            end
-            if IsShiftKeyDown and IsShiftKeyDown() then
-                local selectedValue1
-                if not ((M.gfPreviewSoloLayer == self.key)) then selectedValue1 = self.key end
-                M.gfPreviewSoloLayer = selectedValue1
-            else
-                M.gfPreviewSoloLayer = nil
-                layerVisibility[self.key] = layerVisibility[self.key] == false
-            end
-            for j = 1, #(owner._layerButtons or {}) do owner._layerButtons[j]:Refresh() end
-            if owner.RequestRefresh then owner:RequestRefresh("GROUP_PREVIEW_LAYER")
-            elseif owner.Refresh then owner:Refresh("GROUP_PREVIEW_LAYER") end
-        end,
-        OnEnter = function(self, owner, available, on, tr)
-            if not owner._hint then return end
-            local label = self.fs and self.fs:GetText() or tr("Layer")
-            if not available then
-                owner._hint:SetText(string.format(tr("%s is off in settings. Click to open its options."), label))
-                return
-            end
-            local solo = M.gfPreviewSoloLayer == self.key
-            local action = solo and "Shift-click clears solo layer" or (on and "click to hide - Shift-click to solo" or "click to show")
-            owner._hint:SetText(label .. " - " .. tr(action))
-        end,
+        IsAvailable = GroupLayerChip.Available,
+        IsOn = GroupLayerChip.On,
+        OnClick = GroupLayerChip.Click,
+        OnEnter = GroupLayerChip.Enter,
         OnLeave = function(_, owner) Deps.UpdateHint(owner, owner._selectedHandle) end,
     })
     for i = 1, #layerDefs do
@@ -1468,6 +1506,8 @@ function NativeBuild.LayerRail(state)
                 enabled = enabled == true
                 M.gfPreviewSoloLayer = nil
                 layerVisibility[btn._layerKey] = enabled
+                local sampleState = M._msuf2SampleLayers
+                if sampleState then sampleState.auto[btn._layerKey] = nil end
                 if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_SEARCH_LAYER")
                 elseif box.Refresh then box:Refresh() end
                 return (layerVisibility[btn._layerKey] ~= false) == enabled
@@ -1477,6 +1517,9 @@ function NativeBuild.LayerRail(state)
         if def[4] == "portrait" then btn:Hide() end
         box._layerButtons[#box._layerButtons + 1] = btn
     end
+    PreviewHelpers.SetupSampleEffectHint(box, state.stage, {
+        Tr = Deps.Tr, T = T, buttons = "_layerButtons", IsOn = GroupLayerChip.On, Hide = GroupLayerChip.HideSamples,
+    })
     box.LayoutLayerRail = function(self, railWidth)
         return PreviewHelpers.LayoutLayerRail(self, self._layers, self._layerButtons, railWidth)
     end
@@ -1891,4 +1934,20 @@ function M.FocusGFPreviewTextSlot(kind, slot, active)
             and (not box.IsVisible or box:IsVisible()) then focused = box:FocusTextSlot(kind, slot, active) or focused end
     end
     return focused
+end
+
+-- A sample-effect layer follows its open settings section: opening or closing one repaints every shown group preview,
+-- whose render reads the section state and applies the edge.
+local GF_SAMPLE_SECTION_IDS = { dispel = true, dispelSymbol = true }
+local previousSectionStateChanged = M.OnCollapsibleSectionStateChanged
+function M.OnCollapsibleSectionStateChanged(pageKey, sectionId, open, entry)
+    if previousSectionStateChanged then previousSectionStateChanged(pageKey, sectionId, open, entry) end
+    if pageKey ~= "gf_bars" or not GF_SAMPLE_SECTION_IDS[sectionId] then return end
+    local previews = M._gfNativePreviews
+    for i = 1, previews and #previews or 0 do
+        local box = previews[i]
+        if box and not box._msufGFNativePreviewDisposed and box.RequestRefresh and box.IsShown and box:IsShown() then
+            box:RequestRefresh("GROUP_PREVIEW_SAMPLE_LAYER")
+        end
+    end
 end

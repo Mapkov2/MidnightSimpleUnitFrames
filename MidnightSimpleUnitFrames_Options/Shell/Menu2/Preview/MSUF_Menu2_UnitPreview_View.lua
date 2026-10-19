@@ -1023,9 +1023,40 @@ function BoxBuild.LayerRail(box, s)
         return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
     end
     local disabledLayerText = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
+    local function UnitLayerOn(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end
+    --- Everything a layer change does once its flag has flipped. The chip click and the sample-effect hint share it,
+    --- so hiding the sample layers from the hint is exactly a click on each of their chips.
+    local function ApplyUnitLayerChange(owner, key)
+        if key == "guides" then ViewChrome.SetPreviewGuidesEnabled(owner.layerVisibility[key] ~= false) end
+        -- Hiding a layer changes the footprint, so auto-fit has to recenter.
+        -- A zoom the user dialled in by hand is a deliberate viewport and
+        -- must survive the toggle; _manualZoom is exactly that marker.
+        if key ~= "guides" and owner._manualZoom == nil then
+            owner._zoomPanX, owner._zoomPanY = 0, 0
+        end
+        for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
+        PreviewHelpers.RefreshSampleEffectHint(owner)
+        -- Visibility is local preview state and does not need a full render.
+        -- Apply it immediately; the queued refresh only recomputes footprint
+        -- and fit geometry for layers such as Auras, Cast and Class Power.
+        if PreviewCore.ApplyLayerVisibility then PreviewCore.ApplyLayerVisibility(owner) end
+        RequestPreviewLayoutRefresh(owner, "UNIT_PREVIEW_LAYER")
+        RefreshHandleSelectionVisuals(owner)
+    end
+    local function HideSampleLayers(owner)
+        local state, changed = owner._msuf2SampleLayers, nil
+        for i = 1, #owner.layerButtons do
+            local key = owner.layerButtons[i].key
+            if PreviewHelpers.IsSampleEffectLayer(key) and UnitLayerOn(owner, key) then
+                owner.layerVisibility[key], changed = false, key
+                if state then state.auto[key] = nil end
+            end
+        end
+        if changed then ApplyUnitLayerChange(owner, changed) end
+    end
     local unitLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(TR, colors, chrome, {
         IsAvailable = UnitLayerAvailable,
-        IsOn = function(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end,
+        IsOn = UnitLayerOn,
         OnClick = function(self, owner)
             if owner.layerAvailable and owner.layerAvailable[self.key] == false then
                 if GameTooltip then GameTooltip:Hide() end
@@ -1033,20 +1064,10 @@ function BoxBuild.LayerRail(box, s)
                 return
             end
             owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
-            if self.key == "guides" then ViewChrome.SetPreviewGuidesEnabled(owner.layerVisibility[self.key] ~= false) end
-            -- Hiding a layer changes the footprint, so auto-fit has to recenter.
-            -- A zoom the user dialled in by hand is a deliberate viewport and
-            -- must survive the toggle; _manualZoom is exactly that marker.
-            if self.key ~= "guides" and owner._manualZoom == nil then
-                owner._zoomPanX, owner._zoomPanY = 0, 0
-            end
-            for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
-            -- Visibility is local preview state and does not need a full render.
-            -- Apply it immediately; the queued refresh only recomputes footprint
-            -- and fit geometry for layers such as Auras, Cast and Class Power.
-            if PreviewCore.ApplyLayerVisibility then PreviewCore.ApplyLayerVisibility(owner) end
-            RequestPreviewLayoutRefresh(owner, "UNIT_PREVIEW_LAYER")
-            RefreshHandleSelectionVisuals(owner)
+            -- A chip click is the user's own choice: the settings section no longer owns this layer's state.
+            local sampleState = owner._msuf2SampleLayers
+            if sampleState then sampleState.auto[self.key] = nil end
+            ApplyUnitLayerChange(owner, self.key)
         end,
         OnEnter = function(self, owner, available, on, tr)
             if not available then
@@ -1061,6 +1082,7 @@ function BoxBuild.LayerRail(box, s)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(label, 1, 1, 1)
                 if self.tooltip then GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true) end
+                PreviewHelpers.AddSampleEffectTooltipLine(self.key, tr)
                 GameTooltip:AddLine(TR(on and "Click to hide this preview layer." or "Click to show this preview layer."), 0.55, 0.68, 0.86, true)
                 if self.key == "guides" then GameTooltip:AddLine(tr(on
                     and "Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys."
@@ -1077,7 +1099,9 @@ function BoxBuild.LayerRail(box, s)
         -- separate cyan measurement guide hidden.
         if def.key == "guides" then
             box.layerVisibility[def.key] = ViewChrome.PreviewGuidesEnabled()
-        elseif def.key == "bounds" then
+        elseif def.key == "bounds" or PreviewHelpers.IsSampleEffectLayer(def.key) then
+            -- Sample-effect layers (dispel overlay/symbol) stay off until a chip click or their open settings
+            -- section asks for them; Bounds is the cyan measurement guide.
             box.layerVisibility[def.key] = false
         else
             box.layerVisibility[def.key] = true
@@ -1091,6 +1115,9 @@ function BoxBuild.LayerRail(box, s)
         end
         box.layerButtons[#box.layerButtons + 1] = btn
     end
+    PreviewHelpers.SetupSampleEffectHint(box, s.canvas, {
+        Tr = TR, T = s.T, buttons = "layerButtons", IsOn = UnitLayerOn, Hide = HideSampleLayers,
+    })
     -- While the rail hangs under the "Layers" button it is a dropdown, not
     -- the docked strip, so it owns its own width. Callers that re-flow it
     -- from the preview box -- the render pass does, on every layer-

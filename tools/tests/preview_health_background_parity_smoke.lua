@@ -132,7 +132,9 @@ local function UnitBackground(label)
 end
 live.current = nil
 local sampleFraction = UnitBackground("unreadable current health")
-Check(sampleFraction > 0.5 and sampleFraction < 0.95, "harness: the stylized fraction is not a partial health (" .. tostring(sampleFraction) .. ")")
+-- A live unit whose current health is unreadable shows a full bar (its frame out of combat); the partial
+-- gradient is covered by the readable case below.
+Check(Near(sampleFraction, 1), "unreadable current health on a live unit is not a full bar (" .. tostring(sampleFraction) .. ")")
 live.current = 450000
 Check(Near(UnitBackground("readable current health"), 0.5), "the unit preview is not at the live health fraction")
 

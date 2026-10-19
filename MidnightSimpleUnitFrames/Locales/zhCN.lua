@@ -7418,6 +7418,9 @@ L["Second choice"] = "第二选择"
 L["Third choice"] = "第三选择"
 L["Choose up to three blessings per role.\nPaladins use their first learned choice. Other classes use the first choice; unassigned members use DPS."] = "为每种职责选择最多三种祝福。\n圣骑士使用已学会的第一个选择。其他职业使用第一个选择；未分配职责的成员按伤害输出处理。"
 L["Class exceptions replace role priorities. Paladins must know the chosen blessing."] = "职业例外会替代职责优先级。圣骑士必须已学会所选祝福。"
+L["Sample effects shown: %s - not your live state"] = "正在显示示例效果：%s - 并非你当前的实际状态"
+L["Click to hide these sample effects."] = "点击以隐藏这些示例效果。"
+L["Shows a sample effect your frame does not currently have."] = "显示你的框架当前没有的示例效果。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)

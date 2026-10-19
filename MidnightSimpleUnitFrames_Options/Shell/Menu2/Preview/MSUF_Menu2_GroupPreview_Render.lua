@@ -35,6 +35,8 @@ local PREVIEW_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSU
 local ADDITIONAL_PREVIEW_PREFIXES = PREVIEW_BOSS_UNITS and { "pets", "targets", "friendlyBoss", "healerMana" }
     or { "pets", "targets", "healerMana" }
 Render.ADDITIONAL_PREVIEW_PREFIXES = ADDITIONAL_PREVIEW_PREFIXES
+-- The Group Bars settings section that owns each sample-effect layer.
+Render.SAMPLE_LAYER_SECTIONS = { dispelOverlay = "dispel", dispelSymbol = "dispelSymbol" }
 -- Menu samples form a compact shared scene. Screen positions belong to the
 -- live/Edit Mode layout; projecting them here would hide the group or samples.
 -- `out` (optional) is the caller's reused result table, so a settings repaint
@@ -735,6 +737,9 @@ local function BuildScene(box, reason)
     scene.runtimeStatus = runtimeSpec and runtimeSpec.status or {}
     scene.focus = H.PreviewFocusForPage(RenderState.ctx.key)
     scene.layerVisible = type(M.gfPreviewLayerVisible) == "table" and M.gfPreviewLayerVisible or {}
+    -- The sample-effect layers follow their open settings section on the Group Bars page (an edge, so a chip click sticks).
+    M.PreviewHelpers.SyncSampleLayerSections(M, scene.layerVisible, "gf_bars", Render.SAMPLE_LAYER_SECTIONS,
+        M.accordionState, M.activeKey)
     scene.soloLayer = M.gfPreviewSoloLayer
     scene.textHandles = box._textHandles or {}
     scene.previewRole = H.PreviewRole and H.PreviewRole(kind) or RenderState.GF_PREVIEW_ROLE
@@ -1230,6 +1235,7 @@ local function FinalizeScene(scene)
         if button.Refresh then button:Refresh() end
     end
     box._visibleLayerButtonCount = visibleLayerButtonCount
+    M.PreviewHelpers.RefreshSampleEffectHint(box)
     -- The in-world dummies answer to the same rail. Pushing from here instead of
     -- from the chip's OnClick covers every route into the state -- click, Shift
     -- solo, Search command, page re-entry -- and the engine compares a

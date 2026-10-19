@@ -243,7 +243,9 @@ local function LiveUnitData(key, playerManaSourceActive)
     local hpMax = _G.UnitHealthMax and LiveNumber(_G.UnitHealthMax(unit))
     d.hpMax = hpMax and hpMax > 0 and hpMax or nil
     d.hpCur = hpCur and max(0, min(d.hpMax or MSUF.UF.UnitScene.HEALTH_MAX, hpCur)) or nil
-    d.hp = d.hpCur and d.hpMax and d.hpCur / d.hpMax or mock.hp or 0.72
+    -- A live unit whose current health is secret shows a full bar, like its frame out of combat, instead of the
+    -- stylized 72% sample; units without readable live health keep the sample.
+    d.hp = d.hpCur and d.hpMax and d.hpCur / d.hpMax or (d.hpMax and 1) or mock.hp or 0.72
     local powerType = playerManaSourceActive == true
         and ((_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0) or nil
     local powerToken
