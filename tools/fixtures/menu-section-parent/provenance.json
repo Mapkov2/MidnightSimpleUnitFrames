@@ -1798,7 +1798,7 @@
     "tools/tests/menu_section_capture.py": "f6e56c71241056b4764766a688fe5c10f9945f517e16a8af42929bfe80fa86ee",
     "tools/tests/menu_section_parent_semantics.lua": "3cf29493e713e502904a52700976c22d41b81709b0487f397f83109f4e015199",
     "tools/tests/menu_section_parity_semantics.lua": "a437590883c81bba9c553b1138cb32c9135780b7a624dc7e7471275bb9d4fe63",
-    "tools/tests/menu_section_parity_world.lua": "e1f90f1027964810ba4787f3ce009efb7c06368c6944d7a337d7763f677f363e",
+    "tools/tests/menu_section_parity_world.lua": "aa794d0582e5055e83d7f648f29046c95b543616d8a401e3b5ba42320a88bd3a",
     "tools/tests/menu_unit_visibility_inventory_smoke.lua": "10db5cef501555c24c0852c6dedde0edb6d643b37dce2c2c47b707f7ac99a929"
   },
   "input_roots": {
