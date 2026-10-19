@@ -242,7 +242,7 @@
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Focus.lua": [571, 81, 43, 15, 15, 46, 9, 8, 1, 0, 0, 1, 0, 1],
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua": [95, 24, 4, 9, 1, 15, 0, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Grid2.lua": [286, 28, 35, 10, 14, 39, 26, 10, 0, 0, 1, 0, 0, 0],
-  "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua": [991, 148, 114, 40, 45, 117, 22, 7, 0, 0, 2, 0, 0, 0],
+  "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua": [993, 148, 114, 40, 45, 117, 22, 7, 0, 0, 2, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Dock.lua": [610, 133, 49, 26, 18, 51, 10, 3, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Kit.lua": [496, 36, 51, 14, 8, 56, 4, 0, 1, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Picker.lua": [213, 44, 22, 14, 6, 23, 2, 1, 0, 0, 0, 0, 0, 0],
