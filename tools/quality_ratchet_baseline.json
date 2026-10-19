@@ -48,7 +48,7 @@
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LaneConfig.lua": [309, 129, 48, 36, 33, 49, 3, 2, 0, 0, 0, 2, 0, 4],
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua": [792, 125, 81, 27, 21, 100, 2, 9, 1, 0, 0, 1, 0, 5],
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua": [210, 84, 29, 11, 6, 35, 3, 6, 1, 0, 0, 1, 0, 0],
-  "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_OwnerConfig.lua": [286, 65, 35, 24, 7, 36, 1, 0, 0, 0, 0, 0, 0, 0],
+  "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_OwnerConfig.lua": [264, 71, 34, 24, 7, 35, 1, 0, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Platform.lua": [188, 99, 38, 5, 6, 39, 19, 6, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Presence.lua": [492, 64, 28, 16, 6, 29, 9, 8, 0, 0, 0, 0, 0, 0],
   "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Schema.lua": [98, 91, 2, 17, 0, 25, 1, 0, 0, 0, 0, 0, 0, 0],

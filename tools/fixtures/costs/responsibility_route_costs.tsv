@@ -2,10 +2,11 @@
 Mainline	factory-event:PLAYER_LOGIN	100	123100	1000	13.671875
 Mainline	factory-event:PLAYER_ENTERING_WORLD	100	234700	700	27.34375
 Mainline	factory-event:EDIT_MODE_LAYOUTS_UPDATED	100	253700	1200	27.34375
-Mainline	target-offset-apply:ordinary	1	563430	6320	455.25390625
-Mainline	target-offset-apply:inline	1	574230	6670	461.552734375
-Mainline	target-offset-apply:direct	1	571820	6460	452.3837890625
-Mainline	target-offset-apply:both	1	582730	6810	458.6826171875
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Mainline	target-offset-apply:ordinary	1	563430	6340	455.25390625
+Mainline	target-offset-apply:inline	1	574230	6690	461.552734375
+Mainline	target-offset-apply:direct	1	571820	6480	452.3837890625
+Mainline	target-offset-apply:both	1	582730	6830	458.6826171875
 Mainline	event-arm:ADDON_LOADED:Blizzard_EditMode:none	10	12890	10	1.3671875
 Mainline	event-arm:ADDON_LOADED:Blizzard_EditMode:late	10	12320	100	1.3671875
 Mainline	event-arm:ADDON_LOADED:Blizzard_EditMode:group	10	12540	20	1.3671875
@@ -175,8 +176,9 @@ Mainline	spawn-apply:player:reuse	1	30325	403	3.94140625
 Mainline	spawn-apply:player:disabled	1	30325	403	3.94140625
 Mainline	spawn-apply:player:mask	1	9968	62	2.263671875
 Mainline	spawn-apply:player:combat	1	55	1	0.0
-Mainline	spawn-apply:target:create	1	30986	383	3.7744140625
-Mainline	spawn-apply:target:reuse	1	30938	382	3.7744140625
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Mainline	spawn-apply:target:create	1	31124	385	3.7744140625
+Mainline	spawn-apply:target:reuse	1	31076	384	3.7744140625
 Mainline	spawn-apply:target:disabled	1	2174	19	0.158203125
 Mainline	spawn-apply:target:mask	1	10208	60	2.388671875
 Mainline	spawn-apply:target:combat	1	55	1	0.0
@@ -185,9 +187,9 @@ Mainline	spawn-apply:targettarget:reuse	1	20531	187	2.5029296875
 Mainline	spawn-apply:targettarget:disabled	1	20531	187	2.5029296875
 Mainline	spawn-apply:targettarget:mask	1	7700	46	1.826171875
 Mainline	spawn-apply:targettarget:combat	1	55	1	0.0
-Mainline	spawn-apply:pet:create	1	25914	249	3.2197265625
-Mainline	spawn-apply:pet:reuse	1	25866	248	3.2197265625
-Mainline	spawn-apply:pet:disabled	1	25866	248	3.2197265625
+Mainline	spawn-apply:pet:create	1	26052	251	3.2197265625
+Mainline	spawn-apply:pet:reuse	1	26004	250	3.2197265625
+Mainline	spawn-apply:pet:disabled	1	26004	250	3.2197265625
 Mainline	spawn-apply:pet:mask	1	9439	64	1.9921875
 Mainline	spawn-apply:pet:combat	1	55	1	0.0
 Mainline	spawn-apply:unknown:create	1	47	1	0.0
@@ -4486,10 +4488,11 @@ Mists	compile-absorb-mode:PERCENTMAXCURABSORB	10	46890	520	18.083984375
 Forever	factory-event:PLAYER_LOGIN	100	123100	1000	13.671875
 Forever	factory-event:PLAYER_ENTERING_WORLD	100	234700	700	27.34375
 Forever	factory-event:EDIT_MODE_LAYOUTS_UPDATED	100	253700	1200	27.34375
-Forever	target-offset-apply:ordinary	1	582250	6470	461.0078125
-Forever	target-offset-apply:inline	1	593050	6820	467.306640625
-Forever	target-offset-apply:direct	1	590640	6610	458.1376953125
-Forever	target-offset-apply:both	1	601550	6960	464.4365234375
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Forever	target-offset-apply:ordinary	1	582250	6490	461.0078125
+Forever	target-offset-apply:inline	1	593050	6840	467.306640625
+Forever	target-offset-apply:direct	1	590640	6630	458.1376953125
+Forever	target-offset-apply:both	1	601550	6980	464.4365234375
 Forever	event-arm:ADDON_LOADED:Blizzard_EditMode:none	10	12890	10	1.3671875
 Forever	event-arm:ADDON_LOADED:Blizzard_EditMode:late	10	12320	100	1.3671875
 Forever	event-arm:ADDON_LOADED:Blizzard_EditMode:group	10	12540	20	1.3671875
@@ -4659,8 +4662,9 @@ Forever	spawn-apply:player:reuse	1	30599	403	3.94140625
 Forever	spawn-apply:player:disabled	1	30599	403	3.94140625
 Forever	spawn-apply:player:mask	1	10052	62	2.263671875
 Forever	spawn-apply:player:combat	1	55	1	0.0
-Forever	spawn-apply:target:create	1	32191	396	3.7744140625
-Forever	spawn-apply:target:reuse	1	32143	395	3.7744140625
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Forever	spawn-apply:target:create	1	32329	398	3.7744140625
+Forever	spawn-apply:target:reuse	1	32281	397	3.7744140625
 Forever	spawn-apply:target:disabled	1	2174	19	0.158203125
 Forever	spawn-apply:target:mask	1	10555	63	2.388671875
 Forever	spawn-apply:target:combat	1	55	1	0.0
@@ -4669,9 +4673,9 @@ Forever	spawn-apply:targettarget:reuse	1	20805	187	2.5029296875
 Forever	spawn-apply:targettarget:disabled	1	20805	187	2.5029296875
 Forever	spawn-apply:targettarget:mask	1	7784	46	1.826171875
 Forever	spawn-apply:targettarget:combat	1	55	1	0.0
-Forever	spawn-apply:pet:create	1	26745	261	3.5009765625
-Forever	spawn-apply:pet:reuse	1	26697	260	3.5009765625
-Forever	spawn-apply:pet:disabled	1	26697	260	3.5009765625
+Forever	spawn-apply:pet:create	1	26883	263	3.5009765625
+Forever	spawn-apply:pet:reuse	1	26835	262	3.5009765625
+Forever	spawn-apply:pet:disabled	1	26835	262	3.5009765625
 Forever	spawn-apply:pet:mask	1	9772	65	1.9921875
 Forever	spawn-apply:pet:combat	1	55	1	0.0
 Forever	spawn-apply:unknown:create	1	47	1	0.0

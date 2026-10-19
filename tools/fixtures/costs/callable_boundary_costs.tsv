@@ -29,7 +29,8 @@ Mainline	anchor:provider-change	100	114900	5600	228.171875000000
 Mainline	anchor:public	100	97700	3300	37.500000000000
 Mainline	layout:custom	10	8700	310	6.562500000000
 Mainline	layout:missing	10	7320	230	6.250000000000
-Mainline	layout:unit-apply	10	320218	4341	28.751953125000
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Mainline	layout:unit-apply	10	321598	4361	28.751953125000
 Mainline	layout:group	10	115470	3530	23.453125000000
 Mainline	layout:group-preview	10	114710	3490	23.453125000000
 Mainline	status:atlas-cold	100	18600	400	9.375000000000
@@ -108,7 +109,8 @@ Forever	anchor:provider-change	100	114900	5600	233.046875000000
 Forever	anchor:public	100	97700	3300	37.500000000000
 Forever	layout:custom	10	8700	310	6.562500000000
 Forever	layout:missing	10	7320	230	6.250000000000
-Forever	layout:unit-apply	10	332268	4471	28.751953125000
+# 2026-10-19: unit Dispel/Purge sensors own their native container alone (port of production 1d9c9e056, target buff freeze fix); +1 native owner per unit frame with such a sensor. Caps follow the measured cost.
+Forever	layout:unit-apply	10	333648	4491	28.751953125000
 Forever	layout:group	10	112820	2780	23.453125000000
 Forever	layout:group-preview	10	112060	2740	23.453125000000
 Forever	status:atlas-cold	100	18600	400	9.375000000000
