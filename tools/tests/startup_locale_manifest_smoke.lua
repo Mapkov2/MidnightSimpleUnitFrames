@@ -135,7 +135,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- Classic 7,981,166 -> 7,983,199.
         -- 2026-10-19: the Edit Mode toolbar keeps its Auras switch without the advanced menu (+150 LF
         -- bytes on every client); the Mainline ceiling 10,107,385 -> 10,107,535 (exact +150).
-        assert(bytes < (suffix == "Mainline" and 10107535 or 7983199),
+        -- 2026-10-19: the Options unit and group previews paint a health gradient / match-health background from the
+        -- previewed health (scene form Health.PaintSampleBackground, the unit and group scene calls): +1,697 core LF bytes
+        -- on every client, Mainline/ruRU 10,106,459 -> 10,108,156, TBC/ruRU 7,979,162 -> 7,980,859. Both ceilings add
+        -- exactly that delta: Mainline 10,107,535 -> 10,109,232; Classic 7,983,199 -> 7,984,896. Live paths unchanged.
+        assert(bytes < (suffix == "Mainline" and 10109232 or 7984896),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

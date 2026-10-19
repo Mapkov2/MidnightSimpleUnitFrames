@@ -931,4 +931,9 @@ classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavo
 -	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Vanilla	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Vanilla	nightly
 -	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} TBC	Restored unit preview marker, reminder, Bounds or absorb sample regressed: TBC	nightly
 -	lua	tools/tests/unit_preview_review_features_smoke.lua	{root} Mists	Restored unit preview marker, reminder, Bounds or absorb sample regressed: Mists	nightly
+-	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Mainline	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Mainline
+-	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Forever	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Forever	nightly
+-	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Vanilla	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Vanilla	nightly
+-	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} TBC	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): TBC	nightly
+-	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Mists	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Mists	nightly
 -	lua	tools/tests/aura_unit_sensor_owner_split_smoke.lua	{root}	Aura unit sensor owner split smoke failed

@@ -1091,6 +1091,31 @@ end
 
 ExportPublic("MSUF_UFCore_RefreshHealthBarColor", Health.RefreshColor)
 
+--- Scene form of the dynamic health background (health gradient, match health): the colour of the health the sample
+--- bar shows. The live refreshers read the unit's own health percent, or paint a fixed fallback tint when the frame
+--- holds no unit; a scene frame stands for a sample and asks the client nothing.
+function Health.PaintSampleBackground(frame, fraction)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health
+  if not health then return false end
+  local mode = BackgroundColorMode(health)
+  if mode == "match_health" then
+    local refresh = RefreshHealthBarBackgroundColor or (MSUF.Bars and MSUF.Bars.RefreshHealthBarBackgroundColor)
+    return refresh ~= nil and refresh(frame, "MSUF_SAMPLE", nil, nil, nil, nil, true) == true
+  end
+  if mode ~= "health_gradient" then return false end
+  local texture = frame.hpBarBG or frame.healthBg or frame.bg
+  if not texture then return false end
+  local r, g, b = C.PreviewHealthGradientColor(health, fraction)
+  local background = health.background
+  local a = background and background.a
+  if type(a) ~= "number" then a = spec.backgroundAlpha or 0.9 end
+  if a < 0 then a = 0 elseif a > 1 then a = 1 end
+  texture:SetVertexColor(r, g, b, a)
+  frame._msufHPBgR, frame._msufHPBgG, frame._msufHPBgB, frame._msufHPBgA = r, g, b, a
+  return true
+end
+
 --- Scene form: the health values, background and colours from a sample, with no client query.
 function Health.PaintSample(frame, unit, hp, hpMax)
   local bar = frame and frame.hpBar
@@ -1105,14 +1130,17 @@ function Health.PaintSample(frame, unit, hp, hpMax)
     C.ApplyStatusColor(bar, r, g, b)
     frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB = r, g, b
     frame._msufGradStashAt = GetTime and GetTime() or 0
-    local enabled = frame._msufHealthRuntimeColorEnabled
-    frame._msufHealthRuntimeColorEnabled = false
-    ApplyRuntimeColor(frame, "MSUF_SAMPLE", unit, hp, hpMax, true, nil, true)
-    frame._msufHealthRuntimeColorEnabled = enabled
   else
-    ApplyRuntimeColor(frame, "MSUF_SAMPLE", unit, hp, hpMax, true, nil, true)
+    -- The background is painted from the sample below: its live refresh reads the unit's own health.
+    ApplyRuntimeColor(frame, "MSUF_SAMPLE", unit, hp, hpMax, true, true, true)
   end
-  if ApplyBackgrounds then ApplyBackgrounds(frame, true, false, true) end
+  if ApplyBackgrounds then
+    local dynamic = frame._msufHealthBgDynamic
+    frame._msufHealthBgDynamic = false
+    ApplyBackgrounds(frame, true, false, true)
+    frame._msufHealthBgDynamic = dynamic
+  end
+  Health.PaintSampleBackground(frame, hp / hpMax)
   return true
 end
 

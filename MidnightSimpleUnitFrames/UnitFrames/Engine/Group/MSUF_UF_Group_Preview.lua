@@ -1573,6 +1573,11 @@ local function ApplyPreviewData(frame, slot, kind)
   local hpMax = sample and sample.hpMax or 100
   local hp = floor(hpPct * hpMax + 0.5)
   SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true, PreviewHealthColor(frame, class, hpPct))
+  if activeScene then
+    -- A scene frame holds no unit: the dynamic background (health gradient, match health) takes the sample's health.
+    local health = MSUF.UF.elements and MSUF.UF.elements.Health
+    if health and health.PaintSampleBackground then health.PaintSampleBackground(frame, hp / hpMax) end
+  end
 
   local powerMax = sample and sample.powerMax or 100
   local power = sample and sample.powerPct and floor(sample.powerPct * powerMax + 0.5) or min(powerMax, 35 + ((index * 11) % 55))

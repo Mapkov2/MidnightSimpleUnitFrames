@@ -181,7 +181,9 @@ inline text) and `portrait` (the picture an NPC stands in with in a 2D portrait)
 (`_msufUnitState`, the cache every identity reader of the engine consults first: exists, dead, connected, player, class,
 NPC kind, tapped, boss disposition) is the sample, with a dispatch token the readers accept. Inside the window the
 engine's own routines run on the sample: the health colour pass (`Health.PaintSample`, whose gradient takes the sample's
-fraction), the power colour, the name and its colour, the text slots and their colours, the portrait art and its border
+fraction; the dynamic background, health gradient or match health, is its scene form `Health.PaintSampleBackground`, also
+run by the group scene, because the live refreshers read the unit's own health percent or paint a fixed tint without a
+unit), the power colour, the name and its colour, the text slots and their colours, the portrait art and its border
 (`Portrait.SceneApply`, `Portrait.PaintSample` for the classification art), the prediction bars
 (`Prediction.PaintSample`), the status icons and identity texts (`Runtime.PaintSampleIndicators`,
 `Runtime.PaintSampleIdentityTexts`, the live textures, packs and symbols), and the elements that have a sample mode of
