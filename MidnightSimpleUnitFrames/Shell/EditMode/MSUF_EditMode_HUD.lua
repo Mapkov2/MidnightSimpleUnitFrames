@@ -532,14 +532,16 @@ local function RefreshPreviewCluster()
     DockUI.advancedHUD = advanced
     DockUI.horizontalWidth = advanced and 1480 or DOCK_HORIZONTAL_W
     local items = { previewBtn, previewAddonSlot }
-    for _, button in ipairs({ previewAnimBtn, auraBtn }) do
-        if advanced then
-            button:Show()
-            items[#items + 1] = button
-        else
-            button:Hide()
-        end
+    if advanced then
+        previewAnimBtn:Show()
+        items[#items + 1] = previewAnimBtn
+    else
+        previewAnimBtn:Hide()
     end
+    -- Auras stays in every toolbar: it is the only switch for aura previews in Edit Mode,
+    -- so a profile that turned them off must be able to turn them back on.
+    auraBtn:Show()
+    items[#items + 1] = auraBtn
     FinishCluster(DockUI.previewCluster, items, CLUSTER_H, -7)
     ApplyDockLayout()
 end

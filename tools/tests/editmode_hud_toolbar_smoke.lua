@@ -120,6 +120,21 @@ local function Run(flavor)
         Check((db.auras3.shared.showInEditMode == true) ~= before, context .. ": Auras did not toggle aura previews")
     end
 
+    -- Without the advanced menu the toolbar still offers Auras (a profile that turned aura
+    -- previews off must be able to turn them back on); Motion stays advanced-only.
+    db.general.hideAdvancedMenu = true
+    EM2.HUD.RefreshControls(true)
+    local basicAuras, basicMotion = Button(world, hud, "Auras"), Button(world, hud, "Motion")
+    if Check(basicAuras ~= nil and basicAuras.shown == true, context .. ": Auras missing in the basic toolbar") then
+        local before = db.auras3.shared.showInEditMode == true
+        Click(basicAuras)
+        Check((db.auras3.shared.showInEditMode == true) ~= before, context .. ": basic Auras did not toggle aura previews")
+        Click(basicAuras)
+    end
+    Check(basicMotion == nil or basicMotion.shown ~= true, context .. ": Motion shown in the basic toolbar")
+    db.general.hideAdvancedMenu = false
+    EM2.HUD.RefreshControls(true)
+
     -- Snap, grid, background.
     local snap = Button(world, hud, "Snap")
     if Check(snap ~= nil, context .. ": Snap missing") then

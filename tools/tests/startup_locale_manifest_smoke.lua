@@ -133,7 +133,9 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- Measured core LF delta: Mainline +2,762, Classic +2,033; Mainline/ruRU 10,104,462 -> 10,107,224,
         -- TBC/ruRU 7,976,916 -> 7,978,949. Ceilings add exactly that: Mainline 10,104,623 -> 10,107,385;
         -- Classic 7,981,166 -> 7,983,199.
-        assert(bytes < (suffix == "Mainline" and 10107385 or 7983199),
+        -- 2026-10-19: the Edit Mode toolbar keeps its Auras switch without the advanced menu (+150 LF
+        -- bytes on every client); the Mainline ceiling 10,107,385 -> 10,107,535 (exact +150).
+        assert(bytes < (suffix == "Mainline" and 10107535 or 7983199),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
