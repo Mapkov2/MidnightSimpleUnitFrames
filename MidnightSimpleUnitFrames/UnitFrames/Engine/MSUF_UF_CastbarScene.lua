@@ -143,6 +143,10 @@ function Surface.Paint(scene)
   if sample.interrupted then
     scene.paintInterrupt(scene.interruptRuntime, frame, 1, false, sample.interruptLabel, nil, nil, nil, true)
   end
+  -- The live layout gives the bar its configured castbar strata (often LOW); a preview draws inside
+  -- its owner, or the Options window (FULLSCREEN_DIALOG) covers it.
+  local owner = scene.root.parent
+  frame:SetFrameStrata(owner:GetFrameStrata())
   frame:Show()
 end
 

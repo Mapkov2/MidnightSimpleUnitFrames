@@ -121,6 +121,9 @@ for _, unit in ipairs(UNITS) do
             Check("A1", (f.MSUF_isChanneled == true) == (kind == "channel"), label .. ": wrong channel state")
             Check("A1", (f.isEmpower == true) == (kind == "empowered"), label .. ": wrong empower state")
             Check("A22", f:GetParent() == preview.castRow and f.statusBar:IsShown(), label .. ": scene not inside the cast row")
+            -- The live layout hands the bar its unit frame strata (LOW/MEDIUM/HIGH); inside the Options window
+            -- (FULLSCREEN_DIALOG) that would draw it behind the window.
+            Check("A22b", f:GetFrameStrata() == preview.castRow:GetFrameStrata(), label .. ": scene drawn outside the Options strata")
             local width = Resolve(unit)
             Check("A22", Near(f:GetWidth(), width, 1), label .. ": width " .. tostring(f:GetWidth()) .. " is not the configured " .. tostring(width))
             local lo, hi = f.statusBar:GetMinMaxValues()
