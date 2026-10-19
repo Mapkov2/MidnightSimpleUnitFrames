@@ -211,40 +211,18 @@ end
 
 A3._GetGroupSlotsRootConfig = GetGroupSlotsRootConfig
 
--- Unit sensors already need a native owner. Share its cache with compatible
--- normal lanes, preserving the historical sensor root and each visual's layer.
--- Special lanes retain their own alias, portrait, priority or enchant lifecycle.
-local function AttachUnitLanes(cfg, sensorRoot)
-    if not sensorRoot then return nil end
-    local flow, slots, owned
-    local parts = { sensorRoot._msufA3StructuralSignature }
-    local lanes = cfg.lanes
-    for i = 1, #A3._normalAuraLaneOrder do
-        local lane = lanes and lanes[A3._normalAuraLaneOrder[i]]
-        if lane and lane.enabled == true and lane.identityCandidateMode == sensorRoot.identityCandidateMode
-            and lane.portraitOverlay ~= true and lane.customPriority ~= true
-            and lane.weaponEnchants ~= true and not lane.sourceSpellIDs
-            and (lane.max == 1 or not flow) then
-            if lane.max == 1 then
-                slots = slots or {}
-                slots[#slots + 1] = lane
-            else
-                flow = lane
-            end
-            owned = owned or {}
-            owned[lane.rootKey] = true
-            parts[#parts + 1] = lane.rootKey .. ":" .. lane._msufA3StructuralSignature .. "\030" .. tostring(lane.alpha)
-        end
-    end
-    if not owned then return sensorRoot end
-    return { kind = "unitAuraOwner", rootKey = sensorRoot.rootKey, unit = sensorRoot.unit,
-        enabled = true, sensorRoot = sensorRoot, flowLane = flow, slotLanes = slots,
-        identityCandidateMode = sensorRoot.identityCandidateMode, ownedLaneKeys = owned,
-        _msufA3StructuralSignature = table_concat(parts, "\028") }
-end
-
 -- Apply, refresh and reuse validation consume the same cold owner plan. This
 -- prevents a lane merged at creation from acquiring a second update lifecycle.
+--
+-- Unit-frame Dispel/Purge sensors own their native container alone; no normal
+-- lane is merged into it. Blizzard_AuraContainer stops processing a container
+-- for the rest of the session once one of its update passes aborts
+-- (DirtyPhaseMixin, Blizzard_SharedXML/MixinUtil.lua), so a shared owner let a
+-- failure on the sensor side take the Buff lane down with it until /reload
+-- (2026-10-19 target buff report). Blizzard's own TargetFrame, EllesmereUI and
+-- EQoL keep buffs apart from dispel visuals too. The cost is one more native
+-- owner per unit frame with such a sensor; a full parse repeats a filter
+-- query only where both owners use the same string (plain Purge HELPFUL).
 local function GetNativeOwnerPlan(cfg)
     if cfg.nativeOwnerPlan then return cfg.nativeOwnerPlan end
     local group = cfg.group == true
@@ -259,9 +237,9 @@ local function GetNativeOwnerPlan(cfg)
             if tertiary then owners[tertiary.rootKey] = tertiary end
         end
     else
-        owners.DispelSensor = AttachUnitLanes(cfg, GetDispelSensorRootConfig(cfg))
-        owners.DispelSensorNeutral = AttachUnitLanes(cfg, GetUnitDispelSensorRootConfig(cfg))
-        owners.DispelSensorHostile = AttachUnitLanes(cfg, GetUnitDispelSensorRootConfig(cfg, "hostile"))
+        owners.DispelSensor = GetDispelSensorRootConfig(cfg)
+        owners.DispelSensorNeutral = GetUnitDispelSensorRootConfig(cfg)
+        owners.DispelSensorHostile = GetUnitDispelSensorRootConfig(cfg, "hostile")
     end
     for _, owner in pairs(owners) do
         for key in pairs(owner.ownedLaneKeys or {}) do plan.ownedLaneKeys[key] = true end
