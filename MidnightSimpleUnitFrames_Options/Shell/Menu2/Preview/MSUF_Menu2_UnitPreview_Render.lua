@@ -813,7 +813,9 @@ function Stage.ResolveInputs(st)
     sample.player = data.isPlayer == true
     sample.reaction = data.reactionKind
     sample.level = data.level == "??" and -1 or tonumber(data.level)
-    sample.absorb = data.absorb and data.absorb > 0 and data.absorb / (data.hpMax or MSUF.UF.UnitScene.HEALTH_MAX) or 0.10
+    sample.absorb = data.absorb and data.absorb > 0
+        and data.absorb / (data.hpMax or MSUF.UF.UnitScene.HEALTH_MAX)
+        or MSUF.UF.UnitScene.SAMPLES[key].absorb or 0
     sample.powerType = data.powerType or MSUF.UFPreview.Model.POWER_TYPES[data.powerToken]
     if key == "target" and Deps.LiveUnitData then
         local inline = Deps.LiveUnitData("targettarget")

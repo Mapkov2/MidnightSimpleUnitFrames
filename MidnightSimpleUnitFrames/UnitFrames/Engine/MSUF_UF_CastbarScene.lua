@@ -23,7 +23,7 @@ function Surface.Create(scene)
     return known and known[id]
   end)
   if C.Empower.CreateSampleLayout then scene.layoutEmpower = C.Empower.CreateSampleLayout() end
-  scene.paintInterrupt = C.Runtime.CreateInterruptPainter({ INTERRUPTED = INTERRUPTED })
+  scene.paintInterrupt = C.Runtime.ApplyInterruptValues
   scene.interruptRuntime = { ReleaseActive = Noop, SetPhase = Noop, Phase = C.Runtime.Phase }
   scene.kickStatus = { resolved = true, sample = true }
   local frames = MSUF.Castbars.Frames

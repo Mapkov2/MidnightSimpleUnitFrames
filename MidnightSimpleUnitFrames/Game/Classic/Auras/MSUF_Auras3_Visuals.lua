@@ -206,6 +206,11 @@ function A3.ApplyAuraDispelShape(border, icon, size, shape)
     return true
 end
 
+--- Previews draw the stock dispel atlas with the same padding as the Retail native border.
+function A3.NativeAuraDispelBorderPadding(size)
+    return math_max(1, math_floor(((tonumber(size) or 24) / 6) + 0.5))
+end
+
 --- Menu and Edit Mode previews: the shaped geometry plus the sample Magic colour.
 function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
     if mode == nil or mode == "OFF" then return false end

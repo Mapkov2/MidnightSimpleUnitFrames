@@ -149,7 +149,7 @@ Check("C15-A1",function()
  local cfg={purge=true,purgeR=0.3,purgeG=0.8,purgeB=0.1};frame._msufBorderRuntimeCfg=cfg
  assert(active(frame,cfg),"Classic purge does not enable border element")
  local color,thickness
- local apply=Compile(Slice(file,"local function ApplyHighlightBorder","function Borders.Create").."return ApplyHighlightBorder",{
+ local apply=Compile(Slice(file,"local function ApplyHighlightBorder","-- A menu's boss-target sample").."return ApplyHighlightBorder",{
  IS_CLASSIC=true,RuntimeHighlightBorderLevel=function()return 35 end,
  PurgeColor=function(c)return c.purgeR,c.purgeG,c.purgeB,1 end,
  ApplyResolvedBorder=function(_,_,key,_,width,r,g,b)color={r,g,b};thickness=width;return key=="purge"end})()

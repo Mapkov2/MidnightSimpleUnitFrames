@@ -237,7 +237,7 @@ local function ScanLua(relative, src)
             and nx2 and nx2.value == "(" and not (prev and prev.value == "local") then
             AddDef(nx.value, where(t))
         elseif t.kind == "name" and t.value:match(PREFIX) and nx and nx.value == "=" and not locals[t.value]
-            and not (prev and (prev.value == "." or prev.value == ":" or prev.value == "local" or prev.value == ",")) then
+            and not (prev and (prev.value == "." or prev.value == ":" or prev.value == "local" or prev.value == "," or prev.value == "{")) then
             AddDef(t.value, where(t))
         elseif t.kind == "name" and IsExportCall(t.value) and nx and nx.value == "(" and nx2 and nx2.kind == "string" then
             local close, args = CallArgs(tokens, k + 1, n)

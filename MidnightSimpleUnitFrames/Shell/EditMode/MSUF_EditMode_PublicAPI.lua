@@ -26,7 +26,7 @@ local function Key(owner, id)
 end
 
 local function Finite(value)
-    if _G.issecretvalue and _G.issecretvalue(value) then return false end
+    if issecretvalue and issecretvalue(value) then return false end
     return type(value) == "number" and value == value
         and value > -math.huge and value < math.huge
 end
@@ -444,7 +444,7 @@ function External.CaptureState(key) return Capture(records[key]) end
 function External.GetPositionFrame(key)
     local record = records[key]
     local frame = record and Frame(record)
-    if _G.issecretvalue and _G.issecretvalue(frame) then return nil end
+    if issecretvalue and issecretvalue(frame) then return nil end
     if type(frame) ~= "table" and type(frame) ~= "userdata" then return nil end
     if frame.IsForbidden and frame:IsForbidden() then return nil end
     if not (frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom

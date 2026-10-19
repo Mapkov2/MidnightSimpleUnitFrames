@@ -459,10 +459,9 @@ function Scene:RefreshData(layout)
     local gf = MSUF.GF
     if gf and gf.PreviewUnitFrameAuras then gf.PreviewUnitFrameAuras(frame, unit, spec, 1) end
     local auras = MSUF.MSUF_Auras3
-    local effects = auras and auras.Runtime and auras.Runtime.EffectPreview
-    if effects and effects.PaintScene then
+    if auras and auras.PaintSceneEffects then
       local cfg = auras.ResolveAuraPreviewConfig(frame, unit, spec)
-      effects.PaintScene(frame, cfg and cfg.sensors)
+      auras.PaintSceneEffects(frame, cfg and cfg.sensors)
     elseif auras and auras.ClassicVisuals then
       local cfg = auras.ResolveAuraPreviewConfig(frame, unit, spec)
       local visual, native = cfg and cfg.visual, auras.ClassicVisuals

@@ -200,5 +200,6 @@ factories.Facade(addonName, MSUF, A3, UF, ExportPublic, {
     Schema = Schema,
     UnitConfig = UnitConfig,
     ConfigValues = ConfigValues,
+    CustomConfig = CustomConfig,
 })
 MSUF.Auras3RuntimeFactories = nil

@@ -108,8 +108,12 @@ if not only or only == "absorb" then
    selected = key
    env.MSUF_DB.general.enableAbsorbBar = true
    local body = Refresh()
-   assert(box._unitScene:Sample().absorb == .10 and body._msufTextRuntime.healthAbsorb == 90000,
-    key .. ": zero live absorb blanked the sample shield")
+   -- A zero live shield falls back to that unit's own sample (Pet and Arena samples carry none).
+   local expected = core.UF.UnitScene.SAMPLES[key].absorb or 0
+   assert(box._unitScene:Sample().absorb == expected
+    and body._msufTextRuntime.healthAbsorb == math.floor(900000 * expected + 0.5),
+    key .. ": zero live absorb did not fall back to the unit sample")
+   assert(key ~= "player" or expected == .10, "player sample shield missing")
    amount = 45000
    body = Refresh()
    assert(body._msufTextRuntime.healthAbsorb == amount, key .. ": positive live absorb lost its exact value")

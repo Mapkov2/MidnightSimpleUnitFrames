@@ -417,7 +417,16 @@ local function Replay(parent)
     for i, item in ipairs(sharedAnchors) do
         local editor, opts, ctx = unpack(item)
         if not parent then
-            assert(editor.box._msuf2ControlSchema.kind == "customAnchor", "anchor editor declaration " .. tostring(opts.controlDomain))
+            local declaration = assert(editor.box._msuf2ControlSchema, "anchor editor declaration missing")
+            local record = editor.box._msuf2RuntimeControlRecord
+            if opts.controlDomain == "group" and record then
+                -- Group Layout owns this registered input after the shared editor builds it.
+                assert(declaration.id == record.controlId and declaration.kind == record.kind
+                    and declaration.scope == "group" and declaration.applyDomain == "rebuild"
+                    and declaration.owner == editor.box, "group anchor input owner drift")
+            else
+                assert(declaration.kind == "customAnchor", "anchor editor declaration " .. tostring(opts.controlDomain))
+            end
         end
         -- Unit editors were already driven through their real page controls above.
         if opts.controlDomain ~= "unit" then

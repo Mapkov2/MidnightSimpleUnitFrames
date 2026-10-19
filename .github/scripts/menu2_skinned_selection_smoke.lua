@@ -39,6 +39,7 @@ local function NewButton(role)
         function texture:Show() self.shown = true end
         function texture:Hide() self.shown = false end
         function texture:IsShown() return self.shown end
+        function texture:SetShown(shown) self.shown = shown and true or false end
         self.textures[#self.textures + 1] = texture
         return texture
     end

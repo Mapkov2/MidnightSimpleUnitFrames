@@ -1041,7 +1041,7 @@ Kinds.Bind("external", BuildDrag, ApplyExternalStrategy, FinishExternalDrag)
 --- and leave pixel rounding, preview, save and rollback with the drag owner.
 function Ticker.SetExternalPosition(key, axis, value)
     if IsConfigCombatLocked() or not MSUF.EditModeAPI.IsActive() or activeDrag then return false end
-    if (_G.issecretvalue and _G.issecretvalue(value)) or (axis ~= "x" and axis ~= "y") then return false end
+    if (issecretvalue and issecretvalue(value)) or (axis ~= "x" and axis ~= "y") then return false end
     value = tonumber(value)
     if not value or value ~= value or value <= -math.huge or value >= math.huge then return false end
     local external, undo = EM2.ExternalElements, EM2.Undo

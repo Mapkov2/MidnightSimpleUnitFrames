@@ -262,6 +262,9 @@ function Methods:GetBlendMode() return self.blendMode end
 function Methods:SetDesaturated(desaturated) self.desaturated = desaturated end
 function Methods:SetDesaturation(amount) self.desaturation = amount end
 function Methods:SetRotation(rotation) self.rotation = rotation end
+function Methods:SetStartPoint(...) self.startPoint = { ... } end
+function Methods:SetEndPoint(...) self.endPoint = { ... } end
+function Methods:SetThickness(value) self.thickness = value end
 function Methods:SetAtlas(atlas) self.atlas = atlas end
 function Methods:GetAtlas() return self.atlas end
 function Methods:SetGradient(orientation, from, to)

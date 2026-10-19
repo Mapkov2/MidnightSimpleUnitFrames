@@ -93,7 +93,13 @@ Case("first visible refresh preserves live config identities", function()
     box.canvas:SetSize(600, 260)
     preview.Refresh(box, "SHOW")
     Unchanged(mw, config, spec, before)
-    Check(box._msufPreviewScene.runtimeSpec == spec, "visible preview did not use the published spec")
+    local scene = assert(box._unitScene, "visible preview has no engine scene")
+    local painted = scene:Frame().MSUFSpec
+    Check(painted and painted ~= spec and painted.portrait ~= spec.portrait,
+        "visible preview did not compile an isolated scene spec")
+    Check(painted.width == spec.width and painted.height == spec.height,
+        "scene compilation lost the published frame dimensions")
+    Check(config.specs.player == spec, "scene replaced the published live spec")
     Check(config.dirty == true and mw.core.UF.pendingApply.player == true, "refresh consumed deferred runtime work")
 end)
 

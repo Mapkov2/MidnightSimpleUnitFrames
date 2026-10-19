@@ -52,6 +52,20 @@ end
 function Parity.Run(cfg)
     local root = cfg.root:gsub("\\", "/"):gsub("/$", "")
     local area, flavor = cfg.area, cfg.flavor
+    local integrated = area == "dispel_overlay" or area == "dispel_symbol" or area == "boss_target_highlight"
+    local sharedParent = arg[3] == "--shared-parent"
+    assert(not sharedParent or (integrated and not cfg.capture), "invalid shared-parent replay")
+    local parentPath, parentName
+    if sharedParent then
+        parentName = area == "boss_target_highlight" and "MSUF_Menu2_UnitSections.lua" or "MSUF_Menu2_UnitDispel.lua"
+        local original = "096d5e0e0ffc2c386189932cecb946435db09bc3:MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/" .. parentName
+        local pipe = assert(io.popen('git -C "' .. root .. '" show ' .. original, "r"))
+        local source = pipe:read("*a")
+        pipe:close()
+        assert(#source > 1000, "authentic section parent unavailable")
+        parentPath = root .. "/.checks/shared-parent-" .. area .. "-" .. flavor .. ".lua"
+        Write(parentPath, source)
+    end
     local sourceRoot = (os.getenv("MSUF_SECTION_SOURCE_ROOT") or root):gsub("\\", "/"):gsub("/$", "")
     local captureOutput = os.getenv("MSUF_SECTION_CAPTURE_OUTPUT")
     if cfg.capture then
@@ -83,6 +97,13 @@ function Parity.Run(cfg)
     end
     local mw = World.Open(sourceRoot, flavor, { clientScriptBindings = true, nativeButtonLifecycle = true,
         beforeCore = function(world)
+            if sharedParent then
+                local load = world.LoadFile
+                world.LoadFile = function(self, path, ...)
+                    if path:sub(-#parentName) == parentName then path = parentPath end
+                    return load(self, path, ...)
+                end
+            end
             world.widgets.Methods.GetCenter = function(frame)
                 return (tonumber(frame.left) or 0) + (tonumber(frame.width) or 0) / 2,
                     (tonumber(frame.bottom) or 0) + (tonumber(frame.height) or 0) / 2
@@ -213,7 +234,7 @@ function Parity.Run(cfg)
                     values or {}, command and command.get and command.get() or "", meta, widget and widget._msuf2ExactTargetContracts or {},
                     widget and widget._msuf2ContextColorOptions or {}, tooltipLines, widget and widget:IsShown() or "",
                     widget and widget:IsEnabled() or "")
-                if not cfg.capture and widget and SectionOf(widget, entry) then
+                if not cfg.capture and not sharedParent and widget and SectionOf(widget, entry) then
                     local spec = Check(widget._msuf2ControlSchema, "control has no schema declaration: " .. record.controlId)
                     Check(spec.id == record.controlId and spec.scope and spec.applyDomain, "declaration identity: " .. record.controlId)
                     Check(spec.get or spec.action or (spec.unit and spec.key and spec.reason),
@@ -221,7 +242,7 @@ function Parity.Run(cfg)
                 end
             end
         end
-        if not cfg.capture then
+        if not cfg.capture and not sharedParent then
             for _, frame in ipairs(own) do
                 if frame._msuf2ContextColorOptions then
                     Check(frame._msuf2ControlSchema, "color shortcut has no schema declaration in " .. page)
@@ -427,6 +448,10 @@ function Parity.Run(cfg)
     end
     local gapPath = directory .. "/gaps/" .. name
     local gapResult = gaps.Result()
+    if sharedParent then
+        io.write("SHARED_PARENT_RECEIPT\n", result, "END_SHARED_PARENT_RECEIPT\n")
+        return
+    end
     if cfg.capture then
         assert(not Read(path), "section receipts are immutable once captured: " .. path)
         Write(path, result)
@@ -451,6 +476,19 @@ function Parity.Run(cfg)
         if semanticResult ~= semanticExpected then
             Write(root .. "/.checks/" .. area .. "-" .. flavor .. "-semantics-actual.tsv", semanticResult)
             error("section defaults/reset/alignment drifted from authentic original builders: " .. area .. " " .. flavor)
+        end
+        if integrated then
+            -- Compare the authentic pre-schema builder under the same current widgets and scenes.
+            -- Every original control, layout row, behavior and state remains in this comparison;
+            -- shared finite motion is observed on both sides rather than erased or recaptured.
+            local command = '"' .. assert(arg[-1]) .. '" "' .. root .. '/tools/tests/menu_' .. area
+                .. '_inventory_smoke.lua" "' .. root .. '" ' .. flavor .. ' --shared-parent'
+            if package.config:sub(1, 1) == "\\" then command = '"' .. command .. '"' end
+            local pipe = assert(io.popen(command, "r"))
+            local output = pipe:read("*a"):gsub("\r\n", "\n")
+            pipe:close()
+            expected = assert(output:match("^SHARED_PARENT_RECEIPT\n(.*)END_SHARED_PARENT_RECEIPT\n$"),
+                "authentic shared-parent replay failed: " .. output)
         end
         if result ~= expected then
             Write(root .. "/.checks/" .. area .. "-" .. flavor .. "-actual.tsv", result)

@@ -96,13 +96,29 @@ local mw = World.Open(root, flavor, { clientScriptBindings = true, nativeButtonL
 local M, env, core = mw.M, mw.env, mw.core
 local F, GP = core.ProfileFields, M.GroupPage
 local ownedRows = {}
+local sharedDeclarations = {}
 if review and not parent then
     local schema, build, label = M.ControlSchema, M.ControlSchema.Build, M.Widgets.LabelAt
+    local function RememberShared(widget, spec)
+        sharedDeclarations[widget] = { spec.id, spec.kind, spec.scope, spec.applyDomain, spec.owner }
+    end
+    local custom = schema.Custom
+    schema.Custom = function(widget, spec)
+        if debug.getinfo(2, "S").source:match("[^/\\]+$") == "MSUF_Menu2_UnitSectionShared.lua" then
+            RememberShared(widget, spec)
+        end
+        return custom(widget, spec)
+    end
     local rowKinds = { switch = "toggle", sectionSwitch = "toggle", flowToggle = "toggle",
         scopebar = "segment", topButton = "button", roleButton = "button" }
     schema.Build = function(ctx, owner, rows, options, refs)
+        local shared = debug.getinfo(2, "S").source:match("[^/\\]+$") == "MSUF_Menu2_UnitSectionShared.lua"
         local controls = build(ctx, owner, rows, options, refs)
-        for _, row in ipairs(rows) do ownedRows[assert(controls[row[2]])] = rowKinds[row[1]] or row[1] end
+        for _, row in ipairs(rows) do
+            local widget = assert(controls[row[2]])
+            ownedRows[widget] = rowKinds[row[1]] or row[1]
+            if shared and widget._msuf2ControlSchema then RememberShared(widget, widget._msuf2ControlSchema) end
+        end
         return controls
     end
     M.Widgets.LabelAt = function(...)
@@ -111,6 +127,7 @@ if review and not parent then
         if sources[caller] then ownedRows[widget] = "font" end
         return widget
     end
+
 end
 local function CopyDB()
     local db = env.MSUF_DB
@@ -341,7 +358,7 @@ if review then
         alphaexcludetextportrait = true, alphaexcludepredictionbars = true }
     local function Declaration(w, page, seen)
         -- Group.lua owns Portrait/Text; those sections still participate in parity.
-        if page == "gf_layout" and not migrated[Owned(w, page)] then return end
+        if page == "gf_layout" and not migrated[Owned(w, page)] then return true end
         local spec, record = w._msuf2ControlSchema, w._msuf2RuntimeControlRecord
         -- Every recorded owner in this batch, including navigation and ephemeral
         -- controls, must declare itself. Unrecorded regions use their composite owner.
@@ -350,6 +367,16 @@ if review then
         end
         if not spec then return end
         local id, kind, scope, domain = spec.id, spec.kind, spec.scope, spec.applyDomain
+        local shared = sharedDeclarations[w]
+        if shared and not id:match("^menu2%.") then
+            -- A sibling's shared helper declares this chrome on both sides of the
+            -- replay. Preserve its exact metadata/owner; batch-owned rows below
+            -- still require the full page namespace and exact chrome inventory.
+            assert(id == shared[1] and kind == shared[2] and scope == shared[3]
+                and domain == shared[4] and spec.owner == shared[5] and spec.owner == w,
+                "shared chrome declaration overwritten: " .. id)
+            return true
+        end
         assert(type(id) == "string" and id:match("^menu2%." .. page .. "%.[%w_%.]+$")
             and not id:find("..", 1, true) and not id:match("%.$"), "unreadable declaration ID: " .. tostring(id))
         assert(not seen[id], "duplicate declaration ID: " .. id)
@@ -362,6 +389,9 @@ if review then
         assert(scope == expectedScope, "schema scope/section mismatch: " .. id)
         local expectedDomain
         if id:match("%.section%.[%w_]+%.expanded$") then expectedDomain = "sectionNavigation"
+        elseif id == "menu2.gf_layout.group.growth.title" then
+            assert(kind == "font" and spec.owner == w, "growth title owner drift")
+            expectedDomain = "layout"
         elseif kind == "text" or kind == "font" then expectedDomain = "presentation"
         elseif kind == "card" or kind == "growthTiles" then expectedDomain = "layout"
         elseif id:match("%.field%.growth%.option%.") then expectedDomain = "layout"
@@ -390,7 +420,7 @@ if review then
     local chromeIds = {
         gf_layout = [[
 basics.behavior_title basics.offline_title basics.providerHelp basics.raidManagerHelp geometry.grid geometry.growth
-geometry.rules geometry.visibility_help healerMana.position_help healerMana.role_help pets.position_help
+geometry.rules geometry.visibility_help group.growth.title group.growth.tiles healerMana.position_help healerMana.role_help pets.position_help
 scaling.appearance scaling.modeCard scaling.rules scaling.sizeCard scaling.size_help scaling.tier10.help
 scaling.tier20.help scaling.tier25.help scaling.tier40.help section.general.expanded.colors
 section.healer_mana.expanded.colors section.name_bar.expanded.colors sizingtier.help.tier10 sizingtier.help.tier20
@@ -453,15 +483,16 @@ blessingpriorities.role.Healer blessingpriorities.role.Tank buffcoverage.help]]
                     Add("search:" .. page .. ":" .. size, w, w._msuf2SearchMeta, w._msuf2StableSearchLabel,
                         w._msuf2SearchText, Workspace(w), w._msuf2ExactTargetKinds, w._msuf2ExactTargetContracts)
                     if not parent then
-                        Declaration(w, page, seenDeclarations)
+                        local outsideBatchChrome = Declaration(w, page, seenDeclarations)
                         local spec = w._msuf2ControlSchema
-                        if spec and not w._msuf2RuntimeControlRecord then chrome[#chrome + 1] = spec.id end
+                        if spec and not outsideBatchChrome and not w._msuf2RuntimeControlRecord then chrome[#chrome + 1] = spec.id end
                     end
                 end
             end
             if not parent then
                 table.sort(chrome)
-                assert(table.concat(chrome, "\n") == expectedChrome[page], "chrome/help declaration IDs drift: " .. page)
+                assert(table.concat(chrome, "\n") == expectedChrome[page], "chrome/help declaration IDs drift: " .. page
+                    .. "\nexpected\n" .. expectedChrome[page] .. "\nactual\n" .. table.concat(chrome, "\n"))
                 if page == "gf_priority" then
                     for i = 1, 5 do
                         local row = seenDeclarations["menu2.gf_priority.pins.row." .. i]

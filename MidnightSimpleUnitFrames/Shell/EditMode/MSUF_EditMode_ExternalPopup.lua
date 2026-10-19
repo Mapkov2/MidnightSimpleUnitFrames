@@ -248,7 +248,10 @@ function Popup.Sync()
         child:EnableMouse(enabled)
         if enabled then child:Enable() else child:Disable() end
     end
-    if not enabled then frame.xBox:ClearFocus(); frame.yBox:ClearFocus() end
+    if not enabled then
+        frame.xBox:ClearFocus()
+        frame.yBox:ClearFocus()
+    end
     local set = LayoutControls(frame._key)
     SyncControlValues(set, frame._key)
     local extra = set and set.height or 0

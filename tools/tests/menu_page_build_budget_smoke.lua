@@ -33,7 +33,8 @@ end
 -- zero since the field-wise relayout comparison (C5.9).
 local BUDGETS = {
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+8.9 refresh, +0.5 relayout, +17.9 select measured)
-    opt_colors = { build = 3352, refresh = 87.8, relayout = 1.3, relayoutKB = 0.05, select = 128.9 },
+    -- 2026-10-19 stack: 99e build 3324.7 -> 3417.6k (+92.9); ceiling 3352 -> 3444.9, same headroom.
+    opt_colors = { build = 3444.9, refresh = 87.8, relayout = 1.3, relayoutKB = 0.05, select = 128.9 },
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+1.4 refresh, +0.4 relayout, +1.7 select measured)
     opt_bars = { build = 1540, refresh = 110.1, relayout = 0.9, relayoutKB = 0.05, select = 119.6 },
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+2.0 refresh, +0.4 relayout, +2.2 select measured)

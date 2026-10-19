@@ -66,7 +66,7 @@ Check("MT8-A5",function()
  local e={C_SpellBook={IsSpellKnownOrInSpellBook=function(id)return id==1219723 end},issecretvalue=function()return false end,
  ActiveSpellID=function()return 356995 end,PlainNumber=function(n)return n end,CHANNEL_TICK_DATA={[356995]={ticks=4,modSpell=1219723,modTicks=5}},MAX_AUTO_TICK_COUNT=12}
  e._G=e
- local f=Compile(Slice("Castbars/MSUF_CastbarChannelTicks.lua","local function PlayerKnowsSpell","local function TickConfig").."return AutomaticMarkerLayout",e)()
+ local f=Compile(Slice("Castbars/MSUF_CastbarChannelTicks.lua","local function PlayerKnowsSpell","local function CreateTickConfig").."return AutomaticMarkerLayout",e)()
  local lines,ticks=f({});assert(lines==4 and ticks==5,"known modern talent not reflected in channel markers")
 end)
 Check("L07-A2",function()

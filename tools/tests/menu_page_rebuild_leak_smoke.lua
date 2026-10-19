@@ -40,7 +40,11 @@ env.MSUF_UFCore_NotifyConfigChanged = function() return true end
 env.MSUF_ApplyModules = function() return true end
 env.MSUF_ClassPower_Apply = function() return true end
 
-local function Settle() widgets:RunTimers() end
+local function Settle()
+    widgets:RunTimers()
+    -- Observe settled cached views after the finite disclosure/selection motions.
+    M.Theme.StopAllMenuAnimations()
+end
 -- Frames plus their textures and font strings: regions leak with a tree too.
 local function WidgetCount()
     local total = #widgets.frames
@@ -117,6 +121,21 @@ for _, key in ipairs(UNDO_PAGES) do
         end
         if #picked > 0 and M.cache[key] == entry and not M.PageRebuildsItself(key) then
             undoPages = undoPages + 1
+            -- Engine scenes now lazily acquire native clip, gradient and aura pools.
+            -- The individual probe clicks above do not warm the combined settings or
+            -- the coalesced Redo paint. Visit that complete cycle once before measuring;
+            -- every original zero-growth, repaint and value assertion below stays strict.
+            for i = 1, #picked do Click(picked[i].toggle) end
+            for i = 1, #picked do Check(M.Undo(), key .. ": warm-up undo failed") end
+            Settle()
+            for i = 1, #picked do Check(M.Redo(), key .. ": warm-up redo failed") end
+            Settle()
+            for i = 1, #picked do Check(M.Undo(), key .. ": warm-up restore failed") end
+            Settle()
+            Check(M.cache[key] == entry, key .. ": warm-up rebuilt a reusable page")
+            for i = 1, #picked do
+                Check(Value(picked[i].toggle) == picked[i].original, key .. ": warm-up lost the original value")
+            end
             local first = WidgetCount()
             for cycle = 1, CYCLES do
                 for i = 1, #picked do Click(picked[i].toggle) end

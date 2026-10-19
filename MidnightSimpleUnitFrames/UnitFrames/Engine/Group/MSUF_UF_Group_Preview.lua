@@ -11,8 +11,6 @@ local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 local Auras = MSUF.Require("MSUF_Auras3", "GroupFrames/Preview")
 local AuraPainter = assert(Auras.MockAuraPainter)
-local PlacePreviewText = AuraPainter.PlaceText
-local GroupDurationBar, TopSwipe = AuraPainter.GroupDurationBar, AuraPainter.TopSwipe
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -516,7 +514,7 @@ local function ShowPreviewTimer(visual, cfg, text)
   SetPreviewFont(timer, cfg.cooldownSize or 8)
   timer:SetText(text)
   timer:SetTextColor(1, 1, 1, 1)
-  PlacePreviewText(timer, visual, cfg.cooldownAnchor or "CENTER", cfg.cooldownX or 0, cfg.cooldownY or 0, "POINT_ONLY")
+  AuraPainter.PlaceText(timer, visual, cfg.cooldownAnchor or "CENTER", cfg.cooldownX or 0, cfg.cooldownY or 0, "POINT_ONLY")
   timer:Show()
 end
 
@@ -524,7 +522,7 @@ end
 --- both read the same field names. Returns the icon's swipe region, if any.
 local function PaintIconLayers(visual, cfg, size, barOnly, textOn, timerText)
   if cfg.showCooldownSwipe == true and not barOnly then
-    TopSwipe(EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1), visual, size, 0.42)
+    AuraPainter.TopSwipe(EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1), visual, size, 0.42)
   end
   if cfg.showCooldownText == true and textOn then ShowPreviewTimer(visual, cfg, timerText) end
   if cfg.showStacks == true and textOn then
@@ -534,13 +532,13 @@ local function PaintIconLayers(visual, cfg, size, barOnly, textOn, timerText)
     local r, g, b
     if type(Auras.GetStackCountColor) == "function" then r, g, b = Auras.GetStackCountColor() end
     stack:SetTextColor(r or 1, g or 1, b or 1, 1)
-    PlacePreviewText(stack, visual, cfg.stackAnchor or "BOTTOMRIGHT", cfg.stackX or 0, cfg.stackY or 0, "POINT_ONLY")
+    AuraPainter.PlaceText(stack, visual, cfg.stackAnchor or "BOTTOMRIGHT", cfg.stackX or 0, cfg.stackY or 0, "POINT_ONLY")
     stack:Show()
   end
   if cfg.showDurationBar == true then
     local height = tonumber(cfg.durationBarHeight) or 2
     if not (height < size) then height = size elseif height < 1 then height = 1 end
-    GroupDurationBar(EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2), visual, cfg.durationBarPosition, height)
+    AuraPainter.GroupDurationBar(EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2), visual, cfg.durationBarPosition, height)
   end
   return visual._swipe
 end
@@ -622,7 +620,10 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   texture:SetTexCoord(A3.IconShape.IconTexCoords(zoom, lane.buttonWidth or size, lane.buttonHeight or size))
   -- Alternate custom slots show the reminder's missing state, as in the Options lane preview.
   local missing = reminderPlaced and reminderPlaced.reminderEnabled == true and slot % 2 == 1
-  if texture.SetDesaturated then texture:SetDesaturated(missing and reminderPlaced.reminderDesaturate ~= false or false) end
+  -- Only reminder samples change saturation; clear it when a pooled missing slot is reused.
+  local desaturated = missing and reminderPlaced.reminderDesaturate ~= false or false
+  if desaturated or visual._sceneReminderDesaturated then texture:SetDesaturated(desaturated) end
+  visual._sceneReminderDesaturated = desaturated or nil
   if missing then
     local tint = type(reminderPlaced.reminderColor) == "table" and reminderPlaced.reminderColor
     texture:SetVertexColor(tint and tint[1] or 1, tint and tint[2] or 1, tint and tint[3] or 1,
@@ -689,11 +690,9 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
       marker:Show()
     else
       local mode = lane.stealableStyle == "BORDER" and "BORDER" or "SYMBOL"
-      if not (type(A3.ApplyAuraDispelPreview) == "function"
-        and A3.ApplyAuraDispelPreview(marker, visual, size, mode, lane.iconShape, "Magic", false)) then
+      if not A3.ApplyAuraDispelPreview(marker, visual, size, mode, lane.iconShape, "Magic", false) then
         -- Classic's shaped painter leaves rectangular samples to the stock atlas.
-        local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
-          and A3.NativeAuraDispelBorderPadding(size) or max(1, floor(size / 6 + 0.5))
+        local pad = A3.NativeAuraDispelBorderPadding(size)
         marker:ClearAllPoints()
         marker:SetPoint("TOPLEFT", visual, "TOPLEFT", -pad, pad)
         marker:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", pad, -pad)
@@ -773,9 +772,8 @@ local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex
       host:ClearAllPoints()
       local parent = frame
       if lane.anchorTarget == "portrait" then
-        local runtime = Auras.Runtime
-        local custom = runtime and runtime.CustomConfig
-        parent = custom and custom.ResolveLaneParentFrame(frame, lane) or frame.MSUFPortraitHolder or frame
+        parent = Auras.ResolvePreviewLaneParent and Auras.ResolvePreviewLaneParent(frame, lane)
+          or frame.MSUFPortraitHolder or frame
       end
       host:SetPoint(anchor, parent, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
       host:SetSize(max(1, tonumber(lane.width) or lane.size or 1),
@@ -1138,7 +1136,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     SetPreviewFont(stack, size * 0.72)
     stack:SetText("2")
     stack:SetTextColor(r, g, b, a)
-    PlacePreviewText(stack, visual, "CENTER", 0, 0, "POINT_ONLY")
+    AuraPainter.PlaceText(stack, visual, "CENTER", 0, 0, "POINT_ONLY")
     stack:Show()
   else
     texture:SetTexture(slot.icon or PREVIEW_QUESTION)

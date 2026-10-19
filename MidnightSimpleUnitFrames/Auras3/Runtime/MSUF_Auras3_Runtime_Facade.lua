@@ -113,6 +113,10 @@ local RootCanReuseContainersForConfig = dependencies.NativeApply.RootCanReuseCon
 local RunNextFrame = dependencies.Platform.RunNextFrame
 InstallVisualInteractions(A3, MSUF, AuraRuntimeCombatBlocked, dependencies.NativeContract.FrameDispelSignature)
 
+-- Static scenes share backend painters through this public module surface.
+A3.PaintSceneEffects = EffectPreview.PaintScene
+A3.ResolvePreviewLaneParent = dependencies.CustomConfig.ResolveLaneParentFrame
+
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
     A3._unitFrameOwners = A3._unitFrameOwners or {}
