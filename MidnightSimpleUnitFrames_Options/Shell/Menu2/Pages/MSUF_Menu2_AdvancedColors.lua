@@ -613,9 +613,9 @@ local function AttachDefaultColorBehavior(ctx, control, defaultRGB)
     end
     RefreshDot()
 end
-function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata, defaultRGB)
-    local color = W.Color(section, label)
-    M.BindColor(ctx, color, getRGB, setRGB, metadata)
+-- Shared completion keeps default resets, swatch geometry and badges with the
+-- existing color owner, after either the legacy or schema typed binding.
+function CP.FinishColorRow(ctx, color, section, x, y, labelWidthOverride, swatchWidth, defaultRGB)
     AttachDefaultColorBehavior(ctx, color, defaultRGB)
     if color._msuf2Title then
         local sx, sy = x or 0, y or 0
@@ -631,6 +631,11 @@ function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverr
         return color
     end
     return MoveWidget(color, section, x, y)
+end
+function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata, defaultRGB)
+    local color = W.Color(section, label)
+    M.BindColor(ctx, color, getRGB, setRGB, metadata)
+    return CP.FinishColorRow(ctx, color, section, x, y, labelWidthOverride, swatchWidth, defaultRGB)
 end
 local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
