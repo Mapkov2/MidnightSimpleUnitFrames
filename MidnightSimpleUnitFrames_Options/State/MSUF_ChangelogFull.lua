@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F2AE8493CA89D0B42B78AF1A360EEEF344D1F6450BA5A338B74064B752AB460B",
+    sourceSha256 = "8BA85AB812C13D788BA2DCD23AB0D8599205DEC944DFFCF5F78D3099D70653A5",
     currentVersion = "6.504-beta1",
     historyFromVersion = "6.02",
     previousVersion = "6.503",
@@ -23,7 +23,14 @@ local data = {
                     bullets = {
                         {
                             text = "Fixed buffs on the target, focus, boss and arena frames sometimes disappearing, or showing an old buff from an earlier target, until /reload while debuffs kept working.",
-                            linkless = true,
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target buff aura visible",
+                                label = "Target buff visibility",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
+                                settingKey = "auras3.target.buff.visible",
+                            },
                         },
                     },
                 },

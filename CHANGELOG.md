@@ -5,7 +5,7 @@
 ### Bug Fixes
 
 - Fixed buffs on the target, focus, boss and arena frames sometimes disappearing, or showing an old buff from an earlier target, until /reload while debuffs kept working.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
 
 ## 6.503 - 2026-10-17
 
