@@ -8,7 +8,7 @@ MSUF.UF.PreviewSurfaces.Castbar = Surface
 
 function Surface.Create(scene)
   local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "CastbarScene")
-  local frame = PixelLayoutRegion(CreateFrame("Frame", nil, scene.root.parent))
+  local frame = PixelLayoutRegion(CreateFrame("Frame", nil, scene.root.parent, "BackdropTemplate")) -- as the live castbar frames
   frame.unit, frame._msufIsPreview = scene.key, true
   frame._msufPreviewScope, frame._msufPreviewScene = true, scene
   frame.MSUF_latencyHooked, frame._msufPlayerChannelHasteMarkersHooked = true, true

@@ -130,6 +130,26 @@ function World.Open(root, flavor, state)
     end
   end })
   h.Regions, h.spy = Regions, spy
+  -- Retail gives SetBackdrop only to frames built from BackdropTemplate, so scene
+  -- frames must ask for the template the live builders request.
+  local env = h.env
+  local createFrame = env.CreateFrame
+  env.CreateFrame = function(kind, name, parent, template, ...)
+    local frame = createFrame(kind, name, parent, template, ...)
+    if type(frame) == "table" then frame._worldTemplate = template end
+    return frame
+  end
+  local setBackdrop = h.widgets.Methods.SetBackdrop
+  if setBackdrop then
+    h.widgets.Methods.SetBackdrop = function(region, ...)
+      local r = region
+      while r and not r._msufPreviewScope do r = r.parent end
+      if r and not tostring(region._worldTemplate or ""):find("BackdropTemplate", 1, true) then
+        error("scene SetBackdrop on a frame without BackdropTemplate", 2)
+      end
+      return setBackdrop(region, ...)
+    end
+  end
   for _, method in ipairs({ "RegisterEvent", "RegisterUnitEvent", "SetAttribute", "HookScript", "SetScript" }) do
     local original = assert(h.widgets.Methods[method])
     h.widgets.Methods[method] = function(region, key, value, ...)

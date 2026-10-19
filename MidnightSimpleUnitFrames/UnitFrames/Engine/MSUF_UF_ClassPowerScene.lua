@@ -4,9 +4,11 @@ local EMPTY_SAMPLE = {}
 MSUF.UF.PreviewSurfaces.ClassPower = Surface
 local function Noop() end
 local function False() return false end
-local function SceneFrame(kind, _, parent)
+-- Scene frames stay unnamed, but keep the template the live builder asks for
+-- (the outline needs BackdropTemplate for SetBackdrop on Retail).
+local function SceneFrame(kind, _, parent, template)
   local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPowerScene")
-  return PixelLayoutRegion(CreateFrame(kind, nil, parent))
+  return PixelLayoutRegion(CreateFrame(kind, nil, parent, template))
 end
 
 local function Sample(scene) return scene.opts.sample or EMPTY_SAMPLE end
