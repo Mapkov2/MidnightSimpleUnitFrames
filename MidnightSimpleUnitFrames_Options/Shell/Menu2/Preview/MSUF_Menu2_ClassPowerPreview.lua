@@ -104,15 +104,6 @@ local function Clamp(value, fallback, minValue, maxValue)
     if value > maxValue then return maxValue end
     return value
 end
-local function ClassTextLevel(owner, bars)
-    local layer = bars and bars.classPowerTextLayer
-    if Layers.TextLevel then return Layers.TextLevel(owner, layer, 5) end
-    if Layers.ElementLevel then return Layers.ElementLevel(layer, 5, 8) end
-    return 100 + Clamp(layer, 5, 0, 30) * 32 + 8
-end
-local function ApplyClassTextOwnerLevel(owner, bars)
-    if owner and owner.SetFrameLevel then owner:SetFrameLevel(ClassTextLevel(owner, bars)) end
-end
 local function Alpha(value, fallback)
     value = tonumber(value)
     if value == nil then value = fallback end
@@ -181,7 +172,7 @@ local function RefreshLayerButtons(preview)
         if buttons[i].Refresh then buttons[i]:Refresh() end
     end
 end
-local NormalizeAlign = _G.MSUF_UF_NormalizeShapeAlign
+
 local function ResolveHPShape(bars, player)
     local value = tostring(bars and bars.playerHPBarShape or "BAR"):upper()
     if value ~= "FOLLOW_POWER" then return ResolvePowerShape(value, bars and bars.classPowerShape) end
@@ -253,10 +244,6 @@ local function PowerColor(player)
     if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
     return 1.00, 0.86, 0.12
 end
-local function CPToken(spec, value)
-    if CPPreview.TokenForValue then return CPPreview.TokenForValue(spec, value) end
-    return spec and spec.token
-end
 local function CPBaseColor(spec, bars, fallbackR, fallbackG, fallbackB)
     if CPPreview.ResolveBaseColor then return CPPreview.ResolveBaseColor(spec, bars, fallbackR, fallbackG, fallbackB) end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
@@ -274,10 +261,6 @@ local function CPTextAlpha()
     local alpha = tonumber(g and g.fontTextAlpha) or 1
     if alpha < 0.7 then alpha = 0.7 elseif alpha > 1 then alpha = 1 end
     return alpha
-end
-local function CPBgColor(token)
-    if CPPreview.ColorOverride then return CPPreview.ColorOverride("classPowerBgColorOverrides", token) end
-    return nil
 end
 local function HPColor(bars, spec)
     local mode = tostring(bars and bars.playerHPBarColorMode or "GLOBAL"):upper()
@@ -383,12 +366,6 @@ local function ApplyFont(region, size)
         region:SetShadowOffset(0, 0)
     end
 end
-local function HideTableRegions(t)
-    if not t then return end
-    for i = 1, #t do
-        if t[i] and t[i].Hide then t[i]:Hide() end
-    end
-end
 local function EnsureOutlineHost(frame)
     local parent = frame and frame:GetParent()
     if not parent then return nil end
@@ -445,25 +422,6 @@ local CP_POWER_ROUNDED_OPTS = {
             tonumber(player.powerBarBorderColorA) or a
     end,
 }
-local CP_CLASS_ROUNDED_OPTS = {
-    bgKey = "_msufCPClassRoundedBg",
-    edgeKey = "_msufCPClassRoundedEdge",
-    stackKey = "_msufCPClassRoundedEdgeStack",
-    countKey = "_msufCPClassRoundedEdgeCount",
-    maskStoreKey = "_msufCPClassRoundedMasks",
-    maskedKey = "_msufCPClassRoundedMasked",
-    whiteTexture = WHITE8,
-    edgeLayer = "OVERLAY",
-    edgeSubLevel = 6,
-    maxEdgeSize = 8,
-    snapOff = Helpers.SnapOff,
-    baseEdgeColor = function() return 0, 0, 0, 1 end,
-}
-local function RoundedClassResourcesPreviewEnabled(bars)
-    if not bars then return false end
-    if bars.slantedBarsEnabled ~= false and bars.slantedClassResources == true then return true, "SLANTED" end
-    return bars.roundedFramesEnabled == true and bars.roundedClassResources == true, "ROUNDED"
-end
 local function RoundedPowerPreviewEnabled()
     local bars = EnsureDB().bars
     return bars and bars.roundedFramesEnabled == true
@@ -705,37 +663,6 @@ local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
     if hidden then tex:Hide() end
     return tex
 end
---- Segment slots of the class resource row. Ten cover every pip resource;
---- Sweeping Strikes shows 18 stacks (MSUF_CP_NativeAuras.lua), so the row
---- grows once to the largest count it has shown and keeps the slots.
-local function EnsureClassPowerSlots(frame, count)
-    for i = #frame.segments + 1, count do
-        frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
-        frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
-        frame.edges[i] = MakeTexture(frame, "OVERLAY", 5, nil, true)
-        local runeText = MakeText(frame.textOwner, "OVERLAY", "CENTER", 9)
-        runeText:Hide()
-        frame.runeTexts[i] = runeText
-        frame.hashes[i] = MakeTexture(frame, "OVERLAY", 7, nil, true)
-    end
-end
-local function EnsureClassPower(preview)
-    if preview.classPower then return preview.classPower end
-    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
-    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
-    frame:SetBackdropColor(0, 0, 0, 0)
-    frame:SetBackdropBorderColor(0, 0, 0, 0)
-    frame.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
-    frame.textOwner:SetAllPoints(frame)
-    if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
-    frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
-    frame.notches = {}
-    EnsureClassPowerSlots(frame, 10)
-    frame.text = MakeText(frame.textOwner, "OVERLAY", "CENTER", 9)
-    frame.text:Hide()
-    preview.classPower = frame
-    return frame
-end
 local function EnsureMeter(preview, name, separateTextOwner)
     if preview[name] then return preview[name] end
     local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
@@ -836,6 +763,45 @@ local function UpdateMeterFill(frame, fraction)
     if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
     return true
 end
+--- A Cooldown Manager viewer by frame name: the effective (relocated) frame first, then the global.
+local function CooldownFrame(frameName)
+    return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName))
+        or _G[frameName]
+end
+--- Plain rectangles of the shown Cooldown Manager viewers, placed relative to the live player frame when
+--- there is one (the scene sizes and anchors the container from these like the live layout does).
+local CDM_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }
+function CPPreview.ProjectCooldowns(out)
+    local player = MSUF.UF.GetFrame and MSUF.UF.GetFrame("player")
+    local pe = player and player.GetEffectiveScale and tonumber(player:GetEffectiveScale())
+    local px, py
+    if pe and pe > 0 and player.GetCenter then px, py = player:GetCenter() end
+    local any
+    for i = 1, #CDM_VIEWERS do
+        local name = CDM_VIEWERS[i]
+        local frame = CooldownFrame(name)
+        if frame and frame.IsShown and frame:IsShown() and (tonumber(frame:GetWidth()) or 0) > 0 then
+            local entry = out[name]
+            if not entry then
+                entry = {}
+                out[name] = entry
+            end
+            any = true
+            local ve = tonumber(frame:GetEffectiveScale()) or 1
+            entry.width, entry.height = frame:GetWidth(), frame:GetHeight()
+            entry.scale = px and ve / pe or tonumber(frame:GetScale()) or 1
+            local vx, vy = frame:GetCenter()
+            if px and vx and vy and ve > 0 then
+                entry.x, entry.y = (vx * ve - px * pe) / ve, (vy * ve - py * pe) / ve
+            else
+                entry.x, entry.y = nil, nil
+            end
+        else
+            out[name] = nil
+        end
+    end
+    return any and out or nil
+end
 --- Width of the class resource container on a player frame `frameW` wide, by the
 --- live rule (ClassPower Layout.ResolveWidth): the pip auto-fit, a Cooldown
 --- Manager viewer's scaled width, the custom width, else the frame width less
@@ -854,7 +820,7 @@ function CPPreview.ContainerWidth(bars, frameW, height, segCount, nativeBar)
     local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES
     local frameName = cdmFrames and cdmFrames[widthMode]
     if frameName then
-        local source = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
+        local source = CooldownFrame(frameName)
         local scaleWidth = _G.MSUF_CDM_GetScaledWidth
         local width = source and source.IsShown and source:IsShown() and type(scaleWidth) == "function" and scaleWidth(source, _G.MSUF_ClassPowerContainer)
         if tonumber(width) and width >= 30 then return width end
@@ -870,13 +836,7 @@ function CPPreview.ContainerInsetX(bars)
     local _, insetX = MSUF.UF.Shared.ClassPowerFrameInsets(bars and bars.classPowerWidthMode or "player")
     return insetX
 end
-local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeBar)
-    local width = tonumber(CPPreview.ContainerWidth(bars, frameW, height, segCount, nativeBar)) or 275
-    if width < 20 then width = 20 elseif width > 800 then width = 800 end
-    if maxWidth and width > maxWidth then width = maxWidth end
-    return floor(width + 0.5)
-end
-local SegmentCount = CPPreview.SegmentCount
+
 
 local function IsAugCompositePreviewSpec(spec)
     return spec and spec.key == "evoker_augmentation_ebon"
@@ -898,284 +858,68 @@ local function ClassPowerPreviewState(bars, spec)
     return true
 end
 
---- Compose the class-resource row/pips from profile values and the preview spec.
---- Runtime values are simulated here; the live controller remains authoritative.
+--- The class resource row: the engine's ClassPower scene inside a player-frame stand-in over the reference frame.
+--- The scene is made when the row is first painted and kept for the box. It reads every look setting the way the
+--- live resource does; this feeds the previewed resource, the layer overlays and the Cooldown Manager rectangles.
+local function Wanted(preview, key)
+    local visible = preview.layerVisibility
+    return not (visible and visible[key] == false)
+end
+local function PlaceClassTextHandle(preview, scene)
+    local text = scene.CP.text
+    if text and text:IsShown() then
+        PlaceTextHandle(preview.handleClassText, PreviewParent(preview), { text })
+    else
+        preview.handleClassText:Hide()
+    end
+end
+-- The spec's own class, else the page's current preview class (every page version provides it).
+local function SpecClass(spec)
+    local token = spec and (spec.classToken or spec.class)
+    if token then return tostring(token):upper() end
+    return M.GetClassPowerPreviewClassToken()
+end
+
 local function RenderClassPower(preview, bars, player, spec)
-    local frame = EnsureClassPower(preview)
-    ApplyClassTextOwnerLevel(frame.textOwner, bars)
+    local scene = preview.cpScene
     local enabled, disabledReason = ClassPowerPreviewState(bars, spec)
-    if not enabled then
-        if Helpers.ApplyRoundedClassPowerSurface then
-            Helpers.ApplyRoundedClassPowerSurface(frame, false, frame.segments, frame.bgs, 0, 0, CP_CLASS_ROUNDED_OPTS)
-        end
-        frame:Hide()
-        HideBarOutline(frame)
-        HideTableRegions(frame.segments)
-        HideTableRegions(frame.bgs)
-        HideTableRegions(frame.edges)
-        HideTableRegions(frame.notches)
-        HideTableRegions(frame.runeTexts)
-        frame.text:Hide()
+    if not enabled or (scene and not Wanted(preview, "class")) then
+        if scene then scene:Hide() end
+        if preview.classPower then preview.classPower:Hide() end
         preview.handleClass:Hide()
         preview.handleClassText:Hide()
-        return nil, disabledReason
+        if not enabled then return nil, disabledReason end
+        return preview.classPower
     end
-    local h = Clamp(bars.classPowerHeight, 4, 2, 30)
-    local count = SegmentCount(spec)
-    EnsureClassPowerSlots(frame, count)
-    -- Augmentation is no longer special here: Ebon Might lives on the Player
-    -- Power bar, so Essence is an ordinary Class Resource with its own width,
-    -- offsets and anchor.
-    local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72,
-        spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
-    local x = CPPreview.ContainerInsetX(bars) + (tonumber(bars.classPowerOffsetX) or 0)
-    -- Same anchor as the live container (ClassPower Layout.Position).
-    local y = (tonumber(bars.classPowerOffsetY) or 0) - 2
-    frame:SetSize(w, h)
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", preview.playerRef, "TOPLEFT", x, y)
-    frame:Show()
-    local shape = (spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
-        and "BAR" or NormalizeClassShape(bars.classPowerShape)
-    local shapeInfo = CP_SHAPES[shape]
-    local classResourceStyle, selectedStyle = RoundedClassResourcesPreviewEnabled(bars)
-    local roundClassResources = shapeInfo == nil and classResourceStyle
-    CP_CLASS_ROUNDED_OPTS.style = selectedStyle
-    local token = CPToken(spec)
-    local r, g, b = CPBaseColor(spec, bars, 1, 1, 1)
-    local bgr, bgg, bgb = CPBgColor(token)
-    local bgA = Alpha(bars.classPowerBgAlpha, 0.30)
-    local filledA = Alpha(bars.classPowerFilledAlpha, 1)
-    local emptyA = Alpha(bars.classPowerEmptyAlpha, 0.30)
-    local outline = PreviewOutline(preview, bars.classPowerOutline, shapeInfo and 0 or 1)
-    local fgTex = ResolveTexture(bars.classPowerTexture)
-    local bgTex = ResolveTexture(bars.classPowerBgTexture, fgTex)
-    local gap = shapeInfo and Clamp(bars.classPowerGap, 0, 0, 8) or (Clamp(bars.classPowerTickWidth, 1, 0, 4) + Clamp(bars.classPowerGap, 0, 0, 8))
-    if count > 1 then
-        local maxGap = floor((w - count) / (count - 1))
-        if maxGap < 0 then maxGap = 0 end
-        if gap > maxGap then gap = maxGap end
+    local root = preview.cpSceneRoot
+    if not root then
+        root = MSUF.GF.NewPreviewScene(PreviewParent(preview))
+        preview.cpSceneRoot, preview.cpSample, preview.cpTick, preview.cpCooldowns = root, {}, {}, {}
+        preview.cpOpts = { sample = preview.cpSample, point = "CENTER", x = 0, y = -34 }
     end
-    local slot, startX, rowW
-    if shapeInfo then
-        slot = min(h, max(1, floor((w - ((count - 1) * gap)) / count)))
-        rowW = (slot * count) + ((count - 1) * gap)
-        local align = NormalizeAlign(bars.classPowerShapeAlign)
-        if align == "LEFT" then startX = 0
-        elseif align == "RIGHT" then startX = max(0, floor(w - rowW + 0.5))
-        else startX = max(0, floor((w - rowW) * 0.5 + 0.5)) end
-        HideBarOutline(frame)
-        frame:SetBackdropBorderColor(0, 0, 0, 0)
-        frame:SetBackdropColor(0, 0, 0, 0)
-    else
-        local barSpace = max(count, w - ((count - 1) * gap))
-        slot = nil
-        startX = 0
-        rowW = barSpace
-        if roundClassResources then HideBarOutline(frame) else ApplyBarOutline(frame, outline) end
-    end
-    local xPos, prevBoundary = 0, 0
-    local elapsed = PreviewElapsed(preview)
-    local animated = AnimationEnabled(preview)
-    local animatedValue = animated and CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
-    local fullEnabled = false
-    local fullR, fullG, fullB = r, g, b
-    if CPPreview.ResolveFullColor then
-        local enabled, fr, fg, fb = CPPreview.ResolveFullColor(bars, token, r, g, b)
-        fullEnabled = enabled == true
-        fullR, fullG, fullB = fr, fg, fb
-    end
-    local isFull = fullEnabled and CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
-    local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, animated) or nil
-    local textColorR, textColorG, textColorB = CPTextColor(1, 1, 1)
-    local textAlpha = CPTextAlpha()
-    local textOffsetX = tonumber(bars.classPowerTextOffsetX) or 0
-    local textOffsetY = tonumber(bars.classPowerTextOffsetY) or 0
-    for i = 1, #frame.segments do
-        local fill = frame.segments[i]
-        local bg = frame.bgs[i]
-        local edge = frame.edges[i]
-        local runeText = frame.runeTexts[i]
-        if i <= count then
-            local segW, boundary
-            if shapeInfo then
-                segW = slot
-                boundary = i * slot
-            else
-                boundary = floor((rowW * i) / count)
-                segW = max(1, boundary - prevBoundary)
-            end
-            local rune = runeOrder and runeOrder[i]
-            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1)) or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue) or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
-            if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-            local sx = startX + xPos
-            if bars.classPowerFillReverse == true then sx = w - sx - segW end
-            sx = max(0, sx)
-            bg:ClearAllPoints()
-            bg:SetPoint("TOPLEFT", frame, "TOPLEFT", sx, 0)
-            bg:SetSize(segW, h)
-            bg:SetTexture(shapeInfo and shapeInfo.bg or bgTex)
-            bg:SetVertexColor(bgr or 0, bgg or 0, bgb or 0, bgA)
-            bg:Show()
-            local sr, sg, sb = r, g, b
-            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
-                sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
-            elseif isFull then
-                sr, sg, sb = fullR, fullG, fullB
-            elseif CPPreview.ResolveSlotColor then
-                sr, sg, sb = CPPreview.ResolveSlotColor(bars, token, i, r, g, b)
-            end
-            if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb) end
-            fill:ClearAllPoints()
-            fill:SetTexture(shapeInfo and shapeInfo.fill or fgTex)
-            fill:SetVertexColor(sr, sg, sb, rune and filledA or (frac > 0 and filledA or emptyA))
-            local drawW = frac > 0 and max(1, floor(segW * frac + 0.5)) or 0
-            if bars.classPowerFillReverse == true then
-                fill:SetPoint("TOPRIGHT", frame, "TOPLEFT", sx + segW, 0)
-                fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", sx + segW, 0)
-                fill:SetTexCoord(shapeInfo and (1 - frac) or 0, 1, 0, 1)
-            else
-                fill:SetPoint("TOPLEFT", frame, "TOPLEFT", sx, 0)
-                fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", sx, 0)
-                fill:SetTexCoord(0, shapeInfo and frac or 1, 0, 1)
-            end
-            fill:SetWidth(max(1, drawW))
-            fill._msufCPPreviewSegW = segW
-            fill._msufCPPreviewShape = shapeInfo ~= nil
-            fill._msufCPPreviewReverse = bars.classPowerFillReverse == true
-            if drawW > 0 then fill:Show() else fill:Hide() end
-            if shapeInfo and outline > 0 then
-                edge:ClearAllPoints()
-                edge:SetPoint("TOPLEFT", frame, "TOPLEFT", sx, 0)
-                edge:SetSize(segW, h)
-                edge:SetTexture(shapeInfo.edge)
-                edge:SetVertexColor(PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], ShapeOutlineAlpha(outline))
-                edge:Show()
-            else
-                edge:Hide()
-            end
-            if runeText then
-                if rune and bars.runeShowTime ~= false and not rune.ready then
-                    local txt = CPPreview.FormatSeconds and CPPreview.FormatSeconds(rune.remaining) or ""
-                    ApplyFont(runeText, Clamp((tonumber(bars.classPowerFontSize) or 16) - 2, 12, 6, 48))
-                    runeText:SetText(txt)
-                    runeText:SetTextColor(textColorR, textColorG, textColorB, textAlpha)
-                    runeText:ClearAllPoints()
-                    runeText:SetPoint("CENTER", frame, "TOPLEFT",
-                        sx + floor(segW * 0.5 + 0.5) + textOffsetX,
-                        -floor(h * 0.5 + 0.5) + textOffsetY)
-                    if txt ~= "" then runeText:Show() else runeText:Hide() end
-                else
-                    runeText:Hide()
-                end
-            end
-            xPos = xPos + segW + gap
-            prevBoundary = boundary
-        else
-            fill:Hide()
-            bg:Hide()
-            edge:Hide()
-            if runeText then runeText:Hide() end
-        end
-    end
-    if Helpers.ApplyRoundedClassPowerSurface then
-        local roundedApplied = Helpers.ApplyRoundedClassPowerSurface(frame, roundClassResources,
-            frame.segments, frame.bgs, count, outline, CP_CLASS_ROUNDED_OPTS)
-        if not shapeInfo and not roundedApplied then ApplyBarOutline(frame, outline) end
-    end
-    --- Devourer's fragment separators. Its maximum cannot be one pip per
-    --- fragment, so the live bar keeps a single continuous fill and notches the
-    --- fragment boundaries into it. Mirror the same geometry here: Separator and
-    --- Pip gap must preview what they actually do on that bar.
-    local fragments = shapeInfo and 0 or floor(tonumber(spec.fragments) or 0)
-    --- Separator keeps its literal width inside the space the fragments do not
-    --- need and Pip gap spends the rest of it in proportion, exactly as on the
-    --- live bar.
-    local notchSep, notchGap = Clamp(bars.classPowerTickWidth, 1, 0, 4), Clamp(bars.classPowerGap, 0, 0, 8)
-    local notchW = 0
-    if fragments >= 2 and fragments <= 64 and w > fragments and (notchSep + notchGap) > 0 then
-        local maxNotchW = floor((w - fragments) / (fragments - 1))
-        if maxNotchW >= 1 then
-            local base = (notchSep > maxNotchW) and maxNotchW or notchSep
-            notchW = base + floor(((notchGap * (maxNotchW - base)) / 8) + 0.5)
-            if notchW > maxNotchW then notchW = maxNotchW end
-        end
-    end
-    local shownNotches = 0
-    if fragments >= 2 and fragments <= 64 and notchW >= 1 then
-        local reverse = bars.classPowerFillReverse == true
-        local limit = w - notchW
-        for i = 1, fragments - 1 do
-            local notch = frame.notches[i]
-            if not notch then
-                notch = MakeTexture(frame, "OVERLAY", 6, nil, true)
-                frame.notches[i] = notch
-            end
-            local nx = floor(((w * i) / fragments) - (notchW * 0.5) + 0.5)
-            if nx < 0 then nx = 0 elseif nx > limit then nx = limit end
-            if reverse then nx = limit - nx end
-            notch:ClearAllPoints()
-            notch:SetColorTexture(0, 0, 0, 1)
-            notch:SetSize(notchW, h)
-            notch:SetPoint("TOPLEFT", frame, "TOPLEFT", nx, 0)
-            notch:Show()
-            shownNotches = i
-        end
-    end
-    for i = shownNotches + 1, #frame.notches do frame.notches[i]:Hide() end
-    if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
-        local fractions = { 0.82, 0.51, 0.24 }
-        for i = 1, #frame.hashes do
-            local hash = frame.hashes[i]
-            local fraction = fractions[i]
-            if fraction then
-                hash:ClearAllPoints()
-                hash:SetColorTexture(1, 1, 1, 0.9)
-                hash:SetSize(2, h)
-                hash:SetPoint("TOPLEFT", frame, "TOPLEFT", max(0, floor((w - 2) * fraction)), 0)
-                hash:Show()
-            else
-                hash:Hide()
-            end
-        end
-    else
-        HideTableRegions(frame.hashes)
-    end
-    frame._msufCPPreviewAnim = {
-        bars = bars,
-        spec = spec,
-        count = count,
-        token = token,
-        r = r,
-        g = g,
-        b = b,
-        fullR = fullR,
-        fullG = fullG,
-        fullB = fullB,
-        fullEnabled = fullEnabled,
-        filledA = filledA,
-        emptyA = emptyA,
-        textColorR = textColorR,
-        textColorG = textColorG,
-        textColorB = textColorB,
-        textAlpha = textAlpha,
-    }
-    if bars.classPowerShowText == true or spec.nativeDurationText == true then
-        local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
-        ApplyFont(frame.text, textSize)
-        frame.text:SetText(CPPreview.ConfiguredTextForValue and CPPreview.ConfiguredTextForValue(bars, spec, animatedValue)
-            or (CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue)) or tostring(spec.previewText or "3"))
-        frame.text:SetTextColor(textColorR, textColorG, textColorB, textAlpha)
-        frame.text:ClearAllPoints()
-        frame.text:SetPoint("CENTER", frame, "CENTER", tonumber(bars.classPowerTextOffsetX) or 0, tonumber(bars.classPowerTextOffsetY) or 0)
-        frame.text:Show()
-        PlaceTextHandle(preview.handleClassText, PreviewParent(preview), { frame.text })
-    else
-        frame.text:Hide()
+    root:Activate()
+    local sample, elapsed, animated = preview.cpSample, PreviewElapsed(preview), AnimationEnabled(preview)
+    CPPreview.SceneStatic(sample, spec, SpecClass(spec))
+    local overlay = sample.bars
+    -- The Border and Res Text layers switch the live outline and text off for this preview only.
+    if Wanted(preview, "border") then overlay.classPowerOutline = nil else overlay.classPowerOutline = 0 end
+    if Wanted(preview, "classText") then overlay.classPowerShowText = nil else overlay.classPowerShowText = false end
+    CPPreview.SceneValues(sample, spec, animated and CPPreview.AnimatedValue(spec, elapsed) or nil, elapsed, animated)
+    local opts = preview.cpOpts
+    opts.playerWidth, opts.playerHeight = preview.playerW, preview.playerH
+    opts.cooldowns = CPPreview.ProjectCooldowns(preview.cpCooldowns)
+    scene = root:ClassPower(opts)
+    preview.cpScene, preview.cpSpec = scene, spec
+    local frame, container = scene:Frame(), scene.CP.container
+    if not (frame and frame:IsShown() and container:IsShown()) then
+        preview.handleClass:Hide()
         preview.handleClassText:Hide()
+        return nil, "resource"
     end
-    PlaceHandle(preview.handleClass, frame, 5)
-    return frame
+    preview.classPower = container
+    PlaceHandle(preview.handleClass, container, 5)
+    PlaceClassTextHandle(preview, scene)
+    return container
 end
 
 local function HideSecondaryClassTimer(preview)
@@ -1518,63 +1262,15 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
     PlaceHandle(preview.handleHP, frame, 5)
     return frame
 end
-local function UpdateClassPowerAnimation(preview, frame)
-    local state = frame and frame._msufCPPreviewAnim
-    local bars = state and state.bars
-    local spec = state and state.spec
-    if not (preview and frame and bars and spec) then return false end
-    if frame.IsShown and not frame:IsShown() then return true end
+local function UpdateClassPowerAnimation(preview)
+    local scene, spec = preview.cpScene, preview.cpSpec
+    if not (scene and spec) then return false end
+    local frame = scene:Frame()
+    if not (frame and frame:IsShown()) then return true end
     local elapsed = PreviewElapsed(preview)
-    local animatedValue = CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
-    local isFull = state.fullEnabled == true
-        and CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
-    local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, true) or nil
-    for i = 1, state.count or 0 do
-        local fill = frame.segments and frame.segments[i]
-        if fill then
-            local rune = runeOrder and runeOrder[i]
-            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1))
-                or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue)
-                    or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
-            if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-            local sr, sg, sb = state.r, state.g, state.b
-            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
-                sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
-            elseif isFull then
-                sr, sg, sb = state.fullR, state.fullG, state.fullB
-            elseif CPPreview.ResolveSlotColor then
-                sr, sg, sb = CPPreview.ResolveSlotColor(bars, state.token, i, sr, sg, sb)
-            end
-            if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then
-                sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb)
-            end
-            fill:SetVertexColor(sr, sg, sb, rune and state.filledA or (frac > 0 and state.filledA or state.emptyA))
-            local segW = max(1, floor(tonumber(fill._msufCPPreviewSegW) or 1))
-            local drawW = frac > 0 and max(1, floor(segW * frac + 0.5)) or 0
-            if fill._msufCPPreviewReverse then
-                fill:SetTexCoord(fill._msufCPPreviewShape and (1 - frac) or 0, 1, 0, 1)
-            else
-                fill:SetTexCoord(0, fill._msufCPPreviewShape and frac or 1, 0, 1)
-            end
-            fill:SetWidth(max(1, drawW))
-            if drawW > 0 then fill:Show() else fill:Hide() end
-            local runeText = frame.runeTexts and frame.runeTexts[i]
-            if runeText then
-                if rune and bars.runeShowTime ~= false and not rune.ready then
-                    local txt = CPPreview.FormatSeconds and CPPreview.FormatSeconds(rune.remaining) or ""
-                    runeText:SetText(txt)
-                    if txt ~= "" then runeText:Show() else runeText:Hide() end
-                else
-                    runeText:Hide()
-                end
-            end
-        end
-    end
-    if frame.text and (bars.classPowerShowText == true or spec.nativeDurationText == true) then
-        frame.text:SetText(CPPreview.ConfiguredTextForValue and CPPreview.ConfiguredTextForValue(bars, spec, animatedValue)
-            or (CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue)) or tostring(spec.previewText or "3"))
-        if LayerOn(preview, "classText") then frame.text:Show() end
-    end
+    CPPreview.SceneValues(preview.cpTick, spec, CPPreview.AnimatedValue(spec, elapsed), elapsed, true)
+    scene:Tick(preview.cpTick)
+    PlaceClassTextHandle(preview, scene)
     return true
 end
 --- Drives a native duration meter. Ebon Might now runs on the Player Power bar,
@@ -1637,7 +1333,7 @@ end
 local function RefreshClassPowerAnimation(preview)
     local state = preview and preview._msufCPPreviewAnim
     if not state then return false end
-    if state.classFrame and not UpdateClassPowerAnimation(preview, state.classFrame) then return false end
+    if state.classFrame and not UpdateClassPowerAnimation(preview) then return false end
     if state.ebonFrame and state.ebonFrame._msufCPPreviewTimerAnim
         and state.ebonFrame._msufCPPreviewTimerAnim.spec
         and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
@@ -1965,11 +1661,15 @@ function Preview.UpdateSampleThresholds(preview)
         if (rule.direction=="BELOW" and value<rule.fraction) or (rule.direction~="BELOW" and value>=rule.fraction) then
             local color=rule.color
             if spec then
-                local segments = host.segments
-                for s = 1, segments and #segments or 0 do
-                    local fill = segments[s]
-                    local _,_,_,alpha=fill:GetVertexColor()
-                    fill:SetVertexColor(color[1],color[2],color[3],alpha or 1)
+                -- The class resource is the engine scene: tint its bars like the live threshold step does and
+                -- record the tint in the painters' colour stamp, so the next paint writes the base colour back.
+                local CP = preview.cpScene.CP
+                for s = 1, CP.currentMax do
+                    local bar = CP.bars[s]
+                    local _,_,_,alpha=bar:GetStatusBarColor()
+                    alpha = alpha or 1
+                    bar:SetStatusBarColor(color[1],color[2],color[3],alpha)
+                    bar._msufCPR, bar._msufCPG, bar._msufCPB, bar._msufCPA = color[1], color[2], color[3], alpha
                 end
             else host.fill:SetVertexColor(color[1],color[2],color[3],base and base.a or 1) end
         end
@@ -2081,14 +1781,6 @@ local function ApplyLayerVisibility(preview)
         SetShownSafe(frame, frame._sampleActive == true and LayerOn(preview, frame._sampleLayer))
     end
     SetShownSafe(preview.altMana, LayerOn(preview, "mana") and Bars().showAltMana == true)
-    SetShownSafe(preview.classPower, classOn)
-    if not classOn then HideBarOutline(preview.classPower) end
-    local classTextActive = preview.classPower and preview.classPower._msufCPPreviewAnim
-        and (preview.classPower._msufCPPreviewAnim.bars.classPowerShowText == true
-            or preview.classPower._msufCPPreviewAnim.spec.nativeDurationText == true)
-    if preview.classPower and preview.classPower.text then
-        SetShownSafe(preview.classPower.text, classTextOn and classTextActive)
-    end
     local ebonActive = preview.ebonTimer and preview.ebonTimer._msufCPPreviewActive == true
     SetShownSafe(preview.ebonTimer, classOn and ebonActive)
     if preview.ebonTimer then
@@ -2523,6 +2215,7 @@ function Preview.Create(ctx, builder)
         box._msufCPRefreshQueued = nil
         box._msufCPRefreshReason = nil
         StopAnimationDriver(box)
+        if box.cpSceneRoot then box.cpSceneRoot:Deactivate() end
         box:ReleasePreviewInteraction()
         if Preview.active == box then Preview.active = nil end
         ActivateClassPowerSurface(nil)

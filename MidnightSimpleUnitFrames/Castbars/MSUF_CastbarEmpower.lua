@@ -505,6 +505,21 @@ local function NoSampleAnimation() end
 function Empower.CreateSampleLayout()
     return CreateTickLayout(CreateTickBuilder(NoSampleAnimation))
 end
+--- Preview-only: the crossed stage's blink at a given phase (0..1) without a timer.
+function Empower.PaintSampleBlink(frame, index, phase)
+    local ticks = frame.empowerTicks
+    for i = 1, ticks and #ticks or 0 do
+        local tick, flash = ticks[i], ticks[i].MSUF_flash
+        local on = i == index and phase ~= nil
+        tick:SetWidth(on and TICK_BLINK_WIDTH or tick.MSUF_baseWidth)
+        if on then tick:SetVertexColor(1.0, 0.10, 0.10, 1.0) else tick:SetVertexColor(1.0, 1.0, 1.0, tick.MSUF_baseAlpha) end
+        if flash then
+            flash:SetVertexColor(1.0, 0.10, 0.10, 1.0)
+            flash:SetAlpha(on and (1 - phase) or 0)
+            if on then flash:Show() else flash:Hide() end
+        end
+    end
+end
 
 local function PlayerCastbarEmpowerStart(frame)
     if not frame or not frame.statusBar then return end

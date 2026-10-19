@@ -567,23 +567,6 @@ CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
     WHIRLWIND = { 0.20, 0.80, 0.20 },
 }
-CP.COMBO_POINT_SLOT_TOKENS = MSUF.ClassPowerColors.COMBO_POINT_SLOT_TOKENS
-CP.COMBO_POINT_RAMP_R = MSUF.ClassPowerColors.COMBO_POINT_RAMP_R
-CP.COMBO_POINT_RAMP_G = MSUF.ClassPowerColors.COMBO_POINT_RAMP_G
-CP.COMBO_POINT_RAMP_B = MSUF.ClassPowerColors.COMBO_POINT_RAMP_B
-local previewColorConfig = {}
-local function PreviewColorConfig(bars)
-    local config = previewColorConfig
-    local db = M.EnsureDB()
-    local general = db and db.general
-    config.colorOverrides = general and general.classPowerColorOverrides
-    local modes = bars and bars.classPowerSlotColorModes
-    config.slotColorModes = type(modes) == "table" and modes or nil
-    config.comboPointColorMode = bars and bars.classPowerComboPointColorMode
-    local enabled = bars and bars.classPowerFullColorEnabled
-    config.fullColorEnabled = type(enabled) == "table" and enabled or nil
-    return config
-end
 function CP.ColorOverride(tableName, token)
     local db = _G.MSUF_DB
     local general = db and db.general
@@ -624,29 +607,6 @@ end
 function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
     return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
 end
-function CP.ResolveSlotColor(bars, resourceToken, slot, baseR, baseG, baseB)
-    local r, g, b = MSUF.ClassPowerColors.ResolveSlotColor(resourceToken, slot, baseR, baseG, baseB, PreviewColorConfig(bars))
-    if r == nil then return baseR, baseG, baseB end
-    return r, g, b
-end
-function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
-    return CP.ResolveSlotColor(bars, "COMBO_POINTS", slot, baseR, baseG, baseB)
-end
-function CP.ResolveFullColor(bars, resourceToken, baseR, baseG, baseB)
-    return MSUF.ClassPowerColors.ResolveFullColor(resourceToken, baseR, baseG, baseB, PreviewColorConfig(bars))
-end
-function CP.IsFull(spec, valueOverride)
-    if not spec or CP.IsSingleBarMode(spec.mode) then return false end
-    local maxValue = floor(tonumber(spec.segments) or 0)
-    local value = tonumber(valueOverride)
-    if value == nil then value = tonumber(spec.value) or 0 end
-    return maxValue > 0 and value >= maxValue
-end
-function CP.IsCharged(spec, bars, slot)
-    return spec and spec.token == "COMBO_POINTS"
-        and bars and bars.showChargedComboPoints ~= false
-        and spec.chargedSlots and spec.chargedSlots[slot] == true
-end
 --- Segments a class resource preview draws: the spec's count, at most ten,
 --- or eighteen for Sweeping Strikes, whose live bar shows 18 stacks
 --- (MSUF_CP_NativeAuras.lua).
@@ -675,36 +635,6 @@ function CP.IsSingleBarMode(mode)
 end
 function CP.IsEssence(spec)
     return spec and spec.token == "ESSENCE"
-end
-function CP.TokenForValue(spec, value)
-    if spec and spec.mode == "stagger" then
-        value = tonumber(value)
-        if value == nil then value = tonumber(spec.value) or 0 end
-        if value >= 0.60 then return "STAGGER_RED" end
-        if value > 0.30 then return "STAGGER_YELLOW" end
-        return "STAGGER_GREEN"
-    end
-    return spec and spec.token
-end
-function CP.FillForSegment(spec, index, valueOverride)
-    if not spec then return index <= 3 and 1 or 0 end
-    if spec.nativeDurationText == true then return 0 end
-    local mode = spec.mode or "segmented"
-    local value = tonumber(valueOverride)
-    if value == nil then value = tonumber(spec.value) or 0 end
-    if CP.IsSingleBarMode(mode) then
-        if index ~= 1 then return 0 end
-        if value < 0 then value = 0 elseif value > 1 then value = 1 end
-        return value
-    end
-    local full = floor(value)
-    if mode == "fractional" or CP.IsEssence(spec) then
-        local partial = value - full
-        if index <= full then return 1 end
-        if index == full + 1 and partial > 0.001 then return partial end
-        return 0
-    end
-    return index <= full and 1 or 0
 end
 function CP.AnimatedValue(spec, elapsed)
     if not spec then return nil end
@@ -741,102 +671,77 @@ function CP.TextForValue(spec, value)
     if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
     return tostring(rounded)
 end
-function CP.ConfiguredTextForValue(bars, spec, value)
-    local automatic = CP.TextForValue(spec, value)
-    if not spec or spec.nativeDurationText == true or spec.mode == "ironfur" then return automatic end
-    local textMode = tostring(bars and bars.classPowerTextMode or "AUTO"):upper()
-    if textMode ~= "CURRENT" and textMode ~= "MAX" and textMode ~= "CURMAX" then return automatic end
-
-    local mode = spec.mode or "segmented"
-    local current, maximum
-    value = tonumber(value)
-    if value == nil then value = tonumber(spec.value) or 0 end
-    if mode == "continuous" then
-        current, maximum = tostring(floor((value * 100) + 0.5)), "100"
-    elseif mode == "timer_bar" then
-        current, maximum = string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10), "20.0"
-    elseif mode == "stagger" then
-        current, maximum = tostring(floor((value * 34000) + 0.5)), "34000"
-    elseif mode == "aura_single" then
-        local fragments = tonumber(spec.fragments) or 5
-        current, maximum = tostring(floor((value * fragments) + 0.5)), tostring(fragments)
-    elseif mode == "fractional" then
-        current = string.format("%.1f", value)
-        maximum = tostring(tonumber(spec.segments) or 1)
-    else
-        local rounded = CP.IsEssence(spec) and floor(value) or floor(value + 0.5)
-        current, maximum = tostring(rounded), tostring(tonumber(spec.segments) or 1)
-    end
-    if textMode == "MAX" then return maximum end
-    if textMode == "CURMAX" then return current .. " / " .. maximum end
-    return current
-end
 local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
 local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
 local RUNE_PREVIEW_READY_HOLD = 1.2
-function CP.FormatSeconds(remaining)
-    remaining = tonumber(remaining) or 0
-    if remaining <= 0.05 then return "" end
-    return string.format("%.1f", floor((remaining * 10) + 0.5) / 10)
+--- Scene samples of the previewed class resource (root:ClassPower). SceneStatic writes what a full paint needs
+--- once; SceneValues writes the count, partial and rune states a wave tick changes, without allocating after
+--- its first call. The resource gates the picker ignores are forced on in the sample's bar overlay.
+local SCENE_GATES = { "showShadowMana", "showEleMaelstrom", "showGuardianIronfur", "showSweepingStrikes", "showStagger" }
+function CP.SceneStatic(sample, spec, class)
+    sample.class, sample.spec, sample.primaryPower, sample.time = class, spec.specIndex or 1, spec.primaryPower, 100
+    sample.charged = spec.chargedSlots
+    local bars = sample.bars
+    if not bars then
+        bars = {}
+        sample.bars = bars
+    end
+    for i = 1, #SCENE_GATES do bars[SCENE_GATES[i]] = true end
+    return sample
 end
-function CP.FillRuneState(out, runeID, totalDuration, elapsed, animated)
-    out.id = runeID
-    out.total = totalDuration
-    local baseRemaining = RUNE_PREVIEW_REMAINING[runeID]
-    if not baseRemaining then
-        out.ready = true
-        out.elapsed = totalDuration
-        out.remaining = 0
-        return out
+local function SceneRunes(out, spec, elapsed, animated)
+    local runes = out.runes
+    if not runes then
+        runes = {}
+        out.runes = runes
     end
-    out.ready = false
-    if animated then
-        local cycle = totalDuration + RUNE_PREVIEW_READY_HOLD
-        local progress = ((tonumber(elapsed) or 0) + (RUNE_PREVIEW_OFFSET[runeID] or 0)) % cycle
-        if progress >= totalDuration then
-            out.ready = true
-            out.elapsed = totalDuration
-            out.remaining = 0
-        else
-            out.elapsed = progress
-            out.remaining = totalDuration - progress
+    local total = tonumber(spec.runeDuration) or 10
+    if total < 1 then total = 10 end
+    local ready = 0
+    for i = 1, 6 do
+        local rune = runes[i]
+        if not rune then
+            rune = {}
+            runes[i] = rune
         end
-    else
-        out.remaining = baseRemaining
-        out.elapsed = totalDuration - baseRemaining
+        rune.duration = total
+        local remaining, cooled = RUNE_PREVIEW_REMAINING[i], nil
+        if remaining then
+            cooled = animated and (((tonumber(elapsed) or 0) + (RUNE_PREVIEW_OFFSET[i] or 0)) % (total + RUNE_PREVIEW_READY_HOLD))
+                or (total - remaining)
+            if cooled >= total then cooled = nil end
+        end
+        rune.ready, rune.start = cooled == nil, cooled and (100 - cooled) or 0
+        if cooled == nil then ready = ready + 1 end
     end
-    if out.remaining < 0.05 then
-        out.ready = true
-        out.elapsed = totalDuration
-        out.remaining = 0
+    return ready
+end
+function CP.SceneValues(out, spec, value, elapsed, animated)
+    local mode = spec.mode or "segmented"
+    if value == nil then value = tonumber(spec.value) or 0 end
+    out.partial = nil
+    if mode == "rune" then
+        out.maximum = 6
+        out.count = SceneRunes(out, spec, elapsed, animated)
+    elseif mode == "aura_single" then
+        out.maximum = floor(tonumber(spec.fragments) or 5)
+        out.count = floor(value * out.maximum + 0.5)
+    elseif mode == "ironfur" then
+        out.maximum, out.count = 5, 3
+    elseif CP.IsSingleBarMode(mode) then
+        out.maximum, out.count = 100, floor(value * 100 + 0.5)
+    else
+        out.maximum = floor(tonumber(spec.segments) or 5)
+        if mode == "fractional" then
+            out.count = value
+        elseif CP.IsEssence(spec) then
+            out.count = floor(value)
+            out.partial = value - out.count
+        else
+            out.count = floor(value)
+        end
     end
     return out
-end
-function CP.BuildRuneOrder(scratch, bars, spec, elapsed, animated)
-    local states = scratch.runeStates
-    if not states then
-        states = {}
-        scratch.runeStates = states
-    end
-    local totalDuration = tonumber(spec and spec.runeDuration) or 10
-    if totalDuration < 1 then totalDuration = 10 end
-    for i = 1, 6 do states[i] = CP.FillRuneState(states[i] or {}, i, totalDuration, elapsed, animated) end
-    for i = 7, #states do states[i] = nil end
-    local sortOrder = bars and bars.runeSortOrder
-    if sortOrder == "asc" then
-        table.sort(states, function(a, b)
-            if a.ready ~= b.ready then return a.ready == true end
-            return (a.id or 0) < (b.id or 0)
-        end)
-    elseif sortOrder == "desc" then
-        table.sort(states, function(a, b)
-            if a.ready ~= b.ready then return a.ready ~= true end
-            return (a.id or 0) < (b.id or 0)
-        end)
-    else
-        table.sort(states, function(a, b) return (a.id or 0) < (b.id or 0) end)
-    end
-    return states
 end
 function CP.ResolveTexture(key, fallback)
     if key and key ~= "" then
@@ -3340,125 +3245,6 @@ end
 -- Shared ClassPower preview contract. BAR mode only needs its two boundary
 -- segments clipped; every interior separator remains square and every non-BAR
 -- shape bypasses this helper entirely.
-local function BindClassPowerPreviewBoundary(frame, tex, key, maskStoreKey, maskedKey, maskPath, snap, seen)
-    if not tex then return end
-    local mask = H.EnsureRoundedMask(frame, key, frame, tex, maskStoreKey, maskPath, snap)
-    if not mask then return end
-    H.SetMask(frame, tex, mask, maskedKey)
-    seen[tex] = true
-end
-
-function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, count, outline, opts, bgR, bgG, bgB, bgA)
-    if not frame then return false end
-    opts = opts or {}
-    local maskedKey = opts.maskedKey or "_msufCPPreviewRoundedMasked"
-    local maskStoreKey = opts.maskStoreKey or "_msufCPPreviewRoundedMasks"
-    local stateKey = opts.stateKey or "_msufCPPreviewRoundedState"
-    local state = frame[stateKey]
-    local roundedBg = frame[opts.bgKey or "_msufCPPreviewRoundedBg"]
-    local canApply = enabled and H.ResolveRoundedMedia and H.EnsureRoundedMask and H.SetMask
-        and H.EnsureRoundedVisuals and H.ApplyRoundedEdgeStack
-
-    count = math.floor((tonumber(count) or 0) + 0.5)
-    if count < 1 then canApply = false end
-    if not canApply then
-        if state and state.active == false then return false end
-        H.ClearMasks(frame, maskedKey)
-        H.SetRoundedEdgeStackShown(frame, false, opts)
-        if roundedBg then roundedBg:Hide() end
-        if not state then
-            state = {}
-            frame[stateKey] = state
-        end
-        state.active = false
-        return false
-    end
-
-    local maskPath, edgePath, strength = H.ResolveFrameBarMedia(opts.style, "player")
-    outline = H.ClampEdgeSize(outline, 0, opts.maxEdgeSize or 8)
-    local fillFirst = type(fills) == "table" and fills[1] or nil
-    local fillLast = type(fills) == "table" and count > 1 and fills[count] or nil
-    local bgFirst = type(backgrounds) == "table" and backgrounds[1] or nil
-    local bgLast = type(backgrounds) == "table" and count > 1 and backgrounds[count] or nil
-    local edgeAnchor = type(opts.anchor) == "function" and opts.anchor(frame) or opts.anchor or frame
-    local edgeR, edgeG, edgeB, edgeA
-    if type(opts.baseEdgeColor) == "function" then
-        edgeR, edgeG, edgeB, edgeA = opts.baseEdgeColor(frame)
-    else
-        edgeR, edgeG, edgeB, edgeA = H.BaseEdgeColor()
-    end
-    if state and state.active == true and state.count == count and state.outline == outline
-        and state.maskPath == maskPath and state.edgePath == edgePath and state.anchor == edgeAnchor
-        and state.fillFirst == fillFirst and state.fillLast == fillLast
-        and state.bgFirst == bgFirst and state.bgLast == bgLast and state.roundedBg == roundedBg
-        and state.bgR == bgR and state.bgG == bgG and state.bgB == bgB and state.bgA == bgA
-        and state.edgeR == edgeR and state.edgeG == edgeG
-        and state.edgeB == edgeB and state.edgeA == edgeA then
-        return true
-    end
-
-    if not state then
-        state = {}
-        frame[stateKey] = state
-    end
-    local seen = state.seen
-    if not seen then
-        seen = {}
-        state.seen = seen
-    else
-        for tex in pairs(seen) do seen[tex] = nil end
-    end
-
-    frame._msufPreviewRoundedMediaStrength = strength
-    opts.edgeTexture = edgePath
-    opts.mediaStrength = strength
-    if not H.EnsureRoundedVisuals(frame, opts) then return false end
-
-    roundedBg = frame[opts.bgKey or "_msufCPPreviewRoundedBg"]
-    local snap = opts.snapOff or H.SnapOff
-    BindClassPowerPreviewBoundary(frame, fillFirst, "fillFirst", maskStoreKey, maskedKey, maskPath, snap, seen)
-    BindClassPowerPreviewBoundary(frame, fillLast, "fillLast", maskStoreKey, maskedKey, maskPath, snap, seen)
-    BindClassPowerPreviewBoundary(frame, bgFirst, "backgroundFirst", maskStoreKey, maskedKey, maskPath, snap, seen)
-    BindClassPowerPreviewBoundary(frame, bgLast, "backgroundLast", maskStoreKey, maskedKey, maskPath, snap, seen)
-    if bgR ~= nil and roundedBg then
-        if roundedBg._msufCPRoundedAnchor ~= frame then
-            roundedBg:ClearAllPoints()
-            roundedBg:SetAllPoints(frame)
-            roundedBg._msufCPRoundedAnchor = frame
-        end
-        roundedBg:SetVertexColor(bgR or 0, bgG or 0, bgB or 0, bgA or 0)
-        roundedBg:Show()
-        BindClassPowerPreviewBoundary(frame, roundedBg, "sharedBackground",
-            maskStoreKey, maskedKey, maskPath, snap, seen)
-    elseif roundedBg then
-        roundedBg:Hide()
-    end
-
-    local masked = frame[maskedKey]
-    if masked then
-        for tex, mask in pairs(masked) do
-            if not seen[tex] then
-                if tex and tex.RemoveMaskTexture and mask then tex:RemoveMaskTexture(mask) end
-                masked[tex] = nil
-            end
-        end
-        if not next(masked) then frame[maskedKey] = nil end
-    end
-
-    if outline > 0 then
-        H.ApplyRoundedEdgeStack(frame, outline, opts)
-    else
-        H.SetRoundedEdgeStackShown(frame, false, opts)
-    end
-    state.active, state.count, state.outline = true, count, outline
-    state.maskPath, state.edgePath, state.anchor = maskPath, edgePath, edgeAnchor
-    state.fillFirst, state.fillLast = fillFirst, fillLast
-    state.bgFirst, state.bgLast, state.roundedBg = bgFirst, bgLast, roundedBg
-    state.bgR, state.bgG, state.bgB, state.bgA = bgR, bgG, bgB, bgA
-    state.edgeR, state.edgeG, state.edgeB, state.edgeA = edgeR, edgeG, edgeB, edgeA
-    return true
-end
-
 local function PreviewBackgroundColorMode(health, general)
     return MSUF.UF.Config.ResolveBarBackgroundColorMode(general, health)
 end

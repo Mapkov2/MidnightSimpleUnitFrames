@@ -50,7 +50,7 @@ local ForceTextUnit, ApplyPanelUnit = PreviewModel.ForceTextUnit, PreviewModel.A
 local EnsureUnitPortraitStyle, PortraitStyleGet = PreviewModel.EnsureUnitPortraitStyle, PreviewModel.PortraitStyleGet
 local ApplyPortrait, NormalizeStatusPreviewId, ClassColor = PreviewModel.ApplyPortrait, PreviewModel.NormalizeStatusPreviewId, PreviewModel.ClassColor
 local PowerColor, FontColor, SetTex = PreviewModel.PowerColor, PreviewModel.FontColor, PreviewModel.SetTex
-local MakeFS, ReadPowerBarEnabled = PreviewModel.MakeFS, PreviewModel.ReadPowerBarEnabled
+local ReadPowerBarEnabled = PreviewModel.ReadPowerBarEnabled
 local CanDetachPowerBarKey, ReadPowerBarHeight = PreviewModel.CanDetachPowerBarKey, PreviewModel.ReadPowerBarHeight
 local ResolveNameAnchor = PreviewModel.ResolveNameAnchor
 local UnitPreviewText = PreviewModel.UnitPreviewText
@@ -77,7 +77,7 @@ local RoundOffset = PreviewCore.RoundOffset
 local GetNudgeStep = PreviewHelpers.NudgeStep or Fallbacks.One
 
 local CastbarOffsetFields, CastbarDetached, ReadCastbarSize = PreviewCastbar.OffsetFields, PreviewCastbar.Detached, PreviewCastbar.ReadSize
-local ReadCastbarNum, FormatCastbarPreviewTime = PreviewCastbar.ReadNumber, PreviewCastbar.FormatPreviewTime
+local ReadCastbarNum = PreviewCastbar.ReadNumber
 local ClampPreviewLayer = PreviewCore.ClampLayer
 local RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or Fallbacks.Nil
 local RuntimeVisualScaleForPreviewKey = PreviewRuntime.VisualScaleForPreviewKey or Fallbacks.One
@@ -1145,59 +1145,14 @@ function BoxBuild.Stage(box, s)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
     s.mock = mock
 end
+--- The class power and castbar slots are plain holders: the engine's scenes paint inside them (root:ClassPower,
+--- root:Castbar). A slot keeps the layer switch, the colour-painter target, the hit area and the guides.
 function BoxBuild.MockClassPower(box, s)
-    local canvas, mock = s.canvas, s.mock
-    mock.classPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
-    PixelLayoutRegion(mock.classPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
-    mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
-    mock.classPower.segments = {}
-    --- Devourer divides one continuous fill with separator notches instead of
-    --- one pip per fragment, so its dividers need their own pool.
-    mock.classPower.notches = {}
-    mock.classPower.segmentBgs = {}
-    mock.classPower.segmentEdges = {}
-    mock.classPower.runeTexts = {}
-    mock.classPower.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, mock.classPower))
-    mock.classPower.textOwner:SetAllPoints(mock.classPower)
-    if mock.classPower.textOwner.EnableMouse then mock.classPower.textOwner:EnableMouse(false) end
-    local function ClassPowerTexture(bucket, index, layer, subLevel, hidden)
-        local tex = PixelLayoutRegion(mock.classPower:CreateTexture(nil, layer, nil, subLevel))
-        tex:SetTexture(TEX_W8)
-        if hidden ~= false then tex:Hide() end
-        mock.classPower[bucket][index] = tex
-        return tex
-    end
-    --- Segment slots grow once to the largest count shown (Sweeping Strikes
-    --- has 18) and are kept; ten cover every other resource.
-    function mock.classPower:EnsureSegmentSlots(count)
-        for i = #self.segments + 1, count do
-            ClassPowerTexture("segmentBgs", i, "BACKGROUND")
-            ClassPowerTexture("segments", i, "ARTWORK", nil, false)
-            ClassPowerTexture("segmentEdges", i, "OVERLAY")
-            local rfs = MakeFS(self.textOwner, "OVERLAY", 8)
-            rfs:SetJustifyH("CENTER")
-            if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
-            if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
-            if rfs.SetShadowOffset then rfs:SetShadowOffset(1, -1) end
-            rfs:Hide()
-            self.runeTexts[i] = rfs
-        end
-    end
-    mock.classPower:EnsureSegmentSlots(10)
-    mock.classPower.text = MakeFS(mock.classPower.textOwner, "OVERLAY", 12)
-    mock.classPower.text:SetJustifyH("CENTER")
-    if mock.classPower.text.SetJustifyV then mock.classPower.text:SetJustifyV("MIDDLE") end
-    mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)
-    mock.classPower.text:SetText("5")
-    mock.classPower.text:Hide()
+    s.mock.classPower = PixelLayoutRegion(CreateFrame("Frame", nil, s.canvas))
 end
 function BoxBuild.MockCast(box, s)
     local T, canvas, mock = s.T, s.canvas, s.mock
-    mock.cast = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
-    PixelLayoutRegion(mock.cast, "SetBackdrop", { bgFile = TEX_W8 })
-    mock.cast:SetBackdropColor(0, 0, 0, 0.92)
-    mock.cast:SetBackdropBorderColor(0, 0, 0, 0)
+    mock.cast = PixelLayoutRegion(CreateFrame("Frame", nil, canvas))
     mock.cast:EnableMouse(false)
     mock.cast:SetScript("OnMouseUp", function(self, button)
         if canvas._msufPreviewPanning then
@@ -1221,25 +1176,6 @@ function BoxBuild.MockCast(box, s)
         end
     end)
     mock.cast:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    mock.cast.fill = PixelLayoutRegion(mock.cast:CreateTexture(nil, "ARTWORK"))
-    SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
-    mock.cast.fill:SetPoint("TOPLEFT", 1, -1)
-    mock.cast.fill:SetPoint("BOTTOMRIGHT", -60, 1)
-    mock.cast.icon = PixelLayoutRegion(CreateFrame("Frame", nil, mock.cast, "BackdropTemplate"))
-    PixelLayoutRegion(mock.cast.icon, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    mock.cast.icon:SetBackdropColor(0.08, 0.12, 0.22, 1)
-    mock.cast.icon:SetBackdropBorderColor(0.2, 0.28, 0.40, 1)
-    mock.cast.icon.texture = PixelLayoutRegion(mock.cast.icon:CreateTexture(nil, "ARTWORK", nil, 7))
-    mock.cast.icon.texture:SetTexture(136235)
-    mock.cast.icon.texture:SetPoint("TOPLEFT", mock.cast.icon, "TOPLEFT", 1, -1)
-    mock.cast.icon.texture:SetPoint("BOTTOMRIGHT", mock.cast.icon, "BOTTOMRIGHT", -1, 1)
-    mock.cast.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    mock.cast.text = MakeFS(mock.cast, "OVERLAY", 11)
-    mock.cast.text:SetPoint("LEFT", mock.cast, "LEFT", 24, 0)
-    mock.cast.time = MakeFS(mock.cast, "OVERLAY", 11)
-    mock.cast.time:SetPoint("RIGHT", mock.cast, "RIGHT", -6, 0)
-    mock.cast.target = MakeFS(mock.cast, "OVERLAY", 10)
-    mock.cast.target:SetPoint("TOP", mock.cast, "BOTTOM", 0, -1)
     mock.cast.sizeTag = PixelLayoutRegion(mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     mock.cast.sizeTag:SetPoint("BOTTOM", mock.cast, "TOP", 0, 2)
     mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
@@ -1386,6 +1322,8 @@ function BoxBuild.Scripts(box)
         if ViewChrome.PreviewAnimationActive(self) then Preview.RestoreStaticEditModeAuraPreview(self) end
         ViewChrome.ReleaseUnitPreviewLiveState(self)
         if self._unitSceneRoot then self._unitSceneRoot:Deactivate() end
+        if self._castSceneRoot then self._castSceneRoot:Deactivate() end
+        if self._cpSceneRoot then self._cpSceneRoot:Deactivate() end
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
         self._refreshReason = nil
@@ -1478,7 +1416,7 @@ do
         PreviewRaidGroupNameText = PreviewRaidGroupNameText,
         NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, CastbarEnabled = CastbarEnabled,
         CastbarShowIcon = CastbarShowIcon, CastbarShowText = CastbarShowText, ReadCastbarSize = ReadCastbarSize,
-        ReadCastbarNum = ReadCastbarNum, FormatCastbarPreviewTime = FormatCastbarPreviewTime,
+        ReadCastbarNum = ReadCastbarNum,
         CastbarOffsetFields = CastbarOffsetFields, CastbarDetached = CastbarDetached,
         CanDetachPowerBarKey = CanDetachPowerBarKey, ClampPreviewLayer = ClampPreviewLayer, SetTex = SetTex,
         PlaceHandle = PlaceHandle, PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions,

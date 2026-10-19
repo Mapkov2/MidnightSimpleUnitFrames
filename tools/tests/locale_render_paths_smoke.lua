@@ -47,9 +47,10 @@ mw:RunTimers()
 local target = core.Translate("Cleave Training Dummy")
 M.SetCastbarPreviewUnit("boss")
 local castPreview = assert(M._msuf2CastbarPreview, "castbar preview missing")
+core.Castbars.Config.Refresh()
 castPreview:Refresh()
 mw:RunTimers()
-Check(castPreview.castTargetText:GetText() == target, "cast target preview does not paint its localized sample")
+Check(castPreview.frame and castPreview.frame.castTargetText:GetText() == target, "cast target preview does not paint its localized sample")
 core.SuiteLink.HasColorsCategory = function() return true end
 core.SuiteLink.BuildColorsCategory = function() end
 M.colorsPainterCategory = "suite"

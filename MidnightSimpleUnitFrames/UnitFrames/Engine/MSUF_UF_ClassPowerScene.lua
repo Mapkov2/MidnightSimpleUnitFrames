@@ -211,7 +211,14 @@ function Surface.Paint(scene)
   local frame, opts, CP = scene.frame, scene.opts, scene.CP
   local cfg, shared = scene.config, MSUF.ClassPowerConfig
   scene.compileConfig()
-  local b, sample = cfg.bars, Sample(scene)
+  local sample = Sample(scene)
+  if sample.bars then
+    scene.barsMeta = scene.barsMeta or {}
+    scene.barsMeta.__index = cfg.bars
+    cfg.bars = setmetatable(sample.bars, scene.barsMeta)
+    cfg.showText = cfg.bars.classPowerShowText ~= false
+  end
+  local b = cfg.bars
   frame:SetScale(opts.scale or 1)
   frame:SetSize(opts.playerWidth or (MSUF_DB.player and MSUF_DB.player.width) or 275, opts.playerHeight or 40)
   frame:ClearAllPoints()
@@ -259,4 +266,12 @@ function Surface.Paint(scene)
   paint(power, slots)
   CP.container:Show()
   frame:Show()
+end
+
+--- Light sample tick: re-run the active mode painter on the changed counts; the last full paint laid the bars out.
+function Surface.Tick(scene)
+  local CP = scene.CP
+  if not CP.visible then return end
+  CP.spStacks, CP.wlPredDelta = Count(scene), Sample(scene).predicted or 0
+  scene.runners[CP.modeDescriptor.updateKey](CP.powerType, CP.currentMax)
 end

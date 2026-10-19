@@ -54,5 +54,22 @@ function Scene:Hide()
   self.want = false
   return self:Suspend()
 end
+--- Light update: copy the given sample fields into the scene's own sample and repaint only what they drive.
+function Scene:Tick(fields)
+  local host = self.host
+  if not (self.want and self.frame and host.active and Allowed(host)) then return false end
+  local tick = Surfaces[self.kind].Tick
+  if fields then
+    local sample = self.opts.sample
+    if not sample then
+      sample = {}
+      self.opts.sample = sample
+    end
+    for key, value in pairs(fields) do sample[key] = value end
+  end
+  if not tick then return self:Refresh() end
+  tick(self)
+  return true
+end
 function Scene:Frame() return self.frame end
 function Scene:IsActive() return self.host.active == true end

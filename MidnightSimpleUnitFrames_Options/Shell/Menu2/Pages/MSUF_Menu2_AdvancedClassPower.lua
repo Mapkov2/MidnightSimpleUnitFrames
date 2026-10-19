@@ -245,41 +245,54 @@ local PLAYER_HP_SEPARATORS = DETACHED_POWER_SEPARATORS
 local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
 local CLASS_POWER_PREVIEW_SPECS = {
-    { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3,
+    { key = "deathknight_runes", specIndex = 1, label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3,
         previewText = "3", runeDuration = 10 },
     --- Devourer's Soul Fragment maximum is talent-dependent and far above the
     --- ten-pip ceiling, so the live bar is one continuous fill whose fragment
     --- boundaries are drawn as separator notches. `fragments` previews that
     --- division at a representative maximum.
-    { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.5,
+    { key = "demonhunter_devourer", specIndex = 3,
+        label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.5,
         previewText = "20", fragments = 40 },
-    { key = "demonhunter_vengeance", label = "Demon Hunter - Vengeance Fragments", token = "SOUL_FRAGMENTS_VENG", mode = "aura_segmented", segments = 6, value = 4, previewText = "4 / 6" },
-    { key = "druid_feral", label = "Druid - Feral Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
-    { key = "druid_balance", label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
-    { key = "evoker_essence", label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
-    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "ESSENCE", mode = "segmented", segments = 6,
+    { key = "demonhunter_vengeance", specIndex = 2,
+        label = "Demon Hunter - Vengeance Fragments", token = "SOUL_FRAGMENTS_VENG", mode = "aura_segmented", segments = 6, value = 4, previewText = "4 / 6" },
+    { key = "druid_feral", specIndex = 2, primaryPower = 3,
+        label = "Druid - Feral Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
+    { key = "druid_guardian", specIndex = 3, primaryPower = 1,
+        label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
+    { key = "druid_balance", specIndex = 1, primaryPower = 8, label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
+    { key = "evoker_essence", specIndex = 1, label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
+    { key = "evoker_augmentation_ebon", specIndex = 3, label = "Evoker - Augmentation Ebon Might", token = "ESSENCE", mode = "segmented", segments = 6,
         value = 4, previewText = "4",
         secondaryTimer = { token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.6, previewText = "12.0", nativeDurationText = true } },
-    { key = "hunter_survival_tip", label = "Hunter - Survival Tip of the Spear", token = "TIP_OF_THE_SPEAR", mode = "aura_segmented", segments = 3, value = 2, previewText = "2" },
-    { key = "mage_arcane", label = "Mage - Arcane Charges", token = "ARCANE_CHARGES", mode = "segmented", segments = 4, value = 3, previewText = "3" },
-    { key = "mage_frost", label = "Mage - Frost Icicles", token = "ICICLES", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "monk_brewmaster", label = "Monk - Brewmaster Stagger", token = "STAGGER_YELLOW", mode = "stagger", segments = 1,
+    { key = "hunter_survival_tip", specIndex = 3,
+        label = "Hunter - Survival Tip of the Spear", token = "TIP_OF_THE_SPEAR", mode = "aura_segmented", segments = 3, value = 2, previewText = "2" },
+    { key = "mage_arcane", specIndex = 1,
+        label = "Mage - Arcane Charges", token = "ARCANE_CHARGES", mode = "segmented", segments = 4, value = 3, previewText = "3" },
+    { key = "mage_frost", specIndex = 3,
+        label = "Mage - Frost Icicles", token = "ICICLES", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
+    { key = "monk_brewmaster", specIndex = 1, label = "Monk - Brewmaster Stagger", token = "STAGGER_YELLOW", mode = "stagger", segments = 1,
         value = 0.42, previewText = "14K" },
-    { key = "monk_windwalker", label = "Monk - Windwalker Chi", token = "CHI", mode = "segmented", segments = 6, value = 4, previewText = "4" },
-    { key = "paladin_holy_power", label = "Paladin - Holy Power", token = "HOLY_POWER", mode = "segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "priest_shadow", label = "Priest - Shadow Insanity", token = "INSANITY", mode = "continuous", segments = 1, value = 0.62,
+    { key = "monk_windwalker", specIndex = 3, label = "Monk - Windwalker Chi", token = "CHI", mode = "segmented", segments = 6, value = 4, previewText = "4" },
+    { key = "paladin_holy_power", specIndex = 1,
+        label = "Paladin - Holy Power", token = "HOLY_POWER", mode = "segmented", segments = 5, value = 3, previewText = "3" },
+    { key = "priest_shadow", specIndex = 3, label = "Priest - Shadow Insanity", token = "INSANITY", mode = "continuous", segments = 1, value = 0.62,
         previewText = "62 / 100" },
-    { key = "rogue_combo", label = "Rogue - Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 7, value = 5, previewText = "5",
+    { key = "rogue_combo", specIndex = 1,
+        label = "Rogue - Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 7, value = 5, previewText = "5",
         chargedSlots = { [1] = true, [2] = true } },
-    { key = "shaman_elemental", label = "Shaman - Elemental Maelstrom", token = "MAELSTROM", mode = "continuous", segments = 1, value = 0.68,
+    { key = "shaman_elemental", specIndex = 1, label = "Shaman - Elemental Maelstrom", token = "MAELSTROM", mode = "continuous", segments = 1, value = 0.68,
         previewText = "68 / 100" },
-    { key = "shaman_enhancement", label = "Shaman - Enhancement Maelstrom Weapon", token = "MAELSTROM", mode = "aura_segmented", segments = 10, value = 7, previewText = "7", threshold = 5, thresholdToken = "MAELSTROM_ABOVE_5" },
-    { key = "warlock_soul_shards", label = "Warlock - Soul Shards", token = "SOUL_SHARDS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "warlock_destruction", label = "Warlock - Destruction Soul Shards", token = "SOUL_SHARDS", mode = "fractional", segments = 5,
+    { key = "shaman_enhancement", specIndex = 2,
+        label = "Shaman - Enhancement Maelstrom Weapon", token = "MAELSTROM", mode = "aura_segmented", segments = 10, value = 7, previewText = "7", threshold = 5, thresholdToken = "MAELSTROM_ABOVE_5" },
+    { key = "warlock_soul_shards", specIndex = 1,
+        label = "Warlock - Soul Shards", token = "SOUL_SHARDS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
+    { key = "warlock_destruction", specIndex = 3, label = "Warlock - Destruction Soul Shards", token = "SOUL_SHARDS", mode = "fractional", segments = 5,
         value = 3.4, previewText = "3.4" },
-    { key = "warrior_whirlwind", label = "Warrior - Whirlwind Stacks", token = "WHIRLWIND", mode = "aura_segmented", segments = 4, value = 2, previewText = "2" },
-    { key = "warrior_sweeping", label = "Warrior - Sweeping Strikes", token = "SWEEPING_STRIKES", mode = "aura_segmented", segments = 18, value = 12, previewText = "12" },
+    { key = "warrior_whirlwind", specIndex = 2,
+        label = "Warrior - Whirlwind Stacks", token = "WHIRLWIND", mode = "aura_segmented", segments = 4, value = 2, previewText = "2" },
+    { key = "warrior_sweeping", specIndex = 1,
+        label = "Warrior - Sweeping Strikes", token = "SWEEPING_STRIKES", mode = "aura_segmented", segments = 18, value = 12, previewText = "12" },
 }
 -- Preview the active provider's resources, including its Classic variants.
 if MSUF.Client and MSUF.Client.IsMists then
@@ -296,7 +309,7 @@ if MSUF.Client and MSUF.Client.IsMists then
         for key, value in pairs(replacements[spec.key] or {}) do spec[key] = value end
     end
     CLASS_POWER_PREVIEW_SPECS[#CLASS_POWER_PREVIEW_SPECS + 1] = {
-        key = "warlock_demonic_fury", label = "Warlock - Demonic Fury", token = "DEMONIC_FURY",
+        key = "warlock_demonic_fury", specIndex = 2, label = "Warlock - Demonic Fury", token = "DEMONIC_FURY",
         mode = "continuous", segments = 1, value = 0.65, previewText = "650 / 1000",
     }
 end

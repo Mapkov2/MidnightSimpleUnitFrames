@@ -65,6 +65,14 @@ function Adapter.Open(root, flavor, Regions, options)
         if options and options.curves then InstallCurves(world) end
         world.env.RAID_CLASS_COLORS = STOCK_COLORS
         world.env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+        -- The engine castbar and class resource scenes read these declared inputs; the bare world would answer
+        -- with opaque stubs the observation refuses to record.
+        world.env.INTERRUPTED = "Interrupted"
+        local enum = world.env.Enum
+        world.env.Enum = setmetatable({ PowerType = setmetatable({ Mana = 0, Rage = 1, Focus = 2, Energy = 3,
+            ComboPoints = 4, Runes = 5, RunicPower = 6, SoulShards = 7, LunarPower = 8, HolyPower = 9, Maelstrom = 11,
+            Chi = 12, Insanity = 13, BurningEmbers = 14, DemonicFury = 15, ArcaneCharges = 16, Essence = 19 },
+            { __index = enum and enum.PowerType }) }, { __index = enum })
         world.env.CLASS_ICON_TCOORDS = {}
         for index, class in ipairs({ "WARRIOR", "MAGE", "ROGUE", "DRUID", "HUNTER", "SHAMAN", "PRIEST",
             "WARLOCK", "PALADIN", "DEATHKNIGHT", "MONK", "DEMONHUNTER", "EVOKER" }) do
@@ -183,22 +191,32 @@ local function Castbar(mw, case)
     local preview = assert(mw.M._msuf2CastbarPreview)
     mw.world.widgets:SetTime(100)
     preview:Refresh()
-    if case.interrupted then assert(mw.M.PlayCastbarPreviewInterrupt(), "interrupt action failed") end
-    local aliases = {}
-    local used = { [preview.castRow] = true }
-    for _, key in ipairs({ "bar", "icon", "iconTexture", "iconOutlineFrame", "outlineFrame", "statusBar", "fill",
-        "barBg", "castText", "time", "castTargetText", "textLayer", "spark", "latency", "kick" }) do
-        local region = preview[key]
-        if region and not used[region] then aliases["castbar/" .. key], used[region] = region, true end
+    if case.interrupted then
+        assert(mw.M.PlayCastbarPreviewInterrupt(), "interrupt action failed")
+        preview:Refresh()
     end
-    for _, key in ipairs({ "ticks", "stageTicks", "empowerBands", "empowerFills" }) do
-        for index, region in ipairs(preview[key] or {}) do
-            if not used[region] then aliases["castbar/" .. key .. "/" .. index], used[region] = region, true end
+    -- The cast is the engine castbar scene: its frame and native regions stand for the old mock regions.
+    local frame = assert(preview.frame, "the castbar page painted no scene frame")
+    local aliases = {}
+    local used = { [preview.castRow] = true, [frame] = true }
+    aliases["castbar/frame"] = frame
+    for _, key in ipairs({ "background", "statusBar", "backgroundBar", "icon", "castText", "timeText", "castTargetText",
+        "latencyBar", "latencyText", "spark", "outline", "outlineFrame" }) do
+        local region = frame[key]
+        if type(region) == "table" and rawget(region, "objectType") and not used[region] then
+            aliases["castbar/" .. key], used[region] = region, true
+        end
+    end
+    for _, key in ipairs({ "empowerTicks", "empowerSegments", "_msufPlayerChannelHasteMarkers", "_msufKickTimeProjections" }) do
+        for index, region in ipairs(frame[key] or {}) do
+            if type(region) == "table" and rawget(region, "objectType") and not used[region] then
+                aliases["castbar/" .. key .. "/" .. index], used[region] = region, true
+            end
         end
     end
     Hosts(aliases, preview.castRow.parent, "host")
     return { castbar = preview.castRow }, aliases, { render = Source(mw.world.root, preview.Refresh),
-        entry = "Open(opt_castbar); SetCastbarPreviewUnit; SetCastbarPreviewType; preview:Refresh; optional interrupt" }
+        entry = "Open(opt_castbar); SetCastbarPreviewUnit; SetCastbarPreviewType; preview:Refresh -> root:Castbar scene; optional interrupt" }
 end
 
 local function ClassPower(mw, case)
@@ -212,12 +230,15 @@ local function ClassPower(mw, case)
     if case.hidden then box.layerVisibility = { class = false, classText = false, power = false, hp = false } end
     box:Refresh()
     assert(box._msufCPPreviewAnim.spec.key == case.resource, "class resource selection did not reach renderer")
+    -- The class resource is the engine ClassPower scene: its stand-in frame and container stand for the old mock row.
     local aliases = {}
-    aliases["resources/class"], aliases["resources/power"] = box.classPower, box.detachedPower
+    local scene = assert(box.cpScene, "the class resource page painted no scene")
+    aliases["resources/class"], aliases["resources/power"] = box.classPower or scene.CP.container, box.detachedPower
     aliases["resources/health"], aliases["resources/reference"] = box.playerHP, box.playerRef
+    aliases["resources/scene"] = scene.frame or scene.CP._pf
     Hosts(aliases, box.stage.parent, "host")
     return { resources = box.stage }, aliases, { render = Source(mw.world.root, box.Refresh),
-        entry = "Open(classpower); ClassPowerWorkspace:Select(class); classPowerPreview:Refresh" }
+        entry = "Open(classpower); ClassPowerWorkspace:Select(class); classPowerPreview:Refresh -> root:ClassPower scene" }
 end
 
 local PAINTERS = { unit = Unit, group = Group, castbar = Castbar, classpower = ClassPower }

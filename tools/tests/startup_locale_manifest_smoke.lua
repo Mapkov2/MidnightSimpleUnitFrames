@@ -128,7 +128,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-19: Edit Mode external X/Y steppers (+4,412) and their review fixes (+549) add 4,961
         -- LF bytes on every client: Mainline/ruRU 10,099,374 -> 10,104,335, TBC/ruRU 7,971,828 -> 7,976,789.
         -- Mainline ceiling 10,099,662 -> 10,104,623 (exact +4,961); the Classic ceiling 7,981,166 still fits.
-        assert(bytes < (suffix == "Mainline" and 10104623 or 7981166),
+        -- 2026-10-19 (98b): the Options castbar and class power previews paint through the engine scenes
+        -- (castbar scene +874, class power scene +586, preview surfaces +573, empower blink +729 on Mainline only).
+        -- Measured core LF delta: Mainline +2,762, Classic +2,033; Mainline/ruRU 10,104,462 -> 10,107,224,
+        -- TBC/ruRU 7,976,916 -> 7,978,949. Ceilings add exactly that: Mainline 10,104,623 -> 10,107,385;
+        -- Classic 7,981,166 -> 7,983,199.
+        assert(bytes < (suffix == "Mainline" and 10107385 or 7983199),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

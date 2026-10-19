@@ -282,19 +282,28 @@ do
     box:Show()
     box:Refresh()
     M.GetClassPowerPreviewSpec = GetSpec
-    local frame = Check(box.classPower or box._classPowerFrame or (box._msufCPPreviewAnim and box._msufCPPreviewAnim.classFrame),
-        "the Class Resources preview has no class resource frame")
-    local shown, right = 0, 0
-    for i, bg in ipairs(frame.bgs or {}) do
-        if bg:IsShown() then
-            shown = shown + 1
-            local _, _, _, x = bg:GetPoint(1)
-            right = math.max(right, (x or 0) + (bg:GetWidth() or 0))
+    -- Only a client that offers the Sweeping Strikes resource previews it (the picker lists the supported ones).
+    if M.ClassPowerPreviewSpecs and M.ClassPowerPreviewSpecs.warrior_sweeping then
+    local frame = Check(box.classPower, "the Class Resources preview has no class resource frame")
+    -- Sweeping Strikes is one native fill with static separators between its 18 stacks
+    -- (MSUF_CP_NativeAuras.lua), so the engine scene shows 17 separators across the bar.
+    local function Separators(container)
+        local count = 0
+        local function Walk(parent)
+            for _, region in ipairs(parent.regions or {}) do
+                local c = region.colorTexture
+                if region.objectType == "Texture" and region.shown and region.drawLayer == "OVERLAY"
+                    and c and c[1] == 0 and c[2] == 0 and c[3] == 0 and c[4] == 1 then
+                    count = count + 1
+                end
+            end
+            for _, child in ipairs(parent.children or {}) do Walk(child) end
         end
+        Walk(container)
+        return count
     end
-    Check(shown == 18, "the Sweeping Strikes preview shows " .. shown .. " of 18 segments")
-    Check(math.abs(right - frame:GetWidth()) <= 1, string.format(
-        "the Sweeping Strikes segments end at x=%d on a %d px bar", right, frame:GetWidth()))
+    Check(box.cpScene.CP.visible and frame:IsShown(), "the Sweeping Strikes preview is hidden")
+    Check(Separators(frame) == 17, "the Sweeping Strikes preview shows " .. Separators(frame) .. " of 17 separators")
     -- The Player preview on the Class Resources page draws the same resource row.
     local Preview = MSUF.UFPreview
     local parent = env.CreateFrame("Frame", nil, env.UIParent); parent:SetSize(900, 400)
@@ -307,12 +316,11 @@ do
     end
     Preview.Refresh(unitBox, "MENU_PREVIEW_QUALITY")
     M.GetClassPowerPreviewSpec = GetSpec
-    local unitShown = 0
-    for _, segment in ipairs(unitBox.mock.classPower.segments or {}) do
-        if segment:IsShown() then unitShown = unitShown + 1 end
-    end
-    Check(unitShown == 18, "the Player preview on the Class Resources page shows " .. unitShown .. " of 18 Sweeping Strikes segments")
+    local unitContainer = unitBox._cpScene and unitBox._cpScene.CP.container
+    Check(unitContainer and unitContainer:IsShown() and Separators(unitContainer) == 17,
+        "the Player preview on the Class Resources page shows " .. (unitContainer and Separators(unitContainer) or 0) .. " of 17 Sweeping Strikes separators")
     unitBox:Hide()
+    end
 end
 
 ---------------------------------------------------------------------------

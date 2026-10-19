@@ -158,9 +158,12 @@ player.powerBarDetached = false
 
 -- 2. Class Resource text layer --------------------------------------------
 local Layers = MSUF.UF.Layers
-local textOwner = mock.classPower and mock.classPower.textOwner
-Check(textOwner ~= nil, "the preview has no Class Resource text owner")
+-- The class resource is the engine scene; its text owner is the live text frame.
 local bars = DB().bars
+bars.classPowerShowText = true
+Refresh("player")
+local textOwner = box._cpScene and box._cpScene.CP.textFrame
+Check(textOwner ~= nil, "the preview has no Class Resource text owner")
 for _, layer in ipairs({ 20, 2 }) do
     bars.classPowerTextLayer = layer
     Refresh("player")

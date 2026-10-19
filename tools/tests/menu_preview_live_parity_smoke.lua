@@ -196,30 +196,36 @@ do
     local saved = {}
     for _, field in ipairs(FIELDS) do saved[field] = g[field] end
     g.enablePlayerCastbar, g.castbarShowLatencyText, g.castbarShowChannelTicks, g.castbarAccentLastTick = true, true, true, true
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
-    g.castbarTimeFontSize, g.castbarPlayerTimeFontSize, g.showPlayerCastTime = 9, 21, false
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
+    -- The live castbar sizes its time text only while it is shown; the latency text copies that font.
+    g.castbarTimeFontSize, g.castbarPlayerTimeFontSize, g.showPlayerCastTime = 9, 21, true
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     local castbar = env.MSUF_DB.player.castbar or {}
     env.MSUF_DB.player.castbar = castbar
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     local savedCustom = castbar.channelTickUseCustom
     castbar.channelTickUseCustom = false
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     for _, direction in ipairs({ "LTR", "RTL" }) do
         g.castbarFillDirection = direction
-        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
         MSUF.UF.Config.Refresh()
         Preview.Refresh(box, "MENU_PREVIEW_LIVE_PARITY")
-        local samples = box.mock.cast._featureSamples
-        Check(samples and samples.latency and samples.latency:IsShown(), "harness: no latency sample")
-        local _, latencySize = samples.latency:GetFont()
-        local _, timeSize = box.mock.cast.time:GetFont()
-        Check(latencySize ~= nil and latencySize == timeSize,
+        -- The player castbar preview is the engine castbar scene, so the latency text and the channel
+        -- markers are the live regions.
+        local frame = box._castScene and box._castScene:Frame()
+        Check(frame, "harness: no castbar scene frame")
+        local latency = frame.latencyText
+        Check(latency and latency:IsShown(), "harness: no latency sample")
+        local _, latencySize = latency:GetFont()
+        local _, timeSize = frame.timeText:GetFont()
+        Check(latencySize == 21 and latencySize == timeSize,
             "the latency sample is " .. tostring(latencySize) .. " px, the player castbar time text " .. tostring(timeSize) .. " px")
         local reverse = direction == "RTL"
         local first
+        local markers = frame._msufPlayerChannelHasteMarkers or {}
         for i = 1, 5 do
-            local marker = samples.ticks[i]
+            local marker = markers[i]
             Check(marker and marker:IsShown(), "channel tick " .. i .. " of the five live markers is missing")
             local point, _, relativePoint, x = marker:GetPoint(1)
             Check(point == "TOP" and relativePoint == (reverse and "TOPRIGHT" or "TOPLEFT"),
@@ -236,10 +242,10 @@ do
             local _, sublevel = marker:GetDrawLayer()
             Check(sublevel == 7, "channel tick " .. i .. " is not on OVERLAY sublevel 7")
         end
-        Check(not samples.ticks[6], "more than five default channel ticks")
+        Check(not (markers[6] and markers[6]:IsShown()), "more than five default channel ticks")
     end
     castbar.channelTickUseCustom = savedCustom
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     for _, field in ipairs(FIELDS) do g[field] = saved[field] end
     MSUF.UF.Config.Refresh()
     box:Hide()
@@ -257,29 +263,29 @@ do
     Check(type(resolve) == "function", "harness: the core publishes no MSUF_ResolveCastbarColors")
     local parent = env.CreateFrame("Frame", nil, env.UIParent); parent:SetSize(900, 400)
     local panel = env.CreateFrame("Frame", nil, env.UIParent)
-    panel._msufGetCurrentKey = function() return "player" end
+    panel._msufGetCurrentKey = function() return "target" end
     local box = Preview._BuildPreview(parent, panel, 900, 400)
     box:Show(); box.canvas:SetSize(400, 200)
     local g = env.MSUF_DB.general
-    local FIELDS = { "enablePlayerCastbar", "castbarInterruptibleColor", "castbarInterruptibleR",
+    local FIELDS = { "enableTargetCastbar", "castbarInterruptibleColor", "castbarInterruptibleR",
         "castbarInterruptibleG", "castbarInterruptibleB" }
     local saved = {}
     for _, field in ipairs(FIELDS) do saved[field] = g[field] end
-    g.enablePlayerCastbar = true
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    g.enableTargetCastbar = true
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     local OLD_FIXED = { 0.0, 0.9, 0.8 }
     local function PreviewFill(label)
         MSUF.UF.Config.Refresh()
         Preview.Refresh(box, "MENU_PREVIEW_LIVE_PARITY")
-        local color = box.mock.cast.fill.vertexColor
+        local color = box._castScene:Frame().statusBar.color
         Check(type(color) == "table", "harness: the castbar preview painted no fill colour (" .. label .. ")")
         return color
     end
     for _, key in ipairs({ "red", "yellow", "turquoise" }) do
         g.castbarInterruptibleColor = key
-        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
         g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
-        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+        if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
         local r, gr, b = resolve()
         local color = PreviewFill(key)
         Check(color[1] == r and color[2] == gr and color[3] == b,
@@ -291,7 +297,7 @@ do
         end
     end
     g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = 0.25, 0.5, 0.75
-    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Compile() end
+    if env.MSUF and env.MSUF.Castbars then env.MSUF.Castbars.Config.Refresh() end
     local color = PreviewFill("custom")
     local r, gr, b = resolve()
     Check(r == 0.25 and gr == 0.5 and b == 0.75, "harness: the live castbar ignores the custom RGB")

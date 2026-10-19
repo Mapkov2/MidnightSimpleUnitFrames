@@ -5,6 +5,12 @@ local flavor = arg[2] or "Mainline"
 local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = World.Open(root, flavor, { page = "home", beforeCore = function(world)
     world.env.RAID_CLASS_COLORS = { MAGE = { r = .2, g = .5, b = .8 } }
+    -- The class resource scene tells its power types apart; the bare world answers Enum with one opaque stub.
+    local enum = world.env.Enum
+    world.env.Enum = setmetatable({ PowerType = setmetatable({ Mana = 0, Rage = 1, Focus = 2, Energy = 3,
+        ComboPoints = 4, Runes = 5, RunicPower = 6, SoulShards = 7, LunarPower = 8, HolyPower = 9, Maelstrom = 11,
+        Chi = 12, Insanity = 13, BurningEmbers = 14, DemonicFury = 15, ArcaneCharges = 16, Essence = 19 },
+        { __index = enum and enum.PowerType }) }, { __index = enum })
 end })
 local core, env, M = mw.core, mw.env, mw.M
 local UF, Config = core.UF, core.UF.Config
@@ -299,36 +305,30 @@ local bars, general = env.MSUF_DB.bars, env.MSUF_DB.general
 bars.classPowerSlotColorModes = { COMBO_POINTS = "custom", HOLY_POWER = "custom" }
 general.classPowerColorOverrides = { COMBO_POINTS_2 = { .1, .3, .7 }, HOLY_POWER_FULL = { .4, .6, .8 } }
 local config = { slotColorModes = bars.classPowerSlotColorModes, colorOverrides = general.classPowerColorOverrides }
-local cr, cg, cb = cp.ResolveSlotColor(bars, "COMBO_POINTS", 2, .2, .4, .6)
-Near(cr, .1, "custom slot R")
-Near(cg, .3, "custom slot G")
-Near(cb, .7, "custom slot B")
-local legacyRamp = { classPowerComboPointColorMode = "ramp" }
-local rr, rg, rb = cp.ResolveSlotColor(legacyRamp, "COMBO_POINTS", 1, .2, .4, .6)
+-- The class resource previews are the engine's ClassPower scene: slot and full colours come from the runtime
+-- resolvers, with no preview-side copy.
+assert(cp.ResolveSlotColor == nil and cp.ResolveFullColor == nil, "a preview-side class colour resolver came back")
+Config.Refresh()
+Preview.Refresh(box, "SHARED_CP_COLOUR")
+local visual = assert(box._cpScene and box._cpScene.CP.visual, "the unit preview painted no class resource scene")
+Near(visual.slotR[2], .1, "custom slot R")
+Near(visual.slotG[2], .3, "custom slot G")
+Near(visual.slotB[2], .7, "custom slot B")
+local cr, cg, cb = Colors.ResolveSlotColor("COMBO_POINTS", 2, .2, .4, .6, config)
+Near(cr, .1, "runtime custom slot R")
+Near(cg, .3, "runtime custom slot G")
+Near(cb, .7, "runtime custom slot B")
+local rr, rg, rb = Colors.ResolveSlotColor("COMBO_POINTS", 1, .2, .4, .6, { comboPointColorMode = "ramp" })
 Near(rr, 0, "legacy ramp R")
 Near(rg, .95, "legacy ramp G")
 Near(rb, 1, "legacy ramp B")
 assert(Colors.ResolveSlotColor("COMBO_POINTS", 1, .2, .4, .6, {}) == nil, "runtime default mode contract changed")
-local malformed = { classPowerSlotColorModes = 5, classPowerFullColorEnabled = 5 }
-local mr, mg, mb = cp.ResolveSlotColor(malformed, "COMBO_POINTS", 2, .2, .4, .6)
-Near(mr, .2, "invalid slot map R")
-Near(mg, .4, "invalid slot map G")
-Near(mb, .6, "invalid slot map B")
-assert(cp.ResolveFullColor(malformed, "COMBO_POINTS", .2, .4, .6) == false, "invalid full map enabled colour")
-for _, token in ipairs({ "COMBO_POINTS", "HOLY_POWER" }) do
-    for slot = 1, 10 do
-        local r, g, b = Colors.ResolveSlotColor(token, slot, .2, .4, .6, config)
-        local pr, pg, pb
-        Calls(Colors.ResolveSlotColor, function() pr, pg, pb = cp.ResolveSlotColor(bars, token, slot, .2, .4, .6) end, "slot preview")
-        Near(pr, r, "slot R")
-        Near(pg, g, "slot G")
-        Near(pb, b, "slot B")
-    end
-end
+assert(Colors.ResolveSlotColor("COMBO_POINTS", 2, .2, .4, .6, {}) == nil, "invalid slot map changed the base colour")
+assert(Colors.ResolveFullColor("COMBO_POINTS", .2, .4, .6, {}) == false, "invalid full map enabled colour")
 bars.classPowerFullColorEnabled = { HOLY_POWER = true }
-local full, r, g, b
-Calls(Colors.ResolveFullColor, function() full, r, g, b = cp.ResolveFullColor(bars, "HOLY_POWER", 1, 1, 1) end, "full preview")
-assert(full, "full colour lost")
+local full, r, g, b = Colors.ResolveFullColor("HOLY_POWER", 1, 1, 1, { colorOverrides = general.classPowerColorOverrides,
+    fullColorEnabled = bars.classPowerFullColorEnabled })
+assert(full == true, "enabled full colour was not applied")
 Near(r, .4, "full R")
 Near(g, .6, "full G")
 Near(b, .8, "full B")
@@ -354,20 +354,43 @@ general.enablePlayerCastbar, general.castbarPlayerShowIcon = true, true
 general.castbarPlayerIconZoom, general.castbarPlayerIconBorderStyle = 150, "CASTBAR"
 general.castbarPlayerIconBorderThickness = 3
 general.castbarBorderR, general.castbarBorderG, general.castbarBorderB, general.castbarBorderA = .2, .4, .6, .8
+-- Both castbar previews paint the engine castbar scene, which reads the live castbar config snapshot the apply path refreshes.
+local function RefreshCast(reason)
+    core.Castbars.Config.Refresh()
+    Preview.Refresh(box, reason)
+end
 Config.Refresh()
-Calls(Castbars.ApplyIconZoom, function() Preview.Refresh(box, "SHARED_CAST_ZOOM") end, "unit cast zoom")
-Calls(Castbars.PaintIconBorder, function() Preview.Refresh(box, "SHARED_CAST_BORDER") end, "unit cast border")
+Calls(Castbars.ApplyIconZoom, function() RefreshCast("SHARED_CAST_ZOOM") end, "unit cast zoom")
+core.Castbars.Config.Refresh()
+general.castbarPlayerIconBorderThickness = 4
+Calls(Castbars.PaintIconBorder, function() RefreshCast("SHARED_CAST_BORDER") end, "unit cast border")
 general.castbarPlayerIconBorderStyle = "NONE"
-Preview.Refresh(box, "SHARED_CAST_NO_BORDER")
-assert(box.mock.cast.icon:IsShown(), "disabling the icon border hid the preview icon")
+RefreshCast("SHARED_CAST_NO_BORDER")
+local playerScene = box._castScene:Frame()
+assert(playerScene.icon:IsShown(), "disabling the icon border hid the preview icon")
 general.castbarPlayerShowIcon = false
-Preview.Refresh(box, "SHARED_CAST_NO_ICON")
-assert(not box.mock.cast.icon:IsShown(), "disabled preview icon stayed visible")
+RefreshCast("SHARED_CAST_NO_ICON")
+assert(not playerScene.icon:IsShown(), "disabled preview icon stayed visible")
 general.castbarPlayerShowIcon, general.castbarPlayerIconBorderStyle = true, "CASTBAR"
+general.castbarPlayerIconBorderThickness = 5
+core.Castbars.Config.Refresh()
 mw:Select("opt_castbar")
 local castPage = assert(M._msuf2CastbarPreview, "castbar page preview missing")
-Calls(Castbars.PaintIconBorder, function() castPage:Refresh() end, "castbar page border")
-Calls(Castbars.AnchorText, function() castPage:Refresh() end, "castbar page text")
+Calls(Castbars.PaintIconBorder, function()
+    general.castbarPlayerIconBorderThickness = 6
+    core.Castbars.Config.Refresh(); castPage:Refresh()
+end, "castbar page border")
+Calls(Castbars.ApplyIconZoom, function()
+    general.castbarPlayerIconZoom = 130
+    core.Castbars.Config.Refresh(); castPage:Refresh()
+end, "castbar page zoom")
+general.castbarPlayerIconZoom = 150
+Calls(Castbars.AnchorText, function()
+    general.castbarPlayerSpellNamePosition = "CENTER"
+    core.Castbars.Config.Refresh(); castPage:Refresh()
+end, "castbar page text")
+general.castbarPlayerSpellNamePosition = nil
+core.Castbars.Config.Refresh()
 
 local liveCast = env.CreateFrame("Frame", nil, env.UIParent)
 liveCast:SetSize(250, 18)
@@ -395,13 +418,6 @@ Near(supplied.backdrop.edgeSize, 4, "supplied mock pixel edge")
 Castbars.PaintIconBorder(supplied, mockHost, "NONE", 0, general, 0, true)
 assert(supplied:IsShown(), "border painter changed preview-owned visibility")
 
--- Fractional mock scaling applies after the runtime's text padding. Rounding
--- the padding and coordinates separately would move this by one pixel.
-local fs = liveCast:CreateFontString()
-Calls(Castbars.AnchorText, function()
-    core.UFPreviewCastbar.AnchorText(fs, liveCast, "LEFT", 1, 1, "LEFT", function(v) return math.floor(v * .5 + .5) end)
-end, "scaled text")
-Near(select(4, fs:GetPoint(1)), 2, "scaled padded text X")
 
 local layout = UF.elements.Health.LayoutBackgroundFill
 assert(type(layout) == "function", "runtime health background geometry missing")

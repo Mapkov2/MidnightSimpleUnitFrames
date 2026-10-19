@@ -319,12 +319,28 @@ clocks without requesting a live-header rebuild; regen repaints wanted surfaces.
 Each class's painters and each root's frames are retained independently. Static
 native-aura samples use the core native slot's regions/style with plain sample values.
 
-The Options switch must replace the painters in UnitPreview_Castbar,
-GlobalCastbars_Preview, ClassPowerPreview, and the cast/resource parts of
-UnitPreview_Render/PreviewHelpers with these scene calls. Preserve the selection,
-zoom, viewport, help, replay, animation and layer controls; feed changed options to the
-active root. Unit-scene attachment is a separate package. Existing Options painters
-remain intact here, and their historical render oracle is not repinned.
+The Options previews paint these scenes. Each preview box makes its root on its first
+visible paint (parent: the castbar slot, the unit body holder, or the Class Resources stage),
+reuses it, deactivates it when the box hides, and never builds one at load. Options feeds a
+sample, `width`/`height`/`scale`/`point` and the `cooldowns` rectangles of the shown Cooldown
+Manager viewers; it keeps the selection, zoom, viewport, help, replay, animation and layer
+controls, the text and selection handles, the castbar slot, and the detached GCD strip, which
+is not part of the castbar. A changed setting reaches the scene through `SetOptions`.
+
+Preview-only additions to the scene contract:
+
+- `scene:Tick(fields)` copies scalar sample fields into the scene's own sample and repaints
+  only what they drive (a castbar's progress and time text, a resource's mode painter), so an
+  animation tick allocates nothing beyond the painters' own text.
+- Castbar samples accept `latencyMS` (the "50 ms" text of `castbarShowLatencyText`, player) and
+  `blinkStage`/`blinkPhase` (the empower stage flash of `empowerStageBlink`, driven by the
+  owner's clock through `Empower.PaintSampleBlink`).
+- ClassPower samples accept `bars`, a table that overlays the profile's `bars` for this scene
+  only. The preview forces the resource gates the picker ignores (`showShadowMana`,
+  `showEleMaelstrom`, `showGuardianIronfur`, `showSweepingStrikes`, `showStagger`) and carries
+  its Border and Res Text layers (`classPowerOutline = 0`, `classPowerShowText = false`).
+- `scene.CP.container`, `scene.CP.text`, `scene.CP.bars` and `scene.CP.currentMax` are the
+  retained regions Options places handles, bounds and the threshold tint around.
 
 The new smokes compare native visual properties and resolved screen rectangles with
 real core castbar/controller surfaces. They cover all five graphs, supported resources,

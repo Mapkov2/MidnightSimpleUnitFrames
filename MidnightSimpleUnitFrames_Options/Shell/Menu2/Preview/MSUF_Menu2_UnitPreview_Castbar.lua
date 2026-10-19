@@ -1,11 +1,10 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua
 --- Cold-path castbar preview helpers.
 ---
---- Resolves castbar DB fields and mock layout values for Menu2 previews. It intentionally
---- does not subscribe to UNIT_SPELLCAST events or mutate live castbar frames.
+--- Resolves castbar DB fields and the configured size for the Menu2 previews, which paint the engine's
+--- castbar scene. It does not subscribe to UNIT_SPELLCAST events or mutate live castbar frames.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-local format = string.format
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
@@ -187,57 +186,6 @@ function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
     if suffix and suffix:find("Icon", 1, true) then globalKey = suffix:gsub("^Icon", "castbarIcon") end
     return MSUF.Castbars.Visuals.DetailNum(g, nil, nil, dbKey, nil)
         or MSUF.Castbars.Visuals.DetailNum(g, nil, nil, globalKey, fallback)
-end
--- Time text offsets follow the live castbar (MSUF_CastbarVisuals.lua
--- ApplyTimeTextLayout): boss and arena store X relative to a -2 base and never
--- fall back to the player offset; the other units fall back to the player
--- offset, then to -2 and 0. Both menu castbar previews read them here.
-function Castbar.TimeOffsets(g, key)
-    key = CanonKey(key)
-    g = g or {}
-    if key == "boss" or key == "arena" then
-        return -2 + (tonumber(g[key .. "CastTimeOffsetX"]) or 0), tonumber(g[key .. "CastTimeOffsetY"]) or 0
-    end
-    local prefix = Castbar.Prefix(key)
-    local x = prefix and g[prefix .. "TimeOffsetX"]
-    local y = prefix and g[prefix .. "TimeOffsetY"]
-    if x == nil then x = g.castbarPlayerTimeOffsetX end
-    if y == nil then y = g.castbarPlayerTimeOffsetY end
-    return tonumber(x) or -2, tonumber(y) or 0
-end
-function Castbar.ReadString(g, key, suffix, bossKey, fallback)
-    g = g or EMPTY_DETAILS
-    return MSUF.Castbars.Visuals.DetailString(g, nil, nil, TextKey(key, suffix, bossKey), fallback)
-end
-Castbar.NormalizeTextPosition = _G.MSUF_NormalizeCastbarTextPosition
-Castbar.JustifyForTextPosition = MSUF.Castbars.Visuals.JustifyForTextPosition
-Castbar.NormalizeTextJustify = _G.MSUF_NormalizeCastbarTextJustify
-function Castbar.AnchorText(fontString, relativeTo, position, x, y, justify, scaleFn)
-    position = Castbar.NormalizeTextPosition(position, "LEFT")
-    justify = Castbar.NormalizeTextJustify(justify, Castbar.JustifyForTextPosition(position))
-    if type(scaleFn) ~= "function" then scaleFn = tonumber end
-    MSUF.Castbars.Visuals.AnchorText(fontString, relativeTo, position,
-        tonumber(x) or 0, tonumber(y) or 0, justify, scaleFn)
-end
-function Castbar.ResolveTargetTextPreviewColor(key, fallbackR, fallbackG, fallbackB)
-    key = CanonKey(key)
-    local getDetailColor = _G.MSUF_GetCastbarDetailTextColor
-    if type(getDetailColor) == "function" and key then
-        local r, g, b, custom = getDetailColor(key, "TargetName")
-        if custom == true then return r, g, b, true end
-    end
-    local getSharedColor = _G.MSUF_GetCastbarTargetNameColor
-    if type(getSharedColor) == "function" then
-        local r, g, b, custom = getSharedColor()
-        if custom == true then return r, g, b, true end
-    end
-    return fallbackR or 1, fallbackG or 0.82, fallbackB or 0.20, false
-end
-function Castbar.FormatPreviewTime(g, key, current, total)
-    local mode = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then mode = _G.MSUF_GetCastbarTimeFormat(key, g) end
-    if type(_G.MSUF_FormatCastbarTimeText) == "function" then return _G.MSUF_FormatCastbarTimeText(mode, current, total) or "" end
-    return format("%.1f", tonumber(current) or 0)
 end
 function Castbar.Enabled(key, g)
     local fn = _G.MSUF_ShouldUseMSUFCastbar

@@ -78,7 +78,7 @@ local function CheckCasts()
     end
 end
 CheckCasts()
--- The real unit preview painter must update its scope when its selector changes.
+-- The unit preview paints the engine castbar scene: it must follow its selector's scope with the live shaped contour.
 local methods = mw.world.widgets.Methods
 for _, key in ipairs({ "SetStartPoint", "SetEndPoint", "SetThickness", "SetAutoFocus", "SetMaxLetters", "EnableKeyboard" }) do
     if not methods[key] then methods[key] = function() end end
@@ -94,77 +94,72 @@ preview._msuf2ColorPainterForceCastbar = true
 preview.canvas:SetSize(400, 200)
 db.general.enablePlayerCastbar, db.general.enableTargetCastbar, db.general.enableFocusCastbar = true, true, true
 UF.Config.Refresh()
+core.Castbars.Config.Refresh()
+local SCENE_UNIT = { boss = "boss1", arena = "arena1" }
 for _, scope in ipairs({ "player", "target", "focus", "boss", "arena" }) do
     if core.Client.SupportsUnit(scope) then
         selected = scope
         core.UFPreview.Refresh(preview, "SLANTED_ALL_SCOPES")
-        assert(preview.mock.cast:IsShown(), scope .. ": unit castbar preview was silently skipped")
+        local cast = preview._castScene and preview._castScene:Frame()
+        assert(preview.mock.cast:IsShown() and cast and cast:IsShown(), scope .. ": unit castbar preview was silently skipped")
         do
-            assert(preview.mock.cast.configKey == scope, "unit castbar preview lost selected scope")
-            assert(next(preview.mock.cast._msufRoundedCastbarMasked))
-            for _, mask in pairs(preview.mock.cast._msufRoundedCastbarMasked) do
+            assert(cast.unit == (SCENE_UNIT[scope] or scope), "unit castbar preview lost selected scope")
+            assert(next(cast._msufRoundedCastbarMasked))
+            for _, mask in pairs(cast._msufRoundedCastbarMasked) do
                 assert(mask:GetTexture() == kit.SLANTED_MASK_PATHS[db[scope].slantedBarDirection],
                     scope .. ": unit castbar preview lost direction")
             end
         end
     end
 end
--- The Castbars page preview uses the same renderer, including style changes.
--- A cold surface can be refused during combat; a failed paint must be retried.
-local Require, refused = core.Require, false
-core.Require = function(name, context)
-    local provider = Require(name, context)
-    if name == "MSUF_RoundedCastbar_RenderPreview" then
-        refused = true
-        return function() return false end
-    end
-    return provider
-end
+-- The Castbars page preview is the same scene, including style changes.
 mw:Select("opt_castbar")
-core.Require = Require
-assert(refused, "cold shaped preview was not exercised")
 local pagePreview = assert(M._msuf2CastbarPreview, "Castbars page preview missing")
-assert(pagePreview.outlineFrame:IsShown() and not pagePreview.bar._msufRoundedCastbarActive,
-    "refused cold shape did not retain rectangular fallback")
 for _, scope in ipairs({ "player", "target", "focus", "boss", "arena" }) do
     if core.Client.SupportsUnit(scope) then
         assert(M.SetCastbarPreviewUnit(scope))
-        local bar, direction = pagePreview.bar, db[scope].slantedBarDirection
-        assert(bar.configKey == scope, "Castbars page lost selected scope")
-        assert(bar._msufRoundedCastbarMasked[pagePreview.fill]:GetTexture() == kit.SLANTED_MASK_PATHS[direction],
-            scope .. ": Castbars page used wrong contour")
+        local bar, direction = pagePreview.frame, db[scope].slantedBarDirection
+        assert(bar.unit == (SCENE_UNIT[scope] or scope), "Castbars page lost selected scope")
+        for _, mask in pairs(bar._msufRoundedCastbarMasked) do
+            assert(mask:GetTexture() == kit.SLANTED_MASK_PATHS[direction], scope .. ": Castbars page used wrong contour")
+        end
         assert(bar._msufRoundedCastbarOutlineStack[1]:GetTexture() == kit.SLANTED_EDGE_PATHS[direction],
             scope .. ": Castbars page used wrong outline")
-        for _, texture in ipairs(bar.empowerSegments) do
-            assert(bar._msufRoundedCastbarMasked[texture]:GetTexture() == kit.SLANTED_MASK_PATHS[direction],
-                "empower stage escaped scoped contour")
-        end
     end
 end
-local host, layoutCalls = pagePreview.bar._msufRoundedCastbarOutlineHost, 0
+local function RefreshPage()
+    core.Castbars.Config.Refresh()
+    pagePreview:Refresh()
+end
+local host, layoutCalls = pagePreview.frame._msufRoundedCastbarOutlineHost, 0
 local Clear = host.ClearAllPoints
 host.ClearAllPoints = function(self, ...)
     layoutCalls = layoutCalls + 1
     return Clear(self, ...)
 end
-for _ = 1, 5 do pagePreview:Refresh() end
+-- The animation driver moves the fill only; the shaped outline keeps its layout.
+local driver = pagePreview.castRowBase.parent
+for _ = 1, 5 do driver:GetScript("OnUpdate")(driver, 0.06) end
 assert(layoutCalls == 0, "unchanged animated preview rebuilt its shaped outline")
 db.general.castbarOutlineThickness = 0
-pagePreview:Refresh()
-assert(pagePreview.bar._msufRoundedCastbarActive and not host:IsShown(), "zero outline disabled cut or retained edge")
+RefreshPage()
+assert(pagePreview.frame._msufRoundedCastbarActive and not host:IsShown(), "zero outline disabled cut or retained edge")
 db.bars.slantedCastbars, db.bars.roundedCastbars = false, false
 db.general.castbarOutlineThickness = 1
-pagePreview:Refresh()
-assert(pagePreview.bar._msufRoundedCastbarMasked == nil and pagePreview.outlineFrame:IsShown(),
+RefreshPage()
+assert(pagePreview.frame._msufRoundedCastbarMasked == nil or next(pagePreview.frame._msufRoundedCastbarMasked) == nil,
     "disabling shape did not restore rectangular Castbars preview")
 db.bars.roundedFramesEnabled, db.bars.roundedCastbars = true, true
-pagePreview:Refresh()
-assert(pagePreview.bar._msufRoundedCastbarMasked[pagePreview.fill]:GetTexture() == core.RoundedSurface.ResolveMedia(),
-    "Castbars preview did not change to rounded media")
+RefreshPage()
+for _, mask in pairs(pagePreview.frame._msufRoundedCastbarMasked) do
+    assert(mask:GetTexture() == core.RoundedSurface.ResolveMedia(), "Castbars preview did not change to rounded media")
+end
 db.bars.slantedCastbars, db.bars.roundedCastbars = true, false
-pagePreview:Refresh()
-assert(pagePreview.bar._msufRoundedCastbarMasked[pagePreview.fill]:GetTexture()
-    == kit.SLANTED_MASK_PATHS[db[pagePreview.layoutUnit].slantedBarDirection], "rounded-to-slanted transition stayed rounded")
+RefreshPage()
+for _, mask in pairs(pagePreview.frame._msufRoundedCastbarMasked) do
+    assert(mask:GetTexture() == kit.SLANTED_MASK_PATHS[db[pagePreview.layoutUnit].slantedBarDirection],
+        "rounded-to-slanted transition stayed rounded")
+end
 -- Player class resources share Player's contour, including cached reapply.
 local cp = { container = env.CreateFrame("Frame", nil, env.UIParent), bars = {}, currentMax = 3 }
 cp.container:SetSize(180, 20)
@@ -173,10 +168,7 @@ for index = 1, 3 do
     cp.bars[index] = Bar(cp.container)
     cp.bars[index]._bg = cp.container:CreateTexture()
 end
-local fills, backgrounds = {}, {}
-local sample = env.CreateFrame("Frame", nil, env.UIParent)
-sample:SetSize(180, 20)
-for index = 1, 3 do fills[index], backgrounds[index] = sample:CreateTexture(), sample:CreateTexture() end
+selected = "player"
 for _, direction in ipairs(directions) do
     db.player.slantedBarDirection = direction
     assert(core.RoundedSurface.ApplyClassPower(cp, true), "class resource runtime failed")
@@ -184,9 +176,10 @@ for _, direction in ipairs(directions) do
     assert(cp.container._msufRCPMaskedTextures[cp.bgTex]:GetTexture() == kit.SLANTED_MASK_PATHS[direction],
         "class resources ignored Player direction")
     assert(cp._msufRCPOutlineEdge:GetTexture() == kit.SLANTED_EDGE_PATHS[direction], "class resource edge ignored Player")
-    assert(M.PreviewHelpers.ApplyRoundedClassPowerSurface(sample, true, fills, backgrounds, 3, 1, { style = "SLANTED" }),
-        "class resource preview failed")
-    assert(sample._msufCPPreviewRoundedMasked[fills[1]]:GetTexture() == kit.SLANTED_MASK_PATHS[direction],
+    -- The unit preview's class resource is the engine scene, which applies the same runtime contour.
+    core.UFPreview.Refresh(preview, "SLANTED_CLASS_RESOURCE")
+    local scene = assert(preview._cpScene, "the unit preview painted no class resource scene").CP
+    assert(scene.container._msufRCPMaskedTextures[scene.bgTex]:GetTexture() == kit.SLANTED_MASK_PATHS[direction],
         "class resource preview ignored Player direction")
 end
 -- Clearing a scoped direction restores Shared without disturbing other units.
@@ -201,7 +194,8 @@ end
 CheckCasts()
 assert(core.RoundedSurface.ApplyClassPower(cp, true))
 assert(cp.container._msufRCPMaskedTextures[cp.bgTex]:GetTexture() == kit.SLANTED_MASK_PATHS.BOTH_DOWN)
-assert(M.PreviewHelpers.ApplyRoundedClassPowerSurface(sample, true, fills, backgrounds, 3, 1, { style = "SLANTED" }))
-assert(sample._msufCPPreviewRoundedMasked[fills[1]]:GetTexture() == kit.SLANTED_MASK_PATHS.BOTH_DOWN,
+core.UFPreview.Refresh(preview, "SLANTED_CLASS_RESOURCE")
+local shared = preview._cpScene.CP
+assert(shared.container._msufRCPMaskedTextures[shared.bgTex]:GetTexture() == kit.SLANTED_MASK_PATHS.BOTH_DOWN,
     "class resource preview did not restore Shared")
 print("slanted_all_surfaces_smoke: OK (" .. flavor .. ", " .. #units .. " unit frames, " .. #casts .. " castbars)")

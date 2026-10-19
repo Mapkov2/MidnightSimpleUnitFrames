@@ -191,9 +191,9 @@ assert(unit:find("loadCondShowWhenInjured loadCondActive", 1, true),
 -- Arena preview branches from the Mainline Render, and Retail 7f0aa2c6 guides.
 local render = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
 for _, contract in ipairs({
-    '(key == "arena" and "Greater Pyroblast")',
+    'local CAST_SAMPLE_NAMES = { boss = "Celestial Ruin", arena = "Greater Pyroblast" }',
+    'CAST_SAMPLE_NAMES[key] or "Arcane Surge"',
     '(key == "arena" and g.showArenaCastTime ~= false)',
-    "local timeX, timeY = CastbarPreview.TimeOffsets(g, key)",
     '((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))',
     '((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))',
     'ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)',
@@ -205,13 +205,17 @@ for _, contract in ipairs({
     assert(render:find(contract, 1, true),
         "Classic unit preview lost an Arena or Retail parity branch: " .. contract)
 end
--- The arena time offsets sit on the boss -2 base in the shared helper both
--- menu castbar previews read (castbar_preview_time_offset_smoke drives it).
+-- The arena time offsets sit on the boss -2 base of the live castbar layout, which both
+-- menu castbar previews now paint through their engine scenes
+-- (castbar_preview_time_offset_smoke drives every unit; no preview keeps a copy).
+local liveVisuals = ReadLF("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarVisuals.lua")
+assert(liveVisuals:find("if poolUnit then x = -2 + (tonumber(x) or 0) end", 1, true),
+    "live castbar layout lost the Boss/Arena time offset base")
 local previewCastbar = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua")
-assert(previewCastbar:find('if key == "boss" or key == "arena" then\n'
-    .. '        return -2 + (tonumber(g[key .. "CastTimeOffsetX"]) or 0), tonumber(g[key .. "CastTimeOffsetY"]) or 0', 1, true),
-    "Classic castbar preview helper lost the Arena time offset base")
-assert(CountPlain(render, '(key == "arena" and "arena1")') == 2,
+assert(not previewCastbar:find("-2 + (tonumber(", 1, true) and not render:find("-2 + (tonumber(", 1, true),
+    "a menu castbar preview copies the live Boss/Arena time offset base again")
+assert(CountPlain(render, '(key == "arena" and "arena1")') == 1
+    and CountPlain(render, 'local CAST_SCENE_UNIT = { boss = "boss1", arena = "arena1" }') == 1,
     "Classic unit preview must resolve arena to arena1 for the live frame and the spell-name shortener")
 assert(CountPlain(render, '(key == "arena" and g.showArenaCastTargetName == true)') == 2,
     "Classic unit preview must honor showArenaCastTargetName in the castbar details and the footprint")

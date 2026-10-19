@@ -177,3 +177,27 @@ child frame levels; it does not inject profile values or expected output. Exact
 scene identity, live and secret-field samples, zoomed text dragging, slot anchors,
 layer restoration and unchanged repaint limits have separate runtime assertions.
 All twenty native setter mutations must still fail the comparator.
+
+## Castbar and ClassPower scene live-look migration (98b)
+
+The Castbars page, the Class Resources page and the Unit preview's castbar and class power
+slots now paint the engine's `root:Castbar` and `root:ClassPower` scenes instead of their own
+mock regions. Sixty-eight observations changed, five clients: the sixteen Castbars page
+fixtures and the eleven Class Resources page fixtures (the whole preview tree is the engine
+scene, so every region differs), and the forty-one unit fixtures, where only the roles under
+the castbar slot (`unit/cast`), the class power slot (`unit/classPower` and its scene frame)
+and the text-handle region lists follow the scenes. Cases, client inputs and group fixtures
+are unchanged; the adapter declares `INTERRUPTED`, the power types the scenes tell apart,
+and the class/spec constants the engine reads.
+
+The unit fixtures already differed from the unmodified tree before this migration (aura
+preview `desaturated` flags, a zero-absorb sample, the size tag of the hidden-layers case; the
+stack fix owns them). Every role this migration did not touch keeps its committed bytes, so
+those differences stay visible and unreviewed here; an unrelated role is never repinned. The
+castbar and class power fixtures had no such drift and were recaptured whole.
+
+Live-look convergences recorded by the new fixtures: the draining channel accents the nearest
+marker, the Interrupt Ready fill style paints the ready colour, the class outline is the
+live black rather than the preview red, Sweeping Strikes is one native fill with separators,
+and a hidden time text is not sized. `tools/tests/options_castbar_classpower_scene_smoke.lua`
+asserts every old capability against the scene regions.

@@ -487,8 +487,9 @@ do
         if M.ClassPowerPreviewSpecs and M.ClassPowerPreviewSpecs[specKey] then
             M._msuf2ClassPowerPreviewSpecKey = specKey
             AnimateUnit("player", "unit player " .. specKey)
-            local cp = box._msufPreviewScene and box._msufPreviewScene.cp
-            Check(cp and cp.preview and cp.preview.key == specKey and cp.animatedValue ~= nil,
+            -- The class resource is the engine's ClassPower scene; its wave reaches it as a light tick.
+            local scene, st = box._cpScene, box._msufPreviewScene
+            Check(scene and st and st.cpSpec and st.cpSpec.key == specKey and scene.CP.visible and box._cpTick.count ~= nil,
                 "harness: the player preview animates no " .. specKey .. " class resource")
         else
             Check(specKey ~= "rogue_combo", "harness: the client has no combo point preview")

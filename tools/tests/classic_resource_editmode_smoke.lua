@@ -331,7 +331,14 @@ do
     local source = file:read("*a")
     file:close()
     for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
-        local world = World.New(root, flavor):Boot()
+        local world = World.New(root, flavor)
+        -- The class resource scene tells its power types apart; the bare world answers Enum with one opaque stub.
+        local enum = world.env.Enum
+        world.env.Enum = setmetatable({ PowerType = setmetatable({ Mana = 0, Rage = 1, Focus = 2, Energy = 3,
+            ComboPoints = 4, Runes = 5, RunicPower = 6, SoulShards = 7, LunarPower = 8, HolyPower = 9, Maelstrom = 11,
+            Chi = 12, Insanity = 13, BurningEmbers = 14, DemonicFury = 15, ArcaneCharges = 16, Essence = 19 },
+            { __index = enum and enum.PowerType }) }, { __index = enum })
+        world:Boot()
         local failure = world:FirstFailure()
         assert(not failure, flavor .. ": " .. tostring(failure and failure.message))
         local env, ns = world.env, world.core
@@ -410,14 +417,15 @@ do
         assert(not cost.costMasked and removals==1,"shape mask leaked into normal host")
         b.resourceMarks={{target="CLASS",mode="PERCENT",value=50,threshold=true,color={.2,.4,.6}}}
         geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",mode="segmented",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
-        local first=classFrame.segments[1];local oldPaint=first.SetVertexColor;local painted
-        first.SetVertexColor=function(self,r,g,blue,a) painted={r,g,blue};return oldPaint(self,r,g,blue,a) end
+        -- The class resource is the engine scene: its bars take the threshold colour like the live step does.
+        local first=box.cpScene.CP.bars[1];local oldPaint=first.SetStatusBarColor;local painted
+        first.SetStatusBarColor=function(self,r,g,blue,a) painted={r,g,blue};return oldPaint(self,r,g,blue,a) end
         local cp=M.ClassPowerPreview;local oldValue=cp.AnimatedValue
         cp.AnimatedValue=function() return 3 end;box._animationEnabled=true
         assert(geometry.animate(box) and painted[1]==.2 and painted[2]==.4,"animation erased configured threshold color")
         cp.AnimatedValue=function() return 1 end
         assert(geometry.animate(box) and not(painted[1]==.2 and painted[2]==.4),"threshold ignored changed animated value")
-        cp.AnimatedValue=oldValue;first.SetVertexColor=oldPaint;box._animationEnabled=false
+        cp.AnimatedValue=oldValue;first.SetStatusBarColor=oldPaint;box._animationEnabled=false
         local oldRGBA=first.GetVertexColor
         first.GetVertexColor=function() return 1,1,1,.37 end
         first.SetVertexColor=function(_,_,_,_,a) assert(a==.37,"threshold replaced segment alpha") end

@@ -231,7 +231,8 @@ cases["C32-A2"] = function()
     bars.classPowerWidthMode, bars.classPowerWidth = "custom", 0
     bars.playerHPBarEnabled, bars.playerHPBarWidthMode, bars.playerHPBarWidth = true, "custom", 0
     ui:Select("class"); local box = ui.page.ctx.entry.classPowerPreview; box:Refresh()
-    assert(Near(box.classPower:GetWidth(), box.playerW - 4), "zero class width differs from player width sentinel")
+    -- The engine scene lays the container out like the live bar, snapped to the pixel grid.
+    assert(math.abs(box.classPower:GetWidth() - (box.playerW - 4)) < 1, "zero class width differs from player width sentinel")
     assert(Near(box.playerHP:GetWidth(), box.playerW), "zero HP width differs from player width sentinel")
 end
 cases["C32-A3"] = function()

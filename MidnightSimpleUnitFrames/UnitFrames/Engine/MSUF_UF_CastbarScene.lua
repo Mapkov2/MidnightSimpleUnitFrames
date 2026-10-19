@@ -106,6 +106,19 @@ function Surface.Paint(scene)
     scene.paintPlayerColor(frame)
     C.Player.ApplyLatencySample(frame, g.castbarShowLatency ~= false and sample.latency or 0,
       sample.kind == "CHANNEL")
+    local text = frame.latencyText
+    if g.castbarShowLatencyText and sample.latencyMS then
+      if not text then
+        local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "CastbarScene")
+        text = PixelLayoutRegion(frame.statusBar:CreateFontString(nil, "OVERLAY"))
+        text:SetPoint("TOPRIGHT", frame.statusBar, "BOTTOMRIGHT", 0, -2)
+        frame.latencyText = text
+      end
+      text:SetFont(frame.timeText:GetFont())
+      text:SetTextColor(1, 1, 1)
+      text:SetFormattedText("%d ms", sample.latencyMS)
+      text:Show()
+    elseif text then text:Hide() end
   else
     local r, green, b, nr, ng, nb = C.Utils.ResolveCastbarColors()
     C.Utils.Castbar_ApplyNonInterruptibleTint(frame, frame.isNotInterruptible, nr, ng, nb, 1,
@@ -116,6 +129,10 @@ function Surface.Paint(scene)
     frame.empowerStageEnds = sample.stages or DEFAULT_STAGES
     frame.empowerTotalWithGrace = math.max(0.01, tonumber(sample.duration) or 4)
     scene.layoutEmpower(frame)
+    if sample.blinkStage or scene.blinking then
+      C.Empower.PaintSampleBlink(frame, sample.blinkStage, sample.blinkPhase)
+      scene.blinking = sample.blinkStage ~= nil
+    end
   end
   frame._msufActiveSpellID = sample.spellID
   if C.ChannelTicks.PlayerChannelHasteMarkers_Update then
@@ -127,4 +144,9 @@ function Surface.Paint(scene)
     scene.paintInterrupt(scene.interruptRuntime, frame, 1, false, sample.interruptLabel, nil, nil, nil, true)
   end
   frame:Show()
+end
+
+--- Light clock/sample tick: progress and time text only; the layout of the last full paint stands.
+function Surface.Tick(scene)
+  Progress(scene)
 end
