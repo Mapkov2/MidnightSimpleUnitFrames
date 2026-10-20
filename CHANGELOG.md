@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.504-beta3 - 2026-10-20
+
+### Bug Fixes
+
+- Fixed buffs on the target and other unit frames still going missing until /reload in some places, such as the Labyrinth delve. Aura icons are now set up more robustly, and a broken aura display is rebuilt right away instead of on the next target change.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
+
 ## 6.504-beta2 - 2026-10-20
 
 ### Bug Fixes

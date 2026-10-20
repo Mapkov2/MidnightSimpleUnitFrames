@@ -8,21 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "555971099B5B51331D2160AC81DBB7BFD4092175EACC396A68D235A681A2D297",
-    currentVersion = "6.504-beta2",
+    sourceSha256 = "0F4D4DEB7B5C6FB191C138874B2C10CFA1068C1AAD41385508DAE559D9880B5E",
+    currentVersion = "6.504-beta3",
     historyFromVersion = "6.501",
     previousVersion = "6.503",
-    rangeLabel = "6.503 -> 6.504-beta2",
+    rangeLabel = "6.503 -> 6.504-beta3",
     entries = {
         {
-            version = "6.504-beta2",
+            version = "6.504-beta3",
             date = "2026-10-20",
             sections = {
                 {
                     title = "Bug Fixes",
                     bullets = {
                         {
-                            text = "Fixed buffs on the target, focus, boss and arena frames still staying missing until /reload in some sessions. When Blizzard's aura display stops updating, MSUF now rebuilds it on the next target change.",
+                            text = "Fixed buffs on the target and other unit frames still going missing until /reload in some places, such as the Labyrinth delve. Aura icons are now set up more robustly, and a broken aura display is rebuilt right away instead of on the next target change.",
                             link = {
                                 pageKey = "uf_target",
                                 query = "target buff aura visible",
