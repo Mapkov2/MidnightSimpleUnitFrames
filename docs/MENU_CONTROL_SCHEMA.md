@@ -277,21 +277,48 @@ to the original shortcut/reference controller, without a second binding owner.
 Static and styled-button rows declare their stable row key (or row.meta.controlId),
 row.scope (otherwise ctx.key/shared) and row.domain (otherwise presentation).
 A scopebar retains its native catalog identity and live GetValue/SetValue/values;
-row.domain defaults to menuState. Give cards domain=layout when that is their
-existing page declaration. Card headings/geometry stay inside ControlCard;
+row.domain defaults to menuState. Build a scopebar before the rows it scopes:
+`Schema.Build` constructs and binds rows in array order, without a later scope pass.
+Give cards domain=layout when that is their existing page declaration.
+Card headings/geometry stay inside ControlCard;
 ContextColors declares existing or later-attached shortcuts without creating them.
 The page still calls Colors with the original shortcut options at its original time.
 Font labels are native argument 2; other text labels are argument 1.
 
-`Schema.UnitOptions()` supplies the former UnitSections typed binding policy.
+`Schema.UnitOptions()` returns `{ bind = Schema.UnitBinding }`, supplying the
+former UnitSections typed binding policy. `Schema.UnitBinding(ctx, widget, row, kind)`
+requires `row.meta` for ordinary rows, using its controlId and settingKey for identity.
 Rows carry meta, scope/domain, get/set or unit, reason, commitOnBlur and roundStep;
 slider ranges come from native arguments 2/3/4. Fallback row[3] retains false and 0.
+Ordinary unit rows default scope to ctx.key and domain to unit. Custom get/set
+pairs keep their accessors; otherwise unit rows use UnitPage's typed accessors.
 The existing UnitPage readers/setters resolve profile data at input time. A unit
 row without custom get/set must name a supported SetUnit domain (e.g. layout).
-A row.bind callback keeps its original binding and declaration; if it supplies no
-declaration, the shared adapter declares its menuState ownership without rebinding.
+A unit `row.bind(widget)` callback keeps its original binding and declaration;
+if it supplies no declaration, the shared adapter uses row[2] as the ID,
+row.scope or shared as scope, and menuState as domain, without rebinding.
 ClassPower workspace policies and the Group fixed-Party adapter remain page-owned.
 Existing kinds and hook order are unchanged. No row construction seeds saved data.
+
+`Schema.Build` calls `opts.bind(ctx, widget, row, kind)` for input rows, with
+sectionSwitch and flowToggle normalized to toggle; segment stays segment.
+For ordinary rows, UnitBinding delegates to `Schema.Bind(ctx, widget, spec)`, whose
+central signatures are below (`get` and `set` are value accessors, `meta` is metadata).
+
+| Kind | Central binding signature |
+| --- | --- |
+| toggle | `M.BindBoolWidget(ctx, widget, get, set, meta)` |
+| slider | `M.BindNumberWidget(ctx, widget, get, set, fallback, meta)` |
+| dropdown | `M.BindDropdownWidget(ctx, widget, get, set, meta)` |
+| segment | `M.BindSegment(ctx, widget, get, set, meta)` |
+| textinput | `M.BindTextInput(ctx, widget, get, set, commitOnBlur, meta)` |
+| color | `M.BindColor(ctx, widget, get, set, meta)` |
+
+Scopebars and static/styled chrome bypass opts.bind.
+`Schema.GroupBinding(ctx, widget, row, kind)`, supplied by GroupOptions for ordinary scope rows, accepts
+only toggle, slider and dropdown; segment needs an explicit typed policy such as
+scopeValue. GroupRecord/Selected/Commands call their custom
+`row.bind(ctx, widget, row)` instead, preserving the existing group owner.
 
 ### Verification tiers
 

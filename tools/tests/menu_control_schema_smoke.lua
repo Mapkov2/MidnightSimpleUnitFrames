@@ -10,7 +10,7 @@ local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCor
     world.env.C_SpecializationInfo = {
         GetSpecialization = function() return 1 end, GetSpecializationInfo = function() return 62 end,
     }
-    -- Optional authentic prior schema is used only for the callback-contract red probe.
+    -- Optional schema override supports prior-source and scratch-mutant probes.
     if priorSchemaPath then
         local load = world.LoadFile
         world.LoadFile = function(self, path, ...)
@@ -353,8 +353,17 @@ local function SharedRows()
     local function Meta(key)
         return { controlId = "menu2.uf_target.shared_probe." .. key, settingKey = "target." .. key }
     end
+    local unscoped = S.Build({}, Parent(), { { "text", "scopeshared", nil, { "Shared" } } })
+    Check(unscoped.scopeshared._msuf2ControlSchema.scope == "shared", "scopeshared declaration lost the default scope")
+    local accepted, message = coroutine.resume(coroutine.create(function()
+        S.Build(M.cache.gf_auras.ctx, Parent(), {
+            { "segment", "unsupported", "party", { "Scope", { { value = "party", text = "Party" } }, 240 } },
+        }, S.GroupOptions())
+    end))
+    Check(not accepted and tostring(message):find("unsupported group scope kind: segment", 1, true),
+        "GroupOptions accepted a segment without its own binding policy")
     for _, edge in ipairs({ false, true }) do
-        local db, parent = env.MSUF_DB.target, Parent()
+        local db, parent = Check(env.MSUF_DB.target, "shared unit target config missing"), Parent()
         db.rangeFadeEnabled = edge and false or nil
         if edge then db.rangeFadeEnabled = false end
         db.hpBarAlpha, db.rangeFadeLayerMode = edge and 0 or nil, edge and "text" or nil
@@ -450,11 +459,14 @@ local function SharedRows()
             get = function() return number end, set = function(value) number = value end },
         { "dropdown", "custom", false, { "Target", { { value = false, text = "None" } }, 120 },
             bind = function(widget) calls = calls + 1; widget._msuf2ControlSchema = declaration end },
+        { "dropdown", "scopeshared", false, { "Shared", { { value = false, text = "None" } }, 120 },
+            bind = function() end },
         { "topButton", "active", nil, { "Party", 80, 24, {}, true } },
     }, S.UnitOptions())
     Input(bound.integer, 14.6)
     Check(number == 15, "shared integer slider lost native rounding metadata")
     Check(calls == 1 and bound.custom._msuf2ControlSchema == declaration, "custom binder was rebound or redeclared")
+    Check(bound.scopeshared._msuf2ControlSchema.scope == "shared", "custom unit declaration lost the default scope")
     Check(bound.active._msuf2TopActive == true, "styled button active argument was lost")
     -- SectionSwitch must reuse the lazy header; a new schema row must not make a second switch.
     local section = Parent()

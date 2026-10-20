@@ -352,8 +352,9 @@ function Schema.GroupBinding(ctx, widget, row, kind)
     local meta = gp.ControlMeta(ctx, row.path or "field." .. tostring(key), row.classification)
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1],
         scope = "group", applyDomain = domain, meta = meta }
-    local bind = kind == "toggle" and gp.BindScopeToggle or kind == "slider" and gp.BindScopeSlider or gp.BindScopeDropdown
-    bind(ctx, widget, key, default, domain, meta)
+    local bind = kind == "toggle" and gp.BindScopeToggle or kind == "slider" and gp.BindScopeSlider
+        or kind == "dropdown" and gp.BindScopeDropdown
+    assert(bind, "unsupported group scope kind: " .. tostring(kind))(ctx, widget, key, default, domain, meta)
     local command = widget._msuf2CommandAction
     spec.get, spec.set = command and command.get, command and command.set
     Schema.Custom(widget, spec)
