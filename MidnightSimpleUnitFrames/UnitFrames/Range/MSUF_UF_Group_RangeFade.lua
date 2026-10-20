@@ -29,6 +29,7 @@ local InCombat = MSUF.Util.InCombat
 local IsInInstance = IsInInstance
 local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
+local Scheduler = MSUF.Scheduler
 
 
 local issecretvalue = _G.issecretvalue
@@ -1090,35 +1091,24 @@ local function ApplyFrameAlphaFromBoolean(frame, value, inAlpha, outAlpha, value
   return true
 end
 
-local offlineDelayFrames = {}
-local offlineDelayIndex = {}
-local offlineDelayTimerActive
-local offlineDelayTimerAt
-local offlineDelayTimer
-local ScheduleOfflineDelayTimer
+-- One scheduler key per delayed frame (its cached expiry callback).
+local OfflineDelayExpired
+
+local function OfflineDelayKey(frame)
+  local key = frame._msufGFOfflineDelayExpiry
+  if not key then
+    key = function() OfflineDelayExpired(frame) end
+    frame._msufGFOfflineDelayExpiry = key
+  end
+  return key
+end
 
 RemoveOfflineDelayFrame = function(frame)
-  local i = frame and offlineDelayIndex[frame]
-  if not i then
+  if not (frame and frame._msufGFOfflineDelayReadyAt) then
     return
   end
-  local last = #offlineDelayFrames
-  local tail = offlineDelayFrames[last]
-  offlineDelayFrames[i] = tail
-  offlineDelayFrames[last] = nil
-  offlineDelayIndex[frame] = nil
-  if tail and tail ~= frame then
-    offlineDelayIndex[tail] = i
-  end
   frame._msufGFOfflineDelayReadyAt = nil
-  if #offlineDelayFrames == 0 and offlineDelayTimerActive == true then
-    if offlineDelayTimer then
-      offlineDelayTimer:Cancel()
-    end
-    offlineDelayTimer = nil
-    offlineDelayTimerActive = nil
-    offlineDelayTimerAt = nil
-  end
+  Scheduler.CancelScheduled(frame._msufGFOfflineDelayExpiry)
 end
 
 local function QueueOfflineDelayFrame(frame, delay)
@@ -1128,72 +1118,29 @@ local function QueueOfflineDelayFrame(frame, delay)
   local now = GetTime and GetTime() or 0
   local when = now + (delay or 0)
   frame._msufGFOfflineDelayReadyAt = when
-  if not offlineDelayIndex[frame] then
-    local n = #offlineDelayFrames + 1
-    offlineDelayFrames[n] = frame
-    offlineDelayIndex[frame] = n
-  end
-  ScheduleOfflineDelayTimer(when)
+  local key = OfflineDelayKey(frame)
+  Scheduler.ScheduleAt(key, when, key)
 end
 
-local function FlushOfflineDelayFrames()
-  local now = GetTime and GetTime() or 0
-  local nextAt
+OfflineDelayExpired = function(frame)
+  local when = frame._msufGFOfflineDelayReadyAt
+  frame._msufGFOfflineDelayReadyAt = nil
   local live = GF and GF.frames
-  local i = #offlineDelayFrames
-  while i >= 1 do
-    local frame = offlineDelayFrames[i]
-    local when = frame and frame._msufGFOfflineDelayReadyAt
-    if not frame
-      or (live and live[frame] ~= true)
-      or frame._msufGFOfflineDelayPending ~= true
-      or not when then
-      RemoveOfflineDelayFrame(frame)
-    elseif now >= when then
-      local unit = frame._msufGFOfflineDelayUnit
-      RemoveOfflineDelayFrame(frame)
-      frame._msufGFOfflineDelayPending = nil
-      if UnitEventMatchesFrame(frame, unit) then
-        frame._msufGFOfflineDelayReady = true
-        if ApplyAlpha then
-          ApplyAlpha(frame, "MSUF_GF_OFFLINE_DELAY")
-        end
-      else
-        frame._msufGFOfflineDelayReady = nil
-      end
-    elseif not nextAt or when < nextAt then
-      nextAt = when
-    end
-    i = i - 1
-  end
-  if nextAt then
-    ScheduleOfflineDelayTimer(nextAt)
-  end
-end
-
-local function OfflineDelayTimerCallback()
-  offlineDelayTimer = nil
-  offlineDelayTimerActive = nil
-  offlineDelayTimerAt = nil
-  FlushOfflineDelayFrames()
-end
-
-ScheduleOfflineDelayTimer = function(when)
-  if offlineDelayTimerActive and offlineDelayTimerAt and offlineDelayTimerAt <= when then
+  if (live and live[frame] ~= true)
+    or frame._msufGFOfflineDelayPending ~= true
+    or not when then
     return
   end
-  local now = GetTime and GetTime() or 0
-  local delay = when - now
-  if delay < 0 then
-    delay = 0
+  local unit = frame._msufGFOfflineDelayUnit
+  frame._msufGFOfflineDelayPending = nil
+  if UnitEventMatchesFrame(frame, unit) then
+    frame._msufGFOfflineDelayReady = true
+    if ApplyAlpha then
+      ApplyAlpha(frame, "MSUF_GF_OFFLINE_DELAY")
+    end
+  else
+    frame._msufGFOfflineDelayReady = nil
   end
-  if offlineDelayTimer then
-    offlineDelayTimer:Cancel()
-    offlineDelayTimer = nil
-  end
-  offlineDelayTimerActive = true
-  offlineDelayTimerAt = when
-  offlineDelayTimer = NewTimer(delay, OfflineDelayTimerCallback)
 end
 
 local function OfflineHideReady(frame)

@@ -179,8 +179,9 @@ local STATUS_REFRESH = {
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
--- Ready-check hide queue: frames by hide time, one shared timer.
-local ReadyCheckQueue = { timers = setmetatable({}, { __mode = "k" }), list = {}, head = 1, tail = 0, timerAt = nil }
+-- Ready-check hides: the pending hide time by frame, and each frame's cached
+-- hide callback (its scheduler key; MSUF_UF_Status_GroupRuntime.lua).
+local ReadyCheckQueue = { timers = setmetatable({}, { __mode = "k" }), hides = {} }
 
 local Status = {}
 --- Exported runtime (MSUF.UFStatusRuntime). The per-indicator updaters, their

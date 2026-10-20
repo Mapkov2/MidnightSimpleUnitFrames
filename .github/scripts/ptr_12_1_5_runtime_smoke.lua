@@ -35,6 +35,11 @@ C_Timer = {
     After = function()
         error("12.1.5 native scheduler unexpectedly fell back to C_Timer.After")
     end,
+    -- 12.1.5 ships the native constructor that TimerUtil's map wraps; the
+    -- scheduler requires both before it leaves the C_Timer.After path.
+    NewTimedSignalMap = function()
+        error("the scheduler builds its map through TimerUtil.CreateTimedSignalCallbackMap")
+    end,
 }
 
 local namespace = {

@@ -132,7 +132,9 @@ do
     function map:SignalAfter(signalKey, delay) self.signals[#self.signals + 1] = { signalKey, delay } end
     function map:CancelSignal(signalKey) self.cancelled[signalKey] = true end
     TimerUtil = { CreateTimedSignalCallbackMap = function() return map end }
-    C_Timer = nil
+    -- The native constructor must exist for the scheduler to pick this backend;
+    -- without After, a fallback would fail to load instead of passing silently.
+    C_Timer = { NewTimedSignalMap = function() error("built through TimerUtil") end }
     local s = LoadScheduler()
     local ran, mark, reset = Log()
 

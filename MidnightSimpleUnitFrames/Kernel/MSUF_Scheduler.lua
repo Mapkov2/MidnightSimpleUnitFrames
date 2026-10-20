@@ -9,15 +9,16 @@
 ---     they pass; the key is free again once the callback has been taken from
 ---     the queue (before it runs), so a callback can queue its own key again.
 ---     The key defaults to the function, so one function queued twice runs once.
----   * ScheduleAfter: the LAST function and the LAST deadline win (debounce).
----     Every call replaces the pending function and moves the deadline.
+---   * ScheduleAfter / ScheduleAt: the LAST function and the LAST deadline win
+---     (debounce). Every call replaces the pending function and moves the deadline.
 --- The two keep separate tables: one key can be pending in both, and
---- IsScheduled / CancelScheduled only see ScheduleAfter work.
+--- IsScheduled / CancelScheduled only see delayed work.
 
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS or {})
 
 local type = type
+local C_Timer = _G.C_Timer
 
 local Scheduler = MSUF.Scheduler or {}
 MSUF.Scheduler = Scheduler
@@ -123,20 +124,20 @@ end
 
 --- Delayed keyed scheduling.
 ---
---- 12.1.5 ships TimedSignalMap: one native callback map drives many keyed
---- deadlines, and a key is rescheduled by signalling it again instead of being
---- cancelled and recreated. That drops the per-call closure and timer object
---- C_Timer.After allocates, which is what matters here - the dense callers fire
---- in bursts (target swap, roster change, menu refresh), not steadily.
+--- 12.1.5 and Forever ship C_Timer.NewTimedSignalMap: one native callback map
+--- drives many keyed deadlines, and a key is rescheduled by signalling it again
+--- instead of being cancelled and recreated. That drops the per-call closure and
+--- timer object C_Timer.After allocates, which is what matters here - the dense
+--- callers fire in bursts (target swap, roster change, menu refresh), not steadily.
 ---
 --- One numeric signal key is registered per logical key and kept for the
 --- session. TimerUtil retains registered callbacks for the map's lifetime, so
 --- registering per call would leak; after the first use a reschedule costs one
---- SignalAfter plus one table store and allocates nothing. Keys are therefore
+--- signal call plus one table store and allocates nothing. Keys are therefore
 --- meant to be stable identities (a string, a module table, a frame), never a
---- value minted per call.
+--- value minted per call. Delays and deadlines are public numbers only.
 ---
---- Clients without TimedSignalMap (Midnight 12.1.0 live, every Classic client)
+--- Clients without the map (Midnight 12.1.0 live, every Classic client)
 --- use C_Timer.After with one runner closure cached per key, so a reschedule
 --- allocates nothing there either: a superseded timer still fires, and only the
 --- timer that is due (or the last one outstanding) runs the work.
@@ -153,8 +154,9 @@ Scheduler.delayedDeadline = delayedDeadline
 
 local signalMap = Scheduler.signalMap
 if signalMap == nil then
+    -- TimerUtil only wraps the native constructor: require that too.
     local timerUtil = _G.TimerUtil
-    if timerUtil and type(timerUtil.CreateTimedSignalCallbackMap) == "function" then
+    if C_Timer and C_Timer.NewTimedSignalMap and timerUtil and timerUtil.CreateTimedSignalCallbackMap then
         signalMap = timerUtil.CreateTimedSignalCallbackMap()
     else
         signalMap = false
@@ -164,10 +166,10 @@ end
 
 -- Resolve the supported timer backend once. Missing platform services are a
 -- startup error; a delayed callback must never silently become synchronous.
-local after, GetTime
+local after
+local GetTime = _G.GetTime
 if not signalMap then
-    after = assert(_G.C_Timer and _G.C_Timer.After, "MSUF scheduler requires C_Timer.After")
-    GetTime = _G.GetTime
+    after = assert(C_Timer and C_Timer.After, "MSUF scheduler requires C_Timer.After")
 end
 
 local function RunDelayed(key)
@@ -175,6 +177,15 @@ local function RunDelayed(key)
     if fn == nil then return end
     delayedPending[key] = nil
     RunIsolated(delayedSlot, fn)
+end
+
+local function SignalKey(key)
+    local signalKey = delayedKeys[key]
+    if signalKey == nil then
+        signalKey = signalMap:RegisterCallback(function() RunDelayed(key) end)
+        delayedKeys[key] = signalKey
+    end
+    return signalKey
 end
 
 --- Schedule fn under key after delay seconds. A second call for the same key
@@ -189,12 +200,7 @@ function Scheduler.ScheduleAfter(key, delay, fn)
     delayedPending[key] = fn
 
     if signalMap then
-        local signalKey = delayedKeys[key]
-        if signalKey == nil then
-            signalKey = signalMap:RegisterCallback(function() RunDelayed(key) end)
-            delayedKeys[key] = signalKey
-        end
-        signalMap:SignalAfter(signalKey, delay)
+        signalMap:SignalAfter(SignalKey(key), delay)
         return true
     end
 
@@ -217,6 +223,23 @@ function Scheduler.ScheduleAfter(key, delay, fn)
     delayedDeadline[key] = GetTime and (GetTime() + delay) or 0
     after(delay, runner)
     return true
+end
+
+--- ScheduleAfter's policy for an absolute GetTime() deadline (a GetTimePreciseSec
+--- caller passes a delay instead); a past deadline is clamped to now.
+function Scheduler.ScheduleAt(key, at, fn)
+    assert(type(fn) == "function", "MSUF scheduler requires a callback function")
+    key = key or fn
+    assert(type(at) == "number" and at > -math.huge and at < math.huge,
+        "MSUF scheduler requires a finite deadline")
+    local now = GetTime()
+    if signalMap then
+        delayedPending[key] = fn
+        signalMap:SignalAt(SignalKey(key), at > now and at or now)
+        return true
+    end
+    local delay = at - now
+    return Scheduler.ScheduleAfter(key, delay > 0 and delay or 0, fn)
 end
 
 function Scheduler.CancelScheduled(key)

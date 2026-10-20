@@ -923,6 +923,17 @@
    "evidence": "Castbars namespace ownership: MSUF.Castbars.Visuals.ApplyCastbarDetailLayout, MSUF.Castbars.Visuals.RefreshCastbarFrame",
    "reason": "Internal castbar providers moved to the named namespace module. Frames use Frames.Get and retain one native CreateFrame name each. Externally read names remain in MSUF_Castbars_PublicAPI.lua and tools/public-globals.tsv; profile settings and runtime behavior are retained.",
    "date": "2026-10-13"
+  },
+  {
+   "category": "locale",
+   "items": [
+    "Disabled by default. Blizzard's native implementation enables a per-frame OnUpdate for each visible aura button as soon as that aura has a calculated pandemic window; this can begin before the warning becomes visible.",
+    "PERFORMANCE WARNING (12.1): Blizzard can run an OnUpdate every frame on each visible aura button for the full aura while it has a calculated pandemic window, not only while the warning is shown. Enable only if you accept this potentially high combat cost."
+   ],
+   "basis": "moved",
+   "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua: the Pandemic Warning & Style note and the Show Pandemic State tooltip now begin \"PERFORMANCE NOTE: On 12.1.0 Blizzard runs an OnUpdate\" and \"Disabled by default. On 12.1.0 Blizzard's native implementation\"; all twelve packs carry the reworded keys (tools/tests/timed_signal_deadlines_smoke.lua).",
+   "reason": "The per-frame OnUpdate warning holds only on 12.1.0; 12.1.5 and WoW Forever drive the pandemic window with a native timed signal map, so the note and its tooltip were reworded, not removed.",
+   "date": "2026-10-20"
   }
  ]
 }

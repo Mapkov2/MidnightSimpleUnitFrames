@@ -473,9 +473,9 @@ do
         end
     end
 
-    --- One callback serves every scheduled expiry, so a cast allocates no
-    --- closure. A timer from an earlier cast finds the later expiry still ahead,
-    --- or the stacks already reset (spExpires nil), and does nothing.
+    --- One scheduler key holds the expiry; every cast moves it to spExpires.
+    --- Without the scheduler an earlier cast's After finds the later expiry still
+    --- ahead, or the stacks already reset (spExpires nil), and does nothing.
     local function OnTipExpiry()
         if CP.spExpires and GetTime() >= CP.spExpires then
             ResetTipState(true)
@@ -483,8 +483,12 @@ do
     end
 
     local function ScheduleTipExpiry()
-        if not (C_Timer and type(C_Timer.After) == "function") then return end
-        C_Timer.After(TIP.DURATION + 0.05, OnTipExpiry)
+        local scheduler = MSUF.Scheduler
+        if scheduler then
+            scheduler.ScheduleAt("MSUF_CP_TIP_EXPIRY", CP.spExpires + 0.05, OnTipExpiry)
+        elseif C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(TIP.DURATION + 0.05, OnTipExpiry)
+        end
     end
 
     local function NormalizeExpiredTipState()

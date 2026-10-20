@@ -221,9 +221,11 @@ end
 -- Tooltips.ShowUnit; the unit token comes from the adapter's own cached
 -- attribute index (StoredAttrUnit), so there is no secure read per hover.
 do
-  local C_Timer, GetTime = C_Timer, GetTime
+  -- One debounced scheduler key; each hover moves its deadline.
+  local Scheduler = MSUF.Scheduler
+  local HOVER_KEY = "MSUF_GF_TOOLTIP_HOVER"
   local HOVER_DELAY = 0.12
-  local pendingFrame, pendingToken, pendingAt, timerActive
+  local pendingFrame, pendingToken
 
   local function TooltipAllowed()
     local tooltips = MSUF.Tooltips
@@ -231,16 +233,9 @@ do
   end
 
   local function TimerCallback()
-    timerActive = nil
     local frame, token = pendingFrame, pendingToken
     if not frame then return end
-    local now = GetTime and GetTime() or 0
-    if pendingAt and now < pendingAt then
-      timerActive = true
-      C_Timer.After(pendingAt - now, TimerCallback)
-      return
-    end
-    pendingFrame, pendingToken, pendingAt = nil, nil, nil
+    pendingFrame, pendingToken = nil, nil
     if frame._msufGFTooltipToken ~= token then return end
     local portrait = frame.MSUFPortraitClickTarget
     if not (portrait and portrait._msufPortraitHovered)
@@ -264,11 +259,7 @@ do
     local token = (self._msufGFTooltipToken or 0) + 1
     self._msufGFTooltipToken = token
     pendingFrame, pendingToken = self, token
-    pendingAt = (GetTime and GetTime() or 0) + HOVER_DELAY
-    if timerActive ~= true then
-      timerActive = true
-      C_Timer.After(HOVER_DELAY, TimerCallback)
-    end
+    Scheduler.ScheduleAfter(HOVER_KEY, HOVER_DELAY, TimerCallback)
   end
 
   GroupHideTooltip = function(self)
@@ -276,7 +267,8 @@ do
     if not tooltips or tooltips.hoverInert then return end
     self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
     if pendingFrame == self then
-      pendingFrame, pendingToken, pendingAt = nil, nil, nil
+      pendingFrame, pendingToken = nil, nil
+      Scheduler.CancelScheduled(HOVER_KEY)
     end
     if tooltips.HideUnit then tooltips.HideUnit(self) end
   end

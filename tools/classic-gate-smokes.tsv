@@ -119,6 +119,7 @@ clients+Forever	lua	tools/tests/forever_spec_profile_smoke.lua	{root} {flavor}	F
 -	lua	tools/tests/modules_apply_isolation_smoke.lua	{root}	A raising module stopped or corrupted the module apply pass
 -	lua	tools/tests/eventbus_nonprefix_unit_events_smoke.lua	{root}	A unit filter on a non-UNIT_ unit event (PLAYER_FLAGS_CHANGED, INCOMING_RESURRECT_CHANGED) was dropped
 -	lua	tools/tests/scheduler_pending_key_policy_smoke.lua	{root}	ScheduleOnce no longer keeps the first function or ScheduleAfter the last for a pending key
+-	lua	tools/tests/timed_signal_deadlines_smoke.lua	{root}	A deadline timer left the shared scheduler key or the 12.1.5 signal map, the preview restyled its pandemic region per tick, or the pandemic notes misname the per-frame client
 -	lua	tools/tests/lsm_media_registered_in_combat_smoke.lua	{root}	Media registered with LibSharedMedia in combat was lost, repeated, or the callback churns on combat edges
 clients	lua	tools/tests/classic_shared_definitions_smoke.lua	{root} {flavor}	Shared aura definitions failed: {flavor}
 -	lua+driver	tools/tests/classic_profile_60_only_smoke.lua	{root/}	Classic 6.0-only profile policy smoke failed

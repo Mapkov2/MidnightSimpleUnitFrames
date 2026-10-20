@@ -9,89 +9,34 @@ MSUF.UFModuleFactories.StatusGroupRuntime = function(
     UnitPhaseReason, issecretvalue, tostring, type
 )
 
+-- One scheduler key per frame's delayed hide (ReadyCheckQueue.hides).
+local Scheduler = MSUF.Scheduler
+
 local function CancelReadyCheckTimer(frame)
-  if frame then
+  if frame and ReadyCheckQueue.timers[frame] then
     ReadyCheckQueue.timers[frame] = nil
+    Scheduler.CancelScheduled(ReadyCheckQueue.hides[frame])
   end
 end
 
-local ReadyCheckTimerCallback
-
-local function ArmReadyCheckTimer(when)
-  if ReadyCheckQueue.timerAt and ReadyCheckQueue.timerAt <= when then return end
-  ReadyCheckQueue.timerAt = when
-  local now = GetTime and GetTime() or 0
-  local delay = when - now
-  C_Timer.After(delay > 0 and delay or 0, ReadyCheckTimerCallback)
-end
-
-ReadyCheckTimerCallback = function()
-  -- Ready-check icons share one compact timer queue instead of one timer per frame. The
-  -- callback compacts sparse slots so raid-size checks do not leave long-lived table holes.
-  ReadyCheckQueue.timerAt = nil
-  local now = GetTime and GetTime() or 0
-  local nextAt
-  local out = ReadyCheckQueue.head
-  local last = ReadyCheckQueue.tail
-
-  for i = ReadyCheckQueue.head, last do
-    local frame = ReadyCheckQueue.list[i]
-    local due = frame and ReadyCheckQueue.timers[frame]
-    if not due then
-      ReadyCheckQueue.list[i] = nil
-    elseif now >= due then
+local function ReadyCheckHideKey(frame)
+  local key = ReadyCheckQueue.hides[frame]
+  if not key then
+    key = function()
       ReadyCheckQueue.timers[frame] = nil
-      ReadyCheckQueue.list[i] = nil
       SetShown(frame.readyCheckIcon, false)
-    else
-      if out ~= i then
-        ReadyCheckQueue.list[out] = frame
-        ReadyCheckQueue.list[i] = nil
-      end
-      out = out + 1
-      if not nextAt or due < nextAt then nextAt = due end
     end
+    ReadyCheckQueue.hides[frame] = key
   end
-
-  local appendedTail = ReadyCheckQueue.tail
-  if appendedTail > last then
-    for i = last + 1, appendedTail do
-      local frame = ReadyCheckQueue.list[i]
-      local due = frame and ReadyCheckQueue.timers[frame]
-      if due then
-        if out ~= i then
-          ReadyCheckQueue.list[out] = frame
-          ReadyCheckQueue.list[i] = nil
-        end
-        out = out + 1
-        if not nextAt or due < nextAt then nextAt = due end
-      else
-        ReadyCheckQueue.list[i] = nil
-      end
-    end
-  end
-
-  ReadyCheckQueue.head = 1
-  ReadyCheckQueue.tail = out - 1
-  if ReadyCheckQueue.tail <= 0 then
-    ReadyCheckQueue.tail = 0
-  end
-  if nextAt then
-    ArmReadyCheckTimer(nextAt)
-  end
+  return key
 end
 
 local function QueueReadyCheckHide(frame)
   if not frame then return end
-  local now = GetTime and GetTime() or 0
-  local due = now + 6
-  local known = ReadyCheckQueue.timers[frame] ~= nil
+  local due = (GetTime and GetTime() or 0) + 6
   ReadyCheckQueue.timers[frame] = due
-  if not known then
-    ReadyCheckQueue.tail = ReadyCheckQueue.tail + 1
-    ReadyCheckQueue.list[ReadyCheckQueue.tail] = frame
-  end
-  ArmReadyCheckTimer(due)
+  local key = ReadyCheckHideKey(frame)
+  Scheduler.ScheduleAt(key, due, key)
 end
 
 function Runtime.UpdateRole(frame, status)

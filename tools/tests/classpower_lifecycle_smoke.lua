@@ -13,7 +13,8 @@
 --   3. A full refresh inside an MSUF Edit Mode session hides Alt Mana (it is no
 --      Edit Mode mover); leaving Edit Mode shows it again.
 --   4. Tip of the Spear expires after its duration; every Kill Command
---      schedules the same expiry callback instead of a new closure.
+--      schedules the same expiry callback instead of a new closure, and with
+--      the shared scheduler moves one key instead of arming another timer.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -229,6 +230,68 @@ do
     RunDue(1014.1)
     Check(CP.spStacks == 0 and CP.spExpires == nil, "Tip of the Spear did not expire after its duration")
     C_Timer.After = after
+end
+
+-- 4b. With the shared scheduler (it always loads before ClassPower in game) the
+--     expiry is one key: every Kill Command moves its deadline to the new
+--     spExpires instead of arming another timer. Runs on the 12.1.5 signal map.
+do
+    local map = { callbacks = {}, due = {}, registered = 0 }
+    function map:RegisterCallback(fn)
+        self.registered = self.registered + 1
+        self.callbacks[self.registered] = fn
+        return self.registered
+    end
+    function map:SignalAt(key, time) self.due[key] = time end
+    function map:SignalAfter(key, delay) self.due[key] = GetTime() + delay end
+    function map:CancelSignal(key) self.due[key] = nil end
+    local afters = 0
+    local t = World.Start(repo, "Mainline", "HUNTER", 3, 2, nil, {
+        beforeLoad = function()
+            _G.C_Timer.NewTimedSignalMap = function() error("built through TimerUtil") end
+            _G.TimerUtil = { CreateTimedSignalCallbackMap = function() return map end }
+            assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"))(
+                "MidnightSimpleUnitFrames", _G.MSUF_NS)
+            local after = _G.C_Timer.After
+            _G.C_Timer.After = function(...)
+                afters = afters + 1
+                return after(...)
+            end
+        end,
+    })
+    local CP = t.CP
+    local KILL_COMMAND = 259489
+    local function Cast(now)
+        t.env:SetTime(now)
+        t.onEvent(t.eventFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "cast", KILL_COMMAND)
+    end
+    local function RunDue(now)
+        t.env:SetTime(now)
+        local ready = {}
+        for key, due in pairs(map.due) do
+            if due <= now then ready[#ready + 1] = key end
+        end
+        for index = 1, #ready do
+            map.due[ready[index]] = nil
+            map.callbacks[ready[index]]()
+        end
+    end
+    afters = 0
+    local registered = map.registered
+    Cast(1000)
+    Cast(1004)
+    Check(CP.spStacks > 0, "Kill Command gave no Tip of the Spear stacks (scheduler)")
+    Check(afters == 0, "each Kill Command armed its own C_Timer.After instead of the scheduler key")
+    local key = _G.MSUF_NS.Scheduler.delayedKeys.MSUF_CP_TIP_EXPIRY
+    Check(key and map.registered == registered + 1, "the Tip of the Spear expiry is not one scheduler key")
+    Check(key and map.due[key] and math.abs(map.due[key] - (CP.spExpires + 0.05)) < 1e-9,
+        "the Tip of the Spear key does not signal the latest expiry")
+    local stacks = CP.spStacks
+    RunDue(1010.1)
+    Check(CP.spStacks == stacks, "the moved Tip of the Spear key fired at the first cast's expiry")
+    RunDue(1014.1)
+    Check(CP.spStacks == 0 and CP.spExpires == nil, "Tip of the Spear did not expire through the scheduler key")
+    _G.TimerUtil = nil
 end
 
 if #failures > 0 then

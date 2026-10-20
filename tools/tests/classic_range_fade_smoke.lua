@@ -3,6 +3,7 @@
 -- Loads the real UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua and
 -- UnitFrames/Range/MSUF_UF_RangeFade.lua with a fresh namespace per
 -- scenario and asserts the alpha multiplier it hands to UF.ApplyRangeModifier.
+-- Scenario P runs the poll heartbeat on the 12.1.5 signal map (SignalAt deadlines).
 -- Usage (cwd = repo root): lua tools/tests/classic_range_fade_smoke.lua <repoRoot>
 local root = arg and arg[1]
 assert(type(root) == "string" and root ~= "", "usage: lua classic_range_fade_smoke.lua <repoRoot>")
@@ -138,9 +139,16 @@ local function Load(opts)
   }
   -- The real keyed scheduler (Kernel loads it first). Its own frame is not a
   -- range driver, and RangeFade's next-frame After(0, ...) stays a no-op.
+  -- opts.signalMap puts it on the 12.1.5 TimedSignalMap instead of After.
+  _G.TimerUtil = nil
+  if opts.signalMap then
+    _G.C_Timer.NewTimedSignalMap = function() error("built through TimerUtil") end
+    _G.TimerUtil = { CreateTimedSignalCallbackMap = function() return opts.signalMap end }
+  end
   local createFrame = _G.CreateFrame
   _G.CreateFrame = function() return { SetScript = function() end } end
   assert(loadfile(SCHEDULER))("MidnightSimpleUnitFrames", ns)
+  _G.TimerUtil = nil
   _G.CreateFrame = createFrame
   _G.C_Timer.After = function() end
   assert(loadfile(DRIVER))("MidnightSimpleUnitFrames", ns)
@@ -550,6 +558,44 @@ scenarios[#scenarios + 1] = { "O the poll heartbeat re-arms without a timer obje
     "O re-arming the poll created " .. (st.newTimers - timers) .. " timer objects (" .. st.newTimers .. " in total)")
   assert(st.pollArms - arms == 50, "O 50 polls armed " .. (st.pollArms - arms) .. " native timers")
   assert(kb <= 0.05, string.format("O 50 polls allocated %.2f KB", kb))
+end }
+
+-- The heartbeat tracks an absolute GetTime() deadline. On the 12.1.5 signal map
+-- it hands that deadline to SignalAt, never back through a delay, and every
+-- re-arm moves the one registered key.
+scenarios[#scenarios + 1] = { "P the poll heartbeat signals its own deadline", function()
+  local map = { callbacks = {}, due = {}, registered = 0, at = 0, after = 0 }
+  function map:RegisterCallback(fn)
+    self.registered = self.registered + 1
+    self.callbacks[self.registered] = fn
+    return self.registered
+  end
+  function map:SignalAt(key, time)
+    self.at = self.at + 1
+    self.due[key] = time
+  end
+  -- Recorded as given: a relative delay can never pass for this deadline.
+  function map:SignalAfter(key, delay)
+    self.after = self.after + 1
+    self.due[key] = delay
+  end
+  function map:CancelSignal(key) self.due[key] = nil end
+  local st = Load({ classic = true, armed = true, known = { [355] = true }, rangeResult = 1, interact = false,
+    signalMap = map })
+  st.speed.target = 7
+  st.Refresh()
+  assert(map.registered == 1 and map.due[1], "P a moving blind target did not arm the poll signal")
+  for i = 1, 20 do
+    local due = map.due[1]
+    assert(due and due > st.now and due <= st.now + 2, "P the poll signalled " .. tostring(due) .. " at " .. st.now)
+    st.now = due
+    map.due[1] = nil
+    map.callbacks[1]()
+  end
+  assert(map.after == 0 and map.at >= 20,
+    "P the poll converted its deadline back to a delay (" .. map.after .. " SignalAfter, " .. map.at .. " SignalAt)")
+  assert(map.registered == 1, "P re-arming the poll registered " .. map.registered .. " signal keys")
+  assert(st.pollArms == 0, "P the signal-map poll still armed C_Timer.After")
 end }
 
 local failures = {}

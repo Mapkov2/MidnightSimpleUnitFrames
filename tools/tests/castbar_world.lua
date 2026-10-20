@@ -7,7 +7,8 @@
 -- runs in deadline order. Two delayed-scheduler backends:
 --   * "timer":  C_Timer.After with one runner per key (every Classic client,
 --               Midnight 12.1.0);
---   * "signal": TimerUtil.CreateTimedSignalCallbackMap (12.1.5).
+--   * "signal": TimerUtil.CreateTimedSignalCallbackMap over
+--               C_Timer.NewTimedSignalMap (12.1.5, Forever).
 --
 -- Usage from a smoke (Lua 5.1, repo root as arg 1):
 --   local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
@@ -167,6 +168,11 @@ function World.New(root, backend, options)
         end,
     }
     if backend == "signal" then
+        -- The scheduler takes this backend only when the native constructor
+        -- exists too; it builds the map through TimerUtil's wrapper.
+        _G.C_Timer.NewTimedSignalMap = function()
+            error("the scheduler builds its map through TimerUtil.CreateTimedSignalCallbackMap")
+        end
         _G.TimerUtil = {
             CreateTimedSignalCallbackMap = function()
                 local map = { callbacks = {}, next = 0 }
@@ -177,6 +183,9 @@ function World.New(root, backend, options)
                 end
                 function map:SignalAfter(key, delay)
                     world.signals[key] = { due = world.clock + delay, fn = self.callbacks[key] }
+                end
+                function map:SignalAt(key, time)
+                    world.signals[key] = { due = time, fn = self.callbacks[key], absolute = true }
                 end
                 function map:CancelSignal(key) world.signals[key] = nil end
                 return map

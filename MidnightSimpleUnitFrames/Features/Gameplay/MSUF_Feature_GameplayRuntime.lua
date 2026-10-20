@@ -372,10 +372,12 @@ local function ClearCombatStateText()
     end
 end
 
-local combatStateClearTimer
+-- One scheduler key: a new combat edge moves the pending clear.
+local COMBAT_STATE_CLEAR_KEY = "MSUF_COMBAT_STATE_CLEAR"
+local combatStateClearPending = false
 
 local function CombatStateClearTimerFired()
-    combatStateClearTimer = nil
+    combatStateClearPending = false
     local g = GetGameplayDB()
     if stateText and g and g.enableCombatStateText then
         ClearCombatStateText()
@@ -390,18 +392,14 @@ local function CombatStateClearTimerFired()
 end
 
 local function CancelCombatStateClear()
-    local timer = combatStateClearTimer
-    combatStateClearTimer = nil
-    if timer and timer.Cancel then timer:Cancel() end
+    if not combatStateClearPending then return end
+    combatStateClearPending = false
+    MSUF.Scheduler.CancelScheduled(COMBAT_STATE_CLEAR_KEY)
 end
 
 local function ScheduleCombatStateClear(duration)
-    CancelCombatStateClear()
-    if C_Timer.NewTimer then
-        combatStateClearTimer = C_Timer.NewTimer(duration, CombatStateClearTimerFired)
-    else
-        C_Timer.After(duration, CombatStateClearTimerFired)
-    end
+    combatStateClearPending = true
+    MSUF.Scheduler.ScheduleAfter(COMBAT_STATE_CLEAR_KEY, duration, CombatStateClearTimerFired)
 end
 
 local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"

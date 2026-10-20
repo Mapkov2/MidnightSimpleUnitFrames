@@ -706,6 +706,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     visual._sceneStaticTimer = sampleIndex == 1 and "12" or "8"
     visual._sceneAuraLane, visual._sceneAuraKind, visual._sceneAuraIndex = lane,
       (descriptor.key == "debuff" or lane.targetDots or (lane.nativeFilter and lane.nativeFilter:find("HARMFUL", 1, true))) and "debuff" or "buff", slot + 1
+    visual._scenePandemicStyled = nil
   end
   visual:Show()
   return true
@@ -944,8 +945,15 @@ function GF.AnimateUnitFrameAuras(frame, elapsed)
       if visual._timer and lane.showCooldownText then visual._timer:SetText(state and state.text or visual._sceneStaticTimer or "8") end
       if visual._stack and lane.showStacks then visual._stack:SetText(state and state.stacks or "2") end
       if Auras.ApplyPandemicVisual and (lane.targetDots or visual._msufA3PandemicRegion) then
-        Auras.ApplyPandemicVisual(visual, lane, lane.pandemicEnabled == true and visual._sceneAuraIndex == 1
-          and (not state or state.pandemicActive ~= false))
+        -- Styled once per paint; a tick only toggles it.
+        local inWindow = lane.pandemicEnabled == true and visual._sceneAuraIndex == 1
+          and (not state or state.pandemicActive ~= false)
+        local region = visual._scenePandemicStyled and visual._msufA3PandemicRegion
+        if region then
+          region:SetShown(inWindow)
+        else
+          visual._scenePandemicStyled = Auras.ApplyPandemicVisual(visual, lane, inWindow) ~= nil
+        end
       end
       if visual._durationBar then
         AuraPainter.DurationBar(visual._durationBar, visual, lane, visual:GetWidth(), visual:GetHeight(), state)

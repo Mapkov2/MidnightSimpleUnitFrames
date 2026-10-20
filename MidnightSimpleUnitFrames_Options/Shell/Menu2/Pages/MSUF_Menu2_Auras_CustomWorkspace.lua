@@ -877,7 +877,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
         local pandemicCol, pandemicX, PandemicNumber = StyleGrid(pandemic)
         local pandemicControls = {}
         local pandemicWarning = W.Text(pandemic,
-            "PERFORMANCE WARNING (12.1): Blizzard can run an OnUpdate every frame on each visible aura button for the full aura while it has a calculated pandemic window, not only while the warning is shown. Enable only if you accept this potentially high combat cost.",
+            "PERFORMANCE NOTE: On 12.1.0 Blizzard runs an OnUpdate every frame on each visible aura button for the full aura while it has a calculated pandemic window, not only while the warning is shown; enable it there only if you accept that combat cost. 12.1.5 and WoW Forever switch the window with a native timer instead, at no per-frame cost.",
             24, -96, (pandemic._msuf2Width or b.width or 720) - 48, { 1.00, 0.38, 0.18, 1 })
         if pandemicWarning.SetWordWrap then pandemicWarning:SetWordWrap(true) end
         local RefreshPandemicState
@@ -890,7 +890,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
             end,
             AuraControlMeta(ctx, "custom-container.appearance.pandemic.enabled"))
         AddTooltip(pandemicToggle, "12.1 Pandemic state",
-            "Disabled by default. Blizzard's native implementation enables a per-frame OnUpdate for each visible aura button as soon as that aura has a calculated pandemic window; this can begin before the warning becomes visible.")
+            "Disabled by default. On 12.1.0 Blizzard's native implementation enables a per-frame OnUpdate for each visible aura button as soon as that aura has a calculated pandemic window; this can begin before the warning becomes visible. 12.1.5 and WoW Forever use a native timer instead.")
         pandemicControls[#pandemicControls + 1] = BindDropdown(ctx, pandemic, "Style", pandemicX(2), -42,
             M.AURA_PANDEMIC_STYLE_VALUES, pandemicCol,
             function() return item.placed.pandemicStyle or "BORDER" end,
@@ -1245,7 +1245,7 @@ local function BuildCustomEffectTool(C)
                 end,
                 AuraControlMeta(ctx, "custom-container.effect.only-during-pandemic-window"))
             AddTooltip(pandemicOnly, "Pandemic-only Full-Frame effect",
-                "Shows this effect only while a tracked DoT is in its native Pandemic window. Multiple DoTs in Pandemic can intensify the same effect. Blizzard may run an OnUpdate on each visible aura button while its Pandemic timing is available.")
+                "Shows this effect only while a tracked DoT is in its native Pandemic window. Multiple DoTs in Pandemic can intensify the same effect. On 12.1.0 Blizzard runs an OnUpdate on each visible aura button while its Pandemic timing is available; 12.1.5 and WoW Forever use a native timer instead.")
         end
         if W.SetCollapsibleBadges then
             M.TrackRefresh(ctx, function()
