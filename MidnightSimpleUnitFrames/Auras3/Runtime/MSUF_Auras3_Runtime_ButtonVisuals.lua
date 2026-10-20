@@ -44,6 +44,8 @@ local ResolveFrameStrata = dependencies.Platform.ResolveFrameStrata
 local ResolveLaneParentFrame = dependencies.CustomConfig.ResolveLaneParentFrame
 local Shape = dependencies.Appearance.Shape
 local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
+local STANDARD_TEXT_FONT = dependencies.Platform.STANDARD_TEXT_FONT
+local Register = MSUF.RunNativeAuraRegistration
 local ValidateNativeAuraButtonContract = dependencies.NativeContract.ValidateNativeAuraButtonContract
 
 local _durationTextOptions = { zeroDurationText = "", expiredText = "" }
@@ -326,12 +328,20 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     return true
 end
 
--- PrepareAuraButton runs once per native AuraButton from Blizzard's
--- frame-creation initializeFrame callback (pool fill), never per UNIT_AURA.
--- Its stages live on this table and PrepareAuraButton calls them in the
--- original order, threading the shared values (visual owner, bar-only, icon,
--- icon shape, text overlay, border binding) as plain arguments so no per-call
--- table is ever allocated.
+-- Build and style every region before native registrations can update the display.
+local function StyleFontString(fs, size, lane)
+    ApplyFont(fs, size, lane)
+    if not fs:GetFont() then fs:SetFont(STANDARD_TEXT_FONT, ClampNumber(size, 12, 6, 40), "OUTLINE") end
+    return fs:GetFont() ~= nil
+end
+
+local function Bind(button, setName, clearName, region, ...)
+    if region and Register(setName, button[setName], button, region, ...) then return true end
+    if region then region:Hide() end
+    Register(clearName, button[clearName], button)
+    return false
+end
+
 local PrepareStage = {}
 
 function PrepareStage.BindLaneIdentity(button, lane, index)
@@ -341,21 +351,8 @@ function PrepareStage.BindLaneIdentity(button, lane, index)
     button._msufA3LaneIndex = index
     LayoutButton(button, lane, index)
     button:SetAlpha(1)
-    -- Runtime AuraButtons are click-through except for the normal Player Buff
-    -- lane, whose native RightButtonUp cancellation must remain usable. On
-    -- 12.1 SetCancelAuraButtons only registers click tokens; it does not enable
-    -- the separate click gate, so this explicit true is required. All of this
-    -- runs only from Blizzard's frame-creation initializeFrame callback.
-    local cancelablePlayerBuff = lane.unit == "player" and lane.kind == "buff"
-    button:SetMouseClickEnabled(cancelablePlayerBuff)
-    if cancelablePlayerBuff then
-        button:SetCancelAuraButtons("RightButtonUp")
-    end
 end
 
--- One native AuraSlot owns the secret assignment. Spell Indicator icon
--- art lives on an independently levelled child, so its user Layer remains
--- independent from a full-frame effect without a second aura assignment.
 function PrepareStage.ResolveVisualOwner(button, lane)
     local visualOwner = button
     if lane.kind == "spellIndicator" and lane.frameEffect and lane.visual ~= "none" then
@@ -376,92 +373,61 @@ function PrepareStage.ResolveVisualOwner(button, lane)
     return visualOwner
 end
 
--- Normal aura lanes retain the reference-addon model: their AuraButton
--- inherits the container's strata and remains the sole visual owner. The
--- Spell Indicator exception above is established only in initializeFrame;
--- later secret-backed assignment never needs another hierarchy mutation.
--- Returns barOnly, spellIndicatorBar and the icon texture the shape stage
--- masks (the pre-existing button.Icon, possibly nil, when bar-only).
 function PrepareStage.PrepareIcon(button, lane, index, visualOwner)
     local spellIndicatorBar = lane.kind == "spellIndicator" and lane.visual == "bar"
     local barOnly = spellIndicatorBar
         or (lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY")
     local icon = button.Icon
     if barOnly then
-        button:ClearIcon()
         if icon then
             icon:SetAlpha(0)
             icon:Hide()
         end
-    else
-        if not icon then
-            -- The portrait itself is ARTWORK sublevel 0. Use the same sublevel
-            -- contract as the proven cast-icon overlay; normal aura lanes keep
-            -- their existing layer order.
-            icon = PixelLayoutRegion(visualOwner:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0))
-            button.Icon = icon
-        elseif lane.portraitOverlay == true and icon.SetDrawLayer then
-            icon:SetDrawLayer("ARTWORK", 1)
-        end
-        icon:ClearAllPoints()
-        icon:SetAllPoints(visualOwner)
-        ApplyAuraIconZoom(icon, lane)
-        icon:SetAlpha(1)
-        icon:Show()
-        button:SetIcon(icon)
-        -- Preserve the original portrait mask on icon 1. Reusing that
-        -- screen-space mask on appended icons would clip them to the portrait.
-        if lane.portraitOverlay == true and index == 1 then
-            local holder = button._msufA3ParentFrame
-            local mask = holder and holder.mask
-            if mask and icon.AddMaskTexture then icon:AddMaskTexture(mask) end
-        end
+        return barOnly, spellIndicatorBar, icon
+    end
+    if not icon then
+        icon = PixelLayoutRegion(visualOwner:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0))
+        button.Icon = icon
+    elseif lane.portraitOverlay == true and icon.SetDrawLayer then
+        icon:SetDrawLayer("ARTWORK", 1)
+    end
+    icon:ClearAllPoints()
+    icon:SetAllPoints(visualOwner)
+    ApplyAuraIconZoom(icon, lane)
+    icon:SetAlpha(1)
+    icon:Show()
+    if lane.portraitOverlay == true and index == 1 then
+        local holder = button._msufA3ParentFrame
+        local mask = holder and holder.mask
+        if mask and icon.AddMaskTexture then icon:AddMaskTexture(mask) end
     end
     return barOnly, spellIndicatorBar, icon
 end
 
--- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
--- the (secret) aura duration C-side, so there is no addon timer cost.
---
--- Use CooldownFrameTemplate for the actual swipe art, then immediately opt
--- out of countdown numbers, bling, and edge drawing. Created once per button
--- and reused.
 function PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
-    if lane.showCooldownSwipe == true and not barOnly then
-        local cooldownAnchor, cooldownLevel = ButtonVisuals.AuraCooldownAnchorAndLevel(button, lane)
-        local cooldown = button._msufA3Cooldown
-        if not cooldown then
-            local cd = PixelLayoutRegion(CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate"))
-            if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
-            if type(cd.SetSwipeColor) == "function" then cd:SetSwipeColor(0, 0, 0, 0.58) end
-            if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
-            if type(cd.SetDrawBling) == "function" then cd:SetDrawBling(false) end
-            if type(cd.SetDrawEdge) == "function" then cd:SetDrawEdge(false) end
-            button._msufA3Cooldown = cd
-            cooldown = cd
-        end
-        if cooldown then
-            cooldown:ClearAllPoints()
-            cooldown:SetAllPoints(cooldownAnchor or button)
-            if type(cooldown.SetDrawSwipe) == "function" then cooldown:SetDrawSwipe(true) end
-            if type(cooldown.SetSwipeColor) == "function" then cooldown:SetSwipeColor(0, 0, 0, 0.58) end
-            if type(cooldown.SetReverse) == "function" then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
-            if type(cooldown.SetFrameLevel) == "function" then
-                cooldown:SetFrameLevel(cooldownLevel)
-            end
-            cooldown:Show()
-            button:SetDurationCooldown(cooldown)
-        end
-    else
-        button:ClearDurationCooldown()
-        if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
+    local cooldown = button._msufA3Cooldown
+    if lane.showCooldownSwipe ~= true or barOnly then
+        if cooldown then cooldown:Hide() end
+        return nil
     end
+    local cooldownAnchor, cooldownLevel = ButtonVisuals.AuraCooldownAnchorAndLevel(button, lane)
+    if not cooldown then
+        cooldown = PixelLayoutRegion(CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate"))
+        button._msufA3Cooldown = cooldown
+    end
+    cooldown:ClearAllPoints()
+    cooldown:SetAllPoints(cooldownAnchor or button)
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.58) end
+    if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
+    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+    if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
+    if cooldown.SetReverse then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
+    if cooldown.SetFrameLevel then cooldown:SetFrameLevel(cooldownLevel) end
+    cooldown:Show()
+    return cooldown
 end
 
--- Masking is stamped once in AuraContainer's initializeFrame callback.
--- Rectangular/default auras take the no-allocation branch and keep the
--- exact pre-shape icon, swipe, and border renderer. Returns the icon shape
--- the border and icon-style stages share.
 function PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
     local iconShape = not barOnly and (lane.iconShape or Shape.RECTANGLE) or Shape.RECTANGLE
     A3.ApplyAuraIconShape(visualOwner, iconShape, button._msufA3Cooldown, icon)
@@ -469,51 +435,37 @@ function PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
 end
 
 function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
-    if lane.showDurationBar == true then
-        local bar = button._msufA3DurationBar
-        if not bar then
-            bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, visualOwner))
-            bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-            bar:SetMinMaxValues(0, 1)
-            bar:SetValue(0)
-            button._msufA3DurationBar = bar
-        end
-        if type(bar.SetFrameLevel) == "function" then
-            bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0)
-                + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
-        end
-        if spellIndicatorBar then
-            -- Same proven path as the native Ebon Might bar: the StatusBar is
-            -- a descendant of the CustomAuraButton and fills the complete
-            -- configured Spell Indicator rectangle. Blizzard's
-            -- ApplyDurationBar calls SetTimerDuration(auraDuration, ...) C-side.
-            bar:ClearAllPoints()
-            bar:SetAllPoints(visualOwner)
-            local color = lane.color or {}
-            bar:SetStatusBarColor(
-                Clamp01(color[1], 0.69),
-                Clamp01(color[2], 0.50),
-                Clamp01(color[3], 0.88),
-                Clamp01(color[4], 1))
-        else
-            LayoutDurationBar(visualOwner, bar, lane)
-            ApplyDurationBarColor(bar, lane)
-        end
-        if type(bar.SetReverseFill) == "function" then
-            bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
-        end
-        -- Finish every script-side mutation before handing the StatusBar to
-        -- Blizzard, which adds secret BarValue ownership during this call.
-        bar:Show()
-        button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
-    else
-        button:ClearDurationBar()
-        if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
+    local bar = button._msufA3DurationBar
+    if lane.showDurationBar ~= true then
+        if bar then bar:Hide() end
+        return nil
     end
+    if not bar then
+        bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, visualOwner))
+        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(0)
+        button._msufA3DurationBar = bar
+    end
+    if bar.SetFrameLevel then
+        bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0) + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
+    end
+    if spellIndicatorBar then
+        bar:ClearAllPoints()
+        bar:SetAllPoints(visualOwner)
+        local color = lane.color or {}
+        bar:SetStatusBarColor(Clamp01(color[1], 0.69), Clamp01(color[2], 0.50), Clamp01(color[3], 0.88), Clamp01(color[4], 1))
+    else
+        LayoutDurationBar(visualOwner, bar, lane)
+        ApplyDurationBarColor(bar, lane)
+    end
+    if bar.SetReverseFill then
+        bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
+    end
+    bar:Show()
+    return bar
 end
 
--- Cooldown text and stack text share one overlay above the swipe; it exists
--- only while at least one text element is on.
 function PrepareStage.ResolveTextOverlay(button, lane)
     if lane.showCooldownText == true or lane.showStacks == true then
         return EnsureAuraTextOverlay(button, lane) or button
@@ -522,162 +474,110 @@ function PrepareStage.ResolveTextOverlay(button, lane)
 end
 
 function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
-    if lane.showCooldownText == true then
-        local duration = button.Text or button.DurationText
-        if not duration then
-            duration = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
-            button.Text = duration
-        elseif duration.GetParent and duration:GetParent() ~= textOverlay then
-            -- PTR 7 seals configured display elements with
-            -- ForbiddenAspect.ChangeParent; SetParent would hard-error inside
-            -- initializeFrame and kill the lane. Retire the stray element and
-            -- rebuild on the overlay instead.
-            duration:Hide()
-            duration = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
-            button.Text = duration
-        end
-        duration:Hide()
-        ApplyFont(duration, lane.cooldownSize, lane)
-        if type(duration.SetDrawLayer) == "function" then
-            duration:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
-        end
-        PlaceCooldownText(duration, textOverlay, lane)
-        duration:Show()
-        -- Hand Blizzard a C-side formatter plus a duration-text binding
-        -- template so the text renders from the secret duration object with no
-        -- addon cost. Long durations promote to hours/days on Blizzard's own
-        -- curve, and the binding's blank zero/expired fallbacks keep recycled
-        -- pool buttons from showing the previous aura's stale countdown on
-        -- permanent auras (flasks, food, raid buffs).
-        -- PTR 7 duration-text options: the formatter rides `textFormatter` and
-        -- the template rides `binding`; the pre-PTR7 scalar keys stay set too
-        -- so a client on the older contract reads the same style. Smooth
-        -- C-side color curves stay OUT until DurationTextBindingColorOptions
-        -- is source-verified: no pcall probing in initializeFrame, ever.
-        local style = BuildAuraDurationStyle(lane)
-        if style then
-            _durationTextOptions.textFormatter = style.formatter
-            _durationTextOptions.formatter = style.formatter
-            _durationTextOptions.binding = style.binding
-            _durationTextOptions.updateInterval = style.updateInterval
-            button:SetDurationText(duration, _durationTextOptions)
-            _durationTextOptions.textFormatter = nil
-            _durationTextOptions.formatter = nil
-            _durationTextOptions.binding = nil
-            _durationTextOptions.updateInterval = nil
-        else
-            button:SetDurationText(duration, _durationTextOptions)
-        end
-    else
-        button:ClearDurationText()
-        local duration = button.Text or button.DurationText
+    local duration = button.Text or button.DurationText
+    if lane.showCooldownText ~= true then
         if duration then duration:Hide() end
+        return nil
     end
+    if not duration or (duration.GetParent and duration:GetParent() ~= textOverlay) then
+        if duration then duration:Hide() end
+        duration = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
+        button.Text = duration
+    end
+    duration:Hide()
+    if not StyleFontString(duration, lane.cooldownSize, lane) then return nil end
+    if duration.SetDrawLayer then
+        duration:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
+    end
+    PlaceCooldownText(duration, textOverlay, lane)
+    duration:Show()
+    return duration
 end
 
 function PrepareStage.PrepareStackText(button, lane, textOverlay)
-    if lane.showStacks == true then
-        local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
-        if not count then
-            count = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
-            button._msufA3ApplicationCount = count
-        elseif count.GetParent and count:GetParent() ~= textOverlay then
-            -- Same ChangeParent seal as the duration text above.
-            count:Hide()
-            count = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
-            button._msufA3ApplicationCount = count
-        end
-        button.Count = count
-        count:Hide()
-        ApplyFont(count, lane.stackSize, lane)
-        if type(count.SetDrawLayer) == "function" then
-            count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
-        end
-        PlaceStackText(count, textOverlay, lane)
-        count:Show()
-        button:SetApplicationCount(count, _applicationCountOptions)
-    else
-        button:ClearApplicationCount()
-        local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
+    local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
+    if lane.showStacks ~= true then
         if count then count:Hide() end
+        return nil
     end
+    if not count or (count.GetParent and count:GetParent() ~= textOverlay) then
+        if count then count:Hide() end
+        count = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
+        button._msufA3ApplicationCount = count
+    end
+    button.Count = count
+    count:Hide()
+    if not StyleFontString(count, lane.stackSize, lane) then return nil end
+    if count.SetDrawLayer then
+        count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
+    end
+    PlaceStackText(count, textOverlay, lane)
+    count:Show()
+    return count
 end
 
--- Returns whether a dispel-type border was bound; the aura symbol needs one.
 function PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
-    local auraBorderBound = false
-    if lane.showAuraBorder == true and not barOnly then
-        local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
-        if not border then
-            border = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY"))
-        end
-        local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
-        LayoutAuraBorder(visualOwner, border, lane, shapedDispel == nil)
-        if shapedDispel then
-            border:SetTexture(shapedDispel)
-            if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
-        end
-        button._msufA3AuraBorder = border
-        button:ClearDispelTypeTextures()
-        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, shapedDispel ~= nil, lane._msufA3NativeVisualInputs))
-        auraBorderBound = true
-    else
-        button:ClearDispelTypeTextures()
+    if lane.showAuraBorder ~= true or barOnly then
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
+        return nil
     end
-    return auraBorderBound
+    local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
+    if not border then
+        border = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY"))
+    end
+    local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
+    LayoutAuraBorder(visualOwner, border, lane, shapedDispel == nil)
+    if shapedDispel then
+        border:SetTexture(shapedDispel)
+        if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
+    end
+    button._msufA3AuraBorder = border
+    return border, GetAuraBorderOptions(lane.showAuraSymbol, shapedDispel ~= nil)
 end
 
--- PTR 8 stealable filtering stays entirely inside Blizzard's native
--- AuraButton. The helpful button receives one display texture and no MSUF
--- aura-data reads, events, polling, or per-frame work.
 function PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
-    if lane.showStealableMarker == true and not barOnly then
-        local marker = button._msufA3StealableMarker
-        if not marker then
-            marker = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY", nil, 5))
-            button._msufA3StealableMarker = marker
-        end
-        marker:ClearAllPoints()
-        if lane.stealableStyle == "ICON" then
-            local markerSize = math_max(7, math_floor((lane.size or 24) * 0.42 + 0.5))
-            marker:SetSize(markerSize, markerSize)
-            marker:SetPoint("TOPLEFT", visualOwner, "TOPLEFT", 1, -1)
-        else
-            LayoutAuraBorder(visualOwner, marker, lane, true)
-        end
-        button:AddDispelTypeTexture(marker, A3.GetStealableTextureOptions(lane.stealableStyle))
-    elseif button._msufA3StealableMarker then
-        button._msufA3StealableMarker:Hide()
+    local marker = button._msufA3StealableMarker
+    if lane.showStealableMarker ~= true or barOnly then
+        if marker then marker:Hide() end
+        return nil
     end
-end
-
-function PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
-    if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
-        local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
-        if not symbol then
-            symbol = PixelLayoutRegion(visualOwner:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
-        end
-        button._msufA3AuraSymbol = symbol
-        button.Symbol = symbol
-        symbol:ClearAllPoints()
-        symbol:SetPoint("BOTTOMRIGHT", visualOwner, "BOTTOMRIGHT", -1, 1)
-        symbol:SetJustifyH("RIGHT")
-        symbol:SetJustifyV("BOTTOM")
-        ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14), lane)
-        button:SetDispelTypeText(symbol, _auraSymbolOptions)
+    if not marker then
+        marker = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY", nil, 5))
+        button._msufA3StealableMarker = marker
+    end
+    marker:ClearAllPoints()
+    if lane.stealableStyle == "ICON" then
+        local markerSize = math_max(7, math_floor((lane.size or 24) * 0.42 + 0.5))
+        marker:SetSize(markerSize, markerSize)
+        marker:SetPoint("TOPLEFT", visualOwner, "TOPLEFT", 1, -1)
     else
-        button:ClearDispelTypeText()
-        if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
+        LayoutAuraBorder(visualOwner, marker, lane, true)
     end
+    return marker, A3.GetStealableTextureOptions(lane.stealableStyle)
 end
 
--- Shared icon style: border ring + soft drop shadow. All regions are
--- button-owned textures created once here (initializeFrame); layer stack:
--- BACKGROUND(-7) shadow < BORDER(-1) ring < ARTWORK icon < OVERLAY dispel
--- border, so the dispel-type border overdraws the static ring for typed
--- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the
--- hide branches inside the two helpers.
+function PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, border)
+    if lane.showAuraSymbol ~= true or not border or barOnly then
+        if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
+        return nil
+    end
+    local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
+    if not symbol then
+        symbol = PixelLayoutRegion(visualOwner:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
+    end
+    button._msufA3AuraSymbol = symbol
+    button.Symbol = symbol
+    symbol:ClearAllPoints()
+    symbol:SetPoint("BOTTOMRIGHT", visualOwner, "BOTTOMRIGHT", -1, 1)
+    symbol:SetJustifyH("RIGHT")
+    symbol:SetJustifyV("BOTTOM")
+    if not StyleFontString(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14), lane) then
+        symbol:Hide()
+        return nil
+    end
+    return symbol
+end
+
 function PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
     local style
     if not barOnly then style = lane.iconStyle end
@@ -686,20 +586,64 @@ function PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
     ApplyIconStyleBorder(visualOwner, style, size, iconShape)
 end
 
-function PrepareStage.BindPandemicAndTooltip(button, lane)
-    -- AddPandemicRegion controls only the host's secret Shown aspect. Every
-    -- child texture is static and was configured once at creation above.
-    A3.BindPandemicRegion(button, lane)
+function PrepareStage.BindDurationText(button, lane, duration)
+    if not duration then return Bind(button, "SetDurationText", "ClearDurationText", nil) end
+    local style = BuildAuraDurationStyle(lane)
+    if style then
+        _durationTextOptions.textFormatter = style.formatter
+        _durationTextOptions.formatter = style.formatter
+        _durationTextOptions.binding = style.binding
+        _durationTextOptions.updateInterval = style.updateInterval
+    end
+    local bound = Register("SetDurationText", button.SetDurationText, button, duration, _durationTextOptions)
+    _durationTextOptions.textFormatter = nil
+    _durationTextOptions.formatter = nil
+    _durationTextOptions.binding = nil
+    _durationTextOptions.updateInterval = nil
+    return bound or Bind(button, "SetDurationText", "ClearDurationText", duration, _durationTextOptions)
+end
 
-    -- PTR 7 aura tooltips are native. Their lane switch is the complete
-    -- visibility authority; global Unitframe visibility modes never override
-    -- it. Only the compatible cursor placement and tooltip look are shared.
+function PrepareStage.BindDispelTextures(button, regions)
+    local border, marker = regions.border, regions.marker
+    for _ = 1, 2 do
+        Register("ClearDispelTypeTextures", button.ClearDispelTypeTextures, button)
+        local failed = false
+        if border and not Register("AddDispelTypeTexture", button.AddDispelTypeTexture, button, border, regions.borderOptions) then
+            border:Hide()
+            border, failed = nil, true
+        end
+        if not failed and marker
+            and not Register("AddDispelTypeTexture", button.AddDispelTypeTexture, button, marker, regions.markerOptions) then
+            marker:Hide()
+            marker, failed = nil, true
+        end
+        if not failed then return border end
+    end
+    Register("ClearDispelTypeTextures", button.ClearDispelTypeTextures, button)
+    return nil
+end
+
+function PrepareStage.BindRegions(button, lane, regions)
+    local cancelable = lane.unit == "player" and lane.kind == "buff"
+    Register("SetMouseClickEnabled", button.SetMouseClickEnabled, button, cancelable)
+    if cancelable then Register("SetCancelAuraButtons", button.SetCancelAuraButtons, button, "RightButtonUp") end
+    Bind(button, "SetIcon", "ClearIcon", regions.icon)
+    Bind(button, "SetDurationCooldown", "ClearDurationCooldown", regions.cooldown)
+    Bind(button, "SetDurationBar", "ClearDurationBar", regions.bar, regions.bar and ResolveDurationBarOptions(lane))
+    PrepareStage.BindDurationText(button, lane, regions.duration)
+    Bind(button, "SetApplicationCount", "ClearApplicationCount", regions.count, _applicationCountOptions)
+    local border = PrepareStage.BindDispelTextures(button, regions)
+    if regions.symbol and not border then regions.symbol:Hide() end
+    Bind(button, "SetDispelTypeText", "ClearDispelTypeText", border and regions.symbol, _auraSymbolOptions)
+    if not Register("BindPandemicRegion", A3.BindPandemicRegion, button, lane) and button.ClearPandemicRegions then
+        Register("ClearPandemicRegions", button.ClearPandemicRegions, button)
+    end
     local wantTooltip = lane.showTooltip ~= false
-    button:SetMouseMotionEnabled(wantTooltip)
-    if wantTooltip and type(button.SetTooltipAnchorPoint) == "function" then
-        button:SetTooltipAnchorPoint(lane.auraTooltipAnchor or "ANCHOR_BOTTOMRIGHT")
-        if type(button.SetHideTooltipInCombat) == "function" then
-            button:SetHideTooltipInCombat(false)
+    Register("SetMouseMotionEnabled", button.SetMouseMotionEnabled, button, wantTooltip)
+    if wantTooltip and button.SetTooltipAnchorPoint then
+        Register("SetTooltipAnchorPoint", button.SetTooltipAnchorPoint, button, lane.auraTooltipAnchor or "ANCHOR_BOTTOMRIGHT")
+        if button.SetHideTooltipInCombat then
+            Register("SetHideTooltipInCombat", button.SetHideTooltipInCombat, button, false)
         end
     end
 end
@@ -709,18 +653,20 @@ local function PrepareAuraButton(button, lane, index)
     PixelLayoutRegion(button)
     PrepareStage.BindLaneIdentity(button, lane, index)
     local visualOwner = PrepareStage.ResolveVisualOwner(button, lane)
+    local regions = {}
     local barOnly, spellIndicatorBar, icon = PrepareStage.PrepareIcon(button, lane, index, visualOwner)
-    PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
+    if not barOnly then regions.icon = icon end
+    regions.cooldown = PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
     local iconShape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
-    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
+    regions.bar = PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
     local textOverlay = PrepareStage.ResolveTextOverlay(button, lane)
-    PrepareStage.PrepareCooldownText(button, lane, textOverlay)
-    PrepareStage.PrepareStackText(button, lane, textOverlay)
-    local auraBorderBound = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
-    PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
-    PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
+    regions.duration = PrepareStage.PrepareCooldownText(button, lane, textOverlay)
+    regions.count = PrepareStage.PrepareStackText(button, lane, textOverlay)
+    regions.border, regions.borderOptions = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
+    regions.marker, regions.markerOptions = PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
+    regions.symbol = PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, regions.border)
     PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
-    PrepareStage.BindPandemicAndTooltip(button, lane)
+    PrepareStage.BindRegions(button, lane, regions)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 

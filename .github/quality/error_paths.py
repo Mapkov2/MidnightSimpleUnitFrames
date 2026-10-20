@@ -23,6 +23,10 @@ REJECTION_BOUNDARIES = {
         # Host API v1 steps (another addon's page-reset steps, MSUF's scale
         # appliers) run inside host state that a raise must not leave half done.
         "local ok, result = pcall(step, ...)",
+        # Native AuraButton registrations in initializeFrame (Auras3 ButtonVisuals):
+        # one failing Set* must not leave a half-registered button for the engine's
+        # next UpdateAuraDisplay inside the container's update pass.
+        "local ok, err = pcall(method, owner, ...)",
     },
 }
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")

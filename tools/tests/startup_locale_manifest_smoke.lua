@@ -149,7 +149,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-20: the native aura freeze guard adds exactly 6,942 core LF bytes on Mainline and Forever;
         -- Classic loads none of these native runtime files. Mainline ceiling 10,117,030 -> 10,123,972 (+6,942);
         -- Classic unchanged.
-        assert(bytes < (suffix == "Mainline" and 10123972 or 7992694),
+        -- 2026-10-20: production bd13c8bd5 port builds regions before registration and rechecks flow owners:
+        -- Mainline/Forever -4,131 LF bytes, TBC/Vanilla/Mists +486 (measured against 675022cf4). Ceilings move by
+        -- exactly those deltas: Mainline 10,123,972 -> 10,119,841; Classic 7,992,694 -> 7,993,180.
+        assert(bytes < (suffix == "Mainline" and 10119841 or 7993180),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),
