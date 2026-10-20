@@ -124,20 +124,20 @@ end
 
 --- Delayed keyed scheduling.
 ---
---- 12.1.5 and Forever ship C_Timer.NewTimedSignalMap: one native callback map
---- drives many keyed deadlines, and a key is rescheduled by signalling it again
---- instead of being cancelled and recreated. That drops the per-call closure and
---- timer object C_Timer.After allocates, which is what matters here - the dense
---- callers fire in bursts (target swap, roster change, menu refresh), not steadily.
+--- 12.1.5 ships TimedSignalMap: one native callback map drives many keyed
+--- deadlines, and a key is rescheduled by signalling it again instead of being
+--- cancelled and recreated. That drops the per-call closure and timer object
+--- C_Timer.After allocates, which is what matters here - the dense callers fire
+--- in bursts (target swap, roster change, menu refresh), not steadily.
 ---
 --- One numeric signal key is registered per logical key and kept for the
 --- session. TimerUtil retains registered callbacks for the map's lifetime, so
 --- registering per call would leak; after the first use a reschedule costs one
---- signal call plus one table store and allocates nothing. Keys are therefore
+--- SignalAfter plus one table store and allocates nothing. Keys are therefore
 --- meant to be stable identities (a string, a module table, a frame), never a
---- value minted per call. Delays and deadlines are public numbers only.
+--- value minted per call.
 ---
---- Clients without the map (Midnight 12.1.0 live, every Classic client)
+--- Clients without TimedSignalMap (Midnight 12.1.0 live, every Classic client)
 --- use C_Timer.After with one runner closure cached per key, so a reschedule
 --- allocates nothing there either: a superseded timer still fires, and only the
 --- timer that is due (or the last one outstanding) runs the work.
@@ -154,7 +154,6 @@ Scheduler.delayedDeadline = delayedDeadline
 
 local signalMap = Scheduler.signalMap
 if signalMap == nil then
-    -- TimerUtil only wraps the native constructor: require that too.
     local timerUtil = _G.TimerUtil
     if C_Timer and C_Timer.NewTimedSignalMap and timerUtil and timerUtil.CreateTimedSignalCallbackMap then
         signalMap = timerUtil.CreateTimedSignalCallbackMap()
@@ -225,8 +224,7 @@ function Scheduler.ScheduleAfter(key, delay, fn)
     return true
 end
 
---- ScheduleAfter's policy for an absolute GetTime() deadline (a GetTimePreciseSec
---- caller passes a delay instead); a past deadline is clamped to now.
+--- ScheduleAfter's policy for a GetTime() deadline; a past one is clamped to now.
 function Scheduler.ScheduleAt(key, at, fn)
     assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     key = key or fn

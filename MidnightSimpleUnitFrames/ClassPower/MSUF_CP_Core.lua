@@ -473,9 +473,8 @@ do
         end
     end
 
-    --- One scheduler key holds the expiry; every cast moves it to spExpires.
-    --- Without the scheduler an earlier cast's After finds the later expiry still
-    --- ahead, or the stacks already reset (spExpires nil), and does nothing.
+    --- One scheduler key holds the expiry. Without the scheduler, an earlier
+    --- cast's After finds a later expiry or no stacks, and does nothing.
     local function OnTipExpiry()
         if CP.spExpires and GetTime() >= CP.spExpires then
             ResetTipState(true)

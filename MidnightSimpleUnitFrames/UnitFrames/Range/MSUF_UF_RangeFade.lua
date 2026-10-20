@@ -749,10 +749,12 @@ local function ArmPollTimer()
   -- The callback checks that deadline before sampling, so bursts need no
   -- cancel/recreate pair per edge and never move a range evaluation forward.
   if pollQueued and pollNextAt <= nextAt then return end
+  local delay = nextAt - PollClock()
+  if delay < 0 then delay = 0 end
   pollQueued = true
   pollNextAt = nextAt
   -- Replaces a pending earlier deadline of the same key in place.
-  Scheduler.ScheduleAt(POLL_SCHEDULE_KEY, nextAt, PollTimerCallback)
+  Scheduler.ScheduleAfter(POLL_SCHEDULE_KEY, delay, PollTimerCallback)
 end
 
 PollTimerCallback = function()
@@ -761,7 +763,7 @@ PollTimerCallback = function()
   local nextAt = NextPollDeadline()
   if nextAt and now < nextAt then
     pollNextAt = nextAt
-    Scheduler.ScheduleAt(POLL_SCHEDULE_KEY, nextAt, PollTimerCallback)
+    Scheduler.ScheduleAfter(POLL_SCHEDULE_KEY, nextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false

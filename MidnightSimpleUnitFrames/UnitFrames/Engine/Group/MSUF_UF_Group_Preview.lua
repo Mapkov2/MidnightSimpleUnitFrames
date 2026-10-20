@@ -945,7 +945,6 @@ function GF.AnimateUnitFrameAuras(frame, elapsed)
       if visual._timer and lane.showCooldownText then visual._timer:SetText(state and state.text or visual._sceneStaticTimer or "8") end
       if visual._stack and lane.showStacks then visual._stack:SetText(state and state.stacks or "2") end
       if Auras.ApplyPandemicVisual and (lane.targetDots or visual._msufA3PandemicRegion) then
-        -- Styled once per paint; a tick only toggles it.
         local inWindow = lane.pandemicEnabled == true and visual._sceneAuraIndex == 1
           and (not state or state.pandemicActive ~= false)
         local region = visual._scenePandemicStyled and visual._msufA3PandemicRegion

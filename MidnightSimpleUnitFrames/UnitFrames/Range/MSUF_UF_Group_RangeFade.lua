@@ -1115,11 +1115,10 @@ local function QueueOfflineDelayFrame(frame, delay)
   if not frame then
     return
   end
-  local now = GetTime and GetTime() or 0
-  local when = now + (delay or 0)
-  frame._msufGFOfflineDelayReadyAt = when
+  delay = delay or 0
+  frame._msufGFOfflineDelayReadyAt = (GetTime and GetTime() or 0) + delay
   local key = OfflineDelayKey(frame)
-  Scheduler.ScheduleAt(key, when, key)
+  Scheduler.ScheduleAfter(key, delay, key)
 end
 
 OfflineDelayExpired = function(frame)

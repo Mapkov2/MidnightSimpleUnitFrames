@@ -372,7 +372,6 @@ local function ClearCombatStateText()
     end
 end
 
--- One scheduler key: a new combat edge moves the pending clear.
 local COMBAT_STATE_CLEAR_KEY = "MSUF_COMBAT_STATE_CLEAR"
 local combatStateClearPending = false
 

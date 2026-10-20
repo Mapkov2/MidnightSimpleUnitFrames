@@ -14,16 +14,15 @@
 --      1. the castbar native completion, whose deadline is on
 --         GetTimePreciseSec, lands on the GetTime() clock (50 ms floor);
 --      2. every delayed group offline hide is one key per frame;
---      3. every ready-check icon hide is one key per frame, moved in place by a
---         re-queue and retired by a cancel;
+--      3. the ready-check hide queue is one scheduler key, re-armed for its next
+--         due hide after each pass; a cancelled frame is skipped;
 --      4. the group hover tooltip is one debounced key, cancelled on leave;
 --      5. the combat-state text clear is one key that a new combat edge moves;
 --      6. (12.1.5 run) the preview pandemic region is styled once per paint;
 --         the animation tick only flips its shown state.
 --   C. the pandemic performance notes name 12.1.0 as the only per-frame
 --      OnUpdate client, in the page and in all twelve locale packs.
--- Tip of the Spear (one re-armed key) is pinned in classpower_lifecycle_smoke
--- and the unit range poll deadline in classic_range_fade_smoke.
+-- Tip of the Spear (one re-armed key) is pinned in classpower_lifecycle_smoke.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -324,10 +323,12 @@ local function RunClient(signal)
         end
     end
 
-    -- B3. Ready-check icon hide: one key per frame, moved by a re-queue.
+    -- B3. Ready-check icon hide: the shared queue owns one scheduler key, re-armed
+    -- for the next due hide; a cancelled frame is skipped when it fires.
     do
         local Status = core.UFStatusRuntime
         if Fail(Status and Status.UpdateReadyCheck, "status runtime not loaded") then
+            local KEY = "MSUF_READY_CHECK_HIDE"
             local status = { readyCheck = { enabled = true } }
             local function Member(unit)
                 local frame = env.CreateFrame("Button", nil, env.UIParent)
@@ -338,28 +339,28 @@ local function RunClient(signal)
             end
             local a, b = Member("party1"), Member("party2")
             local t = Now()
-            local pending, registered, signals = Pending(), map.registered, map:Pending()
+            local pending, signals, queued = Pending(), map:Pending(), #afterQueue
             Status.UpdateReadyCheck(a, status, "READY_CHECK_FINISHED")
             Status.UpdateReadyCheck(b, status, "READY_CHECK_FINISHED")
-            Fail(Pending() == pending + 2, "two ready-check hides did not own one scheduler key each")
-            Fail(not signal or (map:Pending() == signals + 2 and #afterQueue == 0),
-                "two ready-check hides did not own one signal each")
+            Fail(Pending() == pending + 1 and Near(DueOf(KEY), t + 6),
+                "two ready-check hides are not one scheduler key due at the first hide")
+            Fail(signal and (map:Pending() == signals + 1 and #afterQueue == queued) or (not signal and #afterQueue == queued + 1),
+                "a ready-check batch armed more than one native timer")
             RunUntil(t + 3)
+            queued = #afterQueue
             Status.UpdateReadyCheck(a, status, "READY_CHECK_FINISHED")
-            Fail(Pending() == pending + 2, "a re-queued hide added a scheduler key")
-            Fail(not signal or (map.registered == registered + 2 and map:Pending() == signals + 2),
-                "a re-queued hide registered another signal or armed a second one")
+            Fail(Pending() == pending + 1 and Near(DueOf(KEY), t + 6) and #afterQueue == queued,
+                "a later re-queue armed another timer or moved the earlier deadline")
             Status.UpdateReadyCheck(b, { readyCheck = { enabled = false } }, "READY_CHECK_FINISHED")
-            Fail(Pending() == pending + 1, "a cancelled ready-check hide stayed scheduled")
-            Fail(not signal or map:Pending() == signals + 1, "a cancelled ready-check hide left its signal armed")
             b.readyCheckIcon:Show()
             RunUntil(t + 6.5)
             Fail(a.readyCheckIcon:IsShown() and b.readyCheckIcon:IsShown(),
-                "the moved hide or the cancelled one ran at the first deadline")
+                "the re-queued hide or the cancelled one ran at the first deadline")
+            Fail(Pending() == pending + 1 and Near(DueOf(KEY), t + 9), "the queue key was not re-armed for the re-queued hide")
             RunUntil(t + 9.1)
             Fail(not a.readyCheckIcon:IsShown(), "the re-queued hide did not run at its moved deadline")
             Fail(b.readyCheckIcon:IsShown(), "the cancelled hide still ran")
-            Fail(Pending() == pending, "the ready-check hides left scheduler keys behind")
+            Fail(Pending() == pending, "the ready-check queue left its key scheduled")
         end
     end
 
