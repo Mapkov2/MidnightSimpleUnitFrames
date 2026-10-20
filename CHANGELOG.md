@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.504-beta2 - 2026-10-20
+
+### Bug Fixes
+
+- Fixed buffs on the target, focus, boss and arena frames still staying missing until /reload in some sessions. When Blizzard's aura display stops updating, MSUF now rebuilds it on the next target change.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
+
 ## 6.504-beta1 - 2026-10-19
 
 ### Bug Fixes
