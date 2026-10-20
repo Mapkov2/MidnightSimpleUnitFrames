@@ -58,7 +58,6 @@ local WIDGET_GAPS = {
     { file = "Pages/MSUF_Menu2_Auras_Preview.lua", source = 'W.LabelAt(section, M.Format("Shared Preview - %s"' },
     { file = "Pages/MSUF_Menu2_GlobalMisc.lua", source = "local mouseoverHelp = Schema.Build(ctx, mouseover, {" },
     { file = "Pages/MSUF_Menu2_GroupAuras.lua", source = 'W.Text(section, M.Format("Ordering and individual Style are edited here.' },
-    { file = "Pages/MSUF_Menu2_GroupBars.lua", source = 'W.Text(stripeCard, M.Format("Color and opacity are in %s."' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'W.Text(section, M.Format("Shape, border and shadow: %s.' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'local assignmentDrop = Schema.Build(ctx, corners, {' },
     { file = "Pages/MSUF_Menu2_GroupIndicators.lua", source = 'local highlightCard = W.ControlCard(indicators, "Target Highlight",' },

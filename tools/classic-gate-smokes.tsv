@@ -968,3 +968,5 @@ clients+Forever	lua	tools/tests/menu_group_colors_schema_parity_smoke.lua	{root}
 -	lua	tools/tests/editmode_core_history_smoke.lua	{root} Mists positions	Native Priority and Gameplay position popups failed: Mists	nightly
 -	lua	tools/tests/menu_castbars_parity_smoke.lua	{root} Mainline --push	Castbar settings representative input DB apply refresh history combat parity: Mainline	push
 clients+Forever	lua	tools/tests/menu_castbars_parity_smoke.lua	{root} {flavor}	Castbar settings parent input DB apply refresh history combat parity: {flavor}	nightly
+-	lua	tools/tests/menu_group_bars_schema_parity_smoke.lua	{root} Mainline - push	Group Bars schema push input, history, combat, declaration and 400px parity: Mainline
+clients+Forever	lua	tools/tests/menu_group_bars_schema_parity_smoke.lua	{root} {flavor}	Group Bars schema input, history, combat, scope and layout parity: {flavor}	nightly

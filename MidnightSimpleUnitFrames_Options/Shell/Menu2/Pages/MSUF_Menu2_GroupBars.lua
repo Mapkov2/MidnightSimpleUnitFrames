@@ -1,12 +1,13 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local M = MSUF.MSUF2 or {}
-MSUF.MSUF2 = M
+local M = MSUF.GetMenu2Namespace()
 
 -- Menu2 Group Bars page.
 -- Builds party/raid health, power, range, dispel overlay, and text controls for the selected
 -- group scope. Applies are queued through GroupPage helpers to respect secure header runtime.
 local W = M.Widgets
+local Schema = M.ControlSchema
+local GROUP_OPTIONS = Schema.GroupOptions()
 local T = M.Theme
 local GP = M.GroupPage or {}
 local UnitSectionShared = M.UnitSectionsShared or {}
@@ -20,8 +21,8 @@ local DELIMITER_VALUES, ANCHORS = GP.DELIMITER_VALUES or {}, GP.ANCHORS or {}
 local DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = GP.DISPEL_OVERLAY_STYLES or {}, GP.DEBUFF_STRIPE_EDGES or {}
 local HEALTH_TEXT_MODES = GP.HEALTH_TEXT_MODES or TEXT_MODES
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection = GP.GF, GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num, GP.ScopeSection
-local CurrentScope, BindScopeToggle, ScopeDropdown = GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown
-local ScopeSlider, SetOptionEnabled, SetOptionsEnabled = GP.ScopeSlider, GP.SetOptionEnabled, GP.SetOptionsEnabled
+local CurrentScope = GP.CurrentScope
+local SetOptionEnabled, SetOptionsEnabled = GP.SetOptionEnabled, GP.SetOptionsEnabled
 local FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh = GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus, GP.TrackSectionRefresh
 local OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = GP.OnOffBadge, GP.BadgeNumber, GP.OptionText, GP.ControlMeta, GP.RegisterControl
 OnOffBadge = OnOffBadge or M.OnOffBadge
@@ -36,15 +37,27 @@ local DISPEL_COLOR_REFERENCES = {
 local function RequestGroupBarsRefresh(ctx, reason)
     if M.RequestRefresh then M.RequestRefresh(ctx, reason or "gf-bars-ui") elseif M.Refresh then M.Refresh(ctx) end
 end
-local function ScopeNumberSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
-    local control = W.Slider(parent, label, minValue, maxValue, step, width)
-    M.BindNumberWidget(ctx, control,
-        function() return Num(CurrentScope(), key, default) end,
-        function(value) Set(CurrentScope(), key, tonumber(value) or default, mode or "visual") end,
-        default,
-        ControlMeta(ctx, "field." .. tostring(key)))
-    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
-    return control
+local function RawMeta(ctx, path)
+    return ControlMeta(ctx, path)
+end
+local function StepMeta(ctx, path, step)
+    local meta = ControlMeta(ctx, path)
+    meta.step, meta.roundStep = step, true
+    return meta
+end
+local RAW_COMMANDS = Schema.GroupCommands({}, ControlMeta, RawMeta)
+local STEP_COMMANDS = Schema.GroupCommands({}, ControlMeta, StepMeta)
+local ROW_OPTIONS = { bind = function(ctx, widget, row, kind)
+    local options = GROUP_OPTIONS
+    if row.get or row.lifecycle or row.bind then options = row.roundStep and STEP_COMMANDS or RAW_COMMANDS end
+    options.bind(ctx, widget, row, kind)
+end }
+local function ScopeNumberCommand(_, ctx, row)
+    local key, default, mode = row[2], row[3], row.domain or "visual"
+    return {
+        get = function() return Num(CurrentScope(), key, default) end,
+        set = function(value) Set(CurrentScope(), key, tonumber(value) or default, mode) end,
+    }
 end
 local function NormalizeGFDispelOverlayTrigger(value)
     local gf = GF and GF()
@@ -55,62 +68,74 @@ local function NormalizeGFDispelOverlayTrigger(value)
     if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
     return "BY_ME"
 end
+local function DispelTriggerCommand(_, ctx, row)
+    return {
+        get = function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), row[2], "BORDER")) end,
+        set = function(value)
+            Set(CurrentScope(), row[2], NormalizeGFDispelOverlayTrigger(value), "visual")
+            RequestGroupBarsRefresh(ctx, row.reason)
+        end,
+    }
+end
 local function BuildDispelOverlaySection(ctx, b)
-    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 422, false)
+    local c = {}
+    local dispel = Schema.Section(b:CollapsibleSection("dispel", "Dispel Overlay", 422, false), "group")
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(900, max(320, dispelW - 40))
-    local dispelCard = W.ControlCard(dispel, nil, nil, 20, -38, dispelCardW, 358)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(dispel, DISPEL_COLOR_REFERENCES, {
-            title = "Dispel Type Colors",
-            note = "Shared by Dispel borders, overlays, symbols, and every related preview.",
-            scopeTag = "Shared",
-            historySource = "menu:group-dispel-overlay-colors",
-            maxTargets = 5,
-        })
-    end
-    local dispelToggle = BindScopeToggle(ctx, W.SectionSwitch(dispel, "Dispel Overlay"), "dispelOverlayEnabled", false, "visual")
-    local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
-    M.BindDropdownWidget(ctx, dispelTrigger,
-        function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
-        function(value)
-            Set(CurrentScope(), "dispelOverlayTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
-            RequestGroupBarsRefresh(ctx, "gf-bars-dispel-trigger")
-        end,
-        ControlMeta(ctx, "field.dispelOverlayTrigger"))
-    W.MoveWidget(dispelTrigger, dispelCard, 16, -54, min(300, dispelCardW - 32), "LEFT")
-    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -106,
-        min(300, dispelCardW - 32))
-    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -154, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
-    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -198,
-        min(360, dispelCardW - 72))
-    local dispelLayer = ScopeNumberSlider(ctx, dispelCard, "Effect Layer (0-30)", 0, 30, 1, 340,
-        "dispelOverlayLayer", 0, "visual", 16, -252, min(360, dispelCardW - 72))
+    local dispelCard = Schema.Build(ctx, dispel, {
+        { "card", "dispelCard", nil, { nil, nil, 20, -38, dispelCardW, 358 }, scope = "group" },
+    }).dispelCard
+    Schema.Colors(dispel, DISPEL_COLOR_REFERENCES, {
+        title = "Dispel Type Colors",
+        note = "Shared by Dispel borders, overlays, symbols, and every related preview.",
+        scopeTag = "Shared",
+        historySource = "menu:group-dispel-overlay-colors",
+        maxTargets = 5,
+    })
+    Schema.Build(ctx, dispel, {
+        { "sectionSwitch", "dispelOverlayEnabled", false, { "Dispel Overlay" } },
+        { "dropdown", "dispelOverlayTrigger", "BORDER", { "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300 }, { 16, -54, min(300, dispelCardW - 32), "LEFT" },
+            lifecycle = DispelTriggerCommand, path = "field.dispelOverlayTrigger", reason = "gf-bars-dispel-trigger", parent = dispelCard },
+        { "dropdown", "dispelOverlayStyle", "FULL", { "Overlay style", DISPEL_OVERLAY_STYLES, 300 }, { 16, -106, min(300, dispelCardW - 32),
+            "LEFT" }, parent = dispelCard },
+        { "toggle", "dispelOverlayOnHealth", true, { "Show on current health only", 16, -154, dispelCardW - 32 }, parent = dispelCard },
+        { "slider", "dispelOverlayAlpha", 0.35, { "Overlay opacity", 0.05, 1, 0.05, 340 }, { 16, -198, min(360, dispelCardW - 72), "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelOverlayAlpha", parent = dispelCard },
+        { "slider", "dispelOverlayLayer", 0, { "Effect Layer (0-30)", 0, 30, 1, 340 }, { 16, -252, min(360, dispelCardW - 72), "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelOverlayLayer", parent = dispelCard },
+    }, ROW_OPTIONS, c)
     -- The live tint is drawn by Blizzard and only appears while a real
     -- dispellable debuff is up, so style, opacity and layer are impossible to
     -- judge while configuring. The preview paints an MSUF-owned stand-in with
     -- the exact same geometry. Ephemeral: never written to the DB.
-    local dispelPreview = W.ToggleAt(dispelCard, "Runtime Preview: live GroupFrames", 16, -300, dispelCardW - 32)
-    M.BindBoolWidget(ctx, dispelPreview,
-        function() return _G.MSUF_DispelOverlayPreviewMode == true end,
-        function(value)
-            local fn = _G.MSUF_SetDispelOverlayPreview
-            if type(fn) == "function" then fn(value and true or false, CurrentScope()) end
-        end,
-        ControlMeta(ctx, "field.dispelOverlayPreview", "ephemeral"))
-    dispelPreview:HookScript("OnHide", function(self)
-        local fn = _G.MSUF_SetDispelOverlayPreview
-        if _G.MSUF_DispelOverlayPreviewMode == true and type(fn) == "function" then
-            fn(false)
-            if self.SetChecked then self:SetChecked(false) end
-        end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(dispelPreview, "Runtime Preview",
+    Schema.Build(ctx, dispelCard, {
+        { "toggle", "dispelPreview", nil, { "Runtime Preview: live GroupFrames", 16, -300, dispelCardW - 32 },
+            path = "field.dispelOverlayPreview", classification = "ephemeral", domain = "preview",
+            lifecycle = function(widget)
+                return {
+                    get = function() return _G.MSUF_DispelOverlayPreviewMode == true end,
+                    set = function(value)
+                        local fn = _G.MSUF_SetDispelOverlayPreview
+                        if type(fn) == "function" then fn(value and true or false, CurrentScope()) end
+                    end,
+                    afterBind = function()
+                        widget:HookScript("OnHide", function(self)
+                            local fn = _G.MSUF_SetDispelOverlayPreview
+                            if _G.MSUF_DispelOverlayPreviewMode == true and type(fn) == "function" then
+                                fn(false)
+                                if self.SetChecked then self:SetChecked(false) end
+                            end
+                        end)
+                    end,
+                }
+            end,
+            tip = { "Runtime Preview",
             "Paints a stand-in tint on the live GroupFrames so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
-            { hook = true })
-    end
-    local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelLayer, dispelPreview }
+                { hook = true } },
+        },
+    }, ROW_OPTIONS, c)
+    local dispelControls = { c.dispelOverlayTrigger, c.dispelOverlayStyle, c.dispelOverlayOnHealth, c.dispelOverlayAlpha, c.dispelOverlayLayer,
+        c.dispelPreview }
     local function RefreshDispelState()
         if DISPEL_OVERLAY_121_PTR_DISABLED and Bool(CurrentScope(), "dispelOverlayEnabled", false) then
             Set(CurrentScope(), "dispelOverlayEnabled", false, "visual")
@@ -122,7 +147,7 @@ local function BuildDispelOverlaySection(ctx, b)
             if type(fn) == "function" then fn(false) end
         end
         SetOptionsEnabled(dispelControls, overlayOn)
-        SetOptionEnabled(dispelToggle, not DISPEL_OVERLAY_121_PTR_DISABLED)
+        SetOptionEnabled(c.dispelOverlayEnabled, not DISPEL_OVERLAY_121_PTR_DISABLED)
         local badges = {
             OnOffBadge(overlayOn, "Active", "Off"),
         }
@@ -156,56 +181,54 @@ local function GFDispelSymbolSectionHeight(ctx)
     local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
     return width >= 760 and 368 or 564
 end
-local function BindExclusivePowerFill(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
-    return GP.BindExclusiveScopeToggle(ctx, W.ToggleAt(parent, label, x, y, width), key, peerKey, historyLabel,
+local function BindExclusivePowerFill(ctx, control, row)
+    GP.BindExclusiveScopeToggle(ctx, control, row[2], row.peer, row.historyLabel,
         "powerFillMode", function() RequestGroupBarsRefresh(ctx, "gf-power-fill-mode") end)
 end
 
 local function BuildGFDispelSymbolSection(ctx, b)
-    local section = b:CollapsibleSection("dispelSymbol", "Dispel Symbol", GFDispelSymbolSectionHeight(ctx), false)
+    local c = {}
+    local section = Schema.Section(b:CollapsibleSection("dispelSymbol", "Dispel Symbol", GFDispelSymbolSectionHeight(ctx), false), "group")
     local sectionW = section._msuf2Width or b.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     local wide = cardW >= 760
-    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, wide and 304 or 500)
-    local toggle = BindScopeToggle(ctx, W.SectionSwitch(section, "Dispel Symbol"), "dispelSymbolEnabled", false, "visual")
+    local card = Schema.Build(ctx, section, {
+        { "card", "dispelSymbolCard", nil, { nil, nil, 20, -38, cardW, wide and 304 or 500 }, scope = "group" },
+    }).dispelSymbolCard
+    Schema.Build(ctx, section, {
+        { "sectionSwitch", "dispelSymbolEnabled", false, { "Dispel Symbol" } },
+    }, ROW_OPTIONS, c)
     local leftX, columnGap = 16, 24
     local controlW = wide and floor((cardW - 32 - columnGap) * 0.5) or min(360, cardW - 32)
     local rightX = wide and (leftX + controlW + columnGap) or leftX
-    local style = ScopeDropdown(ctx, card, "Symbol set", GF_DISPEL_SYMBOL_STYLES, 300,
-        "dispelSymbolStyle", "BLIZZARD", "visual", leftX, -54, controlW)
-    local mode = ScopeDropdown(ctx, card, "Show", GF_DISPEL_SYMBOL_MODES, 300,
-        "dispelSymbolMode", "ALL", "visual", leftX, -106, controlW)
-    local trigger = W.Dropdown(card, "Symbol detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
-    M.BindDropdownWidget(ctx, trigger,
-        function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelSymbolTrigger", "BORDER")) end,
-        function(value)
-            Set(CurrentScope(), "dispelSymbolTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
-            RequestGroupBarsRefresh(ctx, "gf-bars-dispel-symbol-trigger")
-        end,
-        ControlMeta(ctx, "field.dispelSymbolTrigger"))
-    W.MoveWidget(trigger, card, leftX, -158, controlW, "LEFT")
-    local anchor = ScopeDropdown(ctx, card, "Symbol anchor", GF_DISPEL_SYMBOL_ANCHORS, 300,
-        "dispelSymbolAnchor", "TOPRIGHT", "visual", rightX, wide and -54 or -306, controlW)
-    local size = ScopeNumberSlider(ctx, card, "Symbol size", 4, 48, 1, 340,
-        "dispelSymbolSize", 12, "visual", leftX, -210, controlW)
-    local growth = ScopeDropdown(ctx, card, "Grow", GF_DISPEL_SYMBOL_GROWTH, 300,
-        "dispelSymbolGrowth", "RIGHT", "visual", rightX, wide and -106 or -358, controlW)
-    local spacing = ScopeNumberSlider(ctx, card, "Symbol spacing", 0, 32, 1, 340,
-        "dispelSymbolSpacing", 2, "visual", rightX, wide and -158 or -406, controlW)
-    local alpha = ScopeNumberSlider(ctx, card, "Symbol opacity", 0.05, 1, 0.05, 340,
-        "dispelSymbolAlpha", 1, "visual", leftX, -258, controlW)
-    local layer = ScopeNumberSlider(ctx, card, "Effect Layer (0-30)", 0, 30, 1, 340,
-        "dispelSymbolLayer", 8, "visual", rightX, wide and -210 or -454, controlW)
+    Schema.Build(ctx, card, {
+        { "dropdown", "dispelSymbolStyle", "BLIZZARD", { "Symbol set", GF_DISPEL_SYMBOL_STYLES, 300 }, { leftX, -54, controlW, "LEFT" } },
+        { "dropdown", "dispelSymbolMode", "ALL", { "Show", GF_DISPEL_SYMBOL_MODES, 300 }, { leftX, -106, controlW, "LEFT" } },
+        { "dropdown", "dispelSymbolTrigger", "BORDER", { "Symbol detects", GF_DISPEL_OVERLAY_TRIGGERS, 300 }, { leftX, -158, controlW, "LEFT" },
+            lifecycle = DispelTriggerCommand, path = "field.dispelSymbolTrigger", reason = "gf-bars-dispel-symbol-trigger" },
+        { "dropdown", "dispelSymbolAnchor", "TOPRIGHT", { "Symbol anchor", GF_DISPEL_SYMBOL_ANCHORS, 300 }, { rightX, wide and -54 or -306,
+            controlW, "LEFT" } },
+        { "slider", "dispelSymbolSize", 12, { "Symbol size", 4, 48, 1, 340 }, { leftX, -210, controlW, "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelSymbolSize" },
+        { "dropdown", "dispelSymbolGrowth", "RIGHT", { "Grow", GF_DISPEL_SYMBOL_GROWTH, 300 }, { rightX, wide and -106 or -358, controlW, "LEFT" } },
+        { "slider", "dispelSymbolSpacing", 2, { "Symbol spacing", 0, 32, 1, 340 }, { rightX, wide and -158 or -406, controlW, "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelSymbolSpacing" },
+        { "slider", "dispelSymbolAlpha", 1, { "Symbol opacity", 0.05, 1, 0.05, 340 }, { leftX, -258, controlW, "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelSymbolAlpha" },
+        { "slider", "dispelSymbolLayer", 8, { "Effect Layer (0-30)", 0, 30, 1, 340 }, { rightX, wide and -210 or -454, controlW, "CENTER" },
+            lifecycle = ScopeNumberCommand, path = "field.dispelSymbolLayer" },
+    }, ROW_OPTIONS, c)
     -- No preview toggle here. The symbols are previewed in the group preview
     -- above as their own "Dispel" layer -- like every other group element -- and
     -- that layer's handle is also the drag surface for placement.
-    local controls = { style, mode, trigger, anchor, size, alpha, layer }
-    local allModeControls = { growth, spacing }
+    local controls = { c.dispelSymbolStyle, c.dispelSymbolMode, c.dispelSymbolTrigger, c.dispelSymbolAnchor, c.dispelSymbolSize,
+        c.dispelSymbolAlpha, c.dispelSymbolLayer }
+    local allModeControls = { c.dispelSymbolGrowth, c.dispelSymbolSpacing }
     local function RefreshDispelSymbolState()
         local on = Bool(CurrentScope(), "dispelSymbolEnabled", false)
         SetOptionsEnabled(controls, on)
         SetOptionsEnabled(allModeControls, on and Val(CurrentScope(), "dispelSymbolMode", "ALL") == "ALL")
-        SetOptionEnabled(toggle, true)
+        SetOptionEnabled(c.dispelSymbolEnabled, true)
         local badges = {
             OnOffBadge(on, "Active", "Off"),
             { text = OptionText(GF_DISPEL_SYMBOL_STYLES, Val(CurrentScope(), "dispelSymbolStyle", "BLIZZARD"), "Blizzard symbol"), kind = on
@@ -239,39 +262,37 @@ end
 local function PreparePowerSwitch(ctx, power)
     local entry = power and power._msuf2CollapsibleEntry
     if entry and entry.featureSwitch then return entry.featureSwitch end
-    local powerEnabled = W.SectionSwitch(power, "Show Power Bar")
-    M.BindBoolWidget(ctx, powerEnabled,
-        function() return IsPowerBarEnabled(CurrentScope()) end,
-        function(v)
-            local scope = CurrentScope()
-            Set(scope, "powerBarEnabled", v and true or false, "geometry")
-            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
-            RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
-        end,
-        ControlMeta(ctx, "field.powerBarEnabled"))
+    local powerEnabled = Schema.Build(ctx, power, {
+        { "sectionSwitch", "powerEnabled", nil, { "Show Power Bar" }, path = "field.powerBarEnabled", domain = "geometry",
+            get = function() return IsPowerBarEnabled(CurrentScope()) end,
+            set = function(v)
+                local scope = CurrentScope()
+                Set(scope, "powerBarEnabled", v and true or false, "geometry")
+                if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
+                RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
+            end },
+    }, ROW_OPTIONS).powerEnabled
     powerEnabled:SetChecked(IsPowerBarEnabled(CurrentScope()))
     return powerEnabled
 end
 local function PrepareRangeSwitch(ctx, range)
     local entry = range and range._msuf2CollapsibleEntry
     if entry and entry.featureSwitch then return entry.featureSwitch end
-    local toggle = BindScopeToggle(ctx, W.SectionSwitch(range, "Range Fade"), "rangeFadeEnabled", false, "visual")
+    local toggle = Schema.Build(ctx, range, {
+        { "sectionSwitch", "rangeFadeEnabled", false, { "Range Fade" } },
+    }, ROW_OPTIONS).rangeFadeEnabled
     toggle:SetChecked(Bool(CurrentScope(), "rangeFadeEnabled", false))
     return toggle
 end
 local function BuildGFResourceBarSection(ctx, b)
+    local c = {}
     -- Self-sizing section: the cards reserve their own rows through W.NextRow and
     -- b:FinishSection derives the height from the cursor. A hand-declared height
     -- here silently under-sizes the body and lets the cards bleed over the
     -- sections below once a card is added or grows.
     local power = b:CollapsibleSection("power", "Resource Bar", nil, false)
-    local powerW = power._msuf2Width or b.width or 720
-    local powerGap = 16
-    local powerLeftX = 20
-    local powerInnerW = max(320, powerW - 40)
-    local powerLeftW = floor((powerInnerW - powerGap) * 0.54)
-    local powerRightX = powerLeftX + powerLeftW + powerGap
-    local powerRightW = powerInnerW - powerLeftW - powerGap
+    if not power._msuf2CollapsibleEntry.header._msuf2ControlSchema then Schema.Section(power, "group") end
+    local powerLeftX, powerLeftW, powerRightX, powerRightW, powerInnerW = Schema.Columns(power, b.width or 720, 20, 16, 0.54)
     local powerSliderW = max(180, min(360, powerLeftW - 64))
     -- Card set mirrors the unit-frame Resource Bar section (Visibility & Size,
     -- Border & fill, Detached placement); Roles is the group-only addition.
@@ -283,89 +304,91 @@ local function BuildGFResourceBarSection(ctx, b)
     local _, powerCardY = W.NextRow(power, powerCardH + 12)
     local _, roleCardY = W.NextRow(power, roleCardH + 12)
     local _, detachedCardY = W.NextRow(power, detachedCardH)
-    local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, powerCardY, powerLeftW, powerCardH, "group")
-    local powerBorderCard = W.ControlCard(power, "Border & fill", "Outline and fill behavior.", powerRightX, powerCardY, powerRightW, powerCardH, "group")
-    local powerRoleCard = W.ControlCard(power, "Roles", nil, powerLeftX, roleCardY, powerLeftW, roleCardH, "group")
-    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY, powerInnerW, detachedCardH, "group")
+    Schema.Build(ctx, power, {
+        { "card", "powerMain", nil, { "Visibility & Size", nil, powerLeftX, powerCardY, powerLeftW, powerCardH, "group" }, scope = "group" },
+        { "card", "powerBorderCard", nil, { "Border & fill", "Outline and fill behavior.", powerRightX, powerCardY, powerRightW, powerCardH,
+            "group" }, scope = "group" },
+        { "card", "powerRoles", nil, { "Roles", nil, powerLeftX, roleCardY, powerLeftW, roleCardH, "group" }, scope = "group" },
+        { "card", "powerDetached", nil, { "Detached placement", "Used only when the power bar is detached from the frame.",
+            powerLeftX, detachedCardY, powerInnerW, detachedCardH, "group" }, scope = "group" },
+    }, nil, c)
+    local powerMainCard, powerBorderCard, powerRoleCard, detachedCard = c.powerMain, c.powerBorderCard, c.powerRoles, c.powerDetached
     local detachedGap = 16
     local detachedColW = floor((powerInnerW - 32 - detachedGap) / 2)
     local detachedRightX = 16 + detachedColW + detachedGap
     local detachedSliderW = max(160, min(340, detachedColW - 40))
-    if W.AttachContextColorReferences then
-        -- Party and raid rosters mix every resource type at once, so guessing a
-        -- single token for the whole group only ever named the wrong resource.
-        -- The card lists them instead; each entry is that resource's shared
-        -- color, so the mapping is a list and states its own target bound.
-        W.AttachContextColorReferences(powerMainCard, {
-            "power.token.mana", "power.token.rage", "power.token.energy",
-            "power.token.focus", "power.token.runic_power", "power.token.insanity",
-            "power.token.fury", "power.token.pain", "power.token.essence",
-            "power.token.lunar_power", "power.token.maelstrom",
-            "group.background",
-        }, {
-            title = "Group Resource Bar Colors",
-            note = "One color per resource type, shared with every frame.",
-            historySource = "menu:group-resource-bar-colors",
-            offsetX = -76,
-            maxTargets = 12,
-        })
-        W.AttachContextColorReferences(powerBorderCard, { "bar.power_loss" }, {
-            title = "Power Loss Color",
-            note = "Changes only the disappearing loss glow and is shared by every frame.",
-            historySource = "menu:group-power-loss-color",
-        })
-    end
+    -- Party and raid rosters mix every resource type at once, so guessing a
+    -- single token for the whole group only ever named the wrong resource.
+    -- The card lists them instead; each entry is that resource's shared
+    -- color, so the mapping is a list and states its own target bound.
+    Schema.Colors(powerMainCard, {
+        "power.token.mana", "power.token.rage", "power.token.energy",
+        "power.token.focus", "power.token.runic_power", "power.token.insanity",
+        "power.token.fury", "power.token.pain", "power.token.essence",
+        "power.token.lunar_power", "power.token.maelstrom",
+        "group.background",
+    }, {
+        title = "Group Resource Bar Colors",
+        note = "One color per resource type, shared with every frame.",
+        historySource = "menu:group-resource-bar-colors",
+        offsetX = -76,
+        maxTargets = 12,
+    })
+    Schema.Colors(powerBorderCard, { "bar.power_loss" }, {
+        title = "Power Loss Color",
+        note = "Changes only the disappearing loss glow and is shared by every frame.",
+        historySource = "menu:group-power-loss-color",
+    })
     local powerEnabled = PreparePowerSwitch(ctx, power)
-    local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
-    M.BindNumberWidget(ctx, powerHeight,
-        function() return CurrentPowerHeight(CurrentScope()) end,
-        function(v)
-            v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
-            Set(CurrentScope(), "powerHeight", v, "geometry")
-        end,
-        DefaultPowerHeight(), (function()
-            local meta = ControlMeta(ctx, "field.powerHeight")
-            meta.step, meta.roundStep = 1, true
-            return meta
-        end)())
+    Schema.Build(ctx, powerMainCard, {
+        { "slider", "powerHeight", DefaultPowerHeight(), { "Power height", 1, 30, 1, powerSliderW }, path = "field.powerHeight",
+            domain = "geometry", roundStep = true,
+            get = function() return CurrentPowerHeight(CurrentScope()) end,
+            set = function(v)
+                v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
+                Set(CurrentScope(), "powerHeight", v, "geometry")
+            end },
+    }, ROW_OPTIONS, c)
     -- Embed/detach change layout, so they take the geometry dirty class; the
     -- header can only re-lay out its rows outside combat.
-    local embedPower = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Embed into health", 16, -138, powerLeftW - 32),
-        "embedPowerBarIntoHealth", true, "geometry")
-    local detachPower = W.ToggleAt(powerMainCard, "Detach from frame", 16, -166, powerLeftW - 32)
-    M.BindBoolWidget(ctx, detachPower,
-        function() return Bool(CurrentScope(), "powerBarDetached", false) end,
-        function(v)
-            local scope = CurrentScope()
-            local conf = Conf(scope)
-            if v and not ((tonumber(conf.detachedPowerBarWidth) or 0) > 0) then
-                -- Seed the geometry the detached card edits, mirroring the unit page.
-                conf.detachedPowerBarWidth = tonumber(conf.width) or 80
-            end
-            Set(scope, "powerBarDetached", v and true or false, "geometry")
-            RequestGroupBarsRefresh(ctx, "gf-bars-power-detached")
-        end,
-        ControlMeta(ctx, "field.powerBarDetached"))
-    local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -194, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
-    if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
-    local powerBorder = W.ToggleAt(powerBorderCard, "Power bar border", 16, -62, powerRightW - 32)
-    M.BindBoolWidget(ctx, powerBorder,
-        function() return Bool(CurrentScope(), "powerBarBorderEnabled", false) end,
-        function(v)
-            Set(CurrentScope(), "powerBarBorderEnabled", v and true or false, "color")
-            RequestGroupBarsRefresh(ctx, "gf-bars-power-border")
-        end,
-        ControlMeta(ctx, "field.powerBarBorderEnabled"))
-    local powerBorderSize = ScopeSlider(ctx, powerBorderCard, "Border thickness", 0, 6, 1, powerRightW - 72,
-        "powerBarBorderThickness", 1, "color", 16, -108, powerRightW - 72)
-    local smoothFill = BindExclusivePowerFill(ctx, powerBorderCard, "Smooth fill", 16, -158, powerRightW - 32,
-        "powerSmoothFill", "powerChunkedFill", "Smooth group power fill")
-    local chunkedFill = BindExclusivePowerFill(ctx, powerBorderCard, "Chunked power loss", 16, -188, powerRightW - 32,
-        "powerChunkedFill", "powerSmoothFill", "Chunked group power loss")
+    Schema.Build(ctx, powerMainCard, {
+        { "toggle", "embedPowerBarIntoHealth", true, { "Embed into health", 16, -138, powerLeftW - 32 }, domain = "geometry" },
+        { "toggle", "detachPower", nil, { "Detach from frame", 16, -166, powerLeftW - 32 }, path = "field.powerBarDetached", domain = "geometry",
+            get = function() return Bool(CurrentScope(), "powerBarDetached", false) end,
+            set = function(v)
+                local scope = CurrentScope()
+                local conf = Conf(scope)
+                if v and not ((tonumber(conf.detachedPowerBarWidth) or 0) > 0) then
+                    -- Seed the geometry the detached card edits, mirroring the unit page.
+                    conf.detachedPowerBarWidth = tonumber(conf.width) or 80
+                end
+                Set(scope, "powerBarDetached", v and true or false, "geometry")
+                RequestGroupBarsRefresh(ctx, "gf-bars-power-detached")
+            end },
+        { "text", "powerHint", nil, { "Power text modes, delimiter and font size are in Text.", 16, -194, powerLeftW - 32,
+            { 0.60, 0.75, 1.00, 1 } }, scope = "group" },
+    }, ROW_OPTIONS, c)
+    if c.powerHint.SetWordWrap then c.powerHint:SetWordWrap(true) end
+    Schema.Build(ctx, powerBorderCard, {
+        { "toggle", "powerBorder", nil, { "Power bar border", 16, -62, powerRightW - 32 }, path = "field.powerBarBorderEnabled", domain = "color",
+            get = function() return Bool(CurrentScope(), "powerBarBorderEnabled", false) end,
+            set = function(v)
+                Set(CurrentScope(), "powerBarBorderEnabled", v and true or false, "color")
+                RequestGroupBarsRefresh(ctx, "gf-bars-power-border")
+            end },
+        { "slider", "powerBarBorderThickness", 1, { "Border thickness", 0, 6, 1, powerRightW - 72 }, { 16, -108, powerRightW - 72, "CENTER" },
+            domain = "color" },
+        { "toggle", "powerSmoothFill", false, { "Smooth fill", 16, -158, powerRightW - 32 }, bind = BindExclusivePowerFill,
+            peer = "powerChunkedFill", historyLabel = "Smooth group power fill" },
+        { "toggle", "powerChunkedFill", false, { "Chunked power loss", 16, -188, powerRightW - 32 }, bind = BindExclusivePowerFill,
+            peer = "powerSmoothFill", historyLabel = "Chunked group power loss" },
+    }, ROW_OPTIONS, c)
     local roleLabel = powerRoleCard and powerRoleCard.title
-    local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerLeftW - 32), "powerShowTank", true, "visual")
-    local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerLeftW - 32), "powerShowHealer", true, "visual")
-    local showDamager = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "DPS", 16, -134, powerLeftW - 32), "powerShowDamager", false, "visual")
+    Schema.Build(ctx, powerRoleCard, {
+        { "toggle", "powerShowTank", true, { "Tank", 16, -66, powerLeftW - 32 } },
+        { "toggle", "powerShowHealer", true, { "Healer", 16, -100, powerLeftW - 32 } },
+        { "toggle", "powerShowDamager", false, { "DPS", 16, -134, powerLeftW - 32 } },
+    }, ROW_OPTIONS, c)
     local function FocusPreviewRole(control, role)
         if not (control and control.HookScript) then return end
         control:HookScript("OnClick", function()
@@ -375,40 +398,41 @@ local function BuildGFResourceBarSection(ctx, b)
             RequestGroupBarsRefresh(ctx, "gf-bars-preview-role")
         end)
     end
-    FocusPreviewRole(showTank, "TANK")
-    FocusPreviewRole(showHealer, "HEALER")
-    FocusPreviewRole(showDamager, "DAMAGER")
-    W.MoveWidget(powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT")
+    FocusPreviewRole(c.powerShowTank, "TANK")
+    FocusPreviewRole(c.powerShowHealer, "HEALER")
+    FocusPreviewRole(c.powerShowDamager, "DAMAGER")
+    W.MoveWidget(c.powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT")
     -- Detached placement: the same fields a non-Player unit frame gets. Class
     -- Resource width sync, anchor and the ROUND/CRYSTAL/ORB shapes are Player-only
     -- on the unit page, so group members do not get them either.
-    local detachedText = BindScopeToggle(ctx, W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedColW),
-        "detachedPowerBarTextOnBar", false, "geometry")
-    local detachedWidth = ScopeSlider(ctx, detachedCard, "Detached width", 20, 800, 1, detachedSliderW,
-        "detachedPowerBarWidth", 80, "geometry", 16, -116, detachedSliderW)
-    local detachedHeight = ScopeSlider(ctx, detachedCard, "Detached height", 2, 80, 1, detachedSliderW,
-        "detachedPowerBarHeight", 6, "geometry", detachedRightX, -116, detachedSliderW)
-    local detachedLayer = ScopeSlider(ctx, detachedCard, "Detached layer", 0, 30, 1, detachedSliderW,
-        "detachedPowerBarFrameLevelOffset", 6, "geometry", 16, -182, detachedSliderW)
+    Schema.Build(ctx, detachedCard, {
+        { "toggle", "detachedPowerBarTextOnBar", false, { "Text on detached bar", 16, -62, detachedColW }, domain = "geometry" },
+        { "slider", "detachedPowerBarWidth", 80, { "Detached width", 20, 800, 1, detachedSliderW }, { 16, -116, detachedSliderW, "CENTER" },
+            domain = "geometry" },
+        { "slider", "detachedPowerBarHeight", 6, { "Detached height", 2, 80, 1, detachedSliderW }, { detachedRightX, -116, detachedSliderW,
+            "CENTER" }, domain = "geometry" },
+        { "slider", "detachedPowerBarFrameLevelOffset", 6, { "Detached layer", 0, 30, 1, detachedSliderW }, { 16, -182, detachedSliderW,
+            "CENTER" }, domain = "geometry" },
+    }, ROW_OPTIONS, c)
     local powerControls = {
-        powerHeight, smoothFill, chunkedFill, showTank, showHealer, showDamager,
-        embedPower, detachPower, powerBorder,
+        c.powerHeight, c.powerSmoothFill, c.powerChunkedFill, c.powerShowTank, c.powerShowHealer, c.powerShowDamager,
+        c.embedPowerBarIntoHealth, c.detachPower, c.powerBorder,
     }
-    local detachedControls = { detachedText, detachedWidth, detachedHeight, detachedLayer }
+    local detachedControls = { c.detachedPowerBarTextOnBar, c.detachedPowerBarWidth, c.detachedPowerBarHeight, c.detachedPowerBarFrameLevelOffset }
     local function RefreshPowerState()
         local enabled = IsPowerBarEnabled(CurrentScope())
         local detached = enabled and Bool(CurrentScope(), "powerBarDetached", false)
         SetOptionEnabled(powerEnabled, true)
         SetOptionsEnabled(powerControls, enabled)
-        SetOptionEnabled(powerHeight, enabled and not detached)
-        SetOptionEnabled(embedPower, enabled and not detached)
+        SetOptionEnabled(c.powerHeight, enabled and not detached)
+        SetOptionEnabled(c.embedPowerBarIntoHealth, enabled and not detached)
         -- Same gating the unit page applies: detached geometry only while the bar
         -- is detached, thickness only while the border is on.
         SetOptionsEnabled(detachedControls, detached)
-        SetOptionEnabled(powerBorderSize, enabled and Bool(CurrentScope(), "powerBarBorderEnabled", false))
+        SetOptionEnabled(c.powerBarBorderThickness, enabled and Bool(CurrentScope(), "powerBarBorderEnabled", false))
         if roleLabel.SetTextColor then
-            local c = enabled and T.colors.accent or T.colors.dim
-            roleLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+            local color = enabled and T.colors.accent or T.colors.dim
+            roleLabel:SetTextColor(color[1], color[2], color[3], color[4] or 1)
         end
         local roles = {}
         if Bool(CurrentScope(), "powerShowTank", true) then roles[#roles + 1] = "Tank" end
@@ -550,7 +574,9 @@ local function TextSlotSummary(kind)
     end, kind == "hp" and HEALTH_TEXT_MODES or TEXT_MODES, OptionText)
 end
 local function PreviewText(parent, textValue, x, y, width)
-    local _, value = UnitSectionShared.PreviewText(parent, textValue, x, y, width, T.colors.dim)
+    local label, value = UnitSectionShared.PreviewText(parent, textValue, x, y, width, T.colors.dim)
+    Schema.Custom(value, { id = parent._msuf2ControlSchema.id .. ".preview", kind = "preview", scope = "group",
+        applyDomain = "preview", owner = value, label = label })
     return value
 end
 local function IsPowerTextEnabled()
@@ -643,6 +669,7 @@ local function GFTextLayout(b)
     local s = {}
     -- HP tab: 64px tab inset + 430px content card + bottom breathing room.
     local text = b:CollapsibleSection("text", "Text", 522, false)
+    if not text._msuf2CollapsibleEntry.header._msuf2ControlSchema then Schema.Section(text, "group") end
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
@@ -683,6 +710,7 @@ local function GFTextTabs(ctx, s)
     })
     if textTabs._msuf2Title then textTabs._msuf2Title:Hide() end
     RegisterControl(textTabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
+    Schema.Owned(textTabs, "group", "menuState")
     text._msuf2GuidedSelectTab = function(tab)
         if tab ~= "name" and tab ~= "hp" and tab ~= "power" and tab ~= "advanced" then return false end
         if type(ReadTextTab) == "function" and ReadTextTab() == tab then return true end
@@ -703,64 +731,68 @@ local function GFTextTabs(ctx, s)
     s.nameTab, s.hpTab, s.powerTab, s.advancedTab, s.RefreshTextTabs = nameTab, hpTab, powerTab, advancedTab, RefreshTextTabs
 end
 local function GFTextNameTab(ctx, s)
+    local c = {}
     local nameTab, textLeftX, textCardW = s.nameTab, s.textLeftX, s.textCardW
     local textRightX, textRightW, textDropW, hpSliderW = s.textRightX, s.textRightW, s.textDropW, s.hpSliderW
-    local TextCard = UnitSectionShared.TextCard
-    local nameContent = TextCard(nameTab, nil, nil, textLeftX, -4, textCardW, 158)
-    if W.AttachContextColorShortcut then
-        W.AttachContextColorShortcut(nameContent, {
-            title = "Name Text settings",
-            historyLabel = "Group name color",
-            historySource = "menu:group-text-name-color",
-            offsetY = -24,
-            textSettings = {
-                scope = function() return CurrentScope() end,
-                group = true,
-                kind = "name",
-            },
-        })
-    end
+    local nameContent = Schema.Build(ctx, nameTab, {
+        { "card", "nameContent", nil, { nil, nil, textLeftX, -4, textCardW, 158 }, scope = "group" },
+    }).nameContent
+    Schema.Colors(nameContent, nil, {
+        title = "Name Text settings",
+        historyLabel = "Group name color",
+        historySource = "menu:group-text-name-color",
+        offsetY = -24,
+        textSettings = {
+            scope = function() return CurrentScope() end,
+            group = true,
+            kind = "name",
+        },
+    })
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
-    local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")
-    local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
-    local namePosition = TextCard(nameTab, "Position", "Move the name directly in Preview.", textLeftX, -178, textCardW, 134)
-    local nameAnchor = ScopeDropdown(ctx, namePosition, "Anchor", ANCHORS, textDropW, "nameAnchor", "LEFT", "font", 16, -48, textCardW - 32)
-    local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
-    local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
-    s.showName, s.hideNameOnStatus, s.nameAnchor, s.nameSize = showName, hideNameOnStatus, nameAnchor, nameSize
+    Schema.Build(ctx, nameContent, {
+        { "switch", "showName", true, { "Show Name", 16, -24, 0, "HIDDEN" }, domain = "font" },
+        { "toggle", "hideNameOnDeadOffline", false, { "Hide name on dead/offline", 16, -104, textCardW - 32 } },
+    }, ROW_OPTIONS, c)
+    local namePosition = Schema.Build(ctx, nameTab, {
+        { "card", "namePosition", nil, { "Position", "Move the name directly in Preview.", textLeftX, -178, textCardW, 134 }, scope = "group" },
+    }).namePosition
+    Schema.Build(ctx, namePosition, {
+        { "dropdown", "nameAnchor", "LEFT", { "Anchor", ANCHORS, textDropW }, { 16, -48, textCardW - 32, "LEFT" }, domain = "font" },
+    }, ROW_OPTIONS, c)
+    local nameAppearance = Schema.Build(ctx, nameTab, {
+        { "card", "nameAppearance", nil, { "Appearance", nil, textRightX, -4, textRightW, 150 }, scope = "group" },
+    }).nameAppearance
+    Schema.Build(ctx, nameAppearance, {
+        { "slider", "nameFontSize", 12, { "Size", 6, 48, 1, hpSliderW }, { 16, -58, textRightW - 58, "CENTER" }, domain = "font" },
+    }, ROW_OPTIONS, c)
+    s.showName, s.hideNameOnStatus, s.nameAnchor, s.nameSize = c.showName, c.hideNameOnDeadOffline, c.nameAnchor, c.nameFontSize
 end
 local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
     local textLeftX, textCardW, textRightX, textRightW = s.textLeftX, s.textCardW, s.textRightX, s.textRightW
     local hpSliderW, textHalfDropW = s.hpSliderW, s.textHalfDropW
-    local TextCard, PlaceSlider = UnitSectionShared.TextCard, UnitSectionShared.PlaceSlider
+    local PlaceSlider = UnitSectionShared.PlaceSlider
     local slots = s.slots
     local CurrentSlot, SetCurrentSlot, SlotFontSizeKey = slots.CurrentSlot, slots.SetCurrentSlot, slots.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = slots.MoveTogether, slots.SetMoveTogether
     local controls = {}
     local hasAbsorb = cfg.absorbIconKey ~= nil
     local contentHeight = hasAbsorb and 430 or 370
-    local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, contentHeight)
-    if W.AttachContextColorShortcut then
-        local title = kind == "hp" and "HP Text settings" or "Power Text settings"
-        W.AttachContextColorShortcut(content, {
-            title = title,
-            historyLabel = kind == "hp" and "Group HP text color" or "Group power text color",
-            historySource = "menu:group-text-" .. tostring(kind) .. "-color",
-            offsetY = -24,
-            textSettings = {
-                scope = function() return CurrentScope() end,
-                group = true,
-                kind = kind,
-            },
-        })
-    end
+    local showKey, path = cfg.showKey or "show", "text." .. kind .. "."
+    local content = Schema.Build(ctx, tab, {
+        { "card", path .. "content", nil, { nil, nil, textLeftX, -4, textCardW, contentHeight }, scope = "group" },
+    })[path .. "content"]
+    Schema.Colors(content, nil, {
+        title = kind == "hp" and "HP Text settings" or "Power Text settings",
+        historyLabel = kind == "hp" and "Group HP text color" or "Group power text color",
+        historySource = "menu:group-text-" .. tostring(kind) .. "-color",
+        offsetY = -24,
+        textSettings = { scope = function() return CurrentScope() end, group = true, kind = kind },
+    })
     controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
-    if cfg.showGet then
-        controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
-        M.BindBoolWidget(ctx, controls.show, cfg.showGet, cfg.showSet, ControlMeta(ctx, "text." .. kind .. ".show"))
-    else
-        controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
-    end
+    controls.show = Schema.Build(ctx, content, {
+        { "switch", showKey, cfg.showDefault, { cfg.showLabel, 16, -24, 0, "HIDDEN" }, domain = cfg.showGet and "visual" or "font",
+            get = cfg.showGet, set = cfg.showSet, path = cfg.showGet and path .. "show" or nil },
+    }, ROW_OPTIONS)[showKey]
     local function SelectedSlotSpec()
         return cfg.slots[CurrentSlot(kind)] or cfg.slots.center
     end
@@ -781,65 +813,63 @@ local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
         end
         RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
     end
-    controls.slot = W.Segment(content, "Text slots", SLOT_VALUES, textCardW - 32)
-    W.MoveWidget(controls.slot, content, 16, -92, textCardW - 32, "LEFT")
-    M.BindSegment(ctx, controls.slot,
-        function() return CurrentSlot(kind) end,
-        function(v)
-            SetCurrentSlot(kind, v)
-            FocusGFPreviewText(kind, v, true)
-            RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
-        end,
-        ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
-    controls.mode = W.Dropdown(content, cfg.valueLabel or "Value", cfg.baseModes or cfg.modes or TEXT_MODES, textCardW - 32)
-    M.BindDropdownWidget(ctx, controls.mode,
-        function()
-            local mode = CurrentMode()
-            return hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
-        end,
-        function(value)
-            local spec, oldMode = SelectedSlotSpec(), CurrentMode()
-            local mode = value or spec.default
-            if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
-                mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
-            end
-            Set(CurrentScope(), spec.key, mode, "visual")
-            AfterModeChanged(mode)
-        end,
-        ControlMeta(ctx, "text." .. kind .. ".slot.mode"))
-    W.MoveWidget(controls.mode, content, 16, -154, textCardW - 32, "LEFT")
-    if hasAbsorb then
-        controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, textCardW - 32)
-        W.MoveWidget(controls.absorb, content, 16, -216, textCardW - 32, "LEFT")
-        M.BindSegment(ctx, controls.absorb,
-            function()
-                if not M.UnitSectionsShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
-                local spec = SelectedSlotSpec()
-                return Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false)) and "icon" or "value"
+    Schema.Build(ctx, content, {
+        { "segment", "slot", nil, { "Text slots", SLOT_VALUES, textCardW - 32 }, path = path .. "slot_selector", classification = "ephemeral", domain = "menuState",
+            beforeBind = function(widget) W.MoveWidget(widget, content, 16, -92, textCardW - 32, "LEFT") end,
+            get = function() return CurrentSlot(kind) end,
+            set = function(v)
+                SetCurrentSlot(kind, v)
+                FocusGFPreviewText(kind, v, true)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
+            end },
+        { "dropdown", "mode", nil, { cfg.valueLabel or "Value", cfg.baseModes or cfg.modes or TEXT_MODES, textCardW - 32 },
+            { 16, -154, textCardW - 32, "LEFT" }, path = path .. "slot.mode",
+            get = function()
+                local mode = CurrentMode()
+                return hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
             end,
-            function(value)
-                local spec = SelectedSlotSpec()
-                local mode = M.UnitSectionsShared.HealthModeWithAbsorb(CurrentMode(), value ~= "off")
+            set = function(value)
+                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
+                local mode = value or spec.default
+                if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
+                    mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
+                end
                 Set(CurrentScope(), spec.key, mode, "visual")
-                if value ~= "off" then Set(CurrentScope(), spec.absorbIconKey, value == "icon", "font") end
                 AfterModeChanged(mode)
-            end,
-            ControlMeta(ctx, "text." .. kind .. ".slot.absorb"))
+            end },
+    }, ROW_OPTIONS, controls)
+    if hasAbsorb then
+        Schema.Build(ctx, content, {
+            { "segment", "absorb", nil, { "Absorb", ABSORB_STYLE_VALUES, textCardW - 32 }, path = path .. "slot.absorb",
+                beforeBind = function(widget) W.MoveWidget(widget, content, 16, -216, textCardW - 32, "LEFT") end,
+                get = function()
+                    if not M.UnitSectionsShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
+                    local spec = SelectedSlotSpec()
+                    return Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false)) and "icon" or "value"
+                end,
+                set = function(value)
+                    local spec = SelectedSlotSpec()
+                    local mode = M.UnitSectionsShared.HealthModeWithAbsorb(CurrentMode(), value ~= "off")
+                    Set(CurrentScope(), spec.key, mode, "visual")
+                    if value ~= "off" then Set(CurrentScope(), spec.absorbIconKey, value == "icon", "font") end
+                    AfterModeChanged(mode)
+                end },
+        }, ROW_OPTIONS, controls)
     end
     local hidePercentY = hasAbsorb and -278 or -216
-    controls.hidePercent = W.ToggleAt(content, "Hide % sign", 16, hidePercentY, textCardW - 32)
-    M.BindBoolWidget(ctx, controls.hidePercent,
-        function()
-            local spec = SelectedSlotSpec()
-            return spec.hidePercentKey and SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) or false
-        end,
-        function(value)
-            local spec = SelectedSlotSpec()
-            if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
-            FocusGFPreviewText(kind, CurrentSlot(kind), true)
-            RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
-        end,
-        ControlMeta(ctx, "text." .. kind .. ".slot.hide_percent"))
+    Schema.Build(ctx, content, {
+        { "toggle", "hidePercent", nil, { "Hide % sign", 16, hidePercentY, textCardW - 32 }, path = path .. "slot.hide_percent",
+            get = function()
+                local spec = SelectedSlotSpec()
+                return spec.hidePercentKey and SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) or false
+            end,
+            set = function(value)
+                local spec = SelectedSlotSpec()
+                if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
+            end },
+    }, ROW_OPTIONS, controls)
     function controls.RefreshPercentToggles(enabled)
         SetOptionEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
     end
@@ -849,12 +879,22 @@ local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
         end
     end
     local formattingY = hasAbsorb and -310 or -248
-    W.Text(content, "Formatting", 16, formattingY, textCardW - 32, T.colors.text)
-    controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, formattingY - 28, textHalfDropW)
-    if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW), cfg.reverseKey, false, "visual") end
-    if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW), cfg.decimalsKey, false, "visual") end
+    local formattingRows = {
+        { "text", "formatting", nil, { "Formatting", 16, formattingY, textCardW - 32, T.colors.text },
+            scope = "group", meta = { controlId = path .. "formatting" } },
+        { "dropdown", cfg.delimiterKey, " / ", { "Delimiter", DELIMITER_VALUES, textHalfDropW },
+            { 16, formattingY - 28, textHalfDropW, "LEFT" } },
+    }
+    if cfg.reverseKey then formattingRows[#formattingRows + 1] =
+        { "toggle", cfg.reverseKey, false, { "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW } } end
+    if cfg.decimalsKey then formattingRows[#formattingRows + 1] =
+        { "toggle", cfg.decimalsKey, false, { "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW } } end
+    if cfg.shortNumbersKey then formattingRows[#formattingRows + 1] =
+        { "toggle", cfg.shortNumbersKey, true, { "Short numbers", 16, formattingY - 78, textHalfDropW }, domain = "font" } end
+    local formatting = Schema.Build(ctx, content, formattingRows, ROW_OPTIONS)
+    controls.delimiter, controls.reverse = formatting[cfg.delimiterKey], formatting[cfg.reverseKey]
+    controls.decimals, controls.shortNumbers = formatting[cfg.decimalsKey], formatting[cfg.shortNumbersKey]
     if cfg.shortNumbersKey then
-        controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Short numbers", 16, formattingY - 78, textHalfDropW), cfg.shortNumbersKey, true, "font")
         function controls.RefreshShortNumbersToggle(enabled)
             local hasNumericValue = false
             for _, spec in pairs(cfg.slots or {}) do
@@ -867,88 +907,78 @@ local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
             SetOptionEnabled(controls.shortNumbers, enabled == true and hasNumericValue)
         end
     end
-    local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 220)
-    controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -64, textRightW - 32)
-    M.BindBoolWidget(ctx, controls.moveTogether,
-        function() return MoveTogether(kind) end,
-        function(v)
-            SetMoveTogether(kind, v)
-            local selectedValue1
-            if not (v) then selectedValue1 = CurrentSlot(kind) end
-            FocusGFPreviewText(kind, selectedValue1, true)
-            if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
-            RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
-        end,
-        ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
-    controls.slotSize = W.Slider(position, "Selected slot size", 6, 48, 1, hpSliderW)
-    PlaceSlider(position, controls.slotSize, 16, -122, textRightW - 58)
-    M.BindNumberWidget(ctx, controls.slotSize,
-        function()
-            local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
-            return value and value > 0 and value or tonumber(Val(CurrentScope(), cfg.sizeKey, cfg.sizeDefault)) or cfg.sizeDefault
-        end,
-        function(v)
-            Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
-            FocusGFPreviewText(kind, CurrentSlot(kind), true)
-        end,
-        cfg.sizeDefault, (function()
-            local meta = ControlMeta(ctx, "text." .. kind .. ".slot.size")
-            meta.step, meta.roundStep = 1, true
-            return meta
-        end)())
+    local position = Schema.Build(ctx, tab, {
+        { "card", path .. "position", nil, { "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 220 }, scope = "group" },
+    })[path .. "position"]
+    Schema.Build(ctx, position, {
+        { "toggle", "moveTogether", nil, { "Move text as one group", 16, -64, textRightW - 32 },
+            path = path .. "move_together", classification = "ephemeral", domain = "menuState",
+            get = function() return MoveTogether(kind) end,
+            set = function(v)
+                SetMoveTogether(kind, v)
+                local selectedValue1
+                if not (v) then selectedValue1 = CurrentSlot(kind) end
+                FocusGFPreviewText(kind, selectedValue1, true)
+                if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
+            end },
+        { "slider", "slotSize", cfg.sizeDefault, { "Selected slot size", 6, 48, 1, hpSliderW }, path = path .. "slot.size", domain = "font", roundStep = true,
+            beforeBind = function(widget) PlaceSlider(position, widget, 16, -122, textRightW - 58) end,
+            get = function()
+                local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
+                return value and value > 0 and value or tonumber(Val(CurrentScope(), cfg.sizeKey, cfg.sizeDefault)) or cfg.sizeDefault
+            end,
+            set = function(v)
+                Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+            end },
+    }, ROW_OPTIONS, controls)
     return controls
 end
 local function GFTextValueTabs(ctx, s)
     local HP_BASE_MODES = M.UnitSectionsShared.HealthBaseModeValues(HEALTH_TEXT_MODES)
-    s.hpControls = BuildGFValueTextTab(ctx, s, "hp", s.hpTab, {
-        modes = HEALTH_TEXT_MODES,
-        baseModes = HP_BASE_MODES,
-        valueLabel = "HP value",
-        showLabel = "Show HP Text",
-        showKey = "showHPText",
-        showDefault = true,
-        slots = {
-            left = { key = "textLeft", default = "NONE", hidePercentKey = "hpTextLeftHidePercentSymbol", absorbIconKey = "hpTextLeftAbsorbIcon" },
-            center = { key = "textCenter", default = "PERCENT", hidePercentKey = "hpTextCenterHidePercentSymbol", absorbIconKey = "hpTextCenterAbsorbIcon" },
-            right = { key = "textRight", default = "NONE", hidePercentKey = "hpTextRightHidePercentSymbol", absorbIconKey = "hpTextRightAbsorbIcon" },
-        },
-        delimiterKey = "textDelimiter",
-        reverseKey = "hpTextReverse",
-        decimalsKey = "healthTextDecimals",
-        shortNumbersKey = "hpFullValueShort",
-        absorbIconKey = "hpAbsorbIcon",
-        positionSubtitle = "Move the group or selected slot directly in Preview.",
-        sizeKey = "hpFontSize",
-        sizeDefault = 10,
-    })
-    s.powerControls = BuildGFValueTextTab(ctx, s, "power", s.powerTab, {
-        valueLabel = "Power value",
-        showLabel = "Show Power Text",
-        showGet = IsPowerTextEnabled,
-        showSet = function(v)
-            SetPowerTextEnabled(v)
-            if s.refresh then s.refresh() end
-        end,
-        slots = {
-            left = { key = "powerTextLeft", default = "NONE", hidePercentKey = "powerTextLeftHidePercentSymbol" },
-            center = { key = "powerTextCenter", default = "PERCENT", hidePercentKey = "powerTextCenterHidePercentSymbol" },
-            right = { key = "powerTextRight", default = "NONE", hidePercentKey = "powerTextRightHidePercentSymbol" },
-        },
-        delimiterKey = "powerTextDelimiter",
-        positionSubtitle = "Move the group or selected slot directly in Preview.",
-        sizeKey = "powerFontSize",
-        sizeDefault = 9,
-    })
+    for _, tab in ipairs({
+        { "hp", "HP value", "Show HP Text", "text", "hpText", "hpFontSize", 10, "textDelimiter" },
+        { "power", "Power value", "Show Power Text", "powerText", "powerText", "powerFontSize", 9, "powerTextDelimiter" },
+    }) do
+        local kind, slots = tab[1], {}
+        for _, slot in ipairs({ { "left", "Left", "NONE" }, { "center", "Center", "PERCENT" }, { "right", "Right", "NONE" } }) do
+            slots[slot[1]] = {
+                key = tab[4] .. slot[2], default = slot[3], hidePercentKey = tab[5] .. slot[2] .. "HidePercentSymbol",
+                absorbIconKey = kind == "hp" and tab[5] .. slot[2] .. "AbsorbIcon" or nil,
+            }
+        end
+        local cfg = {
+            valueLabel = tab[2], showLabel = tab[3], slots = slots, sizeKey = tab[6], sizeDefault = tab[7], delimiterKey = tab[8],
+            positionSubtitle = "Move the group or selected slot directly in Preview.",
+        }
+        if kind == "hp" then
+            cfg.modes, cfg.baseModes, cfg.showKey, cfg.showDefault = HEALTH_TEXT_MODES, HP_BASE_MODES, "showHPText", true
+            cfg.reverseKey, cfg.decimalsKey = "hpTextReverse", "healthTextDecimals"
+            cfg.shortNumbersKey, cfg.absorbIconKey = "hpFullValueShort", "hpAbsorbIcon"
+        else
+            cfg.showGet = IsPowerTextEnabled
+            cfg.showSet = function(v)
+                SetPowerTextEnabled(v)
+                if s.refresh then s.refresh() end
+            end
+        end
+        s[kind .. "Controls"] = BuildGFValueTextTab(ctx, s, kind, s[kind .. "Tab"], cfg)
+    end
 end
 local function GFTextAdvancedTab(ctx, s)
+    local c = {}
     local textLeftX, textCardW, textSliderW = s.textLeftX, s.textCardW, s.textSliderW
-    local TextCard = UnitSectionShared.TextCard
-    local advancedLayers = TextCard(s.advancedTab, "Text Layers", "Controls text layers when text overlaps bars, icons, or indicators.",
-        textLeftX, -4, textCardW, 260)
-    local nameLayer = ScopeSlider(ctx, advancedLayers, "Name layer", 0, 30, 1, textSliderW, "nameTextLayer", 5, "font", 16, -76, textCardW - 72)
-    local hpLayer = ScopeSlider(ctx, advancedLayers, "HP layer", 0, 30, 1, textSliderW, "textLayer", 5, "font", 16, -136, textCardW - 72)
-    local powerLayer = ScopeSlider(ctx, advancedLayers, "Power layer", 0, 30, 1, textSliderW, "powerTextLayer", 2, "font", 16, -196, textCardW - 72)
-    s.nameLayer, s.hpLayer, s.powerLayer = nameLayer, hpLayer, powerLayer
+    local advancedLayers = Schema.Build(ctx, s.advancedTab, {
+        { "card", "textLayers", nil, { "Text Layers", "Controls text layers when text overlaps bars, icons, or indicators.",
+            textLeftX, -4, textCardW, 260 }, scope = "group" },
+    }).textLayers
+    Schema.Build(ctx, advancedLayers, {
+        { "slider", "nameTextLayer", 5, { "Name layer", 0, 30, 1, textSliderW }, { 16, -76, textCardW - 72, "CENTER" }, domain = "font" },
+        { "slider", "textLayer", 5, { "HP layer", 0, 30, 1, textSliderW }, { 16, -136, textCardW - 72, "CENTER" }, domain = "font" },
+        { "slider", "powerTextLayer", 2, { "Power layer", 0, 30, 1, textSliderW }, { 16, -196, textCardW - 72, "CENTER" }, domain = "font" },
+    }, ROW_OPTIONS, c)
+    s.nameLayer, s.hpLayer, s.powerLayer = c.nameTextLayer, c.textLayer, c.powerTextLayer
 end
 local function GFTextRefresh(ctx, s)
     local text, slots = s.text, s.slots
@@ -1022,30 +1052,40 @@ local function BuildGFTextSection(ctx, b)
 end
 
 local function BuildGFDebuffStripeSection(ctx, b)
-    local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 284, false)
+    local c = {}
+    local stripe = Schema.Section(b:CollapsibleSection("dstripe", "Debuff Stripe", 284, false), "group")
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
-    local stripeCard = W.ControlCard(stripe, "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.",
-        20, -38, stripeCardW, 216)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(stripeCard, { "group.debuff_stripe" }, {
-            title = "Debuff Stripe Color",
-            note = "Shared by Party, Raid and Mythic Raid.",
-            historySource = "menu:group-debuff-stripe-color",
-            offsetX = -76,
-        })
-    end
-    local stripeToggle = BindScopeToggle(ctx, W.SectionSwitch(stripe, "Debuff Stripe"), "debuffStripeEnabled", false, "visual")
-    local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74,
-        min(260, stripeCardW - 32))
-    local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
-    local stripeHint = W.Text(stripeCard, M.Format("Color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -176, stripeCardW - 32, T.colors.muted)
-    if stripeHint.SetWordWrap then stripeHint:SetWordWrap(true) end
-    local stripeControls = { stripeEdge, stripeHeight }
+    local stripeCard = Schema.Build(ctx, stripe, {
+        { "card", "stripeCard", nil, { "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.",
+            20, -38, stripeCardW, 216 }, scope = "group" },
+    }).stripeCard
+    Schema.Colors(stripeCard, { "group.debuff_stripe" }, {
+        title = "Debuff Stripe Color",
+        note = "Shared by Party, Raid and Mythic Raid.",
+        historySource = "menu:group-debuff-stripe-color",
+        offsetX = -76,
+    })
+    Schema.Build(ctx, stripe, {
+        { "sectionSwitch", "debuffStripeEnabled", false, { "Debuff Stripe" } },
+        { "dropdown", "debuffStripeEdge", "BOTTOM", { "Stripe edge", DEBUFF_STRIPE_EDGES, 260 }, { 16, -74, min(260, stripeCardW - 32), "LEFT" },
+            parent = stripeCard },
+        { "slider", "debuffStripeHeight", 3, { "Stripe height", 1, 8, 1, 300 }, { 16, -126, min(360, stripeCardW - 72), "CENTER" }, parent = stripeCard },
+        { "text", "stripeHint", nil, { "", 16, -176, stripeCardW - 32, T.colors.muted }, parent = stripeCard, scope = "group",
+            beforeBind = function(widget, row)
+                local text = M.Format("Color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames"))
+                T.SetTranslatedText(widget, text)
+                W._Shared.SetSearchText(widget, text)
+                M.RegisterSearchWidget(widget, { label = text, kind = "text" })
+                row[4][1] = text
+            end },
+    }, ROW_OPTIONS, c)
+    if c.stripeHint.SetWordWrap then c.stripeHint:SetWordWrap(true) end
+    local stripeControls = { c.debuffStripeEdge, c.debuffStripeHeight }
     local function RefreshStripeState()
         local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
         SetOptionsEnabled(stripeControls, enabled)
-        SetOptionEnabled(stripeToggle, true)
+        SetOptionEnabled(c.debuffStripeEnabled, true)
         SetSectionBadgesAndStatus(stripe, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = OptionText(DEBUFF_STRIPE_EDGES, Val(CurrentScope(), "debuffStripeEdge", "BOTTOM"), "Bottom Edge"), kind = enabled and "info" or "muted" },
@@ -1056,41 +1096,43 @@ local function BuildGFDebuffStripeSection(ctx, b)
 end
 
 local function BuildGFRangeFadeSection(ctx, b)
+    local c = {}
     local AlphaLabel = M.AlphaLabel
     -- 220 mirrors the registered section height in MSUF_Menu2_GroupLayout; the
     -- lazy shell wins over this call, so a larger value here only desynced the
     -- non-lazy fallback path from what the page actually renders.
     local range = b:CollapsibleSection("range", "Range Fade", 220, false)
-    local rangeW = range._msuf2Width or b.width or 720
-    local rangeGap = 16
-    local rangeLeftX = 20
-    local rangeInnerW = max(320, rangeW - 40)
-    local rangeLeftWidth = floor((rangeInnerW - rangeGap) * 0.48)
-    local rangeRightX = rangeLeftX + rangeLeftWidth + rangeGap
-    local rangeRightWidth = rangeInnerW - rangeLeftWidth - rangeGap
+    if not range._msuf2CollapsibleEntry.header._msuf2ControlSchema then Schema.Section(range, "group") end
+    local rangeLeftX, rangeLeftWidth, rangeRightX, rangeRightWidth = Schema.Columns(range, range._msuf2Width or b.width or 720, 20, 16, 0.48)
     -- Both cards sit at -18 so the 190pt card body ends 12pt above the section
     -- floor instead of overflowing it by 8pt while leaving a dead band under
     -- the accordion header.
     local rangeCardY = -18
-    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, rangeCardY, rangeLeftWidth, 190)
-    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, rangeCardY, rangeRightWidth, 190)
+    Schema.Build(ctx, range, {
+        { "card", "rangeEffect", nil, { "Behavior", nil, rangeLeftX, rangeCardY, rangeLeftWidth, 190 }, scope = "group" },
+        { "card", "rangeAlpha", nil, { "Alpha", "Opacity values used by range and offline states.", rangeRightX, rangeCardY,
+            rangeRightWidth, 190 }, scope = "group" },
+    }, nil, c)
+    local rangeEffectCard, rangeAlphaCard = c.rangeEffect, c.rangeAlpha
     local rangeToggle = PrepareRangeSwitch(ctx, range)
     local function BindRangeAlphaSlider(key, label, default, y)
-        local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
         -- The live label names the slider on screen; search needs it as the label.
-        local meta = ControlMeta(ctx, "field." .. tostring(key))
-        meta.label = label
-        M.BindNumberWidget(ctx, control,
-            function() return Num(CurrentScope(), key, default) end,
-            function(v)
-                local n = tonumber(v) or default or 0
-                local conf = Conf(CurrentScope())
-                if conf[key] == n then return end
-                conf[key] = n
-                QueueGF(CurrentScope(), "visual")
-            end,
-            default,
-            meta)
+        local function LabelMeta()
+            local meta = ControlMeta(ctx, "field." .. tostring(key))
+            meta.label = label
+            return meta
+        end
+        local control = Schema.Build(ctx, rangeAlphaCard, {
+            { "slider", key, default, { "", 0, 1, 0.05, rangeRightWidth },
+                get = function() return Num(CurrentScope(), key, default) end,
+                set = function(v)
+                    local n = tonumber(v) or default or 0
+                    local conf = Conf(CurrentScope())
+                    if conf[key] == n then return end
+                    conf[key] = n
+                    QueueGF(CurrentScope(), "visual")
+                end },
+        }, Schema.GroupCommands({}, LabelMeta, LabelMeta))[key]
         if key == "rangeFadeAlpha" and M.BindSliderDragPreview and M.SetRangeFadePreviewState then
             M.BindSliderDragPreview(control, function(active, value)
                 M.SetRangeFadePreviewState("group", active, value,
@@ -1102,20 +1144,23 @@ local function BuildGFRangeFadeSection(ctx, b)
             function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
     end
     local rangeModeW = min(240, rangeLeftWidth - 32)
-    local rangeMode = W.Segment(rangeEffectCard, "Affects", VT("frame", "Frame", "health", "HP"), rangeModeW)
-    M.BindSegment(ctx, rangeMode,
-        function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
-        function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end,
-        ControlMeta(ctx, "field.rangeFadeLayerMode"))
+    Schema.Build(ctx, rangeEffectCard, {
+        { "segment", "rangeMode", nil, { "Affects", VT("frame", "Frame", "health", "HP"), rangeModeW }, path = "field.rangeFadeLayerMode",
+            get = function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
+            set = function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end },
+    }, ROW_OPTIONS, c)
     -- Rows mirror the alpha card on the right: -70 lines up with "Out of range",
     -- -122 with "Offline", so both cards read as one grid instead of a gap plus
     -- a segment overlapping the offline toggle.
-    W.MoveWidget(rangeMode, rangeEffectCard, 16, -70, rangeModeW, "LEFT")
-    local offlineFadeToggle = BindScopeToggle(ctx, W.ToggleAt(rangeEffectCard, "Fade offline members", 16, -122, rangeLeftWidth - 32), "offlineFadeEnabled", false, "visual")
-    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32, T.colors.muted)
-    if offlineHint and offlineHint.SetWordWrap then offlineHint:SetWordWrap(true) end
+    W.MoveWidget(c.rangeMode, rangeEffectCard, 16, -70, rangeModeW, "LEFT")
+    Schema.Build(ctx, rangeEffectCard, {
+        { "toggle", "offlineFadeEnabled", false, { "Fade offline members", 16, -122, rangeLeftWidth - 32 } },
+        { "text", "offlineHint", nil, { "Hiding offline members in Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32,
+            T.colors.muted }, scope = "group" },
+    }, ROW_OPTIONS, c)
+    if c.offlineHint and c.offlineHint.SetWordWrap then c.offlineHint:SetWordWrap(true) end
     local rangeControls = {
-        rangeMode,
+        c.rangeMode,
         BindRangeAlphaSlider("rangeFadeAlpha", "Out of range", 0.4, -70),
     }
     -- Offline opacity is independent of range fade: it drives the fade state and
@@ -1127,7 +1172,7 @@ local function BuildGFRangeFadeSection(ctx, b)
         local offlineHidden = Bool(CurrentScope(), "hideOfflineEnabled", false)
         SetOptionsEnabled(rangeControls, enabled)
         SetOptionEnabled(rangeToggle, true)
-        SetOptionEnabled(offlineFadeToggle, not offlineHidden)
+        SetOptionEnabled(c.offlineFadeEnabled, not offlineHidden)
         SetOptionEnabled(offlineAlphaSlider, offlineFade or offlineHidden)
         local offlineText, offlineKind = "Offline visible", "muted"
         if offlineHidden then

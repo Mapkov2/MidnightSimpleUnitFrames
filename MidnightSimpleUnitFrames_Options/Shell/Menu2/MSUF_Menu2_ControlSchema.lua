@@ -304,10 +304,10 @@ end
 function Schema.Build(ctx, parent, rows, opts, refs)
     opts, refs = opts or {}, refs or {}
     for _, row in ipairs(rows) do
-        local widget, args = nil, row[4]
-        if row[1] == "button" then widget = M.Theme.Button(parent, unpack(args))
-        elseif ROW_CREATORS[row[1]] then widget = W[ROW_CREATORS[row[1]]](parent, unpack(args))
-        else widget = CreateCompositeRow(ctx, parent, row) end
+        local widget, args, rowParent = nil, row[4], row.parent or parent
+        if row[1] == "button" then widget = M.Theme.Button(rowParent, unpack(args))
+        elseif ROW_CREATORS[row[1]] then widget = W[ROW_CREATORS[row[1]]](rowParent, unpack(args))
+        else widget = CreateCompositeRow(ctx, rowParent, row) end
         refs[row[2]] = widget
         if row.anchor then widget:SetPoint(unpack(row.anchor)) end
         if row.center then M.Theme.CenterButtonLabel(widget) end
@@ -320,7 +320,7 @@ function Schema.Build(ctx, parent, rows, opts, refs)
         if row.action then widget:SetScript("OnClick", row.action) end
         if row.register then assert(opts.register, "schema row registry missing")(ctx, widget, row) end
         if ROW_CHROME[row[1]] then DeclareRow(ctx, widget, row, ROW_CHROME[row[1]]) end
-        PlaceRow(widget, parent, row)
+        PlaceRow(widget, rowParent, row)
     end
     return refs
 end
@@ -363,6 +363,7 @@ end
 -- Record rows retain the selected scope and nested-record owners at input time.
 -- A missing record differs from a missing toggle field; false subtypes disable it.
 local function CommandAccessors(owner, row, kind, widget, ctx)
+    if row.set then return assert(row.get, "command row getter missing"), row.set, row[3] end
     local command = row.lifecycle and row.lifecycle(widget, ctx, row) or owner.commands[row[2]]
     local fallback = command.default
     if fallback == nil then fallback = row[3] end

@@ -478,4 +478,41 @@ local function SharedRows()
 end
 SharedRows()
 
+-- Group Bars keeps one ordered row list while using its original card parents.
+local function GroupCommandRows()
+    local ctx, seen = M.cache.uf_target.ctx, {}
+    local left = env.CreateFrame("Frame", nil, env.UIParent)
+    local right = env.CreateFrame("Frame", nil, env.UIParent)
+    left._msuf2Width, right._msuf2Width = 500, 420
+    local values = { raw = 0, legacy = 0 }
+    local function GetRaw() return values.raw end
+    local function SetRaw(value) values.raw = value end
+    local function GetLegacy() return values.legacy end
+    local function SetLegacy(value) values.legacy = value end
+    local function CommandMeta(_, path)
+        return { controlId = "menu2.schema.command." .. path }
+    end
+    local options = Schema.GroupCommands({ legacy = { get = GetLegacy, set = SetLegacy } }, CommandMeta, CommandMeta)
+    local bind = options.bind
+    options.bind = function(context, widget, row, kind)
+        Check(context == ctx, "row parent replaced the binding context")
+        seen[#seen + 1] = row[2]
+        return bind(context, widget, row, kind)
+    end
+    local refs = Schema.Build(ctx, left, {
+        { "slider", "raw", 0, { "Raw value", 0, 1, 0.05, 200 }, { 12, -18, 200, "LEFT" },
+            parent = right, get = GetRaw, set = SetRaw },
+        { "slider", "legacy", 0, { "Legacy command", 0, 1, 0.05, 200 }, { 20, -72, 200, "LEFT" } },
+    }, options)
+    Check(refs.raw:GetParent() == right and refs.legacy:GetParent() == left, "row constructor parent drift")
+    Check(select(2, refs.raw:GetPoint(1)) == right and select(2, refs.legacy:GetPoint(1)) == left, "row placement parent drift")
+    Check(seen[1] == "raw" and seen[2] == "legacy" and #seen == 2, "cross-parent binding order changed")
+    Input(refs.raw, 0.63)
+    Input(refs.legacy, 0.27)
+    Check(math.abs(values.raw - 0.63) < 0.000001 and math.abs(values.legacy - 0.27) < 0.000001,
+        "direct/legacy command accessors changed raw-number binding")
+    Check(refs.raw._msuf2ControlSchema.get() == values.raw, "direct command getter lost its current value")
+end
+GroupCommandRows()
+
 print("menu_control_schema_smoke " .. flavor .. ": input/DB/apply/refresh/combat/history/reset/exact navigation OK")

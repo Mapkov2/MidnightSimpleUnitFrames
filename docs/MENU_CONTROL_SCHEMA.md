@@ -231,6 +231,7 @@ collector, as used by the Style owner's dependent-control refresh.
 | Row positions 1/2/3 | Native control type, stable field/ref key, UI read fallback. |
 | Row position 4 | Dense native label/values/range/size arguments. |
 | Row position 5 | Optional x/y/width/alignment passed to MoveWidget. |
+| parent | An existing native widget for this row; constructor and placement use it, ctx and row order remain unchanged. |
 | anchor, center | Native SetPoint tuple and button-label centering. |
 | flagsBefore, flagsAfter | Widget flags before/after central binding. |
 | beforeBind | Existing widget lifecycle preparation before binding. |
@@ -257,7 +258,9 @@ collector, as used by the Style owner's dependent-control refresh.
 Record owners supply config, scope, changed, path, meta and stepMeta, with optional
 strictToggles/rawNumber/afterToggle. Selected owners supply selected, scope, default,
 bool, number, value and write. GroupCommands receives the actual commands table
-plus meta/stepMeta providers; rows do not carry a separate command object.
+plus meta/stepMeta providers. An explicit row.get/set pair uses row[3] as its
+fallback; otherwise the existing lifecycle factory or command-table entry owns
+the accessors. Rows do not carry a separate command object.
 GroupNestedBinding delegates to the existing nested-number binder. Colors forwards
 named title/note/historyLabel/historySource/offsetX/textSettings options unchanged
 to the original shortcut/reference controller, without a second binding owner.
