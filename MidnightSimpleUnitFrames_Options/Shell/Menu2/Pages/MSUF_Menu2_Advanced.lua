@@ -80,15 +80,8 @@ end
 local function NumValue(tbl, key, default)
     return tonumber(tbl and tbl[key]) or default or 0
 end
-local function SetValue(tbl, key, value, apply)
-    if not tbl or tbl[key] == value then return end
-    local function Write()
-        if tbl[key] == value then return false end
-        tbl[key] = value
-        if type(apply) == "function" then apply() end
-        return true
-    end
-    return M.RunWithHistory(tostring(key), "advanced:" .. tostring(key), Write)
+local function SetValue(...)
+    return MSUF.History.SetAdvancedValue(...)
 end
 local DeepCopyTable = M.DeepCopy
 local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget

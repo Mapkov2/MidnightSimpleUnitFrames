@@ -338,7 +338,8 @@ local popupsSource = Read(EM_DIR .. "MSUF_EditMode_Popups.lua")
 local closeAll = assert(popupsSource:match("\nfunction Popups%.CloseAll%(%)\n(.-)\nend\n"), "Popups.CloseAll is missing")
 assert(closeAll:find("if EM2.CastPopup then EM2.CastPopup.Close() end", 1, true)
     and closeAll:find("if EM2.AuraPopup then EM2.AuraPopup.Close() end", 1, true)
-    and popupsSource:find("    Popups.CloseAll()\n\n    if pType == \"external\" then", 1, true),
+    and closeAll:find("if EM2.PositionPopup then EM2.PositionPopup.Close() end", 1, true)
+    and popupsSource:find("    Popups.CloseAll()\n\n    if cfg and cfg.positionPopup then", 1, true),
     "Popups.Open must close every popup, the castbar and aura popups among them, before it opens one")
 EM2.CastPopup.Close = function() castPopupOpen = false end
 EM2.AuraPopup.Close = function() auraPopupOpen = false end

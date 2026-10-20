@@ -139,7 +139,14 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- previewed health (scene form Health.PaintSampleBackground, the unit and group scene calls): +1,697 core LF bytes
         -- on every client, Mainline/ruRU 10,106,459 -> 10,108,156, TBC/ruRU 7,979,162 -> 7,980,859. Both ceilings add
         -- exactly that delta: Mainline 10,107,535 -> 10,109,232; Classic 7,983,199 -> 7,984,896. Live paths unchanged.
-        assert(bytes < (suffix == "Mainline" and 10109232 or 7984896),
+        -- 2026-10-20: lazy native Priority/Gameplay position popups and the shared menu setter add 7,692 LF bytes on
+        -- every client: Mainline/ruRU 10,108,156 -> 10,115,848, TBC/ruRU 7,980,859 -> 7,988,551. Both ceilings add
+        -- exactly that delta: Mainline 10,109,232 -> 10,116,924; Classic 7,984,896 -> 7,992,588.
+        -- 2026-10-20 review fixes: focused position history sync and dependency binding cleanup add exactly
+        -- 106 LF bytes on every client: Mainline/ruRU 10,116,544 -> 10,116,650;
+        -- TBC/ruRU 7,989,247 -> 7,989,353. Both ceilings add exactly that delta:
+        -- Mainline 10,116,924 -> 10,117,030; Classic 7,992,588 -> 7,992,694.
+        assert(bytes < (suffix == "Mainline" and 10117030 or 7992694),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

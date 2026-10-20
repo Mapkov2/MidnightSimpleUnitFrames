@@ -1208,6 +1208,18 @@ function M.RunWithHistory(label, source, fn)
     if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then return M.CaptureHistory(label, source, fn) end
     return type(fn) == "function" and fn() or nil
 end
+function M.SetAdvancedValue(tbl, key, value, apply)
+    if not tbl or tbl[key] == value then return end
+    local function Write()
+        if tbl[key] == value then return false end
+        tbl[key] = value
+        local popup = MSUF.EditModeController and MSUF.EditModeController.PositionPopup
+        if popup then popup.Sync() end
+        if apply then apply() end
+        return true
+    end
+    return M.RunWithHistory(tostring(key), "advanced:" .. tostring(key), Write)
+end
 local function CopyStack(stack)
     local copy = {}
     for i = 1, #stack do copy[i] = stack[i] end

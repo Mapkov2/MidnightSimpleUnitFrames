@@ -950,3 +950,9 @@ classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavo
 -	lua	tools/tests/unit_preview_secret_health_full_bar_smoke.lua	{root} Mists	Unit preview of a live unit with secret health no longer shows a full bar: Mists	nightly
 -	lua	tools/tests/menu_group_colors_schema_parity_smoke.lua	{root} Mainline - - push	Group Colors replacing schema changed native controls, layout, defaults or binding behavior: Mainline	push
 clients+Forever	lua	tools/tests/menu_group_colors_schema_parity_smoke.lua	{root} {flavor} - - full	Group Colors replacing schema changed native controls, layout, defaults or binding behavior: {flavor}	nightly
+
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root} Mainline positions	Native Priority and Gameplay position popups failed: Mainline
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root} Forever positions	Native Priority and Gameplay position popups failed: Forever	nightly
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root} Vanilla positions	Native Priority and Gameplay position popups failed: Vanilla	nightly
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root} TBC positions	Native Priority and Gameplay position popups failed: TBC	nightly
+-	lua	tools/tests/editmode_core_history_smoke.lua	{root} Mists positions	Native Priority and Gameplay position popups failed: Mists	nightly

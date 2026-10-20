@@ -8,6 +8,7 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Popups.lua"
 local ExportPublic = MSUF.ExportPublic
+local function DB() return _G.MSUF_DB end
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -49,6 +50,7 @@ local function NotifyGuidedPopupOpened(key)
 end
 
 function Popups.CloseAll()
+    if EM2.PositionPopup then EM2.PositionPopup.Close() end
     if EM2.ExternalPopup then EM2.ExternalPopup.Close() end
     if EM2.ResourcePopup then EM2.ResourcePopup.Close() end
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
@@ -82,7 +84,9 @@ function Popups.Open(key, anchorFrame)
 
     Popups.CloseAll()
 
-    if pType == "external" then
+    if cfg and cfg.positionPopup then
+        EM2.PositionPopup.Open(key)
+    elseif pType == "external" then
         local external = EM2.ExternalElements
         if external and type(external.Select) == "function" then
             external.Select(key, "mover", anchorFrame)
@@ -130,15 +134,7 @@ function Popups.Open(key, anchorFrame)
     elseif pType == "gf_priority" then
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
-        if EM2.Focus and EM2.Focus.SetSelection then
-            EM2.Focus.SetSelection("gf_priority", "placement", nil, {
-                source = "priority-mover",
-                openSettings = true,
-            })
-        end
-        if EM2.Focus and EM2.Focus.OpenFullSettings then
-            EM2.Focus.OpenFullSettings("gf_priority")
-        end
+        EM2.PositionPopup.Open(key)
     end
     local opened = Popups.IsAnyOpen and Popups.IsAnyOpen() or false
     if opened then
@@ -150,7 +146,8 @@ function Popups.Open(key, anchorFrame)
 end
 
 function Popups.IsAnyOpen()
-    return (EM2.ExternalPopup and EM2.ExternalPopup.IsOpen())
+    return (EM2.PositionPopup and EM2.PositionPopup.IsOpen())
+        or (EM2.ExternalPopup and EM2.ExternalPopup.IsOpen())
         or (EM2.ResourcePopup and EM2.ResourcePopup.IsOpen())
         or (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
@@ -159,10 +156,112 @@ function Popups.IsAnyOpen()
         or false
 end
 
+-- Compact native position editor; the shared shell and steppers stay lazy.
+local PositionPopup, positionFrame = {}, nil
+EM2.PositionPopup = PositionPopup
+local PRIORITY_POSITION = { dbKey = "gf_priority", xKey = "offsetX", yKey = "offsetY",
+    limit = 4000, title = "Priority Frames", page = "gf_priority" }
+
+local function PositionSpec(key)
+    if key == "gf_priority" then return PRIORITY_POSITION end
+    local cfg = EM2.Registry.Get(key)
+    return cfg and cfg.positionPopup
+end
+
+local function SetPositionBox(box, value, committed)
+    if not committed then return Quick.SetBoxText(box, value) end
+    -- Committed steps and history restores repaint while keyboard focus stays.
+    local text = tostring(value or 0)
+    box:SetText(text)
+    box._msufShownText = text
+end
+
+function PositionPopup.Sync(forceAxis)
+    local f = positionFrame
+    if not (f and f:IsShown()) then return end
+    local spec = PositionSpec(f._msufPositionKey)
+    local db = spec and DB()
+    db = db and db[spec.dbKey]
+    if not db then return end
+    SetPositionBox(f.xBox, db[spec.xKey], forceAxis == true or forceAxis == "x")
+    SetPositionBox(f.yBox, db[spec.yKey], forceAxis == true or forceAxis == "y")
+    f.positionRow:SetAlpha(spec.dbKey == "gf_priority" and db.anchorMode ~= "FREE" and 0.4 or 1)
+    if f._refreshUndoRedo then f._refreshUndoRedo() end
+end
+
+local function ApplyPosition(axis)
+    local f = positionFrame
+    local spec = f and PositionSpec(f._msufPositionKey)
+    local db = spec and DB()
+    db = db and db[spec.dbKey]
+    if not db then return end
+    if BlockConfigCombatLocked() or not EM2.State.IsActive()
+        or (spec.dbKey == "gf_priority" and db.anchorMode ~= "FREE") then
+        PositionPopup.Sync(axis)
+        return
+    end
+    local key = axis == "x" and spec.xKey or spec.yKey
+    local value = tonumber((axis == "x" and f.xBox or f.yBox):GetText())
+    if not value or value ~= value or value == math.huge or value == -math.huge then
+        PositionPopup.Sync(axis)
+        return
+    end
+    value = math.floor(math.max(-spec.limit, math.min(spec.limit, value)) + 0.5)
+    if value ~= db[key] and EM2.Undo.BeginChange(spec.dbKey == "gf_priority" and "gf" or "gameplay",
+        spec.dbKey == "gf_priority" and "priority" or Tr(spec.title), "Move") then
+        -- FREE Priority retains its configured point/relativePoint, rather than
+        -- party/raid's stable-grid position keys: edit its setter offsets verbatim.
+        if spec.dbKey == "gf_priority" then
+            MSUF.GF.SetPriorityOption(key, value)
+        else
+            MSUF.History.SetAdvancedValue(db, key, value, MSUF.MSUF_RequestGameplayApply)
+        end
+        EM2.Undo.CommitChange()
+        U.SyncMoversAndNotify(f._msufPositionKey, true)
+    end
+    PositionPopup.Sync(axis)
+end
+
+local function OpenPositionSettings()
+    if BlockConfigCombatLocked() then return end
+    local key = positionFrame._msufPositionKey
+    local spec = PositionSpec(key)
+    EM2.Focus.SetSelection(key, spec.dbKey == "gf_priority" and "placement" or nil, nil, { source = "position-popup" })
+    if EM2.Focus.OpenFullSettings(spec.page) then positionFrame:Hide() end
+end
+
+function PositionPopup.Open(key)
+    local spec = PositionSpec(key)
+    if not spec or BlockConfigCombatLocked() then return false end
+    if not positionFrame then
+        -- Unnamed: this popup adds no public frame global.
+        positionFrame = Quick.CreateShell(nil, { width = 440, height = 224, liveStatus = true })
+        local f = positionFrame
+        f._titleFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -44, -20)
+        f._titleFS:SetWordWrap(false)
+        f._titleFS:SetJustifyH("LEFT")
+        f._liveStatus:ClearAllPoints()
+        f._liveStatus:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -50)
+        f.positionRow = Quick.ValuePairAt(f, f, 20, -82,
+            "X", "xBox", function() ApplyPosition("x") end,
+            "Y", "yBox", function() ApplyPosition("y") end, { rowWidth = 400, boxWidth = 64 })
+        f.xBox._msufStep, f.yBox._msufStep = 1, 1
+        f.settingsBtn = Quick.ButtonAt(f, "Open detailed settings", 20, -128, 400, 32, OpenPositionSettings)
+        Quick.AddFooterControls(f, { anchor = "BOTTOM" })
+        if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(f) end
+    end
+    positionFrame._msufPositionKey = key
+    positionFrame._titleFS:SetText(Tr(spec.title))
+    positionFrame:Show()
+    PositionPopup.Sync()
+    return true
+end
+function PositionPopup.Close() if positionFrame then positionFrame:Hide() end end
+function PositionPopup.IsOpen() return positionFrame and positionFrame:IsShown() or false end
+
 --- Unit frame popup (EM2.UnitPopup).
 local floor = math.floor
 local max, min = math.max, math.min
-local function DB() return _G.MSUF_DB end
 local function Conf(k)
     local db=DB()
     return db and db[k]

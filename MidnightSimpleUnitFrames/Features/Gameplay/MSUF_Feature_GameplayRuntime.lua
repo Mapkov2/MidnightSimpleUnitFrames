@@ -21,6 +21,7 @@ local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
 local tonumber            = tonumber
 
+local EditModeAPI = MSUF.EditModeAPI
 local GameplayHelpers = MSUF.Gameplay or {}
 local GetPlayerSpecID = GameplayHelpers.GetPlayerSpecID
 local Clamp, RoundInt = GameplayHelpers.Clamp or _G._MSUF_Clamp, GameplayHelpers.RoundInt or _G._MSUF_RoundInt
@@ -1195,6 +1196,7 @@ ApplyGameplayNow = function()
     if SyncGameplaySpecEvents then SyncGameplaySpecEvents(g) end
     local gameplay = MSUF.Gameplay
     if gameplay and type(gameplay.SyncNudgeEvents) == "function" then gameplay.SyncNudgeEvents() end
+    if EditModeAPI and EditModeAPI.IsActive() then EditModeAPI.RefreshOwner("msuf_gameplay") end
 end
 
 MSUF.MSUF_ApplyGameplayVisuals = ApplyGameplayNow
@@ -1298,4 +1300,42 @@ if type(reg) == "function" then
         RefreshSettings = MSUF.MSUF_RequestGameplayApply,
         Shutdown = StopGameplayModule,
     })
+end
+
+-- Reuse the existing external drag bridge for native Gameplay frames; only
+-- their popup overrides the screen-edge readout with the menu's anchor offsets.
+do
+    local api, em = EditModeAPI, MSUF.EditModeController
+    if api and em then
+        local function RegisterPosition(id, title, enabledKey, xKey, yKey, resolve)
+            local function Read()
+                local db = GetGameplayDB()
+                return { x = db[xKey], y = db[yKey] }
+            end
+            local function Write(pos)
+                local x, y = pos.x, pos.y
+                if issecretvalue(x) or issecretvalue(y) then return false end
+                x, y = tonumber(x), tonumber(y)
+                if not x or not y or x ~= x or y ~= y or x == math.huge or x == -math.huge
+                    or y == math.huge or y == -math.huge then return false end
+                local db = GetGameplayDB()
+                MSUF.History.SetAdvancedValue(db, xKey, math.floor(Clamp(x, -800, 800) + 0.5), MSUF.MSUF_RequestGameplayApply)
+                MSUF.History.SetAdvancedValue(db, yKey, math.floor(Clamp(y, -800, 800) + 0.5), MSUF.MSUF_RequestGameplayApply)
+                return true
+            end
+            api.RegisterElement("msuf_gameplay", {
+                id = id, label = title, group = "MSUF Gameplay", order = 90,
+                getFrame = resolve, isEnabled = function() return GetGameplayDB()[enabledKey] == true end,
+                getPosition = Read, setPosition = Write,
+                openSettings = function() MSUF.Require("MSUF_OpenStandaloneOptionsWindow", "Gameplay position")("gameplay") end,
+            })
+            local cfg = em.Registry.Get("external:msuf_gameplay:" .. id)
+            if cfg then cfg.positionPopup = { dbKey = "gameplay", xKey = xKey, yKey = yKey,
+                limit = 800, title = title, page = "gameplay" } end
+        end
+        RegisterPosition("combat_timer", "Combat Timer", "enableCombatTimer", "combatOffsetX", "combatOffsetY",
+            function() return combatFrame end)
+        RegisterPosition("combat_state", "Combat Enter/Leave", "enableCombatStateText", "combatStateOffsetX", "combatStateOffsetY",
+            function() return stateFrame end)
+    end
 end

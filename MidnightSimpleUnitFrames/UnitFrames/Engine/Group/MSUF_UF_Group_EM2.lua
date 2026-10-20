@@ -1742,6 +1742,7 @@ local function HideGFPopup(mode)
 end
 
 SyncGFPopups = function()
+  if EM2.PositionPopup then EM2.PositionPopup.Sync() end
   for _, popup in pairs(_popups) do
     if popup and popup.IsShown and popup:IsShown() and popup.Sync then
       popup.Sync()

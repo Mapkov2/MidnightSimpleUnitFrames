@@ -44,6 +44,7 @@ local HISTORY_CATEGORY_LABELS = {
     power = "Detached power bar",
     aura = "Aura layout",
     gf = "Group frame",
+    gameplay = "MSUF Gameplay",
     external = "External frame",
 }
 
@@ -253,6 +254,8 @@ local function CaptureState(category, key)
         snap.data = { unit = DeepCopy(db[key] or {}), bars = DeepCopy(db.bars or {}) }
     elseif category == "aura" then
         snap.data = DeepCopy(db.auras3 or {})
+    elseif category == "gameplay" then
+        snap.data = DeepCopy(db.gameplay or {})
     elseif category == "gf" then
         local dbKey = ResolveGFDBKey(key)
         if not dbKey then return nil end
@@ -327,6 +330,10 @@ local function RestoreState(snap)
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
         ApplyAuraUndo(snap.key)
+    elseif snap.category == "gameplay" then
+        db.gameplay = db.gameplay or {}
+        DeepRestore(db.gameplay, snap.data)
+        MSUF.MSUF_RequestGameplayApply()
     elseif snap.category == "gf" then
         local dbKey = snap.dbKey or ResolveGFDBKey(snap.key)
         if dbKey then
@@ -340,6 +347,7 @@ local function RestoreState(snap)
     if snap.category == "unit" then MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(snap.key) end
 
     --- Sync popups
+    if EM2.PositionPopup then EM2.PositionPopup.Sync(true) end
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
@@ -629,6 +637,7 @@ function EM2.RefreshAfterHistoryRestore(reason)
     if not (EM2.State and EM2.State.IsActive and EM2.State.IsActive()) then return end
     if Util.IsConfigCombatLocked and Util.IsConfigCombatLocked() then return end
 
+    if EM2.PositionPopup then EM2.PositionPopup.Sync(true) end
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
