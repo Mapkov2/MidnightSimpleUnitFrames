@@ -1246,6 +1246,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Gates.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PageBuilder.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua",
+    "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LatchGuard.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
