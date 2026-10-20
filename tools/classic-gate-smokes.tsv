@@ -200,6 +200,11 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	tools/tests/classic_aura_edit_forbidden_mouse_smoke.lua	{root/}	Classic aura edit forbidden mouse smoke failed
 -	lua	tools/tests/aura_secret_truth_test_smoke.lua	{root}	Aura secret truth-test smoke failed
 -	lua	tools/tests/aura_native_lane_park_smoke.lua	{root}	Aura native lane park smoke failed
+-	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Mainline	Native aura latch guard: Mainline
+-	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Forever	Native aura latch guard: Forever	nightly
+-	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Vanilla	Native aura latch guard: Vanilla	nightly
+-	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} TBC	Native aura latch guard: TBC	nightly
+-	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Mists	Native aura latch guard: Mists	nightly
 -	lua	tools/tests/aura_lane_signature_once_smoke.lua	{root} Mainline	Aura lane button signature built once per lane: Mainline
 -	lua	tools/tests/aura_lane_signature_once_smoke.lua	{root} Forever	Aura lane button signature built once per lane: Forever
 -	lua	tools/tests/aura_label_i18n_smoke.lua	{root}	Aura label i18n smoke failed

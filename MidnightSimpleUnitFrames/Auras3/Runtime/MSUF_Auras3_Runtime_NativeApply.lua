@@ -298,7 +298,7 @@ local function ReviveNativeLane(root, key, current, signature, retire, parentFra
     if forceRecreate == true and root._msufA3ParkedLanes then root._msufA3ParkedLanes[key] = nil end
     if forceRecreate == true or (current and current._msufA3StructuralSignature == signature) then return current end
     local pool = root._msufA3ParkedLanes and root._msufA3ParkedLanes[key]
-    local parked = pool and pool[signature]
+    local parked = pool and Runtime.LatchGuard.TakeRevivableNativeOwner(pool, signature)
     if not parked then return current end
     pool[signature] = nil
     retire(root, key, current, parentFrame)
@@ -756,7 +756,7 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
 end
 
 local exports = {
-    ApplyConfig = ApplyConfig,
+    ApplyConfig = ApplyConfig, ApplyDispelSensorRoot = ApplyDispelSensorRoot,
     ApplyLane = ApplyLane,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
     HideState = HideState,

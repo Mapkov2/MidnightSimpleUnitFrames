@@ -43,7 +43,7 @@ local function RefreshOwners(unit, skipLiveGroup, gateIdentity, seedGroupAssist)
             local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
-                if identityEligible and not filterChanged and Containers.NativeContainerVisible(container) then update(container) end
+                if identityEligible then Runtime.LatchGuard.RefreshNativeAuraOwner(container, filterChanged) end
                 if container._msufA3ForceManagedAuraGeometry == true
                     or container._msufA3ForceSpellIndicatorGeometry == true then
                     Containers.SyncManagedAuraContainerGeometry(container, true)

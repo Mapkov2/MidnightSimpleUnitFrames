@@ -146,7 +146,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 106 LF bytes on every client: Mainline/ruRU 10,116,544 -> 10,116,650;
         -- TBC/ruRU 7,989,247 -> 7,989,353. Both ceilings add exactly that delta:
         -- Mainline 10,116,924 -> 10,117,030; Classic 7,992,588 -> 7,992,694.
-        assert(bytes < (suffix == "Mainline" and 10117030 or 7992694),
+        -- 2026-10-20: the native aura freeze guard adds exactly 6,942 core LF bytes on Mainline and Forever;
+        -- Classic loads none of these native runtime files. Mainline ceiling 10,117,030 -> 10,123,972 (+6,942);
+        -- Classic unchanged.
+        assert(bytes < (suffix == "Mainline" and 10123972 or 7992694),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

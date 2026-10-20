@@ -29,6 +29,8 @@ local function NewContainer()
     function container:IsEnabled() return self.enabled end
     function container:SetUnit(unit) self.boundUnit = unit end
     function container:GetUnit() return self.boundUnit end
+    -- Frozen parked owners are covered by aura_native_latch_guard_smoke.
+    function container:UpdateAllAuras() end
     function container:SetAuraGroupMaxFrameCount() end
     function container:SetAuraGroupSortMethod() end
     created[#created + 1] = container
@@ -62,6 +64,7 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Ru
     "MidnightSimpleUnitFrames", MSUF)
 dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
 local exports = MSUF.Auras3RuntimeFactories.NativeApply("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, dependencies)
+MSUF.Auras3RuntimeFactories.LatchGuard("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, { Platform = {} })
 local ApplyLane = assert(exports.ApplyLane, "NativeApply exports no ApplyLane")
 A3._RegisterDirectIdentityRefreshContainer = function() end
 A3._UnregisterDirectIdentityRefreshContainer = function() end

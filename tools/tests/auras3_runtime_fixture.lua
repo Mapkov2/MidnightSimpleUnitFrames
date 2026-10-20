@@ -51,7 +51,7 @@ end
 function Fixture.Prepare(root, namespace)
     local factories = namespace.Auras3RuntimeFactories
     if not factories then return end
-    for _, role in ipairs({ "WorldTransition", "IdentityRefresh", "IdentityTopology" }) do
+    for _, role in ipairs({ "WorldTransition", "IdentityRefresh", "IdentityTopology", "LatchGuard" }) do
         if not factories[role] then
             assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_" .. role .. ".lua"))("MSUF", namespace)
         end
@@ -61,6 +61,9 @@ function Fixture.Prepare(root, namespace)
     for name, factory in pairs(pending) do
         factories[name] = function(addon, MSUF, A3, UF, export, dependencies)
             Fixture.Attach(root, A3)
+            if name == "IdentityEvents" then
+                pending.LatchGuard(addon, MSUF, A3, UF, export, dependencies)
+            end
             local topology, world
             if name == "IdentityEvents" and not dependencies.WorldTransition then
                 world = pending.WorldTransition(addon, MSUF, A3, UF, export, dependencies)

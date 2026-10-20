@@ -189,7 +189,8 @@ assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFram
 assert(loadfile(ADDON .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_SpellIndicators.lua"))("MidnightSimpleUnitFrames", MSUF)
 local SpellIndicators = assert(A3.SpellIndicators, "Spell Indicator runtime did not load")
-for _, name in ipairs({ "DurationText", "Signatures", "OwnerConfig", "NativeContract", "ButtonVisuals", "Containers", "NativeApply" }) do
+for _, name in ipairs({ "DurationText", "Signatures", "OwnerConfig", "NativeContract", "ButtonVisuals", "Containers", "NativeApply",
+    "LatchGuard" }) do
     assert(loadfile(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_" .. name .. ".lua"))("MidnightSimpleUnitFrames", MSUF)
 end
 local Factories = MSUF.Auras3RuntimeFactories
@@ -251,6 +252,9 @@ dependencies.ButtonVisuals = {
 }
 local Containers = Build("Containers")
 local NativeApply = Build("NativeApply")
+-- Revive checks the guard; these counting stubs never freeze.
+Build("LatchGuard").Bind({ ApplyLane = NativeApply.ApplyLane, ApplyDispelSensorRoot = NativeApply.ApplyDispelSensorRoot,
+    RecreateGroupSlots = NativeApply.RecreateGroupSlots })
 Containers.Bind({ RegisterNativeContainer = NativeApply.RegisterNativeContainer })
 Contract.Bind({ RefreshAppliedNativeRoot = NativeApply.RefreshAppliedNativeRoot })
 NativeApply.Initialize()

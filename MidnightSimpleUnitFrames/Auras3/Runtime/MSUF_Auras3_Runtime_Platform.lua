@@ -29,6 +29,8 @@ local C_Timer = _G.C_Timer
 --- Exported by MSUF_Scheduler.lua, which loads long before Auras3.
 local RunNextFrame = _G.MSUF_RunNextFrame
 local issecretvalue = _G.issecretvalue
+--- The native latch guard compares Enum.OnUpdateMode values; Enum is absent only in stripped test clients.
+local Enum = MSUF.Optional("Enum")
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local ClampNumber, Clamp01
 
@@ -165,6 +167,8 @@ return {
     AuraRuntimeCombatBlocked = AuraRuntimeCombatBlocked,
     BORDER_SENSOR_DETAIL = BORDER_SENSOR_DETAIL,
     C_Timer = C_Timer,
+    OnUpdateMode = Enum and Enum.OnUpdateMode,
+    tostring = tostring,
     Clamp01 = Clamp01,
     ClampNumber = ClampNumber,
     CreateFrame = CreateFrame,

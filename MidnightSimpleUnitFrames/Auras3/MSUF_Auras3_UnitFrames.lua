@@ -41,6 +41,7 @@ Runtime.Facade = Runtime.Facade or {}
 Runtime.Identity = Runtime.Identity or {}
 Runtime.IdentityRefresh = Runtime.IdentityRefresh or {}
 Runtime.IdentityTopology = Runtime.IdentityTopology or {}
+Runtime.LatchGuard = Runtime.LatchGuard or {}
 Runtime.NativeApply = Runtime.NativeApply or {}
 Runtime.OwnerConfig = Runtime.OwnerConfig or {}
 Runtime.Presence = Runtime.Presence or {}
@@ -158,6 +159,7 @@ identityDependencies.IdentityTopology = IdentityTopology
 local IdentityEvents = factories.IdentityEvents(addonName, MSUF, A3, UF, ExportPublic, identityDependencies)
 IdentityTopology.Bind({ OnEvent = IdentityEvents.OnEvent })
 IdentityTopology.Bind = nil
+local LatchGuard = factories.LatchGuard(addonName, MSUF, A3, UF, ExportPublic, { Platform = Platform })
 local NativeApply = factories.NativeApply(addonName, MSUF, A3, UF, ExportPublic, {
     Platform = Platform,
     Containers = Containers,
@@ -187,6 +189,12 @@ WorldTransition.Bind({
     RecreateGroupSlots = NativeApply.RecreateGroupSlots,
 })
 WorldTransition.Bind = nil
+LatchGuard.Bind({
+    ApplyLane = NativeApply.ApplyLane,
+    ApplyDispelSensorRoot = NativeApply.ApplyDispelSensorRoot,
+    RecreateGroupSlots = NativeApply.RecreateGroupSlots,
+})
+LatchGuard.Bind = nil
 NativeApply.Initialize()
 NativeApply.Initialize = nil
 

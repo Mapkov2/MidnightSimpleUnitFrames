@@ -28,6 +28,7 @@
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityRefresh.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityTopology.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_IdentityEvents.lua"/>
+  <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_LatchGuard.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_NativeApply.lua"/>
   <Script file="..\..\..\Auras3\Runtime\MSUF_Auras3_Runtime_Facade.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_UnitFrames.lua"/>

@@ -36,6 +36,7 @@ MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua	*
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityRefresh.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityTopology.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LaneConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LatchGuard.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_OwnerConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
