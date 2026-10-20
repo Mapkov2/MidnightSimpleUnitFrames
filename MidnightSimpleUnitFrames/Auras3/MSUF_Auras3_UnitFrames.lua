@@ -138,6 +138,9 @@ local IdentityEvents = factories.IdentityEvents(addonName, MSUF, A3, UF, ExportP
     Identity = Identity,
     Presence = Presence,
 })
+local LatchGuard = factories.LatchGuard(addonName, MSUF, A3, UF, ExportPublic, {
+    Platform = Platform,
+})
 local NativeApply = factories.NativeApply(addonName, MSUF, A3, UF, ExportPublic, {
     Platform = Platform,
     Containers = Containers,
@@ -167,6 +170,12 @@ IdentityEvents.Bind({
     RecreateGroupSlots = NativeApply.RecreateGroupSlots,
 })
 IdentityEvents.Bind = nil
+LatchGuard.Bind({
+    ApplyLane = NativeApply.ApplyLane,
+    ApplyDispelSensorRoot = NativeApply.ApplyDispelSensorRoot,
+    RecreateGroupSlots = NativeApply.RecreateGroupSlots,
+})
+LatchGuard.Bind = nil
 NativeApply.Initialize()
 NativeApply.Initialize = nil
 
