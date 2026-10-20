@@ -956,3 +956,5 @@ clients+Forever	lua	tools/tests/menu_group_colors_schema_parity_smoke.lua	{root}
 -	lua	tools/tests/editmode_core_history_smoke.lua	{root} Vanilla positions	Native Priority and Gameplay position popups failed: Vanilla	nightly
 -	lua	tools/tests/editmode_core_history_smoke.lua	{root} TBC positions	Native Priority and Gameplay position popups failed: TBC	nightly
 -	lua	tools/tests/editmode_core_history_smoke.lua	{root} Mists positions	Native Priority and Gameplay position popups failed: Mists	nightly
+-	lua	tools/tests/menu_castbars_parity_smoke.lua	{root} Mainline --push	Castbar settings representative input DB apply refresh history combat parity: Mainline	push
+clients+Forever	lua	tools/tests/menu_castbars_parity_smoke.lua	{root} {flavor}	Castbar settings parent input DB apply refresh history combat parity: {flavor}	nightly

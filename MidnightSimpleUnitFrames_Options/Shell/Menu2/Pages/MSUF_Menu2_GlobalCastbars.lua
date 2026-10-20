@@ -69,7 +69,10 @@ local function BuildBehaviorSection(PageState, secBuilder)
             labelWidth = 260, reason = "MSUF2_CASTBAR_SHAKE", afterWrite = ApplyAndRefresh },
         { "slider", "castbarShakeStrength", 8, { "Shake strength", 0, 30, 1, 300 }, { leftX, -72, 320 },
             reason = "MSUF2_CASTBAR_SHAKE_STRENGTH",
-            afterWrite = function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
+            afterWrite = function(reason, value, applyQueued)
+                ApplyCastbarsIfNeeded(reason, nil, applyQueued)
+                ShakeCastPreview(value)
+            end },
         { "slider", "castbarInterruptFeedbackDuration", 0.5, { "Interrupt display duration (sec)", 0, 5, 0.1, 300 }, { leftX, -126, 320 },
             reason = "MSUF2_CASTBAR_INTERRUPT_DURATION", precise = true, set = function(value)
                 local duration = max(0, min(5, tonumber(value) or 0.5))
@@ -422,14 +425,20 @@ local function BuildFocusKickSection(PageState, secBuilder)
         { "slider", "focusKickIconOffsetY", 0, { "Y offset", -500, 500, 1, 300 }, { focusLeftX, -230, 320 },
             reason = "MSUF2_FOCUS_KICK_Y", afterWrite = ApplyFocusKickOptions, name = "y" },
     }, "focus_kick")
-    local resetFocus = W.Button(focusKick, "Reset Position", 150)
-    W.MoveWidget(resetFocus, focusKick, focusLeftX, -284)
-    resetFocus:SetScript("OnClick", function()
-        SetG("focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
-        SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
-        ApplyFocusKickOptions()
-        if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
-    end)
+    local resetFocus = Schema.Build(ctx, focusKick, {
+        { "button", "resetPosition", nil, { "Reset Position", 150, 24 }, { focusLeftX, -284 },
+            beforeBind = function(widget)
+                W.NextRow(focusKick, 32)
+                widget._msuf2ControlKind = "button"
+                W.RegisterSearchObject(widget, "Reset Position", "button")
+            end,
+            action = function()
+                SetG("focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
+                SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
+                ApplyFocusKickOptions()
+                if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
+            end },
+    }).resetPosition
     RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
     Schema.Owned(resetFocus, ctx.key, "castbar")
     local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text,
@@ -491,9 +500,15 @@ local function BuildInterruptReadySection(PageState, secBuilder)
     end
     local kickLeftX, kickRightX = 14, 392
     local function Heading(id, text, x, y)
-        local label = W.LabelAt(kick, text, x, y, 160, "GameFontNormalSmall", T.colors.accent)
-        return Schema.Custom(label, { id = "menu2.opt_castbar.interrupt_ready.heading." .. id, kind = "text",
-            labelKey = text, scope = ctx.key, applyDomain = "presentation", owner = label })
+        local key = "menu2.opt_castbar.interrupt_ready.heading." .. id
+        return Schema.Build(ctx, kick, {
+            { "font", key, nil, { "GameFontNormalSmall", text, T.colors.accent }, { x, y, 160, "LEFT" },
+                beforeBind = function(label)
+                    W.RegisterSearchObject(label, text, "text")
+                    label:SetWidth(160)
+                    label:SetJustifyH("LEFT")
+                end },
+        })[key]
     end
     Heading("castbars", "Castbars", kickLeftX, -38)
     Heading("appearance", "Appearance", kickRightX, -38)
@@ -595,8 +610,9 @@ local function CreateCastbarPageState(ctx, b)
     -- Only the castbar setting/apply policy is page-owned; native controls,
     -- declarations, history and combat refusal come from the shared renderer.
     local function BuildCastControlSpecs(parent, rows, semanticPrefix)
-        local options = {}
-        options.bind = function(rowCtx, widget, row, kind)
+        local options = Schema.UnitOptions()
+        for _, row in ipairs(rows) do
+            local kind = (row[1] == "switch" or row[1] == "flowToggle") and "toggle" or row[1]
             local key, default, reason = row[2], row[3], row.reason
             local exact
             if row.classification ~= "ephemeral" then exact = { settingKey = row.settingKey or ("general." .. key) } end
@@ -623,7 +639,6 @@ local function CreateCastbarPageState(ctx, b)
                 if row.afterWrite then row.afterWrite(reason, nextValue, true) end
             end
             if row.writeDefault ~= nil then row[3] = row.writeDefault end
-            Schema.UnitBinding(rowCtx, widget, row, kind)
         end
         options.beforeBind = function(widget, row)
             if row.labelWidth then

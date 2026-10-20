@@ -1263,31 +1263,30 @@ function CastbarSection.Binders(s)
     -- reaches its color through the card's three-dot shortcut and the Colors page,
     -- so this page never grows a second swatch for a key it already edits.
     local function BuildDetailControls(parent, list, rows)
-        return Schema.Build(ctx, parent, rows, {
-            beforeBind = function(widget)
-                AddControl(list, widget)
-                W.AttachUnitEditFocus(widget, unit, "castbar")
-            end,
-            bind = function(c, widget, row, kind)
-                local key, fallback = row[2], row[3]
-                row.get = function()
-                    if kind == "slider" then return ReadGeneralNumber(key, fallback) end
-                    return ReadGeneralValue(key, fallback)
+        local options = Schema.UnitOptions()
+        options.beforeBind = function(widget)
+            AddControl(list, widget)
+            W.AttachUnitEditFocus(widget, unit, "castbar")
+        end
+        for _, row in ipairs(rows) do
+            local key, fallback, kind = row[2], row[3], row[1]
+            row.get = function()
+                if kind == "slider" then return ReadGeneralNumber(key, fallback) end
+                return ReadGeneralValue(key, fallback)
+            end
+            row.set = function(value)
+                if kind == "slider" then
+                    if row.beforeSet then row.beforeSet(value) end
+                    SetGeneralNumber(key, value, row.reason)
+                else
+                    SetGeneralValue(key, value or fallback, row.reason)
+                    if row.afterSet then row.afterSet() end
                 end
-                row.set = function(value)
-                    if kind == "slider" then
-                        if row.beforeSet then row.beforeSet(value) end
-                        SetGeneralNumber(key, value, row.reason)
-                    else
-                        SetGeneralValue(key, value or fallback, row.reason)
-                        if row.afterSet then row.afterSet() end
-                    end
-                end
-                row.meta = SettingMeta(ctx, "castbar.detail." .. tostring(row.reason), "general", key)
-                row.scope, row.roundStep = unit, kind == "slider"
-                Schema.UnitBinding(c, widget, row, kind)
-            end,
-        })
+            end
+            row.meta = SettingMeta(ctx, "castbar.detail." .. tostring(row.reason), "general", key)
+            row.scope, row.roundStep = unit, kind == "slider"
+        end
+        return Schema.Build(ctx, parent, rows, options)
     end
     s.AddControl, s.DetailKey, s.CastbarWidthKey = AddControl, DetailKey, CastbarWidthKey
     s.CastbarHeightKey, s.CastbarWidthSourceKey = CastbarHeightKey, CastbarWidthSourceKey
@@ -1422,6 +1421,8 @@ end
 function CastbarSection.Tabs(s)
     local ctx, unit, sec, sectionW = s.ctx, s.unit, s.sec, s.sectionW
     local SetCastbarSectionHeight, tabFrames = s.SetCastbarSectionHeight, s.tabFrames
+    -- This custom workspace owns tab frames, exact-search navigation and section
+    -- height. Its native controller retains selection; ordinary settings use rows.
     local castbarTabs, RefreshCastbarTabs, ReadCastbarTab, SetGuidedCastbarTab = W.SegmentTabs(ctx, sec, {
         label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
