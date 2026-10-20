@@ -56,6 +56,11 @@ local function Native(fields)
         end
     end
     function c:GetOnUpdateMode() return self.mode end
+    function c:SetAuraGroupLayout(key, layout)
+        self.layoutCalls = (self.layoutCalls or 0) + 1
+        self.lastLayout = layout
+        self:UpdateAllAuras()
+    end
     function c:IsEnabled() return self.enabled end
     function c:SetEnabled(value)
         if self.enabled ~= (value == true) then
@@ -203,7 +208,7 @@ local function Owner(unit, rootKey, fields)
     local config = { unit = unit, rootKey = rootKey, enabled = true }
     if fields and fields.sensorRoot then config.sensorRoot, config.sensor = true, true end
     config._owner = c
-    unitRoots[unit] = unitRoots[unit] or {}
+    unitRoots[unit] = unitRoots[unit] or { _msufA3ParentFrame = { unit = unit } }
     c._msufA3NativeLaneConfig, c._msufA3Root, c._msufA3ParentFrame = config, unitRoots[unit], { unit = unit }
     unitRoots[unit][rootKey] = c
     registry[unit] = registry[unit] or {}
@@ -326,6 +331,55 @@ NextFrame()
 Check(#rebuilt == before, "an owner with a secret OnUpdate mode was compared and rebuilt")
 registry.target[secretOwner] = nil
 
+-- 1g0. The pass that the target change itself starts can break: the owner is
+-- checked again after that pass (without a second full rebuild when healthy).
+local function Layered(rootKey)
+    local owner = Owner("target", rootKey)
+    owner._msufA3ManagedGroupKey, owner._msufA3GroupLayout = "group:" .. rootKey, { elementWidth = 20 }
+    return owner
+end
+local breaks = Layered("CustomAuras5")
+before = #rebuilt
+onEvent(driver, "PLAYER_TARGET_CHANGED")
+breaks.failNextPass = true
+breaks:Tick()
+NextFrame()
+NextFrame()
+Check(#rebuilt == before + 1 and rebuilt[#rebuilt] == breaks,
+    "an owner that broke during the pass of this target change was not rebuilt")
+local healthy = Layered("CustomAuras6")
+before = #rebuilt
+requests = healthy.requests or 0
+onEvent(driver, "PLAYER_TARGET_CHANGED")
+healthy:Tick()
+NextFrame()
+NextFrame()
+Check(#rebuilt == before and healthy.layoutCalls == 1 and healthy.lastLayout == healthy._msufA3GroupLayout,
+    "a healthy owner was rebuilt or not re-checked with its own layout after the pass")
+Check(healthy.requests == requests + 2, "the after-pass check requested more than one cheap mark")
+healthy:Tick()
+local pendingOwner = Layered("CustomAuras7")
+before = #rebuilt
+onEvent(driver, "PLAYER_TARGET_CHANGED")
+NextFrame()
+Check(#rebuilt == before and (pendingOwner.layoutCalls or 0) == 0, "a still pending pass was treated as finished")
+pendingOwner.failNextPass = true
+pendingOwner:Tick()
+NextFrame()
+NextFrame()
+Check(rebuilt[#rebuilt] == pendingOwner, "an owner whose pass ran a frame late and broke was not rebuilt")
+local hiddenOwner = Layered("CustomAuras8")
+hiddenOwner:Hide()
+before = #rebuilt
+onEvent(driver, "PLAYER_TARGET_CHANGED")
+NextFrame()
+NextFrame()
+Check(#rebuilt == before and (hiddenOwner.layoutCalls or 0) == 0, "a hidden owner was re-checked or rebuilt")
+for _, owner in ipairs({ Current("target", "CustomAuras5"), Current("target", "CustomAuras6"),
+    Current("target", "CustomAuras7"), hiddenOwner }) do
+    registry.target[owner] = nil
+end
+
 -- 1g. The identity-gated route (exact-ID owners present): an ineligible gated
 -- owner is not touched, an eligible frozen one is rebuilt.
 A3._unitAuraIdentityOwnerCount = 1
@@ -382,7 +436,7 @@ end
 local applyMSUF = { Auras3RuntimeFactories = {} }
 local applyA3 = { SpellIndicators = Stubs() }
 local frame = {}
-local laneRoot = {}
+local laneRoot = { _msufA3ParentFrame = frame }
 local function Bound(container, config)
     container._msufA3Root, container._msufA3ParentFrame, container._msufA3NativeLaneConfig = laneRoot, frame, config
     return container

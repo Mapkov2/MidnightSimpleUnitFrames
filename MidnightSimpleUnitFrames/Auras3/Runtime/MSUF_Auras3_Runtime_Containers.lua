@@ -81,7 +81,8 @@ local function ManagedAuraGroupLayoutOptions(lane)
 end
 
 local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
-    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
+    container._msufA3GroupLayout = ManagedAuraGroupLayoutOptions(lane)
+    container:SetAuraGroupLayout(groupKey, container._msufA3GroupLayout)
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
