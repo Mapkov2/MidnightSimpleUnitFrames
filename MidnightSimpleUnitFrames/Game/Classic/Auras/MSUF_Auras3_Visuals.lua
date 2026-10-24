@@ -1,7 +1,7 @@
 --- Classic-only visual parity for the scan-based Auras3 backend.
 --- Loaded exclusively by Classic-family manifests; Mainline keeps the native
 --- AuraContainer visual implementation and pays no load/runtime cost here.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 
 local _, MSUF = ...
 local FILE = "Game/Classic/Auras/MSUF_Auras3_Visuals.lua"

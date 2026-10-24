@@ -20,7 +20,7 @@
 local _, MSUF = ...
 
 local Client = MSUF.Client
-if not (Client and Client.IsForever == true) then return end
+if Client.IsForever ~= true then return end
 
 local TargetCombo = assert(MSUF.CPTargetCombo, "shared target-combo module must load first")
 local K = MSUF.Require("MSUF_CP_CONST", "Game/Forever/ClassPower.lua")

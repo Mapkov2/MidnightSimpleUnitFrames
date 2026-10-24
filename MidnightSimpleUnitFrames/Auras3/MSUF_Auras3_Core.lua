@@ -428,7 +428,7 @@ local function BuildLaneKeySchema()
     -- Game/Shared/Initialize.lua: 5 on TBC and Mists).
     local unitFlag = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus" }
     for index = 1, 5 do unitFlag["boss" .. index] = "showBoss" end
-    for index = 1, math.max(3, tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents) or 3) do
+    for index = 1, math.max(3, tonumber(MSUF.Client.MaxArenaOpponents) or 3) do
         unitFlag["arena" .. index] = "showArena"
     end
     schema.RUNTIME_UNITS = { "player", "pet", "target", "focus" }
@@ -531,8 +531,10 @@ end
 -- Normalizing is idempotent: skip it while the stamped profile is unchanged.
 local sDB, sAuras, sItem, sGen
 local function DefensiveItem(a)
-    a = a.customContainers; a = type(a) == "table" and a.perUnit
-    a = type(a) == "table" and a.player; a = type(a) == "table" and a.items
+    a = a.customContainers
+    a = type(a) == "table" and a.perUnit
+    a = type(a) == "table" and a.player
+    a = type(a) == "table" and a.items
     return type(a) == "table" and a[PRESET_CUSTOM_CONTAINER_INDEX] or nil
 end
 function A3.EnsureDB()

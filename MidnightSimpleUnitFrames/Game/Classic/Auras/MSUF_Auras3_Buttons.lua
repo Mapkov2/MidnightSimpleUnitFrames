@@ -10,7 +10,7 @@
 --- in this order: Buttons, Filters, FrameVisuals, Lanes, UnitFrames, Requests.
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 --- This first file claims the backend for the client.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local ExportPublic = MSUF.ExportPublic
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Auras/MSUF_Auras3_Buttons.lua")

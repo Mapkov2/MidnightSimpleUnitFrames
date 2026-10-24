@@ -115,24 +115,34 @@ function Factories.Presets(Model, Common)
 
     local FALLBACK_PUBLIC_AURA_META = {
         { key = "RAID_BUFFS", label = "Long-term Raid Buffs", category = "Raid", tooltip = "Long duration raid buffs Blizzard exposes as non-secret." },
-        { key = "PRESERVATION_EVOKER", label = "Preservation Evoker", category = "Healer", tooltip = "Dream Breath, Dream Flight, Echo, Reversion, Lifebind, Verdant Embrace." },
-        { key = "AUGMENTATION_EVOKER", label = "Augmentation Evoker", category = "Support", tooltip = "Blistering Scales, Ebon Might, Prescience, Inferno's Blessing, Symbiotic Bloom, Shifting Sands." },
-        { key = "RESTO_DRUID", label = "Restoration Druid", category = "Healer", tooltip = "Rejuvenation, Regrowth, Lifebloom, Wild Growth, Germination, Symbiotic Blooms." },
-        { key = "DISC_PRIEST", label = "Discipline Priest", category = "Healer", tooltip = "Power Word: Shield, Atonement, Void Shield, and Unfolding Vision variants." },
+        { key = "PRESERVATION_EVOKER", label = "Preservation Evoker", category = "Healer",
+          tooltip = "Dream Breath, Dream Flight, Echo, Reversion, Lifebind, Verdant Embrace." },
+        { key = "AUGMENTATION_EVOKER", label = "Augmentation Evoker", category = "Support",
+          tooltip = "Blistering Scales, Ebon Might, Prescience, Inferno's Blessing, Symbiotic Bloom, Shifting Sands." },
+        { key = "RESTO_DRUID", label = "Restoration Druid", category = "Healer",
+          tooltip = "Rejuvenation, Regrowth, Lifebloom, Wild Growth, Germination, Symbiotic Blooms." },
+        { key = "DISC_PRIEST", label = "Discipline Priest", category = "Healer",
+          tooltip = "Power Word: Shield, Atonement, Void Shield, and Unfolding Vision variants." },
         { key = "HOLY_PRIEST", label = "Holy Priest", category = "Healer", tooltip = "Renew, Prayer of Mending, Echo of Light." },
-        { key = "MISTWEAVER_MONK", label = "Mistweaver Monk", category = "Healer", tooltip = "Soothing Mist, Renewing Mist, Enveloping Mist, Aspect of Harmony, Coalescence." },
-        { key = "RESTO_SHAMAN", label = "Restoration Shaman", category = "Healer", tooltip = "Earth Shield, Riptide, Earthliving Weapon, Ancestral Vigor, Hydrobubble." },
+        { key = "MISTWEAVER_MONK", label = "Mistweaver Monk", category = "Healer",
+          tooltip = "Soothing Mist, Renewing Mist, Enveloping Mist, Aspect of Harmony, Coalescence." },
+        { key = "RESTO_SHAMAN", label = "Restoration Shaman", category = "Healer",
+          tooltip = "Earth Shield, Riptide, Earthliving Weapon, Ancestral Vigor, Hydrobubble." },
         { key = "HOLY_PALADIN", label = "Holy Paladin", category = "Healer", tooltip = "Beacon variants, Eternal Flame, and Dawnlight." },
         { key = "BLESSING_BRONZE", label = "Blessing of the Bronze", category = "Raid", tooltip = "All class-specific Blessing of the Bronze variants." },
         { key = "SELF_BUFFS", label = "Long-term Self Buffs", category = "Class", tooltip = "Rite of Sanctification and Rite of Adjuration." },
         { key = "ROGUE_POISONS", label = "Rogue Poisons", category = "Class", tooltip = "Deadly, Wound, Crippling, Numbing, Instant, Atrophic, Amplifying." },
-        { key = "SHAMAN_IMBUE", label = "Shaman Imbuements", category = "Class", tooltip = "Windfury, Flametongue, Earthliving, Tidecaller's Guard, Thunderstrike Ward." },
+        { key = "SHAMAN_IMBUE", label = "Shaman Imbuements", category = "Class",
+          tooltip = "Windfury, Flametongue, Earthliving, Tidecaller's Guard, Thunderstrike Ward." },
         { key = "RESOURCE_AURAS", label = "Resource Auras", category = "Utility", tooltip = "Mage Icicles and Hunter Tip of the Spear." },
-        { key = "COOLDOWNS", label = "Cooldowns", category = "Utility", tooltip = "Hearthstone and Shaman Reincarnation. Mythic+ teleports are not listed by Wowhead." },
+        { key = "COOLDOWNS", label = "Cooldowns", category = "Utility",
+          tooltip = "Hearthstone and Shaman Reincarnation. Mythic+ teleports are not listed by Wowhead." },
         { key = "SATED", label = "Sated / Exhaustion", category = "Utility", tooltip = "Bloodlust/Heroism exhaustion lockout auras." },
         { key = "DESERTER", label = "Deserter", category = "Utility", tooltip = "Dungeon and battleground deserter lockout auras." },
-        { key = "CHALLENGE_DEBUFFS", label = "Challenge/Instance Debuffs", category = "Utility", tooltip = "Challenger's Burden and other instance-wide timer debuffs." },
-        { key = "CLASS_UTILITY", label = "Class/Utility Auras", category = "Utility", tooltip = "Stagger and similar class utility debuffs (Demon Hunter, Druid, Monk, Shaman)." },
+        { key = "CHALLENGE_DEBUFFS", label = "Challenge/Instance Debuffs", category = "Utility",
+          tooltip = "Challenger's Burden and other instance-wide timer debuffs." },
+        { key = "CLASS_UTILITY", label = "Class/Utility Auras", category = "Utility",
+          tooltip = "Stagger and similar class utility debuffs (Demon Hunter, Druid, Monk, Shaman)." },
         { key = "SKYRIDING", label = "Skyriding/Ride Along Auras", category = "Utility", tooltip = "Skyriding and Ride Along utility auras." },
     }
 
@@ -302,7 +312,7 @@ function Factories.Presets(Model, Common)
         if type(set) ~= "table" then return values end
         for spellID in pairs(set) do
             local id, name, icon = SpellInfo(spellID)
-            if id and (not (MSUF.Client and MSUF.Client.IsClassic) or name) then
+            if id and (not MSUF.Client.IsClassic or name) then
                 values[#values + 1] = {
                     value = tostring(id),
                     text = SpellIDText(name, id),

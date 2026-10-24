@@ -8,7 +8,7 @@
 --- Game/<Flavor>/Auras.xml loads the unit-frame aura backend after Compile.lua
 --- in this order: Buttons, Filters, FrameVisuals, Lanes, UnitFrames, Requests.
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend

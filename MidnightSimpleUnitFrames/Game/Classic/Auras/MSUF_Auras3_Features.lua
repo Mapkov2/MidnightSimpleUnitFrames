@@ -5,7 +5,7 @@
 --- contract, but not that protected container. This module translates the
 --- shared MSUF profile model into ordinary scan lanes consumed by the Classic
 --- backend. It owns no events and performs no polling.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3

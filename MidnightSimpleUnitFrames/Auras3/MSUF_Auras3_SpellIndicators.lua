@@ -329,7 +329,8 @@ local function CreateSlots(root, slotRoot, parentFrame)
     local deps = D()
     if not deps.EnsureLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3._RecordNativeAuraRuntimeError((deps.addonName or "Blizzard_AuraContainer") .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
+        A3._RecordNativeAuraRuntimeError((deps.addonName or "Blizzard_AuraContainer")
+            .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
     local container = deps.CreateContainer(root)

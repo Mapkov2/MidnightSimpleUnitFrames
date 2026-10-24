@@ -310,6 +310,50 @@ local function ResolveSlotCandidateFilters(item)
     return true, candidateFilters, candidateFilterSignature
 end
 
+--- Appearance and text fields of a compiled slot. The owning Group scope's
+--- Spell Icon Style wins; a placed indicator keeps its own settings otherwise.
+local function FillSlotAppearance(slot, appearance, placed, visual, growth, showBarTimer)
+    slot.showCooldownText = showBarTimer
+        or ((appearance and appearance.showCooldownText ~= false or (not appearance and placed and placed.showCooldown ~= false)) and visual == "icon")
+    slot.showCooldownSwipe = (appearance and appearance.showCooldownSwipe ~= false
+        or (not appearance and placed and placed.showCooldownSwipe ~= false)) and visual == "icon"
+    slot.cooldownSwipeReverse = appearance and appearance.cooldownSwipeReverse == true
+        or (not appearance and placed and placed.cooldownSwipeReverse == true) or false
+    -- A placed Bar is the aura duration itself, not a static color swatch.
+    -- The shared AuraButton preparer binds its full-size StatusBar to
+    -- Blizzard's C-side duration object through SetDurationBar().
+    slot.showDurationBar = visual == "bar"
+        or (appearance and appearance.showDurationBar == true and visual == "icon" or false)
+    slot.durationBarHeight = ClampNumber(appearance and appearance.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16)
+    slot.durationBarDisplay = visual == "bar" and "BAR_ONLY"
+        or (appearance and appearance.durationBarDisplay or DEFAULT_SHARED.durationBarDisplay)
+    slot.durationBarPosition = appearance and appearance.durationBarPosition or DEFAULT_SHARED.durationBarPosition
+    slot.durationBarDirection = appearance and appearance.durationBarDirection or DEFAULT_SHARED.durationBarDirection
+    slot.durationBarSmooth = visual == "bar" and placed and placed.barSmoothFill == true or false
+    slot.durationBarReverseFill = visual == "bar" and growth:sub(1, 4) == "LEFT" or false
+    slot.showStacks = (appearance and appearance.showStacks ~= false
+        or (not appearance and placed and placed.showStacks ~= false)) and (visual == "icon" or visual == "number")
+    slot.showTooltip = appearance and appearance.showTooltip ~= false or false
+    slot.showAuraBorder = false
+    slot.showAuraSymbol = false
+    slot.cooldownSize = ClampNumber(appearance and appearance.cooldownSize or (placed and placed.cooldownSize), DEFAULT_SHARED.cooldownTextSize, 6, 40)
+    slot.cooldownAnchor = showBarTimer and SpellIndicatorAnchor(placed and placed.barTimerAnchor, "CENTER")
+        or SpellIndicatorAnchor((appearance and appearance.cooldownAnchor)
+            or (placed and placed.cooldownAnchor), "CENTER")
+    slot.cooldownX = showBarTimer and ClampNumber(placed and placed.barTimerX, 0, -2000, 2000)
+        or ClampNumber((appearance and appearance.cooldownX)
+            or (placed and placed.cooldownX), 0, -2000, 2000)
+    slot.cooldownY = showBarTimer and ClampNumber(placed and placed.barTimerY, 0, -2000, 2000)
+        or ClampNumber((appearance and appearance.cooldownY)
+            or (placed and placed.cooldownY), 0, -2000, 2000)
+    slot.cooldownDecimalSeconds = ClampNumber((appearance and appearance.cooldownDecimalSeconds)
+        or (placed and placed.cooldownDecimalSeconds), DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
+    slot.stackAnchor = SpellIndicatorAnchor(appearance and appearance.stackAnchor, "BOTTOMRIGHT")
+    slot.stackSize = ClampNumber(appearance and appearance.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40)
+    slot.stackX = ClampNumber(appearance and appearance.stackX, 0, -2000, 2000)
+    slot.stackY = ClampNumber(appearance and appearance.stackY, 0, -2000, 2000)
+end
+
 local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, spellIconStyle)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
@@ -342,7 +386,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     local rawStrata = item.strata
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     if rawStrata == nil then rawStrata = fallbackStrata end
-    return FinalizeSlot({
+    local slot = {
         spellIndicatorSlot = true,
         kind = "spellIndicator",
         slotKey = SpellIndicatorSlotKey(item, index),
@@ -421,44 +465,9 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         perRow = 1,
         cols = 1,
         rows = 1,
-        showCooldownText = showBarTimer
-            or ((appearance and appearance.showCooldownText ~= false or (not appearance and placed and placed.showCooldown ~= false)) and visual == "icon"),
-        showCooldownSwipe = (appearance and appearance.showCooldownSwipe ~= false or (not appearance and placed and placed.showCooldownSwipe ~= false)) and visual == "icon",
-        cooldownSwipeReverse = appearance and appearance.cooldownSwipeReverse == true
-            or (not appearance and placed and placed.cooldownSwipeReverse == true) or false,
-        -- A placed Bar is the aura duration itself, not a static color swatch.
-        -- The shared AuraButton preparer binds its full-size StatusBar to
-        -- Blizzard's C-side duration object through SetDurationBar().
-        showDurationBar = visual == "bar"
-            or (appearance and appearance.showDurationBar == true and visual == "icon" or false),
-        durationBarHeight = ClampNumber(appearance and appearance.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
-        durationBarDisplay = visual == "bar" and "BAR_ONLY"
-            or (appearance and appearance.durationBarDisplay or DEFAULT_SHARED.durationBarDisplay),
-        durationBarPosition = appearance and appearance.durationBarPosition or DEFAULT_SHARED.durationBarPosition,
-        durationBarDirection = appearance and appearance.durationBarDirection or DEFAULT_SHARED.durationBarDirection,
-        durationBarSmooth = visual == "bar" and placed and placed.barSmoothFill == true or false,
-        durationBarReverseFill = visual == "bar" and growth:sub(1, 4) == "LEFT" or false,
-        showStacks = (appearance and appearance.showStacks ~= false or (not appearance and placed and placed.showStacks ~= false)) and (visual == "icon" or visual == "number"),
-        showTooltip = appearance and appearance.showTooltip ~= false or false,
-        showAuraBorder = false,
-        showAuraSymbol = false,
-        cooldownSize = ClampNumber(appearance and appearance.cooldownSize or (placed and placed.cooldownSize), DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownAnchor = showBarTimer and SpellIndicatorAnchor(placed and placed.barTimerAnchor, "CENTER")
-            or SpellIndicatorAnchor((appearance and appearance.cooldownAnchor)
-                or (placed and placed.cooldownAnchor), "CENTER"),
-        cooldownX = showBarTimer and ClampNumber(placed and placed.barTimerX, 0, -2000, 2000)
-            or ClampNumber((appearance and appearance.cooldownX)
-                or (placed and placed.cooldownX), 0, -2000, 2000),
-        cooldownY = showBarTimer and ClampNumber(placed and placed.barTimerY, 0, -2000, 2000)
-            or ClampNumber((appearance and appearance.cooldownY)
-                or (placed and placed.cooldownY), 0, -2000, 2000),
-        cooldownDecimalSeconds = ClampNumber((appearance and appearance.cooldownDecimalSeconds)
-            or (placed and placed.cooldownDecimalSeconds), DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
-        stackAnchor = SpellIndicatorAnchor(appearance and appearance.stackAnchor, "BOTTOMRIGHT"),
-        stackSize = ClampNumber(appearance and appearance.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
-        stackX = ClampNumber(appearance and appearance.stackX, 0, -2000, 2000),
-        stackY = ClampNumber(appearance and appearance.stackY, 0, -2000, 2000),
-    })
+    }
+    FillSlotAppearance(slot, appearance, placed, visual, growth, showBarTimer)
+    return FinalizeSlot(slot)
 end
 
 function Runtime.CompileSlots(unit, spellIndicators, spellIconStyle)

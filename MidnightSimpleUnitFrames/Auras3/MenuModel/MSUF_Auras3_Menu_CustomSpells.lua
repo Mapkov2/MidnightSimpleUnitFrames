@@ -393,7 +393,10 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             local prioritized, used = {}, {}
             for i = 1, #priority do
                 local entry = bySpellID[priority[i]]
-                if entry then prioritized[#prioritized + 1] = entry; used[entry] = true end
+                if entry then
+                    prioritized[#prioritized + 1] = entry
+                    used[entry] = true
+                end
             end
             for i = 1, #out do
                 if not used[out[i]] then prioritized[#prioritized + 1] = out[i] end
@@ -504,7 +507,10 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
     function Model.TargetDotValues()
         local values = {}
         local playerClass
-        if type(UnitClass) == "function" then local _; _, playerClass = UnitClass("player") end
+        if type(UnitClass) == "function" then
+            local _
+            _, playerClass = UnitClass("player")
+        end
         local order = {}
         if playerClass and A3.TargetDotData and A3.TargetDotData[playerClass] then order[#order + 1] = playerClass end
         for i = 1, #TARGET_DOT_CLASS_ORDER do

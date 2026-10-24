@@ -84,8 +84,18 @@ function Model.ReadPreviewConfig(unit)
     local showBuffs = false
     local showDebuffs = false
     if unitEnabled then
-        if buffMetrics then showBuffs = buffMetrics.enabled == true else showBuffs = (buffSpec and ReadPreviewBool(context, buffSpec.showKey, true) and ReadPreviewNumber(context, buffSpec.maxKey, 12, 0, 80) > 0) or false end
-        if debuffMetrics then showDebuffs = debuffMetrics.enabled == true else showDebuffs = (debuffSpec and ReadPreviewBool(context, debuffSpec.showKey, true) and ReadPreviewNumber(context, debuffSpec.maxKey, 12, 0, 80) > 0) or false end
+        if buffMetrics then
+            showBuffs = buffMetrics.enabled == true
+        else
+            showBuffs = (buffSpec and ReadPreviewBool(context, buffSpec.showKey, true)
+                and ReadPreviewNumber(context, buffSpec.maxKey, 12, 0, 80) > 0) or false
+        end
+        if debuffMetrics then
+            showDebuffs = debuffMetrics.enabled == true
+        else
+            showDebuffs = (debuffSpec and ReadPreviewBool(context, debuffSpec.showKey, true)
+                and ReadPreviewNumber(context, debuffSpec.maxKey, 12, 0, 80) > 0) or false
+        end
     end
     return {
         unit = unit,
@@ -99,12 +109,18 @@ function Model.ReadPreviewConfig(unit)
         buffY = buffMetrics and buffMetrics.y or ReadPreviewNumber(context, "buffGroupOffsetY", 36, -4096, 4096),
         debuffX = debuffMetrics and debuffMetrics.x or ReadPreviewNumber(context, "debuffGroupOffsetX", 0, -4096, 4096),
         debuffY = debuffMetrics and debuffMetrics.y or ReadPreviewNumber(context, "debuffGroupOffsetY", 6, -4096, 4096),
-        buffAnchor = buffMetrics and buffMetrics.anchor or ReadPreviewEnum(context, buffSpec and buffSpec.anchorKey or "buffAnchor", buffSpec and buffSpec.defaultAnchor or "TOPLEFT", AURA_ANCHOR_OK),
-        debuffAnchor = debuffMetrics and debuffMetrics.anchor or ReadPreviewEnum(context, debuffSpec and debuffSpec.anchorKey or "buffAnchor", debuffSpec and debuffSpec.defaultAnchor or "TOPLEFT", AURA_ANCHOR_OK),
+        buffAnchor = buffMetrics and buffMetrics.anchor
+            or ReadPreviewEnum(context, buffSpec and buffSpec.anchorKey or "buffAnchor",
+                buffSpec and buffSpec.defaultAnchor or "TOPLEFT", AURA_ANCHOR_OK),
+        debuffAnchor = debuffMetrics and debuffMetrics.anchor
+            or ReadPreviewEnum(context, debuffSpec and debuffSpec.anchorKey or "buffAnchor",
+                debuffSpec and debuffSpec.defaultAnchor or "TOPLEFT", AURA_ANCHOR_OK),
         buffLayer = ReadPreviewNumber(context, buffSpec and buffSpec.layerKey or "buffLayer", buffSpec and buffSpec.defaultLayer or 5, 0, 30),
         debuffLayer = ReadPreviewNumber(context, debuffSpec and debuffSpec.layerKey or "buffLayer", debuffSpec and debuffSpec.defaultLayer or 5, 0, 30),
-        buffSize = buffMetrics and buffMetrics.size or ReadPreviewNumber(context, "buffGroupIconSize", ReadPreviewNumber(context, "iconSize", 26, 1, 128), 1, 128),
-        debuffSize = debuffMetrics and debuffMetrics.size or ReadPreviewNumber(context, "debuffGroupIconSize", ReadPreviewNumber(context, "iconSize", 26, 1, 128), 1, 128),
+        buffSize = buffMetrics and buffMetrics.size
+            or ReadPreviewNumber(context, "buffGroupIconSize", ReadPreviewNumber(context, "iconSize", 26, 1, 128), 1, 128),
+        debuffSize = debuffMetrics and debuffMetrics.size
+            or ReadPreviewNumber(context, "debuffGroupIconSize", ReadPreviewNumber(context, "iconSize", 26, 1, 128), 1, 128),
         buffIconZoom = buffMetrics and buffMetrics.iconZoom or ReadPreviewNumber(context, "iconZoom", 100, 100, 200, "buff"),
         debuffIconZoom = debuffMetrics and debuffMetrics.iconZoom or ReadPreviewNumber(context, "iconZoom", 100, 100, 200, "debuff"),
         buffIconShape = buffMetrics and buffMetrics.iconShape or ReadPreviewString(context, "iconShape", "RECTANGLE", "buff"),
@@ -112,7 +128,8 @@ function Model.ReadPreviewConfig(unit)
         buffRequestedIconShape = buffMetrics and buffMetrics.requestedIconShape,
         debuffRequestedIconShape = debuffMetrics and debuffMetrics.requestedIconShape,
         spacing = (buffMetrics and buffMetrics.spacing) or (debuffMetrics and debuffMetrics.spacing) or ReadPreviewNumber(context, "spacing", 2, 0, 64),
-        stylePadding = (buffMetrics and buffMetrics.padding) or (debuffMetrics and debuffMetrics.padding) or ReadPreviewNumber(context, "stylePadding", 0, 0, 16),
+        stylePadding = (buffMetrics and buffMetrics.padding) or (debuffMetrics and debuffMetrics.padding)
+            or ReadPreviewNumber(context, "stylePadding", 0, 0, 16),
         perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or ReadPreviewNumber(context, "perRow", 12, 1, 40),
         buffPerRow = buffMetrics and buffMetrics.perRow or ReadPreviewNumber(context, buffSpec and buffSpec.perRowKey or "perRow", 12, 1, 40),
         debuffPerRow = debuffMetrics and debuffMetrics.perRow or ReadPreviewNumber(context, debuffSpec and debuffSpec.perRowKey or "perRow", 12, 1, 40),
@@ -121,11 +138,13 @@ function Model.ReadPreviewConfig(unit)
         maxBuffs = buffMetrics and buffMetrics.num or ReadPreviewNumber(context, "maxBuffs", 12, 0, 80),
         maxDebuffs = debuffMetrics and debuffMetrics.num or ReadPreviewNumber(context, "maxDebuffs", 12, 0, 80),
         growth = (buffMetrics and buffMetrics.growth) or (debuffMetrics and debuffMetrics.growth) or ReadPreviewEnum(context, "growth", "RIGHT", GROWTH_OK),
-        rowWrap = (buffMetrics and buffMetrics.rowWrap) or (debuffMetrics and debuffMetrics.rowWrap) or ReadPreviewEnum(context, "rowWrap", "DOWN", ROW_WRAP_OK),
+        rowWrap = (buffMetrics and buffMetrics.rowWrap) or (debuffMetrics and debuffMetrics.rowWrap)
+            or ReadPreviewEnum(context, "rowWrap", "DOWN", ROW_WRAP_OK),
         buffGrowthX = buffMetrics and buffMetrics.growth or ReadPreviewEnum(context, buffSpec and buffSpec.growthKey or "growth", "RIGHT", GROWTH_OK),
         buffGrowthY = buffMetrics and buffMetrics.rowWrap or ReadPreviewEnum(context, buffSpec and buffSpec.wrapKey or "rowWrap", "DOWN", ROW_WRAP_OK),
         debuffGrowthX = debuffMetrics and debuffMetrics.growth or ReadPreviewEnum(context, debuffSpec and debuffSpec.growthKey or "growth", "RIGHT", GROWTH_OK),
-        debuffGrowthY = debuffMetrics and debuffMetrics.rowWrap or ReadPreviewEnum(context, debuffSpec and debuffSpec.wrapKey or "rowWrap", "DOWN", ROW_WRAP_OK),
+        debuffGrowthY = debuffMetrics and debuffMetrics.rowWrap
+            or ReadPreviewEnum(context, debuffSpec and debuffSpec.wrapKey or "rowWrap", "DOWN", ROW_WRAP_OK),
         showStackCount = ReadPreviewBool(context, "showStackCount", true),
         showCooldownText = ReadPreviewBool(context, "showCooldownText", true),
         buffShowStackCount = ReadPreviewBool(context, "showStackCount", true, "buff"),

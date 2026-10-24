@@ -9,6 +9,21 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+-- The filter keys buffs and debuffs share; each side adds its own on top.
+local function NewFilterSection()
+    return {
+        enabled = true,
+        onlyMine = false,
+        onlyImportant = false,
+        includeDispellable = false,
+        dispellableAny = false,
+        raid = false,
+        raidInCombat = false,
+        includeNameplateOnly = false,
+        exclusive = "none",
+    }
+end
+
 -- Build fresh dropdown domains for each menu schema instance.
 local function BuildDropdownDomains()
     return {
@@ -161,35 +176,16 @@ function Factories.Schema(A3)
     local DEFAULT_SHARED = LaneKeySchema.SeedDefaults()
     DEFAULT_SHARED.filters = {
         enabled = true,
-        buffs = {
-            enabled = true,
-            onlyMine = false,
-            onlyImportant = false,
-            includeDispellable = false,
-            dispellableAny = false,
-            raid = false,
-            raidInCombat = false,
-            includeNameplateOnly = false,
-            cancelable = false,
-            notCancelable = false,
-            externalDefensive = false,
-            bigDefensive = false,
-            exclusive = "none",
-        },
-        debuffs = {
-            enabled = true,
-            onlyMine = false,
-            onlyImportant = false,
-            includeDispellable = false,
-            dispellableAny = false,
-            raid = false,
-            raidInCombat = false,
-            includeNameplateOnly = false,
-            crowdControl = false,
-            nonPlayer = false,
-            exclusive = "none",
-        },
+        buffs = NewFilterSection(),
+        debuffs = NewFilterSection(),
     }
+    local buffFilters, debuffFilters = DEFAULT_SHARED.filters.buffs, DEFAULT_SHARED.filters.debuffs
+    buffFilters.cancelable = false
+    buffFilters.notCancelable = false
+    buffFilters.externalDefensive = false
+    buffFilters.bigDefensive = false
+    debuffFilters.crowdControl = false
+    debuffFilters.nonPlayer = false
 
     local DEFAULT_GENERAL = {
         aurasCooldownTextUseBuckets = false,

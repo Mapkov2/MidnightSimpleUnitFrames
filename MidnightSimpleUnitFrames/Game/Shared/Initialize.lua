@@ -75,7 +75,7 @@ if type(GetBuildInfo) == "function" then
     interfaceNumber = tonumber((select(4, GetBuildInfo())))
 end
 
-local Client = MSUF.Client or {}
+local Client = {}
 MSUF.Client = Client
 -- The interface number of the running build, read once above. Nothing else may
 -- call GetBuildInfo for it: the value cannot change while the client runs.

@@ -283,8 +283,10 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         showDurationBar = source[spec.showDurationBarKey] == true or source.showDurationBar == true,
         durationBarHeight = ClampNumber(source[spec.durationBarHeightKey] or source.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(source[spec.durationBarDisplayKey] or source.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
-        durationBarPosition = NormalizeDurationBarPosition(source[spec.durationBarPositionKey] or source.durationBarPosition, DEFAULT_SHARED.durationBarPosition),
-        durationBarDirection = NormalizeDurationBarDirection(source[spec.durationBarDirectionKey] or source.durationBarDirection, DEFAULT_SHARED.durationBarDirection),
+        durationBarPosition = NormalizeDurationBarPosition(
+            source[spec.durationBarPositionKey] or source.durationBarPosition, DEFAULT_SHARED.durationBarPosition),
+        durationBarDirection = NormalizeDurationBarDirection(
+            source[spec.durationBarDirectionKey] or source.durationBarDirection, DEFAULT_SHARED.durationBarDirection),
         showStacks = source[spec.showStackKey] ~= false,
         showTooltip = showTooltip ~= false,
         showAuraBorder = debuffTypeBorderMode ~= "OFF",

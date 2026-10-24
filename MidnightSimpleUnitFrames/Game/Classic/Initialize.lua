@@ -7,7 +7,7 @@
 
 local _, MSUF = ...
 local Client = MSUF.Client
-if not (Client and Client.IsClassic == true) then return end
+if Client.IsClassic ~= true then return end
 
 local type = type
 local Compat = MSUF.Compat or {}

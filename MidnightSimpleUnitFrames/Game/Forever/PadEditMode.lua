@@ -9,7 +9,7 @@
 -- menu, which covers most of the screen, is minimized while the pad runs Edit
 -- Mode; Start brings it back, and it returns by itself when Edit Mode ends.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local PadNav = MSUF.PadNavigation
 if not PadNav then return end
 local Kit = PadNav.Kit

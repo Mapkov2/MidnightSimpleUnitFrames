@@ -273,7 +273,10 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
 
     local function GroupConf(kind)
         local db = MSUF_DB
-        if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
+        if type(db) ~= "table" then
+            db = {}
+            ExportPublic("MSUF_DB", db)
+        end
         local key = kind == "raid" and "gf_raid" or (kind == "mythicraid" and "gf_mythicraid" or "gf_party")
         if type(db[key]) ~= "table" then db[key] = {} end
         return db[key]

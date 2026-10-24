@@ -7,7 +7,7 @@
 --- Game/<Flavor>/Auras.xml loads it after the unit-frame aura backend
 --- (Requests.lua last). It imports the compiler at load time and installs only
 --- when that backend loaded, as Requests.lua's installer call used to.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend

@@ -175,7 +175,10 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
             auras, shared = A3.EnsureDB()
         else
             local db = MSUF_DB
-            if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
+            if type(db) ~= "table" then
+                db = {}
+                ExportPublic("MSUF_DB", db)
+            end
             if type(db.auras3) ~= "table" then db.auras3 = {} end
             auras = db.auras3
             shared = auras.shared
@@ -189,7 +192,10 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         Default(auras, "showFocus", false)
         Default(auras, "showBoss", true)
         if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
-        if type(shared) ~= "table" then shared = {}; auras.shared = shared end
+        if type(shared) ~= "table" then
+            shared = {}
+            auras.shared = shared
+        end
         if type(auras.customDisplays) ~= "table" then auras.customDisplays = {} end
         if type(auras.customDisplays.shared) ~= "table" then auras.customDisplays.shared = { items = {} } end
         if type(auras.customDisplays.shared.items) ~= "table" then auras.customDisplays.shared.items = {} end
@@ -231,7 +237,10 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
 
     local function EnsureGeneralDB()
         local db = MSUF_DB
-        if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
+        if type(db) ~= "table" then
+            db = {}
+            ExportPublic("MSUF_DB", db)
+        end
         if type(db.general) ~= "table" then db.general = {} end
         DefaultsIntoOnce(db.general, DEFAULT_GENERAL)
         return db.general

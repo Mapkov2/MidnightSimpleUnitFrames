@@ -1,7 +1,7 @@
 -- Forever supplies swing events; MSUF owns the bars and profile settings.
 -- Reference: upstream/forever Blizzard_SwingTimer and Blizzard_CustomAuraButton.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local FILE = "Game/Forever/SwingTimer.lua"
 local Require = MSUF.Require
 local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)

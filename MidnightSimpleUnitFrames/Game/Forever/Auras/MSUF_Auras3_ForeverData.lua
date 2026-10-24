@@ -26,7 +26,7 @@
 local _, MSUF = ...
 
 local Client = MSUF.Client
-local IS_FOREVER = Client ~= nil and Client.IsForever == true
+local IS_FOREVER = Client.IsForever == true
 if not IS_FOREVER then return end
 
 local A3 = MSUF.MSUF_Auras3

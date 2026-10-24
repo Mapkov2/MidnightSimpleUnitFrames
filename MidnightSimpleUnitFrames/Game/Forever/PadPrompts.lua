@@ -6,7 +6,7 @@
 -- The hint list comes from PadNavigation.lua; labels are English keys MSUF.L
 -- translates.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local PadNav = MSUF.PadNavigation
 if not PadNav then return end
 local Kit = PadNav.Kit

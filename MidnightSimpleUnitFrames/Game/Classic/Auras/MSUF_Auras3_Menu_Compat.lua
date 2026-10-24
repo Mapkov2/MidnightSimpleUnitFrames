@@ -6,7 +6,7 @@
 --- without creating an empty blacklist override merely by opening the page.
 local _, MSUF = ...
 local Client = MSUF.Client
-if not (Client and Client.IsClassic == true) then return end
+if Client.IsClassic ~= true then return end
 
 local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3

@@ -22,7 +22,7 @@
 ---     A member whose state is unknown never shows an icon.
 local _, MSUF = ...
 local Client = MSUF.Client
-if not (Client and Client.IsForever == true) then return end
+if Client.IsForever ~= true then return end
 local GF = MSUF.GF
 local Blessings = assert(GF.BlessingPriorities, "BuffCoverage requires the Forever BlessingPriorities provider")
 local UnitAuraAPI = C_UnitAuras

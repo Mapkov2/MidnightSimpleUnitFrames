@@ -3,7 +3,7 @@
 -- reach a unit frame. Own only our overrides and yield to native UI bindings;
 -- never register addon callbacks or frames with Blizzard's binding manager.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local Menus = MSUF.UnitMenus
 local PadNav = MSUF.PadNavigation
 local PixelLayoutRegion = PadNav.Kit.PixelLayoutRegion

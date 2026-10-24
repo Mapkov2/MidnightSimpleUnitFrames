@@ -6,7 +6,7 @@
 --- Loaded immediately before the unit-frame aura backend (Buttons.lua first),
 --- which imports these helpers through A3._ClassicCompile, the one A3 field
 --- this file publishes.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local ExportPublic = MSUF.ExportPublic
 local PublicGlobals = MSUF.PublicGlobals

@@ -214,7 +214,10 @@ function Shape.ApplyBorderRings(button, style, shape)
         elseif ring.SetDrawLayer then
             ring:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
         end
-        if not Shape.SetTexture(ring, shape, true) then ring:Hide(); return end
+        if not Shape.SetTexture(ring, shape, true) then
+            ring:Hide()
+            return
+        end
         local inset = inner and (i - 1) or -i
         ring:ClearAllPoints()
         ring:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)

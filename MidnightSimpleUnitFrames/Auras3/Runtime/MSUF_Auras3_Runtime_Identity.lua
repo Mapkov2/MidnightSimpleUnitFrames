@@ -246,40 +246,31 @@ Identity.HasGroupAuraAssistOwners = function()
     return (A3._groupAuraAssistOwnerCount or 0) > 0
 end
 
-Identity.ApplyGroupAuraAssistStateToUnit = function(unit, canAssist)
-    local byUnit = A3._directIdentityAuraContainers
-    local containers = byUnit and byUnit[unit]
-    if not containers then return false end
-    local parents, any = {}, false
-    for container in pairs(containers) do
-        if Identity.ContainerOwnsGroupAuraAssistGate(container) then
-            local parentFrame = container._msufA3ParentFrame
-            if parentFrame and parents[parentFrame] ~= true then
-                parents[parentFrame] = true
-                any = ApplyGroupAuraAssistGate(parentFrame, canAssist, true) or any
+-- One gate applier per readiness: ready=true reveals the owners' parent frames
+-- for a known assist state, ready=false hides them. The closure keeps the call
+-- shape of the two entry points below unchanged.
+local function CreateGroupAuraAssistGateApplier(ready)
+    return function(unit, canAssist)
+        local byUnit = A3._directIdentityAuraContainers
+        local containers = byUnit and byUnit[unit]
+        if not containers then return false end
+        local parents, any = {}, false
+        for container in pairs(containers) do
+            if Identity.ContainerOwnsGroupAuraAssistGate(container) then
+                local parentFrame = container._msufA3ParentFrame
+                if parentFrame and parents[parentFrame] ~= true then
+                    parents[parentFrame] = true
+                    any = ApplyGroupAuraAssistGate(parentFrame, canAssist, ready) or any
+                end
             end
         end
+        return any
     end
-    return any
 end
 
+Identity.ApplyGroupAuraAssistStateToUnit = CreateGroupAuraAssistGateApplier(true)
 
-Identity.HideGroupAuraAssistOwners = function(unit, canAssist)
-    local byUnit = A3._directIdentityAuraContainers
-    local containers = byUnit and byUnit[unit]
-    if not containers then return false end
-    local parents, any = {}, false
-    for container in pairs(containers) do
-        if Identity.ContainerOwnsGroupAuraAssistGate(container) then
-            local parentFrame = container._msufA3ParentFrame
-            if parentFrame and parents[parentFrame] ~= true then
-                parents[parentFrame] = true
-                any = ApplyGroupAuraAssistGate(parentFrame, canAssist, false) or any
-            end
-        end
-    end
-    return any
-end
+Identity.HideGroupAuraAssistOwners = CreateGroupAuraAssistGateApplier(false)
 
 Identity.ReadGroupAuraAssistIdentity = function(unit, readGUID)
     if type(UnitCanAssist) ~= "function" then return nil, false, nil, false end

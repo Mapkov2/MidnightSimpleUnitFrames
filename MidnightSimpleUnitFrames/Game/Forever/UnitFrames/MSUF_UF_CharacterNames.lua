@@ -23,7 +23,7 @@
 local _, MSUF = ...
 
 local Client = MSUF.Client
-if not (Client and Client.HasCharacterSurnames == true) then return end
+if Client.HasCharacterSurnames ~= true then return end
 local Text = MSUF.UFText
 if not (Text and type(Text.SetDisplayNameResolver) == "function" and type(Text.UnitName) == "function") then return end
 

@@ -70,7 +70,10 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local hasCustomContainers = false
     if customLanes then
         for _, lane in pairs(customLanes) do
-            if lane and lane.enabled == true then hasCustomContainers = true; break end
+            if lane and lane.enabled == true then
+                hasCustomContainers = true
+                break
+            end
         end
     end
     local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil

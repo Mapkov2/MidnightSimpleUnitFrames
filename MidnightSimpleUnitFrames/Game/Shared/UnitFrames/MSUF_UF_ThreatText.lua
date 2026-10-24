@@ -21,7 +21,7 @@ local addonName, MSUF = ...
 
 -- Only an explicit "no" stops the file, so a harness without the client model
 -- still gets the element.
-if MSUF.Client and MSUF.Client.SupportsThreatText == false then return end
+if MSUF.Client.SupportsThreatText == false then return end
 local UF = MSUF.UF
 if not (UF and type(UF.RegisterElement) == "function") then return end
 

@@ -1,7 +1,7 @@
 --- Classic aura backend selected before the Retail 12.1 AuraContainer backend.
 --- Classic Era, TBC Classic and MoP Classic expose the C_UnitAuras/AuraUtil scan contract
 --- used here, while Classic does not ship the Retail native aura-container runtime.
-if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
+if not select(2, ...).Client.IsClassic then return end
 --- Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua
 --- The Auras element of the delta-first Classic backend: per-frame UNIT_AURA
 --- and identity dispatch, the frame's compiled config, enable and disable,

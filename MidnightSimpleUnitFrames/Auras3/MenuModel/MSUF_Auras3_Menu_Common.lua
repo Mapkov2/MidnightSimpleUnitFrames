@@ -14,7 +14,7 @@ local function AddBlacklistSpellToList(list, key, preset)
     if type(list) ~= "table" or type(list.spells) ~= "table" then return false end
     local changed = list.spells[key] ~= true
     list.spells[key] = true
-    if preset == true and MSUF.Client and MSUF.Client.IsClassic then
+    if preset == true and MSUF.Client.IsClassic then
         list.rankFamilySpellIDs = list.rankFamilySpellIDs or {}
         changed = list.rankFamilySpellIDs[key] ~= true or changed
         list.rankFamilySpellIDs[key] = true

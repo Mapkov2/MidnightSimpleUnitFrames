@@ -26,7 +26,7 @@
 -- windows and, held with LB/RB, undo/redo, the right stick moves or scrolls, a
 -- right stick press shows or hides tooltips.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Forever/PadNavigation.lua")
 
 local PadNav = {}

@@ -138,7 +138,10 @@ local function DispelSensorPriorityDetail(border, visual)
     local priorityKey = visual == "purge" and "purge" or (visual == "border" and "dispel" or nil)
     if priorityKey and type(priorityOrder) == "table" then
         for index = 1, #priorityOrder do
-            if priorityOrder[index] == priorityKey then priorityDetail = BORDER_SENSOR_DETAIL + 1 - index; break end
+            if priorityOrder[index] == priorityKey then
+                priorityDetail = BORDER_SENSOR_DETAIL + 1 - index
+                break
+            end
         end
     end
     return priorityDetail

@@ -14,7 +14,7 @@
 -- handler, B closes the keyboard and ends editing like a click elsewhere (the
 -- field commits through its focus-lost handler).
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local PadNav = MSUF.PadNavigation
 if not PadNav then return end
 local Kit = PadNav.Kit
