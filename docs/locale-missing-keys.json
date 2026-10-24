@@ -1,0 +1,91 @@
+{
+  "source": "MidnightSimpleUnitFrames/Locales/enUS.lua",
+  "runtime_fallback": "key itself (existing localization metatable)",
+  "note": "Generated translation work; stubs are suggestions, never loaded or counted as translations.",
+  "locales": {
+    "deDE": [],
+    "enGB": [
+      {
+        "key": "Above threshold",
+        "stub": "L[\"Above threshold\"] = \"Above threshold\""
+      },
+      {
+        "key": "Adjust opacity below threshold",
+        "stub": "L[\"Adjust opacity below threshold\"] = \"Adjust opacity below threshold\""
+      },
+      {
+        "key": "Any combat state",
+        "stub": "L[\"Any combat state\"] = \"Any combat state\""
+      },
+      {
+        "key": "Any health",
+        "stub": "L[\"Any health\"] = \"Any health\""
+      },
+      {
+        "key": "Below threshold",
+        "stub": "L[\"Below threshold\"] = \"Below threshold\""
+      },
+      {
+        "key": "Colors the texture from the shared low, mid and high HP gradient as health changes.",
+        "stub": "L[\"Colors the texture from the shared low, mid and high HP gradient as health changes.\"] = \"Colors the texture from the shared low, mid and high HP gradient as health changes.\""
+      },
+      {
+        "key": "Continue HP gradient",
+        "stub": "L[\"Continue HP gradient\"] = \"Continue HP gradient\""
+      },
+      {
+        "key": "HP gradient",
+        "stub": "L[\"HP gradient\"] = \"HP gradient\""
+      },
+      {
+        "key": "HP gradient color",
+        "stub": "L[\"HP gradient color\"] = \"HP gradient color\""
+      },
+      {
+        "key": "HP threshold is configured under General.",
+        "stub": "L[\"HP threshold is configured under General.\"] = \"HP threshold is configured under General.\""
+      },
+      {
+        "key": "Health",
+        "stub": "L[\"Health\"] = \"Health\""
+      },
+      {
+        "key": "Low HP opacity",
+        "stub": "L[\"Low HP opacity\"] = \"Low HP opacity\""
+      },
+      {
+        "key": "Out of combat",
+        "stub": "L[\"Out of combat\"] = \"Out of combat\""
+      },
+      {
+        "key": "Selected conditions are combined (AND).",
+        "stub": "L[\"Selected conditions are combined (AND).\"] = \"Selected conditions are combined (AND).\""
+      },
+      {
+        "key": "Single color",
+        "stub": "L[\"Single color\"] = \"Single color\""
+      },
+      {
+        "key": "Single color (monochrome)",
+        "stub": "L[\"Single color (monochrome)\"] = \"Single color (monochrome)\""
+      },
+      {
+        "key": "Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.",
+        "stub": "L[\"Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.\"] = \"Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.\""
+      },
+      {
+        "key": "When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.",
+        "stub": "L[\"When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.\"] = \"When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.\""
+      }
+    ],
+    "esES": [],
+    "esMX": [],
+    "frFR": [],
+    "itIT": [],
+    "koKR": [],
+    "ptBR": [],
+    "ruRU": [],
+    "zhCN": [],
+    "zhTW": []
+  }
+}

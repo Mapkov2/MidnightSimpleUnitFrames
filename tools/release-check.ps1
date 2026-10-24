@@ -56,6 +56,13 @@ function LuaRun([string]$Smoke, [string]$Flavor, [string]$Mode = "") {
 }
 Push-Location $root
 try {
+    Contract "generated lists" @(
+        @{ Label = "module-manifest"; Exe = $Python; Args = @("tools/generate_module_manifest.py", "--check") }
+    )
+    if ($failed) {
+        Write-Output "release-check: $failed failed; generated lists are stale or invalid; log $log"
+        exit 1
+    }
     $fast = Invoke-Check "fast-check" "powershell" @("-NoProfile", "-File", $FastCheck, "-Owner", $Owner)
     $fastOk = $fast.Ok -and $fast.Text -match "fast-check: 0 failed,"
     if (-not $fastOk) { $failed++ }

@@ -13,6 +13,7 @@ so the combined slot figure is conservative when that queue is occupied).
 
 | Contract | Clients and observations |
 | --- | --- |
+| Generated lists | Static Python check of module-manifest.json: exact TOC/XML bytes, ordered client graph, exclusions, retained files, reviewed API lists and English-derived translation stubs. Fails before acquiring a Lua slot. |
 | Profiles | Entire SavedVariables corpus on Mainline and Vanilla; sparse save/restore and reload against a full control. CRUD, active table identity, native spec event and combat deferral on Mainline/Mists, talent groups on Forever, and no spec on Vanilla. Fast check supplies all-client sparse transfer. |
 | Apply | Mainline and Vanilla: schema-bound setters, real dispatcher, native unit/group health, power, castbar, aura config, fonts and colors; border test activation/retirement; history restores painted state. |
 | Menu | All matrix clients plus Forever: shipped core/Options graph, every registered page and its lazy sections, existing schema projection capture, a real search query and exact visible target navigation. |
