@@ -12,19 +12,11 @@ luarc-notes.md
 luarsp-project.json
 AGENTS.md
 
-# Local developer toolbelt: nothing below tools/ is versioned unless a rule
-# below re-includes it or it is already tracked. The Classic gate, its
-# manifests and the smokes it runs are tracked; a new file directly in tools/
-# needs `git add -f`.
-tools/
-!/tools/
-/tools/*
-!/tools/classic-addon-tombstones.txt
-!/tools/load-graph.lock
-!/tools/load-graph.lua
-!/tools/classic-toc-identity.tsv
-!/tools/MenuTest/
-!/tools/search_catalog_harness.lua
+# tools/ is versioned by default: the release check must run from a fresh
+# checkout. Only generated caches and local scratch stay out of git.
+tools/__pycache__/
+tools/**/__pycache__/
+tools/menu_schema_coverage.json
 # Smokes: the whole folder is versioned, so a new smoke is added without -f.
 # The gate runs every smoke tools/classic-gate-smokes.tsv lists and fails on a
 # tracked smoke it neither runs nor retires.

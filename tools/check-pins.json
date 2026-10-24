@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-24",
+  "python": "3.12.7",
+  "lua": "5.1.5",
+  "luaSourceSha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
+  "blizzard": {
+    "upstream/live": "15881d522c44cd106d3d8660106ec9f9d2f44167",
+    "upstream/classic": "eb90f45fdf58706455424b15417495f45e4947d6",
+    "upstream/classic_era": "8165d4cd6e48d606369336cc3a7977902310e81e",
+    "upstream/classic_anniversary": "2cfec7c00f0f24762d5ca35a4beb1e93c0cde328",
+    "upstream/forever": "ca8368f2f2380cbe696854f7f2646387c278a61b",
+    "upstream/ptr": "03cd1ac95b8c96fcb91377a3bfc8e52d4edca9b8",
+    "upstream/ptr2": "12380f8cdc541b7f0963f74cbe0874c21a857fbb",
+    "upstream/classic_ptr": "ea6f4ee4ce0d457c02f479787293b702c062f067",
+    "upstream/classic_era_ptr": "31702bfe83af187a4344eb6934d64ba1904238ad"
+  },
+  "powershell": "7.4.6",
+  "luaSourceUrl": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
+  "blizzardRepository": "https://github.com/Gethe/wow-ui-source"
+}
