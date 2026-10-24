@@ -672,6 +672,13 @@ local function InstallCombatCrosshairZoomHooks()
     if type(CameraZoomOut) == "function" then hooksecurefunc("CameraZoomOut", CameraZoomChanged) end
 end
 
+-- Geometry is shared with Options; range colouring remains runtime-owned.
+function GameplayHelpers.PaintCrosshairGeometry(frame, size, thickness)
+    size, thickness = Clamp(size or 40, 20, 80), Clamp(thickness or 2, 1, 10)
+    frame.horiz:SetSize(size, thickness)
+    frame.vert:SetSize(thickness, size)
+end
+
 local function EnsureCombatCrosshair()
     local g = GameplayDefaults()
     InstallCombatCrosshairZoomHooks()
@@ -740,8 +747,7 @@ local function EnsureCombatCrosshair()
         if crosshairFrame._msufLastThickness ~= thickness or crosshairFrame._msufLastSizeForLines ~= size then
             crosshairFrame._msufLastThickness = thickness
             crosshairFrame._msufLastSizeForLines = size
-            crosshairFrame.horiz:SetSize(size, thickness)
-            crosshairFrame.vert:SetSize(thickness, size)
+            GameplayHelpers.PaintCrosshairGeometry(crosshairFrame, size, thickness)
         end
 
         SyncCrosshairRangeCache(g)

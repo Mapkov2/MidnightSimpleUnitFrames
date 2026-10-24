@@ -310,7 +310,6 @@ function M.OpenSeeNewFeatures()
     M.changelogSource = source
     local data = SourceData(source)
     if data and data.currentVersion then M[SelectedField(source)] = tostring(data.currentVersion) end
-    M.InvalidatePage("changelog")
     if M.SelectPage("changelog") then
         M.MarkChangelogSeen(source)
         return true

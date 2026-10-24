@@ -450,10 +450,12 @@ local function BuildGameplayCrosshair(env, controls, meleeControls)
         Meta("crosshair.melee_spell"), env.apply, "Choose spell ID or name")
     M.AppendValues(meleeControls, spellInput, classSpellToggle, specSpellToggle)
     local bars = {}
-    for i = 1, 4 do
+    for i = 1, 2 do
         bars[i] = PixelLayoutRegion(preview:CreateTexture(nil, "ARTWORK"))
         bars[i]:SetColorTexture(1, 0, 0, 1)
+        bars[i]:SetPoint("CENTER", preview, "CENTER", 0, 0)
     end
+    preview.horiz, preview.vert = bars[1], bars[2]
     local previewRefresh = function()
         local g = Gameplay()
         local id = CurrentMeleeSpellID()
@@ -461,30 +463,15 @@ local function BuildGameplayCrosshair(env, controls, meleeControls)
         if selectedSpellText then T.SetTranslatedText(selectedSpellText,
             (id > 0 and M.Format("Selected: %s (%d)", name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
         if noSpellWarn then noSpellWarn:SetShown((g.enableCombatCrosshairMeleeRangeColor == true) and id <= 0) end
-        local size = math.max(20, tonumber(g.crosshairSize) or Schema.Default("gameplay","crosshairSize"))
-        local thick = math.max(1, tonumber(g.crosshairThickness) or Schema.Default("gameplay","crosshairThickness"))
-        local previewW = (preview and preview.GetWidth and preview:GetWidth()) or 260
-        local previewH = (preview and preview.GetHeight and preview:GetHeight()) or 120
-        local centerX, centerY = previewW * 0.5, -(previewH * 0.5)
-        local gap = math.max(6, floor(size * 0.20))
+        MSUF.Gameplay.PaintCrosshairGeometry(preview, tonumber(g.crosshairSize), tonumber(g.crosshairThickness))
         local color = g.crosshairInRangeColor
         local r, gr, b = (color and color[1]) or 0, (color and color[2]) or 1, (color and color[3]) or 0
         if g.enableCombatCrosshairMeleeRangeColor then
             local c = g.crosshairOutRangeColor
             r, gr, b = (c and c[1]) or 1, (c and c[2]) or 0, (c and c[3]) or 0
         end
-        -- Bars 1/2 are the left/right arms, 3/4 the top/bottom arms; sign is the side of the centre.
-        local reach, arm = size * 0.28, size * 0.42
-        for i = 1, 4 do
-            local bar, sign = bars[i], (i == 1 or i == 4) and -1 or 1
-            bar:ClearAllPoints()
-            if i <= 2 then
-                bar:SetPoint("CENTER", preview, "TOPLEFT", centerX + sign * gap + sign * reach, centerY)
-                bar:SetSize(arm, thick)
-            else
-                bar:SetPoint("CENTER", preview, "TOPLEFT", centerX, centerY + sign * gap + sign * reach)
-                bar:SetSize(thick, arm)
-            end
+        for i = 1, 2 do
+            local bar = bars[i]
             bar:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35)
         end
     end

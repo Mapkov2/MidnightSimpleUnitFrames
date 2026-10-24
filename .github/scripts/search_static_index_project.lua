@@ -711,7 +711,13 @@ local function SearchMetadata(M, Catalog, record)
     end
     local function Value(item)
         if type(item) == "table" then
-            Add(item.text or item.label or item.name or item.title or item.value or item.key)
+            -- Locale choices have stable searchable IDs; provider bootstrapping
+            -- must not replace the existing index vocabulary with display names.
+            if record.settingKey == "general.menuLocale" and item.value ~= "auto" then
+                Add(item.value)
+            else
+                Add(item.text or item.label or item.name or item.title or item.value or item.key)
+            end
             Add(item.tooltip)
             Add(item.desc or item.description)
         else
@@ -927,7 +933,7 @@ local function Render(lines)
         "--\n",
         "-- Complete Menu2 control inventory for search. One string constant, so login\n",
         "-- pays only the parse of a literal; it is split into records the first time a\n",
-        "-- player actually uses search (see MSUF_Menu2_Search_StaticIndex.lua).\n",
+        "-- player searches; dense columns and row/page IDs are released on menu close.\n",
         "-- Columns: pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, exactSectionId, exactTargetKinds, exactTargetContracts, haystack (base + pipe + metadataNorm)\n",
         "local _, MSUF = ...\n",
         "MSUF = MSUF or _G.MSUF_NS or {}\n",
@@ -957,7 +963,7 @@ local function BuildFlavor(target)
     local client = InstallClientFacts(target)
     _G.__MSUF_MENU2_XML_MANIFEST = Menu2Manifests(suffix)
 
-    local harness = Read(HARNESS_PATH)
+    local harness = "local NativeLoadfile = loadfile\n" .. Read(HARNESS_PATH)
     local profileHook = 'local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")'
     local profileAt = harness:find(profileHook, 1, true)
     if not profileAt then Fail("profile data bootstrap hook moved") end
@@ -981,6 +987,35 @@ _G.MSUF_GetCharKey = MSUF.PublicGlobals.MSUF_GetCharKey
     local hookAt = harness:find(HARNESS_MANIFEST_HOOK, 1, true)
     if hookAt then
         harness = harness:sub(1, hookAt - 1)
+            .. [=[
+assert(loadfile("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", MSUF)
+-- The shared partial loader still recognizes the old facade as the numeric
+-- helper owner. Bind the moved provider before loading its actual shard.
+local scrollSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Scroll.lua")
+local accessibleSource = require("msuf_source_slice").Function(scrollSource, "local function AccessibleNumber", "Theme_Scroll")
+M.AccessibleNumber = assert(loadstring(accessibleSource .. "\nreturn AccessibleNumber"))()
+local scenesSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Scenes.lua")
+local animationSource = require("msuf_source_slice").Function(scenesSource, "function H.CreateAnimationStarter", "Preview_Scenes")
+M.PreviewHelpers = M.PreviewHelpers or {}
+assert(loadstring("local H = ...\n" .. animationSource))(M.PreviewHelpers)
+-- Its preview dependencies are already loaded by the complete Options graph.
+-- The partial fixture instead unconditionally rebinds an obsolete facade owner.
+local FixtureLoadfile = loadfile
+loadfile = function(path, ...)
+    if path:gsub("\\", "/"):find("/Preview/", 1, true)
+        and Read(path):find("PreviewHelpers.ExactPreviewDelta", 1, true) then
+        return NativeLoadfile(path, ...)
+    end
+    return FixtureLoadfile(path, ...)
+end
+-- The catalog harness loads only a subset of core. Install the actual runtime
+-- painter used by Gameplay's page rather than a second geometry implementation.
+assert(loadfile("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_GameplayHelpers.lua"))("MidnightSimpleUnitFrames", MSUF)
+local painterSource = require("msuf_source_slice").Function(
+    Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_GameplayRuntime.lua"),
+    "function GameplayHelpers.PaintCrosshairGeometry", "GameplayRuntime")
+assert(loadstring("local GameplayHelpers = _G.MSUF_NS.Gameplay\nlocal Clamp = GameplayHelpers.Clamp\n" .. painterSource))()
+]=]
             .. 'assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua"))("MidnightSimpleUnitFrames", MSUF)\n'
             .. harness:sub(hookAt)
     end
@@ -1070,7 +1105,7 @@ elseif toStdout then
 else
     local handle, err = io.open(OUTPUT_PATH, "wb")
     if not handle then Fail(OUTPUT_PATH .. ": " .. tostring(err)) end
-    handle:write(text)
+    handle:write((text:gsub("\n", "\r\n")))
     handle:close()
 end
 io.stderr:write(string.format("search static index: %d records from %s, %.0f KB -> %s\n",

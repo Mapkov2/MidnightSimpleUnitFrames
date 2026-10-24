@@ -2,7 +2,7 @@
 --
 -- Complete Menu2 control inventory for search. One string constant, so login
 -- pays only the parse of a literal; it is split into records the first time a
--- player actually uses search (see MSUF_Menu2_Search_StaticIndex.lua).
+-- player searches; dense columns and row/page IDs are released on menu close.
 -- Columns: pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, exactSectionId, exactTargetKinds, exactTargetContracts, haystack (base + pipe + metadataNorm)
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "4083FF167A77637CE0DDF72931B6EBE5599DE6AC57AFA55D08E191DF7A00704D"
+Search.StaticIndexSourceSha256 = "DC2B72A888B60995B1623FFDD21A179DD985627A6C15DEE080F11DD865024360"
 Search.StaticIndexRecordCount = 3910
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider|

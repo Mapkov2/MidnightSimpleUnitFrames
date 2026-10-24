@@ -24,6 +24,49 @@ local StaticIndex = Search.StaticIndex or {}
 Search.StaticIndex = StaticIndex
 
 local CONTROL_TOKEN_LIMIT = 36
+-- Includes the retained source blob, columns and localized strings, after full GC.
+-- Fuzzy/query caches belong to IndexQuery and are discarded on menu quiescence.
+StaticIndex.HEAP_BUDGET_KIB = 5632
+local FIELD = {
+    label = 1, kind = 2, hint = 3, labelNorm = 4, searchIdentity = 5,
+    hintNorm = 6, haystack = 7, settingKey = 8, actionKey = 9, sectionId = 10,
+    prepareKinds = 11, prepareContracts = 12, prepareKind = 14, prepareValue = 15,
+}
+local PAGE_FIELD = { title = "title", group = "group", titleNorm = "titleNorm", groupNorm = "groupNorm", key = "key", pageKey = "key" }
+
+-- A row is just its numeric ID. All immutable fields live in dense columns;
+-- page metadata is shared by page ID. Mutable ranking/fuzzy fields stay on the row.
+local function ColumnField(row, key)
+    local store, id = getmetatable(row), row[1]
+    if key == "controlId" then return StaticIndex.ControlId(row) end
+    local column = FIELD[key]
+    if column then return store.columns[column][id] end
+    local pageField = PAGE_FIELD[key]
+    if pageField then return store.pages[store.columns[13][id]][pageField] end
+end
+function StaticIndex.TargetField(row, key)
+    if getmetatable(row) and getmetatable(row)._staticColumns then return ColumnField(row, key) end
+    local target = row.exactTarget
+    return target and target[key]
+end
+local function RecordField(row, key)
+    if key == "static" then return true end
+    if key == "tokenLimit" then return CONTROL_TOKEN_LIMIT end
+    if key ~= "exactTarget" then
+        -- Target-only fields keep the public row shape they had before columns.
+        if (FIELD[key] and FIELD[key] > 7) or key == "controlId" or key == "pageKey" then return nil end
+        return ColumnField(row, key)
+    end
+    local controlId, settingKey, actionKey = ColumnField(row, "controlId"), ColumnField(row, "settingKey"), ColumnField(row, "actionKey")
+    if not controlId and not settingKey and not actionKey then return nil end
+    local target = { pageKey = ColumnField(row, "key"), label = ColumnField(row, "label"), controlId = controlId }
+    for field in pairs(FIELD) do
+        if field ~= "kind" and field ~= "hint" and field ~= "labelNorm" and field ~= "searchIdentity"
+            and field ~= "hintNorm" and field ~= "haystack" then target[field] = ColumnField(row, field) end
+    end
+    rawset(row, "exactTarget", target)
+    return target
+end
 
 local state = {
     records = nil,
@@ -124,6 +167,27 @@ local function DecodeIdentityPart(value)
     return value and value:gsub("%%(%x%x)", HEX_ESCAPE_BYTES)
 end
 
+local function ValidEncodedControl(value)
+    if not value or value == "" or value:find("[^%w_%%%.:/%-]") then return false end
+    local offset = 1
+    while true do
+        local first = value:find("%", offset, true)
+        if not first then return true end
+        local decoded = HEX_ESCAPE_BYTES[value:sub(first + 1, first + 2)]
+        if not decoded or decoded:find("[^%w_%.:/%-]") then return false end
+        offset = first + 3
+    end
+end
+
+-- Control IDs are needed only for navigation. Keep the encoded identity once;
+-- thousands of decoded duplicate ID strings need not live beside the source.
+function StaticIndex.ControlId(row)
+    local store, id = getmetatable(row), row[1]
+    if not store.columns[16][id] then return nil end
+    local encoded = store.columns[5][id]:match("^id\031[^\031]+\031([^\031]+)$")
+    return DecodeIdentityPart(encoded)
+end
+
 -- Contracts carry exact view identities. A multi-view selector without one
 -- matching setting is deliberately ambiguous and must not guess a destination.
 -- Every kind a contract names is a view: the generator proves each kind and
@@ -146,24 +210,24 @@ local function ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, 
     if rank > 0 and rank == score and (kind ~= k or value ~= v) then ambiguous = true end
     return kind, value, score, ambiguous, picked
 end
+local function TrackPreparationAlias(aliasKey, ambiguous, setting)
+    if type(setting) ~= "string" or setting == "*" then return aliasKey, ambiguous end
+    if aliasKey and aliasKey ~= setting then ambiguous = true end
+    return setting, ambiguous
+end
 function Search.ResolveExactPreparation(contracts, settingKey)
     local kind, value, score, ambiguous, picked = nil, nil, 0, false, nil
     local aliasKey, aliasAmbiguous
-    local function Alias(setting)
-        if type(setting) ~= "string" or setting == "*" then return end
-        if aliasKey and aliasKey ~= setting then aliasAmbiguous = true end
-        aliasKey = setting
-    end
     if type(contracts) == "string" then
         for k, v, setting in contracts:gmatch("([^|=]+)=([^|=]+)=([^|]+)") do
-            Alias(setting)
+            aliasKey, aliasAmbiguous = TrackPreparationAlias(aliasKey, aliasAmbiguous, setting)
             kind, value, score, ambiguous, picked =
                 ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, setting, settingKey)
         end
     elseif type(contracts) == "table" then
         for k, values in pairs(contracts) do
             for v, setting in pairs(values) do
-                Alias(setting)
+                aliasKey, aliasAmbiguous = TrackPreparationAlias(aliasKey, aliasAmbiguous, setting)
                 kind, value, score, ambiguous, picked =
                     ConsiderPreparation(kind, value, score, ambiguous, picked, k, v, setting, settingKey)
             end
@@ -188,9 +252,7 @@ local function DecodeLine(decoder, line)
         local base, metadataNorm = haystack:match("^(.-)|(.*)$")
         if base then haystack = metadataNorm ~= "" and (base .. " " .. metadataNorm) or base end
         local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
-        local controlId = DecodeIdentityPart(encodedControl)
-        if DecodeIdentityPart(encodedPage) ~= pageKey or not controlId
-            or not controlId:match("^[%w_%.:/%-]+$") then controlId = nil end
+        local hasControlId = DecodeIdentityPart(encodedPage) == pageKey and ValidEncodedControl(encodedControl)
         local page = EnsurePage(pageKey)
         local displayLabel = Translate(label)
         -- The baked text is English. A localized label is added on top instead of
@@ -224,34 +286,25 @@ local function DecodeLine(decoder, line)
         if settingKey == "" then settingKey = declaredSetting or "" end
         local count = decoder.count + 1
         decoder.count = count
-        records[count] = {
-            key = pageKey,
-            label = displayLabel,
-            kind = kind ~= "" and kind or "control",
-            hint = displayHint,
-            title = page.title,
-            group = page.group,
-            labelNorm = labelNorm,
-            searchIdentity = searchIdentity,
-            titleNorm = page.titleNorm,
-            groupNorm = page.groupNorm,
-            hintNorm = hintNorm,
-            haystack = haystack,
-            tokenLimit = CONTROL_TOKEN_LIMIT,
-            static = true,
-            exactTarget = (controlId or settingKey ~= "" or actionKey ~= "") and {
-                controlId = controlId,
-                pageKey = pageKey,
-                settingKey = settingKey ~= "" and settingKey or nil,
-                actionKey = actionKey ~= "" and actionKey or nil,
-                sectionId = exactSectionId ~= "" and exactSectionId or nil,
-                prepareKind = prepareKind,
-                prepareValue = prepareValue,
-                prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
-                prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
-                label = displayLabel,
-            } or nil,
-        }
+        local pageId = decoder.pageIds[pageKey]
+        if not pageId then
+            pageId = #decoder.pages + 1
+            decoder.pageIds[pageKey] = pageId
+            page.key = pageKey
+            decoder.pages[pageId] = page
+        end
+        local columns = decoder.columns
+        columns[1][count], columns[2][count] = displayLabel, kind ~= "" and kind or "control"
+        columns[3][count], columns[4][count] = displayHint, labelNorm
+        columns[5][count], columns[6][count], columns[7][count] = searchIdentity, hintNorm, haystack
+        columns[8][count] = settingKey ~= "" and settingKey or nil
+        columns[9][count] = actionKey ~= "" and actionKey or nil
+        columns[10][count] = exactSectionId ~= "" and exactSectionId or nil
+        columns[11][count] = exactTargetKinds ~= "" and exactTargetKinds or nil
+        columns[12][count] = exactTargetContracts ~= "" and exactTargetContracts or nil
+        columns[13][count], columns[14][count], columns[15][count] = pageId, prepareKind, prepareValue
+        columns[16][count] = hasControlId
+        records[count] = setmetatable({ count }, decoder.rowMeta)
     end
 end
 
@@ -264,7 +317,11 @@ local function Decode(deadline)
         local blob = Search.StaticIndexBlob
         if type(blob) ~= "string" or blob == "" then return {} end
         local _, EnsurePage = BuildPageInfo()
-        decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage }
+        local columns, pages = {}, {}
+        for i = 1, 16 do columns[i] = {} end
+        decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage,
+            columns = columns, pages = pages, pageIds = {} }
+        decoder.rowMeta = { __index = RecordField, columns = columns, pages = pages, _staticColumns = true }
         state.decoder = decoder
     end
     for line in decoder.lines do
@@ -272,8 +329,7 @@ local function Decode(deadline)
         if deadline and debugprofilestop() >= deadline then return nil end
     end
     state.decoder = nil
-    -- The decoded records own their own substrings now, so the source blob can go.
-    Search.StaticIndexBlob = nil
+    -- Keep the compact source for a sliced rebuild after menu-close cache release.
     return decoder.records
 end
 
@@ -301,20 +357,16 @@ end
 --- in combat. Callers are already gated; this is the backstop that keeps a stray
 --- entry point from spending it at the worst possible moment.
 function StaticIndex.GetRecords()
-    if not state.records then
-        if CombatLocked() then return EMPTY end
-        state.records = Decode()
-        state.localeKey = LocaleKey()
-    end
-    return state.records
+    return state.records or EMPTY
 end
 
 --- Decodes until the deadline (debugprofilestop milliseconds): true once
---- GetRecords has its records without further work. The sliced search index
---- build calls it; GetRecords finishes whatever a slice left.
+--- GetRecords has its records without further work. Every reader uses this sliced build.
 function StaticIndex.Advance(deadline)
     if not state.records then
         if CombatLocked() then return false end
+        local now = debugprofilestop()
+        deadline = math.min(deadline or (now + 1), now + 1)
         local records = Decode(deadline)
         if not records then return false end
         state.records = records
@@ -329,6 +381,6 @@ function StaticIndex.IsDecoded()
 end
 
 function StaticIndex.ClearCache()
-    if type(Search.StaticIndexBlob) == "string" then state.records, state.decoder = nil, nil end
+    state.records, state.decoder = nil, nil
     state.localeKey = nil
 end

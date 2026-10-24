@@ -1222,41 +1222,59 @@ end
 
 -- Fold once, when Text is available on the first query. Compact scripts match
 -- native stems (Korean particles included); Latin/Cyrillic words keep boundaries.
-local naturalQueryLexicon, naturalQueryLocale
-local function NaturalQueryLexicon()
+local naturalQueryLexicon, naturalQueryLocale, naturalQueryJob
+local function FoldNaturalWords(job, source, deadline)
+    while true do
+        if not job.words then
+            local kind, words = next(source, job.kind)
+            if not kind then return true end
+            job.kind, job.words, job.list, job.seen = kind, words:gmatch("[^|]+"), {}, {}
+        end
+        local word = job.words()
+        if not word then
+            if job.phase == 2 then job.normalized[job.kind] = job.list end
+            job.words = nil
+        elseif job.phase == 2 or job.kind ~= "grammar" then
+            word = M.Search.Text.NormalizeSearchText(word)
+            if job.phase == 1 then
+                local kinds = job.meanings[word] or {}
+                kinds[job.kind] = true
+                if NATIVE_OTHER[job.kind] then kinds.other = true end
+                if NATIVE_DETAIL[job.kind] then kinds.detail = true end
+                job.meanings[word] = kinds
+            elseif word ~= "" and not job.seen[word] and (not job.meanings[word] or job.meanings[word][job.kind]) then
+                local compact = word:find("[\227-\237][\128-\191][\128-\191]")
+                job.list[#job.list + 1] = { needle = compact and word or (" " .. word .. " "), compact = compact }
+                job.seen[word] = true
+            end
+        end
+        if deadline and debugprofilestop() >= deadline then return false end
+    end
+end
+local function NaturalQueryLexicon(deadline)
     local locale = MSUF.LOCALE or "enUS"
     if naturalQueryLexicon and naturalQueryLocale == locale then return naturalQueryLexicon end
-    local nativeLocale = locale == "esMX" and "esES" or (locale == "enGB" and "enUS" or locale)
-    local preferred = NATIVE_QUERY_WORDS[NATIVE_LANGUAGES[nativeLocale]] or {}
-    local meanings = {}
-    for kind, words in pairs(preferred) do
-        if kind ~= "grammar" then
-            for word in words:gmatch("[^|]+") do
-                word = M.Search.Text.NormalizeSearchText(word)
-                local kinds = meanings[word] or {}
-                kinds[kind] = true
-                if NATIVE_OTHER[kind] then kinds.other = true end
-                if NATIVE_DETAIL[kind] then kinds.detail = true end
-                meanings[word] = kinds
-            end
-        end
+    local job = naturalQueryJob
+    if not job or job.locale ~= locale then
+        local native = locale == "esMX" and "esES" or (locale == "enGB" and "enUS" or locale)
+        job = { locale = locale, phase = 1, preferred = NATIVE_QUERY_WORDS[NATIVE_LANGUAGES[native]] or {}, meanings = {}, normalized = {} }
+        naturalQueryJob = job
     end
-    local normalized = {}
-    for kind, words in pairs(NATURAL_WORDS) do
-        local list, seen = {}, {}
-        for word in words:gmatch("[^|]+") do
-            word = M.Search.Text.NormalizeSearchText(word)
-            if word ~= "" and not seen[word] and (not meanings[word] or meanings[word][kind]) then
-                local compact = word:find("[\227-\237][\128-\191][\128-\191]")
-                list[#list + 1] = { needle = compact and word or (" " .. word .. " "), compact = compact }
-                seen[word] = true
-            end
-        end
-        normalized[kind] = list
+    if job.phase == 1 then
+        if not FoldNaturalWords(job, job.preferred, deadline) then return nil end
+        job.phase, job.kind, job.words = 2, nil, nil
     end
-    naturalQueryLexicon, naturalQueryLocale = normalized, locale
-    return normalized
+    if not FoldNaturalWords(job, NATURAL_WORDS, deadline) then return nil end
+    naturalQueryLexicon, naturalQueryLocale, naturalQueryJob = job.normalized, locale, nil
+    return naturalQueryLexicon
 end
+function Data.AdvanceNaturalQueryLexicon(deadline)
+    return NaturalQueryLexicon(deadline) ~= nil
+end
+function Data.ClearNaturalQueryCache()
+    naturalQueryLexicon, naturalQueryLocale, naturalQueryJob = nil, nil, nil
+end
+
 local function NaturalWordMatch(q, words)
     local bestStart, bestEnd, bestLength = nil, nil, 0
     for _, word in ipairs(words) do

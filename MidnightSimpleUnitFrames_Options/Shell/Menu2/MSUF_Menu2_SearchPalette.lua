@@ -222,6 +222,7 @@ local function CreatePaletteController(parent, searchBox, standalone)
     function controller:Hide()
         if self.frame then self.frame:Hide() end
         self.visibleResults = {}
+        for _, row in ipairs(self.rows or {}) do row._msuf2PaletteResult = nil end
         self.selectedIndex = 1
         local bridge = SearchBridge()
         if type(bridge.CancelSearchBackgroundIndex) == "function" then
@@ -304,6 +305,7 @@ local function CreatePaletteController(parent, searchBox, standalone)
         return true
     end
 
+    M.MenuRuntime:SetQuiesceSettler(controller, function() controller:Hide() end)
     if not standalone then M.HideNavSearchPalette = function() controller:Hide() end end
     return controller
 end

@@ -1922,8 +1922,9 @@ local function EnsureAuraCombatScanner()
         s.stopBtn._msuf2AllowCombatClick = true
         s.stopBtn._msuf2SkipHistoryCheckpoint = true
         s.Finish = function(reopen)
-            if not s:IsShown() then return end
-            s:Hide()
+            if not s._scanning then return end
+            s._scanning = nil
+            s.Pause()
             M.auraBlacklistVerify = {
                 unit = s._scope, lane = s._lane, status = "scan",
                 liveCount = s._lastLive or 0, sessionCount = s._count or 0,
@@ -1937,11 +1938,10 @@ local function EnsureAuraCombatScanner()
             s.Finish(not (M.BlockCombatAction and M.BlockCombatAction()))
             return true
         end)
-        s:RegisterEvent("PLAYER_REGEN_ENABLED")
         s:SetScript("OnEvent", function(self)
             if self:IsShown() then self.Finish(true) end
         end)
-        s:SetScript("OnUpdate", function(self, elapsed)
+        s.Scan = function(self, elapsed)
             self._accum = (self._accum or 0) + (tonumber(elapsed) or 0)
             if self._accum < 0.4 then return end
             self._accum = 0
@@ -1995,7 +1995,21 @@ local function EnsureAuraCombatScanner()
                 T.SetTranslatedText(self.count, M.Format("%d captured so far", self._count or 0))
                 self.hint:Hide()
             end
-        end)
+        end
+        s.Pause = function()
+            s:SetScript("OnUpdate", nil)
+            s:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            s:Hide()
+        end
+        s.Resume = function()
+            if not s._scanning or not M.frame:IsShown() or M.IsConfigCombatLocked() then return end
+            s:RegisterEvent("PLAYER_REGEN_ENABLED")
+            s:SetScript("OnUpdate", s.Scan)
+            s:Show()
+        end
+        M.MenuRuntime:SetQuiesceSettler("aura-scanner", s.Pause)
+        M.frame:HookScript("OnShow", s.Resume)
+        s.Pause()
     end
     return s
 end
@@ -2083,7 +2097,7 @@ local function CreateLiveScanValues(unit, lane)
     end
     return CapturedAuras, CountCaptured, LiveAuraValues, CachedAuraValues, CurrentLiveAura
 end
--- Start combat scan: the overlay keeps scanning this lane after the menu closes.
+-- A scan session pauses with the menu and resumes on its next open.
 local function StartAuraCombatScan(unit, lane, CountCaptured)
     local s = EnsureAuraCombatScanner()
     s._scope, s._lane = unit, lane
@@ -2098,8 +2112,8 @@ local function StartAuraCombatScan(unit, lane, CountCaptured)
     T.SetTranslatedText(s.count, M.Format("%d captured so far", sessionCount))
     if s.hint then s.hint:Hide() end
     for i = 1, #s.icons do s.icons[i]:Hide() end
-    s:Show()
-    M.HideSlashMenuAndMinibar(M.frame)
+    s._scanning = true
+    s.Resume()
     return true
 end
 -- A live-scan button is a part of the manual input's composite control.
@@ -2186,8 +2200,7 @@ local function BuildUnitBlacklistLiveScan(B)
         return true
     end)
     local startScan = LiveScanButton(section, input, "Start combat scan", 170, nil, 24, liveY - 54,
-        "Closes the menu and keeps scanning this frame's auras until combat ends or you press Stop. Every aura an addon can block is captured with its icon - "
-            .. "auras Blizzard keeps secret cannot be blocked by any addon.", true)
+        "Scanning auras - creating a list", true)
     startScan:SetScript("OnClick", function() return StartAuraCombatScan(unit, lane, CountCaptured) end)
 end
 local function BuildUnitBlacklistManualEntry(B)

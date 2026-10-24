@@ -40,11 +40,13 @@ local function OpenExactSettingControl(settingKey, label, pageKey)
         and M.Open(M.activeKey or pageKey) == false then return false end
     local exactTarget = { pageKey = pageKey, settingKey = settingKey }
     local static = M.Search and M.Search.StaticIndex
+    if static and not static.IsDecoded() then
+        return M.Search._CoreAPI.WhenIndexReady(function() OpenExactSettingControl(settingKey, label, pageKey) end)
+    end
     if static and type(static.GetRecords) == "function" then
         for _, record in ipairs(static.GetRecords()) do
-            local target = record.exactTarget
-            if record.key == pageKey and target and target.settingKey == settingKey then
-                exactTarget = target
+            if record.key == pageKey and static.TargetField(record, "settingKey") == settingKey then
+                exactTarget = record.exactTarget
                 break
             end
         end

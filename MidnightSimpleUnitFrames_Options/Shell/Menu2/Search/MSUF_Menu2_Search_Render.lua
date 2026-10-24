@@ -378,7 +378,20 @@ end
 
 Search._CoreAPI = Search._CoreAPI or {}
 Search._CoreAPI.BuildSearchPage = BuildSearchPage
+local function ReleaseResults()
+    local variants = M._msuf2PageLayoutVariants.search or {}
+    local function Release(entry)
+        local view = entry and entry._msuf2SearchView
+        for _, row in ipairs(view and view.rows or {}) do
+            row.rec, row.anchor, row.route = nil, nil, nil
+            row.button:Hide()
+        end
+    end
+    Release(M.cache.search)
+    for _, entry in pairs(variants) do Release(entry) end
+end
 Search._Render = {
     BuildSearchPage = BuildSearchPage,
     ShowSearchPage = ShowSearchPage,
+    ReleaseResults = ReleaseResults,
 }

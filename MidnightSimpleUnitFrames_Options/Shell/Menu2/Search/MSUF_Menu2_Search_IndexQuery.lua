@@ -78,6 +78,7 @@ M.searchRegistry = SEARCH_STATE.registry
 
 local function MarkSearchIndexDirty()
     SEARCH_STATE.recordsDirty = true
+    SEARCH_STATE.recordsReady = false
     SEARCH_STATE.dirtySerial = SEARCH_STATE.dirtySerial + 1
 end
 
@@ -111,6 +112,9 @@ local function SearchMenuClosed()
 end
 
 local function CancelSearchBackgroundIndex()
+    if SEARCH_STATE.sliceTask then SEARCH_STATE.sliceTask:Cancel() end
+    SEARCH_STATE.sliceTask = nil
+    if SEARCH_STATE.request then SEARCH_STATE.request.job = nil end
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
     -- A search cut off before it ran left an empty list labelled with its query.
     -- Forget the label, so the next paint searches again instead of showing
@@ -119,6 +123,7 @@ local function CancelSearchBackgroundIndex()
     M.searchResultsPending = nil
     SEARCH_STATE.indexing = false
     SEARCH_STATE.indexQueue = nil
+    SEARCH_STATE.request, SEARCH_STATE.sliceQueued, SEARCH_STATE.readyCallbacks = nil, nil, nil
 end
 
 local SEARCH_NOISE_TEXT, SEARCH_STOP_WORDS = SearchData.NOISE_TEXT or {}, SearchData.STOP_WORDS or {}
@@ -143,72 +148,85 @@ local SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, CONTROL_KIND_LABEL = SearchData.DASHB
 local LEXICON_SOURCES = { stop = SEARCH_STOP_WORDS, soft = SEARCH_QUERY_SOFT_STOP_WORDS, aliases = SEARCH_QUERY_ALIASES }
 local searchLexiconReady = false
 local compactQueryKeys
+function M.InvalidateSearchLexicon()
+    searchLexiconReady, LEXICON_SOURCES.job = false, nil
+    SEARCH_STATE.recordsReady = false
+    SEARCH_STATE.dirtySerial = SEARCH_STATE.dirtySerial + 1
+end
 LEXICON_SOURCES.watch = { __newindex = function(dictionary, key, value)
     rawset(dictionary, key, value)
-    searchLexiconReady = false
+    M.InvalidateSearchLexicon()
 end }
 if getmetatable(LEXICON_SOURCES.stop) == nil then setmetatable(LEXICON_SOURCES.stop, LEXICON_SOURCES.watch) end
 if getmetatable(LEXICON_SOURCES.soft) == nil then setmetatable(LEXICON_SOURCES.soft, LEXICON_SOURCES.watch) end
 if getmetatable(LEXICON_SOURCES.aliases) == nil then setmetatable(LEXICON_SOURCES.aliases, LEXICON_SOURCES.watch) end
-function M.InvalidateSearchLexicon()
-    searchLexiconReady = false
-end
-local function EnsureSearchLexicon()
-    if searchLexiconReady then return end
-    local function FoldFlags(source)
-        local result = {}
-        for key, value in pairs(source) do
+local function EnsureSearchLexicon(deadline)
+    if searchLexiconReady then return true end
+    local job = LEXICON_SOURCES.job
+    if not job then
+        job = { phase = 1, stop = {}, soft = {}, keys = {}, aliases = {}, seen = {}, multiWord = {} }
+        LEXICON_SOURCES.job = job
+    end
+    local function Due() return deadline and debugprofilestop() >= deadline end
+    local function FoldFlags(source, result)
+        local key, value = next(source, job.key)
+        while key ~= nil do
             local folded = NormalizeSearchText(key)
             if folded ~= "" then result[folded] = value end
+            job.key = key
+            if Due() then return false end
+            key, value = next(source, key)
         end
-        return result
+        job.key = nil
+        return true
     end
-    SEARCH_STOP_WORDS = FoldFlags(LEXICON_SOURCES.stop)
-    SEARCH_QUERY_SOFT_STOP_WORDS = FoldFlags(LEXICON_SOURCES.soft)
-    local sourceAliases = LEXICON_SOURCES.aliases
-    local keys, aliases, seenByKey = {}, {}, {}
-    for key in pairs(sourceAliases) do keys[#keys + 1] = key end
-    table.sort(keys)
-    for _, key in ipairs(keys) do
-        local folded = NormalizeSearchText(key)
-        if folded ~= "" then
-            local terms = aliases[folded]
-            if not terms then
-                terms = {}
-                aliases[folded] = terms
-                seenByKey[folded] = {}
-            end
-            local seen, source = seenByKey[folded], sourceAliases[key]
-            for _, term in ipairs(source) do
-                term = NormalizeSearchText(term)
-                if term ~= "" and not seen[term] then
-                    terms[#terms + 1] = term
-                    seen[term] = true
+    if job.phase == 1 then
+        if not FoldFlags(LEXICON_SOURCES.stop, job.stop) then return false end
+        job.phase = 2
+    end
+    if job.phase == 2 then
+        if not FoldFlags(LEXICON_SOURCES.soft, job.soft) then return false end
+        for key in pairs(LEXICON_SOURCES.aliases) do job.keys[#job.keys + 1] = key end
+        table.sort(job.keys)
+        job.phase, job.index = 3, 1
+    end
+    if job.phase == 3 then
+        for i = job.index, #job.keys do
+            local key = job.keys[i]
+            local folded = NormalizeSearchText(key)
+            if folded ~= "" then
+                local terms = job.aliases[folded]
+                if not terms then terms = {} job.aliases[folded], job.seen[folded] = terms, {} end
+                local seen = job.seen[folded]
+                for _, term in ipairs(LEXICON_SOURCES.aliases[key]) do
+                    term = NormalizeSearchText(term)
+                    if term ~= "" and not seen[term] then terms[#terms + 1], seen[term] = term, true end
                 end
             end
+            if Due() then job.index = i + 1 return false end
         end
+        job.phase = 4
     end
-    SEARCH_QUERY_ALIASES = aliases
-    -- A key of several words ("мини карта") can never be one query word, so
-    -- such keys are listed by their first word, longest first, and
-    -- SearchRawWords matches them as one word before it splits the query.
-    local multiWord = {}
-    for folded in pairs(aliases) do
-        if folded:find(" ", 1, true) then
-            local words = {}
-            for word in folded:gmatch("%S+") do words[#words + 1] = word end
-            local bucket = multiWord[words[1]]
-            if not bucket then
-                bucket = {}
-                multiWord[words[1]] = bucket
+    if job.phase == 4 then
+        local folded = next(job.aliases, job.key)
+        while folded ~= nil do
+            if folded:find(" ", 1, true) then
+                local words = {}
+                for word in folded:gmatch("%S+") do words[#words + 1] = word end
+                local bucket = job.multiWord[words[1]] or {}
+                job.multiWord[words[1]] = bucket
+                bucket[#bucket + 1] = { key = folded, words = words }
             end
-            bucket[#bucket + 1] = { key = folded, words = words }
+            job.key = folded
+            if Due() then return false end
+            folded = next(job.aliases, folded)
         end
     end
-    for _, bucket in pairs(multiWord) do
+    for _, bucket in pairs(job.multiWord) do
         table.sort(bucket, function(a, b) return #a.words == #b.words and a.key < b.key or #a.words > #b.words end)
     end
-    SEARCH_STATE.multiWordAliases = multiWord
+    SEARCH_STOP_WORDS, SEARCH_QUERY_SOFT_STOP_WORDS, SEARCH_QUERY_ALIASES = job.stop, job.soft, job.aliases
+    SEARCH_STATE.multiWordAliases = job.multiWord
     local compounds = {}
     for source, expanded in pairs(SearchData.QUERY_COMPOUNDS or EMPTY_SEARCH_RECORDS) do
         source, expanded = NormalizeSearchText(source), NormalizeSearchText(expanded)
@@ -216,13 +234,13 @@ local function EnsureSearchLexicon()
     end
     table.sort(compounds, function(a, b) return #a[1] == #b[1] and a[1] < b[1] or #a[1] > #b[1] end)
     SEARCH_STATE.queryCompounds = compounds
-    -- Everything derived from the lexicon follows a rebuild.
     compactQueryKeys = nil
     SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = nil, nil
     SEARCH_STATE.aliasTypoCache, SEARCH_STATE.aliasTypoCount = {}, 0
     SEARCH_STATE.queryClauseCacheNorm, SEARCH_STATE.queryClauseCacheClauses = nil, nil
     SEARCH_STATE.lexiconGeneration = (SEARCH_STATE.lexiconGeneration or 0) + 1
-    searchLexiconReady = true
+    searchLexiconReady, LEXICON_SOURCES.job = true, nil
+    return true
 end
 
 local function SearchIgnoreQueryWord(word)
@@ -1853,49 +1871,42 @@ local function StaticRowsWithoutClientSupport()
     -- Suite has nameplates (the same page's probe).
     local nameplatesProbe = M.CastbarSuiteNameplatesSupported
     local nameplatesHidden = nameplatesProbe ~= nil and not nameplatesProbe()
-    local records = Search.StaticIndex.GetRecords()
-    for i = 1, #records do
-        local rec = records[i]
-        local key = rec.exactTarget and rec.exactTarget.settingKey
-        if (key and clientOnly[key] and not built[key])
-            or (gcdHidden and rec.key == "opt_castbar" and rec.exactTarget and rec.exactTarget.sectionId == "castbar_gcd")
-            or (nameplatesHidden and key == "general.kickReadyShowNameplates")
-            or (type(supportsSetting) == "function" and not supportsSetting(key)) then
-            staticRowsWithoutClientSupport[rec.searchIdentity] = true
-        end
-    end
+    staticRowsWithoutClientSupport.config = {
+        clientOnly = clientOnly, built = built, supportsSetting = supportsSetting,
+        gcdHidden = gcdHidden, nameplatesHidden = nameplatesHidden,
+    }
     return staticRowsWithoutClientSupport
 end
 
 --- Static inventory for controls whose page has never been built. A live widget
 --- record for the exact same semantic route always wins: it carries the real
 --- anchor and exact identity. Equal labels on different controls stay intact.
-local function AddStaticIndexSearchRecords(records, covered)
+local function AddStaticIndexSearchRecords(job, deadline)
     local staticIndex = Search.StaticIndex
-    if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
     local staticRecords = staticIndex.GetRecords()
-    if type(staticRecords) ~= "table" then return end
     local unsupported = StaticRowsWithoutClientSupport()
-    for i = 1, #staticRecords do
+    local config = unsupported.config
+    local records, covered = job.records, job.covered
+    for i = job.index, #staticRecords do
         local rec = staticRecords[i]
-        local identity = rec.searchIdentity
-        local target = rec.exactTarget
-        if not covered[identity] and not unsupported[identity]
-            and M.SupportsSearchTarget(rec.key, target and target.settingKey, target and target.prepareKind, target and target.prepareValue) then
+        local identity, key = rec.searchIdentity, staticIndex.TargetField(rec, "settingKey")
+        local hidden = (key and config.clientOnly[key] and not config.built[key])
+            or (config.gcdHidden and rec.key == "opt_castbar" and staticIndex.TargetField(rec, "sectionId") == "castbar_gcd")
+            or (config.nameplatesHidden and key == "general.kickReadyShowNameplates")
+            or (config.supportsSetting and not config.supportsSetting(key))
+        if not covered[identity] and not unsupported[identity] and not hidden
+            and M.SupportsSearchTarget(rec.key, key, staticIndex.TargetField(rec, "prepareKind"), staticIndex.TargetField(rec, "prepareValue")) then
             rec.order = #records + 1
             records[#records + 1] = rec
         end
+        if deadline and debugprofilestop() >= deadline then job.index = i + 1 return false end
     end
+    return true
 end
 
---- The record set is built by a resumable job (SearchIndexBuild.PHASES). A
---- synchronous reader runs it to the end at once. The debounced input path runs
---- it in slices of SLICE_MS on the menu's own task registry
---- (SearchIndexBuild.Advance), so a cold build never lands in one frame. The
---- phases keep the order of the one-shot build, so the records, their order and
---- the caches they fill are identical either way.
-local SearchIndexBuild = { SLICE_MS = 8 }
-
+-- All callers share one queued build; a getter never finishes it synchronously.
+-- The 1 ms work deadline leaves headroom below the 4 ms per-frame contract.
+local SearchIndexBuild = { SLICE_MS = 1 }
 function SearchIndexBuild.Due(deadline)
     return deadline ~= nil and debugprofilestop() >= deadline
 end
@@ -2186,8 +2197,7 @@ function SearchProviders.FilterAvailable(records, job, deadline)
         local rec = records[read]
         local available = rec.easterEgg or (M.pages and M.pages[rec.key]) ~= nil
         if available and not rec.easterEgg then
-            local target = rec.exactTarget
-            local settingKey = target and target.settingKey
+            local settingKey = Search.StaticIndex.TargetField(rec, "settingKey")
             for p = 1, #predicates do
                 if predicates[p](rec.key, settingKey, rec) == false then
                     available = false
@@ -2400,8 +2410,7 @@ SearchIndexBuild.PHASES = {
     function(job, deadline)
         local staticIndex = Search.StaticIndex
         if deadline and staticIndex and staticIndex.Advance and not staticIndex.Advance(deadline) then return false end
-        AddStaticIndexSearchRecords(job.records, job.covered)
-        return true
+        return AddStaticIndexSearchRecords(job, deadline)
     end,
     function(job)
         if job.provided then SearchProviders.Append(job.records, job.provided) end
@@ -2458,19 +2467,12 @@ function SearchIndexBuild.Step(job, deadline)
     while job.phase <= #phases do
         if not phases[job.phase](job, deadline) then return false end
         job.phase, job.index = job.phase + 1, 1
+        if job.phase <= #phases and SearchIndexBuild.Due(deadline) then return false end
     end
     return true
 end
 
---- The unfinished sliced build, while nothing invalidated the index since its
---- last slice; a synchronous reader finishes it instead of starting over.
-function SearchIndexBuild.Pending()
-    local job = SEARCH_STATE.indexQueue
-    if job and job.serial == SEARCH_STATE.dirtySerial and job.phase <= #SearchIndexBuild.PHASES then return job end
-    return nil
-end
-
-local SearchPages, SetSearchResults
+local SearchPages, SetSearchResults, RunSearchInputQuery, ScheduleSearchInputQuery
 
 local function RefreshSearchResultsPage()
     if M.activeKey ~= "search" or SearchMenuClosed() then return end
@@ -2505,11 +2507,9 @@ local function GetSearchRecords()
     if SearchCombatLocked() or SearchMenuClosed() then return EMPTY_SEARCH_RECORDS end
     EnsureSearchLocaleFresh()
     RefreshProviderContexts()
-    if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
-        local job = SearchIndexBuild.Pending() or SearchIndexBuild.New()
-        SearchIndexBuild.Step(job, nil)
-        SEARCH_STATE.records = job.records
-        SEARCH_STATE.recordsDirty = false
+    if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty or not SEARCH_STATE.recordsReady or not searchLexiconReady then
+        SearchIndexBuild.Queue()
+        return EMPTY_SEARCH_RECORDS
     end
     return SEARCH_STATE.records
 end
@@ -2539,7 +2539,7 @@ end
 --- One slice for the debounced input path, from a menu task only (never in
 --- combat; quiescing the menu drops the job): true once the records are current
 --- and warm, false when the next frame has to continue.
-function SearchIndexBuild.Advance()
+function SearchIndexBuild.Advance(deadline)
     EnsureSearchLocaleFresh()
     local job = SEARCH_STATE.indexQueue
     if job and job.serial ~= SEARCH_STATE.dirtySerial then job = nil end
@@ -2550,7 +2550,7 @@ function SearchIndexBuild.Advance()
         job = SEARCH_STATE.indexQueue
         if job and job.serial ~= SEARCH_STATE.dirtySerial then job = nil end
     end
-    local deadline = debugprofilestop and (debugprofilestop() + SearchIndexBuild.SLICE_MS) or nil
+    deadline = deadline or (debugprofilestop() + SearchIndexBuild.SLICE_MS)
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
         if not (job and job.phase <= #SearchIndexBuild.PHASES) then job = SearchIndexBuild.New() end
         SEARCH_STATE.indexQueue = job
@@ -2569,14 +2569,51 @@ function SearchIndexBuild.Advance()
         job = { records = SEARCH_STATE.records, index = 1, phase = #SearchIndexBuild.PHASES + 1 }
         SEARCH_STATE.indexQueue = job
     end
-    -- The query builds the lexicon first thing as well; tokens follow it.
-    EnsureSearchLexicon()
+    if SearchIndexBuild.Due(deadline) or not EnsureSearchLexicon(deadline)
+        or not SearchData.AdvanceNaturalQueryLexicon(deadline) then
+        job.serial = SEARCH_STATE.dirtySerial
+        return false
+    end
     if job.warm ~= SEARCH_STATE.lexiconGeneration and not SearchIndexBuild.WarmTokens(job, deadline) then
         job.serial = SEARCH_STATE.dirtySerial
         return false
     end
     job.serial = SEARCH_STATE.dirtySerial
+    SEARCH_STATE.recordsReady = true
     return true
+end
+
+function SearchIndexBuild.Pump()
+    SEARCH_STATE.sliceTask = nil
+    SEARCH_STATE.sliceQueued = nil
+    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex() return end
+    local deadline = debugprofilestop() + SearchIndexBuild.SLICE_MS
+    if not SearchIndexBuild.Advance(deadline) then SearchIndexBuild.Queue() return end
+    local callbacks = SEARCH_STATE.readyCallbacks
+    SEARCH_STATE.readyCallbacks = nil
+    for i = 1, #(callbacks or EMPTY_SEARCH_RECORDS) do callbacks[i]() end
+    local request = SEARCH_STATE.request
+    if not request or not request.debounced or request.serial ~= SEARCH_STATE.inputSerial then return end
+    if request.box and TrimText(request.box:GetText() or "") ~= request.query then return end
+    if SearchIndexBuild.Due(deadline) then SearchIndexBuild.Queue() return end
+    local queryJob = request.job
+    if queryJob and (queryJob.serial ~= SEARCH_STATE.dirtySerial or queryJob.records ~= SEARCH_STATE.records
+        or queryJob.lexicon ~= SEARCH_STATE.lexiconGeneration) then request.job = nil end
+    request.job = request.job or { index = 1, results = {}, fuzzy = {}, serial = SEARCH_STATE.dirtySerial,
+        records = SEARCH_STATE.records, lexicon = SEARCH_STATE.lexiconGeneration, sourcePage = request.sourcePage }
+    local results = SearchPages(request.query, request.job, deadline)
+    if not results then SearchIndexBuild.Queue() return end
+    SEARCH_STATE.request = nil
+    M.searchQuery, M.searchResultsPending = request.query, nil
+    SetSearchResults(results, request.query)
+    request.job = nil
+    if request.openPage or M.activeKey == "search" then Search._Render.ShowSearchPage() end
+    if request.onComplete then request.onComplete(request.query) end
+end
+function SearchIndexBuild.Queue()
+    if SEARCH_STATE.sliceQueued then return end
+    SEARCH_STATE.sliceQueued = true
+    SEARCH_STATE.sliceTask = C_Timer.After(0, SearchIndexBuild.Pump)
 end
 
 local function CurateSearchResults(results, supportQuestion)
@@ -2628,23 +2665,17 @@ local function MatchesExactQueryTarget(rec, target)
     if not target then return false end
     if target.pageKey and rec.key ~= target.pageKey then return false end
     if target.pageKey and not target.controlSuffix then return rec.kind == "page" end
-    local exact = rec.exactTarget
-    if not exact then return false end
-    if target.settingKey then return exact.settingKey == target.settingKey end
+    local field = Search.StaticIndex.TargetField
+    if target.settingKey then return field(rec, "settingKey") == target.settingKey end
     if target.settingSuffix then
-        local key = tostring(exact.settingKey or "")
+        local key = tostring(field(rec, "settingKey") or "")
         return key:sub(-#target.settingSuffix) == target.settingSuffix
     end
-    local id = tostring(exact.controlId or "")
+    local id = tostring(field(rec, "controlId") or "")
     return (target.pageKey or rec.key == "profiles") and target.controlSuffix and id:find(target.controlSuffix, 1, true) ~= nil
 end
 
-function SearchPages(query)
-    query = TrimText(query)
-    if SearchCombatLocked() or SearchMenuClosed() then
-        CancelSearchBackgroundIndex()
-        return EMPTY_SEARCH_RECORDS
-    end
+function SearchIndexBuild.QueryContext(query)
     -- Raw setting keys ("gf_party.hpTextMode") reach search from exports and
     -- support references. The baked index is pre-normalized without camelCase
     -- tokens, and the scope prefix names the provider rather than the control,
@@ -2657,8 +2688,8 @@ function SearchPages(query)
         query = query:gsub("(%l)(%u)", "%1 %2")
     end
     local normalized, clauses = BuildSearchQueryClauses(query)
-    if #clauses == 0 then return {} end
-    if SearchCharCount(normalized) < MIN_SEARCH_QUERY_LEN then return {} end
+    if #clauses == 0 then return { empty = true } end
+    if SearchCharCount(normalized) < MIN_SEARCH_QUERY_LEN then return { empty = true } end
 
     local exactQueryTarget = ExactQueryTarget(normalized)
     local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
@@ -2676,15 +2707,45 @@ function SearchPages(query)
     if supportQuestion and #clauses > 3 then
         requiredMatches = math.max(2, math.ceil(#clauses * 0.55))
     end
-    local results = {}
+    return { normalized = normalized, clauses = clauses, exactQueryTarget = exactQueryTarget,
+        supportQuestion = supportQuestion, genericLocationClauses = genericLocationClauses,
+        genericLocationQuestion = genericLocationQuestion, controlQuestion = controlQuestion,
+        profileTransferQuestion = profileTransferQuestion, wagoBrowseQuestion = wagoBrowseQuestion,
+        requiredMatches = requiredMatches }
+end
+
+function SearchPages(query, job, deadline)
+    query = TrimText(query)
+    if SearchCombatLocked() or SearchMenuClosed() then
+        CancelSearchBackgroundIndex()
+        return EMPTY_SEARCH_RECORDS
+    end
+    if SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then return EMPTY_SEARCH_RECORDS end
     local records = GetSearchRecords()
+    if SEARCH_STATE.recordsDirty or not SEARCH_STATE.records or not SEARCH_STATE.recordsReady or not searchLexiconReady then
+        if not SEARCH_STATE.request then ScheduleSearchInputQuery(nil, query, false) end
+        if job then return nil end
+        return EMPTY_SEARCH_RECORDS
+    end
+    local context = job and job.context
+    if not context then
+        context = SearchIndexBuild.QueryContext(query)
+        if job then job.context = context return nil end
+    end
+    if context.empty then return EMPTY_SEARCH_RECORDS end
+    local normalized, clauses, exactQueryTarget = context.normalized, context.clauses, context.exactQueryTarget
+    local supportQuestion, genericLocationClauses = context.supportQuestion, context.genericLocationClauses
+    local genericLocationQuestion, controlQuestion = context.genericLocationQuestion, context.controlQuestion
+    local profileTransferQuestion, wagoBrowseQuestion = context.profileTransferQuestion, context.wagoBrowseQuestion
+    local requiredMatches = context.requiredMatches
+    local results = job and job.results or {}
     local namedPageKey = SearchNaming.Page(normalized)
-    local fuzzyDistanceCache = {}
+    local fuzzyDistanceCache = job and job.fuzzy or {}
     -- The page the user searched from ranks first. While results show, the
     -- active page is the search page itself and that page is searchReturnKey.
-    local currentPageKey = M.activeKey == "search" and M.searchReturnKey or M.activeKey
+    local currentPageKey = job and job.sourcePage or (M.activeKey == "search" and M.searchReturnKey or M.activeKey)
     if currentPageKey == "home" or currentPageKey == "search" then currentPageKey = nil end
-    for i = 1, #records do
+    for i = job and job.index or 1, #records do
         local rec = records[i]
         local score = 0
         local matched = true
@@ -2758,7 +2819,9 @@ function SearchPages(query)
             rec.queryClauseCount = #clauses
             results[#results + 1] = rec
         end
+        if deadline and SearchIndexBuild.Due(deadline) then job.index = i + 1 return nil end
     end
+    if job and not job.sortReady then job.sortReady, job.index = true, #records + 1 return nil end
     table.sort(results, function(a, b)
         if a.score ~= b.score then return a.score > b.score end
         if (a.hint or "") ~= (b.hint or "") then return tostring(a.hint or "") < tostring(b.hint or "") end
@@ -2785,7 +2848,7 @@ local function ShowSearchPageForQuery(query)
     end
 end
 
-local function RunSearchInputQuery(query, openPage)
+RunSearchInputQuery = function(query, openPage)
     if SearchCombatLocked() or SearchMenuClosed() then
         CancelSearchBackgroundIndex()
         return
@@ -2806,11 +2869,10 @@ local function RunSearchInputQuery(query, openPage)
         return
     end
 
-    SetSearchResults(SearchPages(query), query)
-    if openPage then ShowSearchPageForQuery(query) end
+    ScheduleSearchInputQuery(nil, query, openPage)
 end
 
-local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
+ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete)
     if SearchCombatLocked() or SearchMenuClosed() then
         CancelSearchBackgroundIndex()
         return
@@ -2828,6 +2890,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
         return
     end
 
+    local sourcePage = M.activeKey == "search" and M.searchReturnKey or M.activeKey
     M.searchResultsPending = true
     M.searchResults = {}
     M.searchResultsQuery = query
@@ -2836,40 +2899,18 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
         ShowSearchPageForQuery(query)
     end
 
-    -- A cold index builds one slice per frame from the next frame on, also while
-    -- the debounce waits; only the latest keystroke's chain runs. The query runs
-    -- once the debounce has passed and the index is complete.
-    local debounced, sliceQueued = false, true
-    local function RunLatest()
-        sliceQueued = false
-        if serial ~= SEARCH_STATE.inputSerial then return end
-        -- Combat can start inside the debounce window. Drop the pending query
-        -- instead of running it against a locked-down UI.
-        if SearchCombatLocked() or SearchMenuClosed() then return end
-        if searchBox and searchBox.GetText then
-            local latest = TrimText(searchBox:GetText() or "")
-            if latest ~= query then return end
-        end
-        if not SearchIndexBuild.Advance() then
-            sliceQueued = true
-            C_Timer.After(0, RunLatest)
-            return
-        end
-        if not debounced then return end
-        RunSearchInputQuery(query, openPage)
-        if type(onComplete) == "function" then onComplete(query) end
-    end
-
-    C_Timer.After(0, RunLatest)
+    local request = { serial = serial, query = query, openPage = openPage, box = searchBox, onComplete = onComplete, sourcePage = sourcePage }
+    SEARCH_STATE.request = request
+    SearchIndexBuild.Queue()
     C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, function()
-        debounced = true
-        if not sliceQueued then RunLatest() end
+        if SEARCH_STATE.request ~= request or serial ~= SEARCH_STATE.inputSerial then return end
+        request.debounced = true
+        SearchIndexBuild.Queue()
     end)
 end
 
 local function OpenSearchResults(query)
-    SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
-    RunSearchInputQuery(query, true)
+    ScheduleSearchInputQuery(nil, query, true)
 end
 
 Search._RoutingContext = {
@@ -2927,6 +2968,15 @@ Search._CoreAPI = {
     SearchBoxHasText = SearchBoxHasText,
     SearchPages = SearchPages,
     GetSearchRecords = GetSearchRecords,
+    WhenIndexReady = function(callback)
+        if SearchCombatLocked() or SearchMenuClosed() then return false end
+        if SEARCH_STATE.recordsReady and not SEARCH_STATE.recordsDirty then callback() return true end
+        local callbacks = SEARCH_STATE.readyCallbacks or {}
+        SEARCH_STATE.readyCallbacks = callbacks
+        callbacks[#callbacks + 1] = callback
+        SearchIndexBuild.Queue()
+        return true
+    end,
     IsSearchPageAvailable = IsSearchPageAvailable,
     GetFAQRecords = function() return SEARCH_FAQ end,
     GetSearchProviderCache = function() return SEARCH_STATE.providerCache end,
@@ -2944,3 +2994,23 @@ if type(MSUF.RegisterLocaleCallback) == "function" then
         if M.activeKey == "search" then RefreshSearchResultsPage() end
     end)
 end
+
+M.MenuRuntime:SetQuiesceSettler("search-cache", function()
+    CancelSearchBackgroundIndex()
+    ClearSearchLocaleCaches()
+    SEARCH_STATE.records, SEARCH_STATE.pageNames = nil, nil
+    SEARCH_STATE.searchableText, SEARCH_STATE.searchableTextCount = {}, 0
+    SEARCH_STATE.aliasTypoCache, SEARCH_STATE.aliasTypoCount = {}, 0
+    SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = nil, nil
+    M.searchResults, M.searchResultsQuery = nil, nil
+    staticRowsWithoutClientSupport = nil
+    searchLexiconReady, LEXICON_SOURCES.job, compactQueryKeys = false, nil, nil
+    SEARCH_STOP_WORDS, SEARCH_QUERY_SOFT_STOP_WORDS = LEXICON_SOURCES.stop, LEXICON_SOURCES.soft
+    SEARCH_QUERY_ALIASES = LEXICON_SOURCES.aliases
+    SEARCH_STATE.multiWordAliases, SEARCH_STATE.queryCompounds = nil, nil
+    utfTokens, utfTokenCount = {}, 0
+    SearchData.ClearNaturalQueryCache()
+    Search.StaticIndex.ClearCache()
+    if Search._Render then Search._Render.ReleaseResults() end
+    MarkSearchIndexDirty()
+end)
