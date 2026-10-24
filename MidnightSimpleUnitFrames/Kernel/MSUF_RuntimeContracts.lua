@@ -23,7 +23,7 @@ if MSUF.Client.SupportsBlizzardEditMode then
 end
 for i = 1, #globals do
     local name = globals[i]
-    if type(_G[name]) ~= "function" then
+    if type(MSUF.Optional(name)) ~= "function" then
         error("MSUF core load incomplete: required function " .. name .. " missing")
     end
 end

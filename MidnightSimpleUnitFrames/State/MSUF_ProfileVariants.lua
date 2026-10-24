@@ -213,10 +213,12 @@ function Variants.Resolve(db, context)
     return applied
 end
 
+local GetPlayerSpecID
 function Variants.ContextValues(db)
     local _, location = IsInInstance()
     if not CONTEXTS[location] then location=IsInGroup() and "world" or "solo" end
-    local spec=MSUF_GetPlayerSpecID()
+    GetPlayerSpecID = GetPlayerSpecID or MSUF.Require("MSUF_GetPlayerSpecID", "State/MSUF_ProfileVariants.lua")
+    local spec=GetPlayerSpecID()
     local dark=type(db.general)=="table" and db.general.darkMode == true
     local record=db==activeDB and journal[DARK_ID]
     if record then dark=record.base==true end

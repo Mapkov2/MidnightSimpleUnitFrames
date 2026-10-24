@@ -3,6 +3,7 @@
 --- refresh to Auras3/Menu2 helpers. It should not run aura scans itself.
 
 local addonName, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_AuraPopup.lua").Client.MaxArenaOpponents
 local CALLER = "Shell/EditMode/MSUF_EditMode_AuraPopup.lua"
 local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
@@ -152,7 +153,7 @@ local function AffectedUnits(unit, shared)
         return { "boss1", "boss2", "boss3", "boss4", "boss5" }
     elseif IsArena(unit) and (not shared or shared.arenaEditTogether ~= false) then
         local units = {}
-        for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do units[i] = "arena" .. i end
+        for i = 1, tonumber(MAX_ARENA_FRAMES) or 3 do units[i] = "arena" .. i end
         return units
     end
     return { unit }
@@ -650,7 +651,7 @@ local function Build()
     }, { height = 132, boxWidth = 64, peelSkin = true })
     pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, ApplyBossTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
-    local arenaTogetherLabel = (tonumber(MSUF_MAX_ARENA_FRAMES) or 3) > 3 and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"
+    local arenaTogetherLabel = (tonumber(MAX_ARENA_FRAMES) or 3) > 3 and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"
     pf.arenaTogetherBtn = Quick.ToggleAt(pf, arenaTogetherLabel, 160, -242, 240, 28, ApplyArenaTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
     pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {

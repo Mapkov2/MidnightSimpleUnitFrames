@@ -3,6 +3,7 @@
 --- frames, resources and external elements, and batches the idle mover and
 --- toolbar syncs. Loads last of the layout family (Grid, Snap, Nudge).
 local _, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_Layout.lua").Client.MaxArenaOpponents
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing. Boss geometry resolves its existing Factory owner; other
@@ -315,7 +316,7 @@ end
 
 local function SetArenaPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
     arenaLayoutDelta = arenaLayoutDelta or MSUF.Require("MSUF_GetArenaLayoutDelta", CALLER)
-    return SetStackedPreviewPosition("arena", tonumber(MSUF_MAX_ARENA_FRAMES) or 3, arenaLayoutDelta,
+    return SetStackedPreviewPosition("arena", tonumber(MAX_ARENA_FRAMES) or 3, arenaLayoutDelta,
         point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
@@ -668,7 +669,7 @@ local function SetActiveDragFlags(d, active)
     end
     if d.isArenaLayout then
         local frames = MSUF and MSUF.UF and MSUF.UF.frames
-        for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+        for i = 1, tonumber(MAX_ARENA_FRAMES) or 3 do
             local frame = (frames and frames["arena" .. i]) or MSUF.Optional("MSUF_arena" .. i)
             if frame then frame._msufDragActive = active end
         end

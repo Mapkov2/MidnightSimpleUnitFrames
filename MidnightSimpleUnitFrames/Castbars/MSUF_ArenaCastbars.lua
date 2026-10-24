@@ -14,7 +14,7 @@ local Publish = PublicAPI.Publish
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
+local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(MSUF.Require("MSUF", "Castbars/MSUF_ArenaCastbars.lua").Client.MaxArenaOpponents) or 3)))
 -- Classic Era and WoW Forever load this file without arena units
 -- (MSUF.Client.SupportsUnit). The answer is fixed for the session, so read it once.
 local HAS_ARENA_UNITS = MSUF.Client.SupportsUnit("arena")

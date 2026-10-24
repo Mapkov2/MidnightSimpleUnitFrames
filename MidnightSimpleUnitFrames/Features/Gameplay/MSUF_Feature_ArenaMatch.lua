@@ -21,7 +21,8 @@ local ExportPublic = MSUF.ExportPublic
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(
+    MSUF.Require("MSUF", "Features/Gameplay/MSUF_Feature_ArenaMatch.lua").Client.MaxArenaOpponents) or 3)))
 local HAS_PVP_MATCH_STATE_CHANGED = C_EventUtils
     and type(C_EventUtils.IsEventValid) == "function"
     and C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
@@ -357,7 +358,7 @@ local function EnsureStealthOverlay(index)
     local frame = ArenaFrame(index)
     if not frame then return nil end
 
-    overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ArenaStealthOverlay" .. index, UIParent))
+    overlay = ExportPublic("MSUF_ArenaStealthOverlay" .. index, PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)))
     overlay:SetFrameStrata("MEDIUM")
     overlay:Hide()
 

@@ -2,6 +2,7 @@
 --- Moves the selected frame, castbar, resource bar or preview target by
 --- 1/5/10 px or one grid step through override bindings on secure buttons.
 local _, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua").Client.MaxArenaOpponents
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua")
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
@@ -258,7 +259,7 @@ local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
                 applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
             elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
                 applyKeys = {}
-                for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+                for i = 1, tonumber(MAX_ARENA_FRAMES) or 3 do
                     applyKeys[i] = "arena" .. i
                 end
             else

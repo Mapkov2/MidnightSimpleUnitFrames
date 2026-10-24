@@ -6,7 +6,9 @@ functions require the exact PLAN-10 comment immediately above their header.
 Clone exceptions additionally require tools/scorecard_clones.tsv rows with
 file, start, end, reason (inclusive source lines); every exempt occurrence must
 be wholly inside an annotated hot function. Missing/invalid data fails closed.
-Finite dynamic global families require reviewed tools/scorecard_global_families.tsv
+Dynamic ExportPublic families are bounded by the closed generated keep policy.
+Native Nudge and Forever container names use gen_global_keep source domains.
+Other finite dynamic global families require reviewed tools/scorecard_global_families.tsv
 rows: file, line, prefix, suffix, source_sha256 (normalized LF source), names
 (a JSON array of exact names), reason. Source/family changes invalidate the row.
 
@@ -181,11 +183,9 @@ def global_counts(root):
     text = keep.read(root / keep.BOOTSTRAP)
     if keep.BEGIN not in text or keep.END not in text:
         raise ValueError("generated Kernel keep data missing; run tools/gen_global_keep.py --write")
-    block = text.split(keep.BEGIN, 1)[1].split(keep.END, 1)[0]
-    target = set(re.findall(r'\["([^"\n]+)"\]\s*=\s*true', block))
-    target.update(re.findall(r"^\s*([A-Za-z_]\w*)\s*=\s*true", block, re.M))
-    if not target:
-        raise ValueError("generated Kernel keep data is empty")
+    target = keep.generated_names(text)
+    pending = keep.pending_page_names(text)
+    native_families = keep.native_dynamic_names(root)
     exports, dynamic = ledger.static_inventory(str(root))
     keep.augment_inventory(root, exports, dynamic)
     active = keep.active_exports(exports, names, prefixes)
@@ -212,6 +212,15 @@ def global_counts(root):
             if (family.passthrough or family.via not in ("assign", "frame", "export")
                     or not (family.prefix or family.suffix)):
                 continue
+            if family.via == "export" and not prefixes:
+                # A dynamic ExportPublic call is bounded by the exact generated
+                # allowlist. Namespace-only families publish zero global names.
+                active.update(name for name, allowed in names.items() if allowed and family.matches(name))
+                continue
+            native = native_families.get((rel, family.prefix, family.expr))
+            if native and family.via == "frame" and not family.suffix:
+                active.update(native[0])
+                continue
             key = rel, family.line, family.prefix, family.suffix
             if key not in reviewed:
                 unresolved.append((rel, family.line, family.describe()))
@@ -221,7 +230,7 @@ def global_counts(root):
                               if family.via != "export" or keep.allowed(name, names, prefixes))
     if set(reviewed) != used:
         raise ValueError("unused dynamic global family review")
-    return len(active), len(target), sorted(active - target), unresolved
+    return len(active), len(target), len(pending), sorted(active - target - pending), unresolved
 
 
 def menu_coverage(root):
@@ -306,9 +315,10 @@ def main():
     rows, details = [], []
     try:
         totals, long_total, long_open, clones, clones_open, details = measure(args.root)
-        active, keep_count, extra, dynamic = global_counts(args.root)
+        active, keep_count, pending_count, extra, dynamic = global_counts(args.root)
         rows.append(("global export names in _G", "%d known; %d dynamic sites unenumerated" % (active, len(dynamic)),
-                     "%d generated keep names; complete inventory" % keep_count, not extra and not dynamic))
+                     "%d generated keep + %d pending page names; complete inventory" % (keep_count, pending_count),
+                     not extra and not dynamic))
         rows.append(("functions > 150 lines", "%d (%d unexcepted)" % (long_total, long_open), "0 unexcepted", long_open == 0))
         for metric in ("client_guards", "fallback_lambdas", "semicolon_lines", "long_lines"):
             rows.append((metric, str(totals[metric]), "0", totals[metric] == 0))

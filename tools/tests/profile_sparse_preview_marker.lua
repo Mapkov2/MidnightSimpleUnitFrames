@@ -11,9 +11,9 @@ return function(root, flavor, C, H)
     local ns, env = w.core, w.env
     local factory = Serial(env.MSUF_DB)
     assert(factory.general[key] == false, "factory teaching cadence changed")
-    assert(env.MSUF_CreateProfile("Marker Created"), "profile creation failed")
+    assert(ns.Optional("MSUF_CreateProfile")("Marker Created"), "profile creation failed")
     assert(env.MSUF_GlobalDB.profiles["Marker Created"].general[key] == false, "created marker changed")
-    assert(env.MSUF_ResetProfile("Marker Created"), "profile reset failed")
+    assert(ns.Optional("MSUF_ResetProfile")("Marker Created"), "profile reset failed")
     assert(env.MSUF_GlobalDB.profiles["Marker Created"].general[key] == false, "reset marker changed")
 
     -- Neither direct menu fill nor either migration route may fill this marker early.
@@ -117,7 +117,9 @@ return function(root, flavor, C, H)
     for _ = 1, 100 do general[key] = true; ns.DefaultsSchema.Persist(measured) end
     local minimum = math.huge
     for _ = 1, 2 do
-        collectgarbage("collect"); collectgarbage("stop")
+        -- A full collect turns the cleared keys of the reused walk scratch into
+        -- dead keys; the first walk after it re-seats (and may resize) them once.
+        collectgarbage("collect"); ns.DefaultsSchema.Persist(measured); collectgarbage("stop")
         local start = collectgarbage("count")
         for _ = 1, 100 do general[key] = true; ns.DefaultsSchema.Persist(measured) end
         local bytes = (collectgarbage("count") - start) * 1024

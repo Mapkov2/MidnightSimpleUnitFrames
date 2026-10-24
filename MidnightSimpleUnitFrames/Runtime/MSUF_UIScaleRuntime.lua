@@ -3,6 +3,7 @@
 --- while the 5 MB options addon has never been loaded.
 
 local _, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Runtime/MSUF_UIScaleRuntime.lua").Client.MaxArenaOpponents
 local ExportPublic, Optional = MSUF.ExportPublic, MSUF.Optional
 local PublicGlobals = MSUF.PublicGlobals
 local M = MSUF.MSUF2 or Optional("MSUF2") or {}
@@ -105,7 +106,7 @@ local function CollectMsufScaleFrames()
         add(castbarFrames.Get("boss", i))
         add(castbarFrames.Get("bossPreview", i))
     end
-    for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 1, tonumber(MAX_ARENA_FRAMES) or 3 do
         add(castbarFrames.Get("arena", i))
         add(castbarFrames.Get("arenaPreview", i))
     end

@@ -1,8 +1,8 @@
-"""Generate the staged Kernel global keep policy; never change the active policy.
+"""Generate the active Kernel global keep policy from reviewed contracts.
 
 Uses the existing public-globals inventory and reviewed integration ledger. Suite
 sources are scanned read-only. --write installs generated data in Bootstrap;
---consumers PATH records compiler-proven bare reads that block the later flip.
+--consumers PATH records compiler-proven bare reads outside the keep list.
 No addon code is executed and no git state is written.
 """
 
@@ -23,7 +23,14 @@ BEGIN = "-- BEGIN GENERATED GLOBAL KEEP: tools/gen_global_keep.py"
 END = "-- END GENERATED GLOBAL KEEP"
 RUN_COMMANDS = ("MSUF_ShowWelcomeMessage", "MSUF_ShowClientVersionWarning")
 # These are live variables, not callable exports: PLAN-10 requires bare reads.
-RUNTIME_FLAGS = ("MSUF_InCombat",)
+RUNTIME_FLAGS = (
+    "MSUF_InCombat",
+    # Border test modes: ExportPublic writers, read bare by Borders.lua and the Global/GlobalBars pages.
+    "MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope",
+    "MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope",
+    "MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope",
+    "MSUF_BossTargetBorderTestMode", "MSUF_BossTargetBorderTestScope",
+)
 
 
 def read(path):
@@ -32,11 +39,65 @@ def read(path):
 
 def policy(root=ROOT):
     text = read(root / BOOTSTRAP)
-    block = text.split("local GlobalExports = {", 1)[1].split("\n}", 1)[0]
-    names = dict((name, value == "true") for name, value in
-                 re.findall(r'\["([^"\n]+)"\]\s*=\s*(true|false)', block))
-    block = text.split("local GlobalExportPrefixes = {", 1)[1].split("\n}", 1)[0]
-    return names, tuple(re.findall(r'"([^"\n]+)"', block))
+    if "local GlobalExports = MSUF.Compat.GlobalKeep" in text:
+        names = {name: True for name in generated_names(text)}
+        names.update((name, True) for name in pending_page_names(text))
+        return names, ()
+    raise ValueError("Kernel publication policy is not the generated keep list")
+
+
+def generated_names(text):
+    block = text.split(BEGIN, 1)[1].split(END, 1)[0]
+    names = set(re.findall(r'\["([^"\n]+)"\]\s*=\s*true', block))
+    names.update(re.findall(r"^\s*([A-Za-z_]\w*)\s*=\s*true", block, re.M))
+    if not names:
+        raise ValueError("generated Kernel keep data is empty")
+    return names
+
+
+def pending_page_names(text):
+    block = text.split("local PendingPageGlobals = {", 1)[1].split("\n}", 1)[0]
+    return set(re.findall(r"^\s*([A-Za-z_]\w*)\s*=\s*true", block, re.M))
+
+
+def native_dynamic_names(root):
+    """Finite native frame names; validate the actual name domains, not line numbers."""
+    nudge = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua"
+    text = read(root / nudge)
+    block = re.search(r"local NUDGE_DIRS = \{([^\n]+)\}", text)
+    if not block or 'SetOverrideBindingClick(owner, false, dir, "MSUF_EM2_Nudge" .. dir)' not in text:
+        raise ValueError("Nudge binding name contract changed")
+    dirs = re.findall(r'\{\s*"([A-Z]+)"\s*,', block.group(1))
+    if set(dirs) != {"UP", "DOWN", "LEFT", "RIGHT"} or len(dirs) != 4:
+        raise ValueError("Nudge button name domain changed")
+    group = "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua"
+    pad = "MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua"
+    text = read(root / group)
+    block = text.split("local KIND_TO_KEY = {", 1)[1].split("\n}", 1)[0]
+    kinds = set(re.findall(r'^\s*(\w+)\s*=\s*"gf_\w+"', block, re.M))
+    pad_text = read(root / pad)
+    pad_block = re.search(r"local GROUP_CONTAINERS = \{([^\n]+)\}", pad_text)
+    if (not pad_block or kinds != set(re.findall(r'"(\w+)"', pad_block.group(1)))
+            or '_G["MSUF_GF_Container_" .. GROUP_CONTAINERS[index]]' not in pad_text):
+        raise ValueError("Forever gamepad container name domain changed")
+    return {
+        (nudge, "MSUF_EM2_Nudge", "btnName"): (
+            {"MSUF_EM2_Nudge" + direction for direction in dirs}, "native SetOverrideBindingClick target"),
+        (group, "MSUF_GF_Container_", "kind"): (
+            {"MSUF_GF_Container_" + kind for kind in kinds}, "Forever gamepad named container reader"),
+    }
+
+
+def documented_run_names(root, exports):
+    paths = [root / rel for rel in ledger.addon_files(str(root))]
+    paths += list(root.glob("*.md")) + list((root / "docs").rglob("*.md"))
+    names = set(RUN_COMMANDS)
+    for path in paths:
+        for line in read(path).splitlines():
+            command = re.search(r"/run\s+(.+)", line)
+            if command:
+                names.update(set(re.findall(ledger.NAME, command.group(1))) & set(exports))
+    return names
 
 
 def allowed(name, names, prefixes):
@@ -173,15 +234,18 @@ def keep_inventory(root=ROOT, suite=Path(ledger.DEFAULT_SUITE_REPO)):
         for name in exports:
             if name.startswith(prefix):
                 keep(name, "Suite dynamic " + prefix)
-    for name in RUN_COMMANDS:
+    for name in documented_run_names(root, exports):
         keep(name, "documented /run")
+    for names, reason in native_dynamic_names(root).values():
+        for name in names:
+            keep(name, reason)
     for name in RUNTIME_FLAGS:
         keep(name, "bare runtime flag")
     return dict(sorted(reasons.items())), exports, dynamic
 
 
 def generated_block(reasons):
-    lines = [BEGIN, "-- Staged data only: the director switches GlobalExports after consumers move.",
+    lines = [BEGIN, "-- Active ExportPublic policy; regenerate from reviewed contracts.",
              "MSUF.Compat.GlobalKeep = {"]
     for name, why in reasons.items():
         for reason in sorted(why):
@@ -229,8 +293,7 @@ def lane(rel):
 
 
 def consumers(root, keep, exports, output):
-    names, prefixes = policy(root)
-    leaving = active_exports(exports, names, prefixes) - set(keep)
+    leaving = set(exports) - set(keep)
     paths = [str(root / rel) for rel in shipped_lua(root)]
     reads = ledger.global_reads(ratchet.find_luac(), paths)
     records = set()
@@ -261,10 +324,10 @@ def main():
             write_policy(args.root, block)
         else:
             print(block)
-        print("Generated keep: %d names; active policy unchanged" % len(reasons))
+        print("Generated keep: %d names; active ExportPublic policy" % len(reasons))
         if args.consumers:
             leaving, reads = consumers(args.root, reasons, exports, args.consumers)
-            print("Pending global removal: %d names; %d bare reader locations -> %s" %
+            print("Non-keep exports: %d names; %d bare reader locations -> %s" %
                   (leaving, reads, args.consumers))
     except (ValueError, OSError, ET.ParseError, ledger.LedgerError) as error:
         parser.exit(1, "global keep FAILED: %s\n" % error)

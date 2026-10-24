@@ -211,7 +211,7 @@ end
 local function Holder(key)
     local frame = holders[key]
     if not frame then
-        frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GroupAdditional_" .. key, UIParent))
+        frame = MSUF.ExportPublic("MSUF_GroupAdditional_" .. key, PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)))
         if key == "Targets" then frame:SetScript("OnUpdate", TickTargets) end
         holders[key] = frame
     end

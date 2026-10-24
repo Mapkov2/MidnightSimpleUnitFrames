@@ -207,7 +207,7 @@ local function EnsurePreviewAnchor(kind)
   if not kind then return nil end
   local anchor = _previewAnchors[kind]
   if not anchor then
-    anchor = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_EM2PreviewAnchor_" .. kind, UIParent))
+    anchor = ExportPublic("MSUF_GF_EM2PreviewAnchor_" .. kind, PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)))
     anchor:EnableMouse(false)
     anchor._msufIsGroupFrame = true
     anchor._msufGFKind = kind

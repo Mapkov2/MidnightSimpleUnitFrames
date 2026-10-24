@@ -1900,7 +1900,8 @@ local function AcquirePreviewFrame(scene, parent)
     free[freeCount] = nil
   elseif scene.default then
     GF._previewFrameSerial = GF._previewFrameSerial + 1
-    frame = PixelLayoutRegion(CreateFrame("Button", "MSUF_GFPreviewButton_" .. GF._previewFrameSerial, parent, "BackdropTemplate"))
+    frame = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))
+    MSUF.PublicGlobals["MSUF_GFPreviewButton_" .. GF._previewFrameSerial] = frame
     if frame.EnableMouse then frame:EnableMouse(false) end
   else
     frame = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))

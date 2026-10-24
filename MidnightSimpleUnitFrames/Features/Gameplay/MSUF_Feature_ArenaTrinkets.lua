@@ -29,7 +29,8 @@ local tonumber = tonumber
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(
+    MSUF.Require("MSUF", "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua").Client.MaxArenaOpponents) or 3)))
 local RETAIL_TRINKET_TEXTURE = 1322720 -- inv_jewelry_trinketpvp_01
 local CLASSIC_TRINKET_TEXTURE = 133453 -- inv_jewelry_trinketpvp_02
 local MISTS_TRINKET_SPELL_ID = 42292
@@ -179,7 +180,7 @@ local function EnsureHolder(index)
     local holder = holders[index]
     if holder then return holder end
 
-    holder = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ArenaTrinket" .. index, UIParent))
+    holder = MSUF.ExportPublic("MSUF_ArenaTrinket" .. index, PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)))
     holder:SetSize(20, 20)
     holder:SetFrameStrata("MEDIUM")
     holder:Hide()

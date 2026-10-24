@@ -194,7 +194,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, reason, coordinatedApplyMask)
     MSUF.PublicGlobals.MSUF_ApplyModules()
     if MSUF.SwingTimer then MSUF.SwingTimer.Apply() end
-    _G.MSUF_GF_RebuildAll()
+    MSUF.PublicGlobals.MSUF_GF_RebuildAll()
     _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
     MSUF.PublicGlobals.MSUF_ApplyPowerBarEmbedLayout_All()
     MSUF_ProfileIO_ApplyCastbarRuntime(reason)

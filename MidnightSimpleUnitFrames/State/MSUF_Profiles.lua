@@ -20,6 +20,7 @@ _G.MSUF = _G.MSUF or MSUF
 MSUF.Public = MSUF.Public or {}
 
 local ExportPublic = MSUF.ExportPublic
+local GetCharKey, GetPlayerSpecID, IsSpecAutoSwitchEnabled, GetSpecProfile, ApplySpecProfileIfEnabled, InitProfiles
 
 --- Shared coldpath field helpers (State/MSUF_StateHelpers.lua) and the import
 --- parser plus compact transport codecs (State/MSUF_ProfileCodec.lua) load
@@ -187,7 +188,8 @@ function MSUF_InitProfiles(startup)
     local legacyDB = startup and startup.legacyDB or MSUF_DB
     local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
-    local charKey = MSUF_GetCharKey()
+    GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
+    local charKey = GetCharKey()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     local active = char.activeProfile
@@ -338,7 +340,8 @@ function MSUF_SwitchProfile(name)
     end
     local prepared,why=BeforeProfileSwitch()
     if not prepared then return false,why end
-    local charKey = MSUF_GetCharKey()
+    GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
+    local charKey = GetCharKey()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     if MSUF_ProfileIO_TranslateProfileToCurrent then
@@ -652,7 +655,8 @@ end
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local function MSUF_GetCharMeta()
     local _, chars = MSUF_ProfileIO_EnsureProfileRoots()
-    local charKey = MSUF_GetCharKey()
+    GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
+    local charKey = GetCharKey()
     local char = chars[charKey]
     if type(char) ~= "table" then
         char = {}
@@ -752,7 +756,8 @@ local function MSUF_RunAfterCombat_SpecProfile(fn)
 function MSUF_ApplySpecProfileIfEnabled(reason)
     local char = MSUF_GetCharMeta()
     if char.specAutoSwitch ~= true then  return end
-    local specID = MSUF_GetPlayerSpecID()
+    GetPlayerSpecID = GetPlayerSpecID or MSUF.Require("MSUF_GetPlayerSpecID", "State/MSUF_Profiles.lua")
+    local specID = GetPlayerSpecID()
     if type(specID) ~= "number" then  return end
     local profileName = char.specProfileMap[specID]
     if type(profileName) ~= "string" or profileName == "" then  return end
@@ -765,10 +770,13 @@ function MSUF_ApplySpecProfileIfEnabled(reason)
     end
     MSUF_RunAfterCombat_SpecProfile(function()
         --- Re-check after combat (spec could have changed again).
-        if not MSUF_IsSpecAutoSwitchEnabled() then  return end
-        local cur = MSUF_GetPlayerSpecID()
+        IsSpecAutoSwitchEnabled = IsSpecAutoSwitchEnabled or MSUF.Require("MSUF_IsSpecAutoSwitchEnabled", "State/MSUF_Profiles.lua")
+        if not IsSpecAutoSwitchEnabled() then  return end
+        GetPlayerSpecID = GetPlayerSpecID or MSUF.Require("MSUF_GetPlayerSpecID", "State/MSUF_Profiles.lua")
+        local cur = GetPlayerSpecID()
         if cur ~= specID then  return end
-        local mapped = MSUF_GetSpecProfile(specID)
+        GetSpecProfile = GetSpecProfile or MSUF.Require("MSUF_GetSpecProfile", "State/MSUF_Profiles.lua")
+        local mapped = GetSpecProfile(specID)
         if mapped ~= profileName then  return end
         if _G.MSUF_ActiveProfile == profileName then  return end
         if _G.MSUF_SwitchProfile then
@@ -791,8 +799,10 @@ do
             if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 and arg1 ~= "player" then
                  return
             end
-            if not MSUF_ActiveProfile or not MSUF_IsSpecAutoSwitchEnabled() then return end
-            MSUF_ApplySpecProfileIfEnabled(event)
+            IsSpecAutoSwitchEnabled = IsSpecAutoSwitchEnabled or MSUF.Require("MSUF_IsSpecAutoSwitchEnabled", "State/MSUF_Profiles.lua")
+            if not MSUF_ActiveProfile or not IsSpecAutoSwitchEnabled() then return end
+            ApplySpecProfileIfEnabled = ApplySpecProfileIfEnabled or MSUF.Require("MSUF_ApplySpecProfileIfEnabled", "State/MSUF_Profiles.lua")
+            ApplySpecProfileIfEnabled(event)
          end)
      end
     EnsureFrame()
@@ -2647,7 +2657,8 @@ local function MSUF_ProfileIO_EnsureProfileSystemInitialized()
         or type(MSUF_DB) ~= "table"
         or type(profiles[active]) ~= "table"
     if needsInit then
-        MSUF_InitProfiles()
+        InitProfiles = InitProfiles or MSUF.Require("MSUF_InitProfiles", "State/MSUF_Profiles.lua")
+        InitProfiles()
     end
 end
 local function MSUF_ProfileIO_GetProfileTable(profileKey)
@@ -2799,8 +2810,8 @@ function MSUF_ImportExternal(profileString, profileKey)
 end
 --- Deprecated compatibility aliases (MSUF_Profiles_*) of the profile string API,
 --- once used by load-order proxies; MSUF itself calls the canonical names.
-ExportPublic("MSUF_Profiles_ExportExternal", MSUF_ExportExternal)
-ExportPublic("MSUF_Profiles_ImportExternal", MSUF_ImportExternal)
+ExportPublic("MSUF_Profiles_ExportExternal", MSUF.Require("MSUF_ExportExternal", "State/MSUF_Profiles.lua"))
+ExportPublic("MSUF_Profiles_ImportExternal", MSUF.Require("MSUF_ImportExternal", "State/MSUF_Profiles.lua"))
 --- Globals for the Options module.
 ExportPublic("MSUF_ExportSelectionToString", MSUF_ExportSelectionToString)
 ExportPublic("MSUF_ImportFromString", MSUF_ImportFromString)

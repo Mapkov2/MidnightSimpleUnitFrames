@@ -177,7 +177,7 @@ ExportPublic("MSUF_GetFontPreviewObject", MSUF_GetFontPreviewObject)
 
 --- Deprecated compatibility alias: the unprefixed name predates the MSUF_
 --- prefix; it is only claimed while no other addon owns it.
-ExportPublic("GetInternalFontPathByKey", GetInternalFontPathByKey or Require("MSUF_GetInternalFontPathByKey", FILE))
+ExportPublic("GetInternalFontPathByKey", MSUF.Optional("GetInternalFontPathByKey") or Require("MSUF_GetInternalFontPathByKey", FILE))
 MSUF.Compat = MSUF.Compat or {}
 MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
 MSUF.Compat.DeprecatedAliases.GetInternalFontPathByKey = "MSUF_GetInternalFontPathByKey"

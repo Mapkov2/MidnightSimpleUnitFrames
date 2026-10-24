@@ -509,11 +509,12 @@ did = true
         end
     end
     if not gf then
-        if rec.rebuild and type(_G.MSUF_GF_RefreshAll) == "function" then
-            _G.MSUF_GF_RefreshAll()
+        local refreshAll, refreshVisuals = MSUF.Optional("MSUF_GF_RefreshAll"), MSUF.Optional("MSUF_GF_RefreshVisuals")
+        if rec.rebuild and refreshAll then
+            refreshAll()
 did = true
-        elseif dirty and type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind, dirty)
+        elseif dirty and refreshVisuals then
+            refreshVisuals(kind, dirty)
 did = true
         end
         return FinishGroupRecord(nil, rec, kind, reason, did)

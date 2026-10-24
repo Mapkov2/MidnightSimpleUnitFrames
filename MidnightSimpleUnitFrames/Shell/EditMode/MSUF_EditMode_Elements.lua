@@ -1,6 +1,7 @@
 --- EditMode/MSUF_EditMode_Elements.lua - registers the MSUF elements with the Edit Mode registry
 --- Deferred to PLAYER_LOGIN so unit frames exist.
 local _, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_Elements.lua").Client.MaxArenaOpponents
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
@@ -62,7 +63,7 @@ end
 
 local function GetArenaSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 2, tonumber(MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = UnitVisualBounds(GetArenaUF(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
@@ -73,7 +74,7 @@ end
 
 local function GetArenaCastbarSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 2, tonumber(MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = FrameRectToUI(GetArenaCastbarFrame(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }

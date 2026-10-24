@@ -1,5 +1,6 @@
 -- Instance-local runtime metadata for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
+local MAX_ARENA_FRAMES = MSUF.Require("MSUF", "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua").Client.MaxArenaOpponents
 
 MSUF.UF = MSUF.UF or {}
 
@@ -100,7 +101,7 @@ UF.unitOrder = UF.unitOrder or {
 }
 -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on
 -- Mainline and in sliced harnesses). Idempotent: present tokens are skipped.
-for arenaIndex = 4, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+for arenaIndex = 4, tonumber(MAX_ARENA_FRAMES) or 3 do
   local token = "arena" .. arenaIndex
   local present = false
   for i = 1, #UF.unitOrder do
@@ -147,7 +148,7 @@ local ARENA_UNITS = {
   arena1 = true, arena2 = true, arena3 = true,
 }
 -- Arena slots 4..N join the arena config key and ConfigKeyForUnit (idempotent).
-for arenaIndex = 4, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+for arenaIndex = 4, tonumber(MAX_ARENA_FRAMES) or 3 do
   local token = "arena" .. arenaIndex
   local arenaKeyUnits = UF.configKeyUnits.arena
   local present = false

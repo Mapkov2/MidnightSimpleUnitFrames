@@ -297,7 +297,7 @@ local function RefreshMediaGroupVisuals(statusbars)
     if gf and type(gf.RefreshVisuals) == "function" then
         gf.RefreshVisuals(nil, not statusbars and gf.DIRTY_VISUAL or nil)
     else
-        local refresh = statusbars and _G.MSUF_GF_RefreshOverlays or _G.MSUF_GF_RefreshVisuals
+        local refresh = MSUF.Optional(statusbars and "MSUF_GF_RefreshOverlays" or "MSUF_GF_RefreshVisuals")
         if type(refresh) == "function" then refresh() end
     end
 end
