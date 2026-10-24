@@ -20,17 +20,19 @@ M.LayerOverview = Overview
 Overview.providers = Overview.providers or {}
 local providers = Overview.providers
 
-local UNIT_SCOPES = {
-    { key = "player", label = "Player" },
-    { key = "target", label = "Target" },
-    { key = "targettarget", label = "Target of Target" },
-    { key = "focustarget", label = "Focus Target" },
-    { key = "focus", label = "Focus" },
-    { key = "pet", label = "Pet" },
-    { key = "pettarget", label = "Pet Target" },
-    { key = "boss", label = "Boss" },
-    { key = "arena", label = "Arena" },
+-- Unit scope keys and labels in menu order; the unit and bar scope lists below share them.
+local UNIT_SCOPE_LABELS = {
+    "player", "Player", "target", "Target", "targettarget", "Target of Target",
+    "focustarget", "Focus Target", "focus", "Focus", "pet", "Pet", "pettarget", "Pet Target",
+    "boss", "Boss", "arena", "Arena",
 }
+local function AppendUnitScopes(list)
+    for i = 1, #UNIT_SCOPE_LABELS, 2 do
+        list[#list + 1] = { key = UNIT_SCOPE_LABELS[i], label = UNIT_SCOPE_LABELS[i + 1] }
+    end
+    return list
+end
+local UNIT_SCOPES = AppendUnitScopes({})
 local UNIT_AURA_SCOPES = {
     { key = "player", runtimeKey = "player", label = "Player", flag = "showPlayer", flagDefault = false },
     { key = "target", runtimeKey = "target", label = "Target", flag = "showTarget", flagDefault = true },
@@ -43,21 +45,10 @@ local GROUP_SCOPES = {
     { key = "raid", dbKey = "gf_raid", label = "Raid" },
     { key = "mythicraid", dbKey = "gf_mythicraid", label = "Mythic Raid" },
 }
-local BAR_SCOPES = {
-    { key = "shared", label = "Shared" },
-    { key = "player", label = "Player" },
-    { key = "target", label = "Target" },
-    { key = "targettarget", label = "Target of Target" },
-    { key = "focustarget", label = "Focus Target" },
-    { key = "focus", label = "Focus" },
-    { key = "pet", label = "Pet" },
-    { key = "pettarget", label = "Pet Target" },
-    { key = "boss", label = "Boss" },
-    { key = "arena", label = "Arena" },
-    { key = "gf_party", label = "Party" },
-    { key = "gf_raid", label = "Raid" },
-    { key = "gf_mythicraid", label = "Mythic Raid" },
-}
+local BAR_SCOPES = AppendUnitScopes({ { key = "shared", label = "Shared" } })
+BAR_SCOPES[#BAR_SCOPES + 1] = { key = "gf_party", label = "Party" }
+BAR_SCOPES[#BAR_SCOPES + 1] = { key = "gf_raid", label = "Raid" }
+BAR_SCOPES[#BAR_SCOPES + 1] = { key = "gf_mythicraid", label = "Mythic Raid" }
 
 if M.FilterSupportedUnitValues then
     M.FilterSupportedUnitValues(UNIT_SCOPES)

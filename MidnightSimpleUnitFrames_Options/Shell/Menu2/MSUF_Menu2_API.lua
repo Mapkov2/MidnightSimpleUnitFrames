@@ -302,7 +302,8 @@ RegisterMenuCommand({
             local shows = type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard()
             local state = type(firstLoad.GetState) == "function" and firstLoad:GetState() or {}
             local detection = type(firstLoad.GetDetection) == "function" and firstLoad:GetDetection() or {}
-            print(string.format("|cff00b7ebMSUF|r first-load: status=%s step=%s install=%s shows=%s reason=%s profile=%s legacy=%s schema=%s rawDB=%s rawProfiles=%s",
+            print(string.format("|cff00b7ebMSUF|r first-load: status=%s step=%s install=%s shows=%s reason=%s profile=%s legacy=%s schema=%s " ..
+                "rawDB=%s rawProfiles=%s",
                 tostring(state.status), tostring(state.step), tostring(state.installKind),
                 tostring(shows), tostring(detection.reason), tostring(detection.existingProfile),
                 tostring(detection.legacyProfile), tostring(detection.profileSchema or "none"),

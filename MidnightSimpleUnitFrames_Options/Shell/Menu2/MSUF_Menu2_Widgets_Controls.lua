@@ -27,7 +27,9 @@ local function MarkControlPart(part, owner)
     else part._msuf2ControlPartOf = owner end
 end
 
-local SLIDER_TEMPLATE_KEEP_KEYS, SLIDER_TEMPLATE_SUFFIXES = M.WordList "_msufTrack _msufTrackTop _msufTrackBottom _msufFill _msufFillGlow _msuf2Thumb _msufPeelTrack _msufPeelTrackFill", M.WordList "Left Middle Right Text Low High"
+local SLIDER_TEMPLATE_KEEP_KEYS, SLIDER_TEMPLATE_SUFFIXES =
+    M.WordList "_msufTrack _msufTrackTop _msufTrackBottom _msufFill _msufFillGlow _msuf2Thumb _msufPeelTrack _msufPeelTrackFill",
+    M.WordList "Left Middle Right Text Low High"
 local IsTextureRegion = T.IsTextureRegion
 -- A Blizzard template names its parts after the frame ("<name>Left"), so the
 -- global is looked up by that computed name.
@@ -178,10 +180,24 @@ local TOGGLE_CONTROL_HOOKS = {
         if self._msuf2UpdateToggleProxyBounds then self:_msuf2UpdateToggleProxyBounds() end
         RefreshToggleControl(self)
     end,
-    OnEnter = function(self) self._msuf2ToggleHovered = true; RefreshToggleControl(self, true, self._msuf2TogglePressed) end,
-    OnLeave = function(self) self._msuf2ToggleHovered = nil; self._msuf2TogglePressed = nil; RefreshToggleControl(self) end,
-    OnMouseDown = function(self) T.CommitFocusedInput(); self._msuf2TogglePressed = true; RefreshToggleControl(self, self._msuf2ToggleHovered, true) end,
-    OnMouseUp = function(self) self._msuf2TogglePressed = nil; RefreshToggleControl(self, self._msuf2ToggleHovered) end,
+    OnEnter = function(self)
+        self._msuf2ToggleHovered = true
+        RefreshToggleControl(self, true, self._msuf2TogglePressed)
+    end,
+    OnLeave = function(self)
+        self._msuf2ToggleHovered = nil
+        self._msuf2TogglePressed = nil
+        RefreshToggleControl(self)
+    end,
+    OnMouseDown = function(self)
+        T.CommitFocusedInput()
+        self._msuf2TogglePressed = true
+        RefreshToggleControl(self, self._msuf2ToggleHovered, true)
+    end,
+    OnMouseUp = function(self)
+        self._msuf2TogglePressed = nil
+        RefreshToggleControl(self, self._msuf2ToggleHovered)
+    end,
     OnClick = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
     OnEnable = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
     OnDisable = function(self) RefreshToggleControl(self) end,
@@ -316,13 +332,31 @@ local function SetSwitchChecked(button, value)
     RefreshSwitchVisual(button)
 end
 local SWITCH_CONTROL_HOOKS = {
-    OnEnter = function(self) self._msuf2SwitchHovered = true; RefreshSwitchVisual(self, true) end,
-    OnLeave = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
-    OnMouseDown = function(self) T.CommitFocusedInput(); self._msuf2SwitchPressed = true; RefreshSwitchVisual(self) end,
-    OnMouseUp = function(self) self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
+    OnEnter = function(self)
+        self._msuf2SwitchHovered = true
+        RefreshSwitchVisual(self, true)
+    end,
+    OnLeave = function(self)
+        self._msuf2SwitchHovered = nil
+        self._msuf2SwitchPressed = nil
+        RefreshSwitchVisual(self)
+    end,
+    OnMouseDown = function(self)
+        T.CommitFocusedInput()
+        self._msuf2SwitchPressed = true
+        RefreshSwitchVisual(self)
+    end,
+    OnMouseUp = function(self)
+        self._msuf2SwitchPressed = nil
+        RefreshSwitchVisual(self)
+    end,
     OnClick = function(self) RefreshSwitchVisual(self) end,
     OnEnable = RefreshSwitchVisual,
-    OnDisable = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
+    OnDisable = function(self)
+        self._msuf2SwitchHovered = nil
+        self._msuf2SwitchPressed = nil
+        RefreshSwitchVisual(self)
+    end,
 }
 local SWITCH_LABEL_HOOKS = {
     OnClick = function(self)

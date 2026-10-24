@@ -46,7 +46,7 @@ local function AliasMap(rows)
     return aliases
 end
 
-Data.QUERY_ALIASES = AliasMap [[
+Data.QUERY_ALIASES = AliasMap([[
 evoker=empowered|empower|empowered casts|stage|stages|hold cast|release cast|quell|essence|augmentation|devastation|preservation
 devastation|preservation=evoker|empowered|empower|empowered casts|essence
 augmentation=evoker|empowered|empower|empowered casts|essence|ebon might
@@ -59,8 +59,10 @@ havoc|vengeance=demon hunter|demonhunter|dh|disrupt|consume magic|interrupt|kick
 devour=consume|consume magic|purge|dispel|disrupt|interrupt|kick|interrupt ready
 consume=consume magic|devour|purge|dispel|interrupt|kick
 disrupt=demon hunter|demonhunter|dh|interrupt|kick|focus kick|interrupt ready
-kick|kicks=interrupt|interrupt ready|focus kick|counterspell|disrupt|pummel|rebuke|wind shear|mind freeze|muzzle|skull bash|spear hand strike|counter shot|quell|silence
-interrupt=kick|interrupt ready|focus kick|counterspell|disrupt|pummel|rebuke|wind shear|mind freeze|muzzle|skull bash|spear hand strike|counter shot|quell|silence
+kick|kicks=interrupt|interrupt ready|focus kick|counterspell|disrupt|pummel|rebuke|wind shear|mind freeze|muzzle|skull bash|spear hand strike|]] ..
+[[counter shot|quell|silence
+interrupt=kick|interrupt ready|focus kick|counterspell|disrupt|pummel|rebuke|wind shear|mind freeze|muzzle|skull bash|spear hand strike|]] ..
+[[counter shot|quell|silence
 interrupts=kick|interrupt|interrupt ready|focus kick
 counterspell=interrupt|kick|interrupt ready|focus kick
 pummel|rebuke|silence=interrupt|kick|interrupt ready
@@ -70,7 +72,8 @@ cast|casting=castbar|cast bar|spell name|channel
 castbar=cast bar|casts|casting|spell name|channel
 castbars=castbar|cast bar|casts|casting|spell name|channel
 zauberleiste=castbar|cast bar|casts|casting
-level=level indicator|level text|show level|unit level|player level|target level|status icons|status indicator|indicator|anchor level|level anchor|position level|level position|x offset|y offset
+level=level indicator|level text|show level|unit level|player level|target level|status icons|status indicator|indicator|anchor level|]] ..
+[[level anchor|position level|level position|x offset|y offset
 levels=level|level indicator|level text|show level|status icons|status indicator
 lvl=level|level indicator|level text|show level
 leveltext=level text|level indicator|show level|status icons|status indicator|anchor|position|x offset|y offset
@@ -164,7 +167,8 @@ hp=health|health text|health bar|leben
 health=hp|health text|health bar|life|leben
 leben=health|hp|health bar|health text
 name|names=name text|text|font|name shortening
-shorten|shortened|shortens|shortening|truncated|kuerzen|gekuerzt|namenskuerzung|namenskurzung|kuerzung=name shortening|short names|truncate names|max name length
+shorten|shortened|shortens|shortening|truncated|kuerzen|gekuerzt|namenskuerzung|namenskurzung|kuerzung=name shortening|short names|]] ..
+[[truncate names|max name length
 override|overrides=custom settings|font override|scope override|group frame override|shared changes
 fontoverride=font override|custom font settings|name shortening|shared changes
 scopeoverride=scope override|font override|custom settings|shared changes
@@ -201,11 +205,15 @@ bad=wrong|broken|performance|lag|fps
 performance=auras|cooldown|filters|range fade
 combat=combat lockdown|in combat|out of combat|alpha|settings
 lockdown=combat lockdown|combat|protected frames|reload
-raidframes=group frames|groupframes|raid frames|raid frame|raid|party|layout|group layout|anchoring|move raid frames|disable raid frames|hide raid frames|turn off raid frames|raid frames off
-partyframes=group frames|groupframes|party frames|party frame|party|raid|layout|group layout|anchoring|move party frames|disable party frames|hide party frames|turn off party frames|party frames off
+raidframes=group frames|groupframes|raid frames|raid frame|raid|party|layout|group layout|anchoring|move raid frames|disable raid frames|]] ..
+[[hide raid frames|turn off raid frames|raid frames off
+partyframes=group frames|groupframes|party frames|party frame|party|raid|layout|group layout|anchoring|move party frames|disable party frames|]] ..
+[[hide party frames|turn off party frames|party frames off
 gruppenframes|group|groupframes=group frames|party|raid|layout|disable group frames|hide group frames|turn off group frames
-raid=group frames|groupframes|raid frames|raid frame|layout|party|anchoring|move raid frames|disable raid frames|hide raid frames|turn off raid frames|raid frames off
-party=group frames|groupframes|party frames|party frame|layout|raid|anchoring|move party frames|disable party frames|hide party frames|turn off party frames|party frames off
+raid=group frames|groupframes|raid frames|raid frame|layout|party|anchoring|move raid frames|disable raid frames|hide raid frames|]] ..
+[[turn off raid frames|raid frames off
+party=group frames|groupframes|party frames|party frame|layout|raid|anchoring|move party frames|disable party frames|hide party frames|]] ..
+[[turn off party frames|party frames off
 tank|tanks=tank role|show tank power|tank power|tank power bar|role power|group frames
 healer|healers=healer role|show healer power|healer power|healer power bar|healer mana|role power|group frames
 dps|damager|damage=damage role|damager role|show dps power|show damager power|dps power|damager power|dps power bar|role power|group frames
@@ -220,7 +228,8 @@ hots=hot|healer buffs|own buffs|aura indicators|group buffs
 own|personal=only mine|own buffs|own debuffs|player only|aura filters
 spellid|spellids=spell id|aura blacklist|aura filters
 bossdebuff|bossdebuffs=boss debuffs|raid debuffs|aura filters
-dispel=dispel border|dispel overlay|dispellable debuffs|dispel border detects|any dispel-type debuff|any debuff|magic|curse|poison|disease|cleanse|decurse|group status and indicators|group indicators|highlight borders
+dispel=dispel border|dispel overlay|dispellable debuffs|dispel border detects|any dispel-type debuff|any debuff|magic|curse|poison|disease|]] ..
+[[cleanse|decurse|group status and indicators|group indicators|highlight borders
 dispels=dispel|dispel border|dispel overlay|dispellable debuffs|magic|curse|poison|disease
 dispell=dispel|dispel border|dispel overlay|dispellable debuffs|cleanse|decurse
 dispellable=dispellable debuffs|dispel border detects|dispellable by me|any dispel-type debuff|magic|curse|poison|disease
@@ -420,7 +429,9 @@ combopointshape|combopointsshape=combo points|class resources|shape|class resour
 playerpowershape|detachedpowershape|powerbarshape=player power shape|detached power bar|shape|class resources
 orb|orbs|manaorb|powerorb|manaorbs|powerorbs|manaball|powerball|powersphere=player power shape|detached power bar|orb|orb size|power orb
 connectedpowerbar|managedpowerbar|managedpowertext|classresourcepowerbar=class resources|detached power bar|power text|anchor to class resource|sync width
-playerhpbar|duplicatehp|secondhp|secondhealth|classresourcehealth|classresourcehp=class resources|player hp bar|health text|foreground texture|background texture|anchor|width mode|hp shape|follow player power|orb size|hp color|class color|dark mode|hp gradient|smooth fill|use player hp text|shared text
+playerhpbar|duplicatehp|secondhp|secondhealth|classresourcehealth|classresourcehp=class resources|player hp bar|health text|foreground texture|]] ..
+[[background texture|anchor|width mode|hp shape|follow player power|orb size|hp color|class color|dark mode|hp gradient|smooth fill|]] ..
+[[use player hp text|shared text
 playerhpshape|secondhpshape|duplicatehpshape|healthorb|hporb=class resources|player hp bar|hp shape|follow player power|round|crystal|orb|orb size
 playerhpcolor|secondhpcolor|duplicatehpcolor|classresourcehpcolor=class resources|player hp bar|hp color|class color|dark mode|hp gradient|global color
 healthduplicate|doppelhp|zweitehp|zweitehealth|lebenzweimal=class resources|player hp bar|second player hp bar|health text
@@ -436,7 +447,7 @@ soulshards=soul shards|class resources|warlock
 runen=runes|runic power|class resources
 eclipse=eclipse|class resources|druid
 stagger=stagger|class resources|brewmaster
-]]
+]])
 
 
 -- Later blocks add words to a key; they never replace its meaning. Assigning
@@ -511,19 +522,100 @@ AddAliasTerms("재사용 대기시간", "cooldown|cooldown manager|cooldown time
 AddAliasTerms("冷却", "cooldown|cooldown manager|cooldown timers")
 AddAliasTerms("冷卻", "cooldown|cooldown manager|cooldown timers")
 
+-- Spanish (Spain) and Spanish (Mexico) share one row set; each gets its own table.
+local function SpanishSearchExamples()
+    return {
+        {"Tamaño del objetivo", "tamaño marco objetivo", "uf_target"},
+        {"Color de la barra de lanzamiento", "color barra lanzamiento", "opt_castbar"},
+        {"Marcos de grupo ocultos", "marcos de grupo ocultos", "gf_layout"},
+        {"Bolsas", "bolsas", "suite_bags"},
+        {"Minimapa", "minimapa", nil},
+        {"Reutilizaciones", "tiempos de reutilización", "suite_cooldownManager"},
+    }
+end
 Data.SEARCH_EXAMPLES = {
-    enUS = { {"Target size", "target size", "uf_target"}, {"Cast bar color", "castbar color", "opt_castbar"}, {"Hidden party frames", "party frames hidden", "gf_layout"}, {"Bags", "bags", "suite_bags"}, {"Minimap", "minimap icon"}, {"Cooldowns", "cooldown timers", "suite_cooldownManager"} },
-    enGB = { {"Target size", "target size", "uf_target"}, {"Cast bar colour", "castbar colour", "opt_castbar"}, {"Hidden party frames", "party frames hidden", "gf_layout"}, {"Bags", "bags", "suite_bags"}, {"Minimap", "minimap icon"}, {"Cooldowns", "cooldown timers", "suite_cooldownManager"} },
-    deDE = { {"Zielframe Größe", "zielframe groesser", "uf_target"}, {"Zauberleistenfarbe", "castbar farbe", "opt_castbar"}, {"Versteckte Gruppenrahmen", "gruppenrahmen verborgen", "gf_layout"}, {"Taschen", "taschen", "suite_bags"}, {"Minikarte", "minikarte", nil}, {"Abklingzeiten", "abklingzeiten", "suite_cooldownManager"} },
-    esES = { {"Tamaño del objetivo", "tamaño marco objetivo", "uf_target"}, {"Color de la barra de lanzamiento", "color barra lanzamiento", "opt_castbar"}, {"Marcos de grupo ocultos", "marcos de grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Reutilizaciones", "tiempos de reutilización", "suite_cooldownManager"} },
-    esMX = { {"Tamaño del objetivo", "tamaño marco objetivo", "uf_target"}, {"Color de la barra de lanzamiento", "color barra lanzamiento", "opt_castbar"}, {"Marcos de grupo ocultos", "marcos de grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Reutilizaciones", "tiempos de reutilización", "suite_cooldownManager"} },
-    frFR = { {"Taille de la cible", "taille cadre cible", "uf_target"}, {"Couleur de barre d'incantation", "couleur barre incantation", "opt_castbar"}, {"Cadres de groupe cachés", "cadres groupe cachés", "gf_layout"}, {"Sacs", "sacs", "suite_bags"}, {"Mini-carte", "minicarte", nil}, {"Temps de recharge", "temps de recharge", "suite_cooldownManager"} },
-    itIT = { {"Dimensione del bersaglio", "dimensione riquadro bersaglio", "uf_target"}, {"Colore barra di lancio", "colore barra lancio", "opt_castbar"}, {"Riquadri gruppo nascosti", "riquadri gruppo nascosti", "gf_layout"}, {"Borse", "borse", "suite_bags"}, {"Minimappa", "minimappa", nil}, {"Tempi di recupero", "tempi di recupero", "suite_cooldownManager"} },
-    ptBR = { {"Tamanho do alvo", "tamanho quadro alvo", "uf_target"}, {"Cor da barra de lançamento", "cor barra lancamento", "opt_castbar"}, {"Quadros de grupo ocultos", "quadros grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Recargas", "recarga", "suite_cooldownManager"} },
-    ruRU = { {"Размер цели", "размер рамки цели", "uf_target"}, {"Цвет полосы заклинания", "цвет полосы заклинания", "opt_castbar"}, {"Скрытые групповые рамки", "скрытые рамки группы", "gf_layout"}, {"Сумки", "сумки", "suite_bags"}, {"Миникарта", "мини карта", nil}, {"Перезарядка", "перезарядка", "suite_cooldownManager"} },
-    koKR = { {"대상 프레임 크기", "대상 프레임 크기", "uf_target"}, {"시전 바 색상", "시전 바 색상", "opt_castbar"}, {"숨겨진 파티 프레임", "숨겨진 파티 프레임", "gf_layout"}, {"가방", "가방", "suite_bags"}, {"미니맵", "미니맵", nil}, {"재사용 대기시간", "재사용 대기시간", "suite_cooldownManager"} },
-    zhCN = { {"目标框体大小", "目标大小", "uf_target"}, {"施法条颜色", "施法条颜色", "opt_castbar"}, {"隐藏的小队框体", "隐藏小队框体", "gf_layout"}, {"背包", "背包", "suite_bags"}, {"小地图", "小地图", nil}, {"冷却", "冷却", "suite_cooldownManager"} },
-    zhTW = { {"目標框架大小", "目標大小", "uf_target"}, {"施法條顏色", "施法條顏色", "opt_castbar"}, {"隱藏的小隊框架", "隱藏小隊框架", "gf_layout"}, {"背包", "背包", "suite_bags"}, {"小地圖", "小地圖", nil}, {"冷卻", "冷卻", "suite_cooldownManager"} },
+    enUS = {
+        {"Target size", "target size", "uf_target"},
+        {"Cast bar color", "castbar color", "opt_castbar"},
+        {"Hidden party frames", "party frames hidden", "gf_layout"},
+        {"Bags", "bags", "suite_bags"},
+        {"Minimap", "minimap icon"},
+        {"Cooldowns", "cooldown timers", "suite_cooldownManager"},
+    },
+    enGB = {
+        {"Target size", "target size", "uf_target"},
+        {"Cast bar colour", "castbar colour", "opt_castbar"},
+        {"Hidden party frames", "party frames hidden", "gf_layout"},
+        {"Bags", "bags", "suite_bags"},
+        {"Minimap", "minimap icon"},
+        {"Cooldowns", "cooldown timers", "suite_cooldownManager"},
+    },
+    deDE = {
+        {"Zielframe Größe", "zielframe groesser", "uf_target"},
+        {"Zauberleistenfarbe", "castbar farbe", "opt_castbar"},
+        {"Versteckte Gruppenrahmen", "gruppenrahmen verborgen", "gf_layout"},
+        {"Taschen", "taschen", "suite_bags"},
+        {"Minikarte", "minikarte", nil},
+        {"Abklingzeiten", "abklingzeiten", "suite_cooldownManager"},
+    },
+    esES = SpanishSearchExamples(),
+    esMX = SpanishSearchExamples(),
+    frFR = {
+        {"Taille de la cible", "taille cadre cible", "uf_target"},
+        {"Couleur de barre d'incantation", "couleur barre incantation", "opt_castbar"},
+        {"Cadres de groupe cachés", "cadres groupe cachés", "gf_layout"},
+        {"Sacs", "sacs", "suite_bags"},
+        {"Mini-carte", "minicarte", nil},
+        {"Temps de recharge", "temps de recharge", "suite_cooldownManager"},
+    },
+    itIT = {
+        {"Dimensione del bersaglio", "dimensione riquadro bersaglio", "uf_target"},
+        {"Colore barra di lancio", "colore barra lancio", "opt_castbar"},
+        {"Riquadri gruppo nascosti", "riquadri gruppo nascosti", "gf_layout"},
+        {"Borse", "borse", "suite_bags"},
+        {"Minimappa", "minimappa", nil},
+        {"Tempi di recupero", "tempi di recupero", "suite_cooldownManager"},
+    },
+    ptBR = {
+        {"Tamanho do alvo", "tamanho quadro alvo", "uf_target"},
+        {"Cor da barra de lançamento", "cor barra lancamento", "opt_castbar"},
+        {"Quadros de grupo ocultos", "quadros grupo ocultos", "gf_layout"},
+        {"Bolsas", "bolsas", "suite_bags"},
+        {"Minimapa", "minimapa", nil},
+        {"Recargas", "recarga", "suite_cooldownManager"},
+    },
+    ruRU = {
+        {"Размер цели", "размер рамки цели", "uf_target"},
+        {"Цвет полосы заклинания", "цвет полосы заклинания", "opt_castbar"},
+        {"Скрытые групповые рамки", "скрытые рамки группы", "gf_layout"},
+        {"Сумки", "сумки", "suite_bags"},
+        {"Миникарта", "мини карта", nil},
+        {"Перезарядка", "перезарядка", "suite_cooldownManager"},
+    },
+    koKR = {
+        {"대상 프레임 크기", "대상 프레임 크기", "uf_target"},
+        {"시전 바 색상", "시전 바 색상", "opt_castbar"},
+        {"숨겨진 파티 프레임", "숨겨진 파티 프레임", "gf_layout"},
+        {"가방", "가방", "suite_bags"},
+        {"미니맵", "미니맵", nil},
+        {"재사용 대기시간", "재사용 대기시간", "suite_cooldownManager"},
+    },
+    zhCN = {
+        {"目标框体大小", "目标大小", "uf_target"},
+        {"施法条颜色", "施法条颜色", "opt_castbar"},
+        {"隐藏的小队框体", "隐藏小队框体", "gf_layout"},
+        {"背包", "背包", "suite_bags"},
+        {"小地图", "小地图", nil},
+        {"冷却", "冷却", "suite_cooldownManager"},
+    },
+    zhTW = {
+        {"目標框架大小", "目標大小", "uf_target"},
+        {"施法條顏色", "施法條顏色", "opt_castbar"},
+        {"隱藏的小隊框架", "隱藏小隊框架", "gf_layout"},
+        {"背包", "背包", "suite_bags"},
+        {"小地圖", "小地圖", nil},
+        {"冷卻", "冷卻", "suite_cooldownManager"},
+    },
 }
 
 -- These examples explicitly advertise the Suite's cooldown manager. Keep that

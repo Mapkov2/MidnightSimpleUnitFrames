@@ -461,7 +461,9 @@ M.PlayerPowerSourceValues = M.ValueTextList(
     "AUTO", "Automatic (current behavior)",
     "MANA", "Mana")
 M.PlayerPowerSourceSearchLabel = "Mana / Automatic displayed resource"
-M.PlayerPowerSourceTooltip = "Automatic preserves the current profile behavior for the active class and specialization, including Maelstrom, Insanity, and Ebon Might hand-offs. Mana explicitly keeps Mana on the Player power bar. Vehicles always use their native resource; classes without a Mana pool keep their normal resource while the preference stays saved."
+M.PlayerPowerSourceTooltip = "Automatic preserves the current profile behavior for the active class and specialization, including Maelstrom, " ..
+    "Insanity, and Ebon Might hand-offs. Mana explicitly keeps Mana on the Player power bar. Vehicles always use their native resource; classes " ..
+    "without a Mana pool keep their normal resource while the preference stays saved."
 function M.NormalizePlayerPowerSource(value)
     return value == "MANA" and "MANA" or "AUTO"
 end
@@ -502,7 +504,10 @@ function M.PipeRows(rows)
     local out = {}
     for line in M.Lines(rows) do
         local cols, n = {}, 0
-        for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; cols[n] = col end
+        for col in (line .. "|"):gmatch("(.-)|") do
+            n = n + 1
+            cols[n] = col
+        end
         out[#out + 1] = cols
     end
     return out
@@ -576,10 +581,25 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
     return out
 end
 local COMMON_FALLBACKS = {
-    Noop = function() end, Nil = function() return nil end, False = function() return false end, True = function() return true end, TruePair = function() return true, true end,
-    One = function() return 1 end, Empty = function() return "" end, Identity = function(v) return v end, Round = function(value) return floor((tonumber(value) or 0) + 0.5) end,
-    WhiteRGB = function() return 1, 1, 1 end, BlackRGBA = function() return 0, 0, 0, 1 end, DarkRGBA = function() return 0.02, 0.03, 0.04, 0.9 end, HealthRGB = function() return 0.2, 0.8, 0.2 end, PowerRGB = function() return 0.2, 0.45, 1.0 end,
-    Center = function() return "CENTER" end, Right = function() return "RIGHT" end, Status = function() return "Status" end, QuestionIcon = function() return "Interface\\Icons\\INV_Misc_QuestionMark" end, ZeroPair = function() return 0, 0 end,
+    Noop = function() end,
+    Nil = function() return nil end,
+    False = function() return false end,
+    True = function() return true end,
+    TruePair = function() return true, true end,
+    One = function() return 1 end,
+    Empty = function() return "" end,
+    Identity = function(v) return v end,
+    Round = function(value) return floor((tonumber(value) or 0) + 0.5) end,
+    WhiteRGB = function() return 1, 1, 1 end,
+    BlackRGBA = function() return 0, 0, 0, 1 end,
+    DarkRGBA = function() return 0.02, 0.03, 0.04, 0.9 end,
+    HealthRGB = function() return 0.2, 0.8, 0.2 end,
+    PowerRGB = function() return 0.2, 0.45, 1.0 end,
+    Center = function() return "CENTER" end,
+    Right = function() return "RIGHT" end,
+    Status = function() return "Status" end,
+    QuestionIcon = function() return "Interface\\Icons\\INV_Misc_QuestionMark" end,
+    ZeroPair = function() return 0, 0 end,
 }
 M.Fallbacks = M.Fallbacks or COMMON_FALLBACKS
 function M.SetMenuStateValue(field, value)
@@ -1317,14 +1337,25 @@ function M.TrackCollapsibleRefresh(ctx, section, refresh)
 end
 function M.TrackMethodRefresh(ctx, object, method)
     return M.TrackRefresh(ctx, function()
-        local fn = object and object[method]; if type(fn) == "function" then return fn(object) end
+        local fn = object and object[method]
+        if type(fn) == "function" then return fn(object) end
     end)
 end
 local tips = {}
 for tip in ([[
-Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|Quick reset: If something feels off, try /msuf reset for frame positions.|Factory reset: Use Dashboard > Display & recovery > MSUF Factory Reset or /msuf fullreset confirm + /reload.|Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.
-Profiles safety: Create a new profile before big experiments so you can switch back instantly.|Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.|Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.|Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.|UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.
-Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.|Readability: Slightly larger fonts often help more than bigger frames.|During development of MSUF Unhalted, R41z0r and other addon developers helped out.|Danders is a strong Party/Raidframe addon and works well with MSUF.|Community: If you like MSUF, share it with a friend.
+Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|]] ..
+[[Quick reset: If something feels off, try /msuf reset for frame positions.|]] ..
+[[Factory reset: Use Dashboard > Display & recovery > MSUF Factory Reset or /msuf fullreset confirm + /reload.|]] ..
+[[Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.
+Profiles safety: Create a new profile before big experiments so you can switch back instantly.|]] ..
+[[Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.|]] ..
+[[Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.|]] ..
+[[Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.|]] ..
+[[UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.
+Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.|]] ..
+[[Readability: Slightly larger fonts often help more than bigger frames.|]] ..
+[[During development of MSUF Unhalted, R41z0r and other addon developers helped out.|]] ..
+[[Danders is a strong Party/Raidframe addon and works well with MSUF.|Community: If you like MSUF, share it with a friend.
 ]]):gmatch("[^|]+") do
     tips[#tips + 1] = (tip:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -1492,7 +1523,8 @@ function M.ShowAlphaDiscordPrompt()
     local version = type(getVersion) == "function" and getVersion() or nil
     if not (type(version) == "string" and version:lower():find("alpha", 1, true)) then return nil end
     return M.ShowPrompt("MSUF_ALPHA_DISCORD", {
-        text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
+        text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n" ..
+            "|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
         accept = Tr("Copy Discord Link"),
         cancel = CLOSE or Tr("Close"),
         onAccept = function() ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end,

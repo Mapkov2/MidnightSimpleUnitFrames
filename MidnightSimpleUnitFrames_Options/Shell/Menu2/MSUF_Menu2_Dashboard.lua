@@ -45,16 +45,7 @@ local function DashboardMeta(semanticPath, classification, exact)
     end
     return meta
 end
-local function RegisterDashboardControl(widget, meta, label, kind, values)
-    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
-    local payload = {}
-    for key, value in pairs(meta) do payload[key] = value end
-    payload.label = label or payload.label
-    payload.kind = kind or payload.kind
-    payload.values = values or payload.values
-    M.RegisterSearchWidget(widget, payload)
-    return widget
-end
+local RegisterDashboardControl = M.RegisterControlMetadata
 
 local function DirectClamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
@@ -110,8 +101,10 @@ local function ShowFactoryResetConfirm(kind)
     local key = suiteReset and "MSUF2_SUITE_FACTORY_RESET_CONFIRM" or "MSUF2_FACTORY_RESET_CONFIRM"
     M.ShowPrompt(key, {
         text = M.Tr(suiteReset
-            and "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
-            or "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."),
+            and "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. " ..
+                "The UI will reload."
+            or "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active " ..
+                "Suite profile may follow MSUF back to Default. The UI will reload."),
         accept = YES or M.Tr("Yes"),
         cancel = NO or M.Tr("No"),
         onAccept = function()
@@ -1046,7 +1039,8 @@ local function BuildScaleColumn(scaling, colW, spec)
 end
 function Dashboard.BuildScalingColumns(state, ctx, scaling)
     local recoveryW, scalingColumns = state.recoveryW, state.scalingColumns
-    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
+    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active " ..
+        "value.", 16, -60, recoveryW - 32, T.colors.muted)
     -- The selections not applied yet: globalEnabled, global, msuf and menu.
     local pending = {}
     local colGap = 24

@@ -1364,10 +1364,23 @@ local function HistoryNavButton(status, rotation, hitLeft, hitRight, onClick)
         if edge then edge:SetVertexColor(edgeC[1], edgeC[2], edgeC[3], edgeA) end
         icon:SetVertexColor(iconC[1], iconC[2], iconC[3], iconA)
     end
-    btn:SetScript("OnEnter", function(self) self._msuf2Hover = true; Paint(self, true, self._msuf2Down) end)
-    btn:SetScript("OnLeave", function(self) self._msuf2Hover = nil; self._msuf2Down = nil; Paint(self, false, false) end)
-    btn:SetScript("OnMouseDown", function(self) self._msuf2Down = true; Paint(self, self._msuf2Hover, true) end)
-    btn:SetScript("OnMouseUp", function(self) self._msuf2Down = nil; Paint(self, self._msuf2Hover, false) end)
+    btn:SetScript("OnEnter", function(self)
+        self._msuf2Hover = true
+        Paint(self, true, self._msuf2Down)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self._msuf2Hover = nil
+        self._msuf2Down = nil
+        Paint(self, false, false)
+    end)
+    btn:SetScript("OnMouseDown", function(self)
+        self._msuf2Down = true
+        Paint(self, self._msuf2Hover, true)
+    end)
+    btn:SetScript("OnMouseUp", function(self)
+        self._msuf2Down = nil
+        Paint(self, self._msuf2Hover, false)
+    end)
     btn:SetScript("OnEnable", function(self) Paint(self, self._msuf2Hover, self._msuf2Down) end)
     btn:SetScript("OnDisable", function(self) Paint(self, false, false) end)
     btn:SetScript("OnClick", onClick)

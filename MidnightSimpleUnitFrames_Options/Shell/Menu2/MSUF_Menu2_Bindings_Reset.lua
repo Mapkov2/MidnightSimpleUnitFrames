@@ -26,8 +26,14 @@ local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf
     uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" },
     uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" },
     uf_pet = { unit = "pet", label = "Pet" }, uf_pettarget = { unit = "pettarget", label = "Pet Target" } }
-local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconShape IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
-local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB"
+local CASTBAR_SUFFIX_KEYS = WL [[
+    TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconShape
+    IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize
+    TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB
+]]
+local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL [[
+    TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB
+]]
 local function BuildUnitCastbarResetKeys(spec)
     local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }
     if spec.targetName then
@@ -61,7 +67,8 @@ local PAGE_RESET_INFO = {
     gf_auras = GROUP_RESET_INFO,
     gf_indicators = GROUP_RESET_INFO,
     gf_priority = GROUP_RESET_INFO,
-    opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
+    opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, " ..
+        "power smoothing and all per-unit/group bar overrides"),
     opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
     auras3_buffs = { label = "Buff Appearance", kind = "auraAppearance", appearanceKind = "buff",
         summary = "global Buff icon shape, border and shadow appearance" },
@@ -84,7 +91,8 @@ for pageKey, info in pairs(UNIT_PAGE_RESETS) do
         label = info.label,
         kind = "unit",
         unit = info.unit,
-        summaryFormat = "%s unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
+        summaryFormat = "%s unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this " ..
+            "unit's castbar toggles",
     }
 end
 -- General-root bars keys beyond BARS_SCOPE_KEYS: the Bars page resets the general
@@ -100,7 +108,8 @@ local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTextureOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
+    overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata
+    barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelBorderShowOn
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
@@ -112,14 +121,20 @@ local BARS_SCOPE_KEYS = KSW [[
 -- Custom settings flag (hlOverride) gates travel with the flag.
 M.BarsScopeKeys = BARS_SCOPE_KEYS
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled
+    roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture
     powerBarBgTexture slantedBarsEnabled slantedBarDirection slantedUnitFrames slantedGroupFrames slantedPowerBars slantedMouseover
     slantedCastbars slantedClassResources
 ]]
-local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB characterNameParts"
+local FONT_GENERAL_KEYS = KSW [[
+    fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha
+    fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide
+    shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB characterNameParts
+]]
 local FONT_SCOPE_KEYS = KSW [[
-    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
+    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha
+    fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
     nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]
@@ -339,7 +354,8 @@ local function ResolvePageResetInfo(pageKey)
     info.label = AURA_APPEARANCE_LABELS[info.appearanceKind] or info.label
     local blizzardAuraScope = info.appearanceKind == "buff" or info.appearanceKind == "debuff"
     local summary = blizzardAuraScope
-        and "only the global %s icon shape, border and shadow settings, plus the shared Blizzard Buff/Debuff visibility settings; other Aura types and all Unit/Group lane settings stay unchanged"
+        and "only the global %s icon shape, border and shadow settings, plus the shared Blizzard Buff/Debuff visibility settings; other Aura " ..
+            "types and all Unit/Group lane settings stay unchanged"
         or "only the global %s icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"
     info.summary = M.Format(summary, M.Tr(info.label))
     return info
@@ -700,13 +716,15 @@ function M.BuildPageResetWarning(pageKey)
     title = M.Tr and M.Tr(title) or title
     if info.kind == "profile" then
         return string.format(
-            M.Tr("Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that profile will be affected."),
+            M.Tr("Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that " ..
+                "profile will be affected."),
             tostring(title),
             tostring(ActiveProfileName())
         )
     end
     return string.format(
-        M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
+        M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future " ..
+            "default changes are used automatically."),
         tostring(title),
         tostring(info.summaryFormat and Fmt(info.summaryFormat, M.Tr(info.label or title))
             or (M.Tr and M.Tr(info.summary or title)) or info.summary or title)

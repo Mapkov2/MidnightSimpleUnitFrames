@@ -10,17 +10,6 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Lines = M.Lines
 local PipeRows = M.PipeRows
-if type(PipeRows) ~= "function" then
-    PipeRows = function(rows)
-        local out = {}
-        for line in Lines(rows) do
-            local cols, n = {}, 0
-            for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; cols[n] = col end
-            out[#out + 1] = cols
-        end
-        return out
-    end
-end
 
 local function NavRows(rows)
     local nav = {}
@@ -60,7 +49,7 @@ P|gameplay|Gameplay|general
 P|opt_misc|Miscellaneous|general
 P|profiles|Profiles|general
 ]]
-if MSUF.Client and MSUF.Client.IsForever then
+if MSUF.Client.IsForever then
     for i, item in ipairs(M.navItems) do
         if item.id == "combat" then
             table.insert(M.navItems, i + 1, { key = "swingtimers", label = "Swing Timers (Forever)", group = "combat" })

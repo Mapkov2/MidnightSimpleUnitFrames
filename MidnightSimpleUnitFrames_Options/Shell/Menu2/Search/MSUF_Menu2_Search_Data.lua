@@ -43,9 +43,17 @@ Data.NOISE_TEXT = {
 }
 
 Data.STOP_WORDS = WordSet [[
-    a an and are bother bothering can cant change changed changing configure configured customize customise do does doesnt didn didnt basically blind brain find fixed fix for get going hey help how i im in is it just m make maybe my need now not of on or please pls option options de del el la las los un una esta este donde como est le les des du une ou il lo gli di da dove per para o os as um uma onde найти где как опция setting settings setup so sorry thanks the thx to want where why with would t etc functioning n wtf dumb stupid plsfix s see image screenshot happening here still even though wie kann ich ist sind das die der den dem ein eine einer mein meine nicht warum wo was aendern andern einstellen einstellungen finde finden bitte du fuer fur mal man mich mir mit nur optionen noch immer aus obwohl trotzdem werden und oder zu zur zum
+    a an and are bother bothering can cant change changed changing configure configured customize customise do does doesnt didn didnt basically blind
+    brain find fixed fix for get going hey help how i im in is it just m make maybe my need now not of on or please pls option options de del el la
+    las los un una esta este donde como est le les des du une ou il lo gli di da dove per para o os as um uma onde найти где как опция setting
+    settings setup so sorry thanks the thx to want where why with would t etc functioning n wtf dumb stupid plsfix s see image screenshot happening
+    here still even though wie kann ich ist sind das die der den dem ein eine einer mein meine nicht warum wo was aendern andern einstellen
+    einstellungen finde finden bitte du fuer fur mal man mich mir mit nur optionen noch immer aus obwohl trotzdem werden und oder zu zur zum
 ]]
 
 Data.QUERY_SOFT_STOP_WORDS = WordSet [[
-    activate activated adjust button checkbox choose chosen decrease disable disabled dropdown enable enabled hide hidden increase input off open select selected slider switch toggle turn value visible aktivieren aktiviere aktiviert anpassen anzeigen ausblenden ausschalten auswahl auswaehlen deaktivieren deaktiviere deaktiviert einschalten menu menue regler schalter umschalter choisir activer desactiver seleccionar activar desactivar selezionare attivare disattivare ativar desativar
+    activate activated adjust button checkbox choose chosen decrease disable disabled dropdown enable enabled hide hidden increase input off open
+    select selected slider switch toggle turn value visible aktivieren aktiviere aktiviert anpassen anzeigen ausblenden ausschalten auswahl auswaehlen
+    deaktivieren deaktiviere deaktiviert einschalten menu menue regler schalter umschalter choisir activer desactiver seleccionar activar desactivar
+    selezionare attivare disattivare ativar desativar
 ]]

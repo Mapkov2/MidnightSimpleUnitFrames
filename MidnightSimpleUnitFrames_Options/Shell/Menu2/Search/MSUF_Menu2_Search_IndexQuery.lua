@@ -572,20 +572,28 @@ local function AddSearchCanonicalPairs(result, firstWords, secondWords)
 end
 
 local function AddSearchCanonicalRows(text)
-    for row in text:gmatch("[^;]+") do
+    -- Rows end at ";" or at a line break; a wrapped line never joins two rows.
+    for row in text:gmatch("[^;\n]+") do
         row = row:match("^%s*(.-)%s*$")
         local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
         if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
     end
 end
 AddSearchCanonicalRows([[
-demonhunter|demon|hunter;deathknight|death|knight;windshear|wind|shear;castbar|cast|bar;healthbar|health|bar;powerbar|power|bar;showbuffs|show|buffs;maxbuffs|max|buffs;customcaps|custom|caps
-smoothfill|smooth soft fluid|fill;smoothfill|weiche weichen sanfte fluessige|fuellung;smoothfill|relleno llenado|suave fluido;smoothfill|remplissage|doux fluide;smoothfill|riempimento|fluido morbido;smoothfill|preenchimento|suave fluido
-classpower|class|resource resources power;clickcast|click|cast casting;clickthrough|click|through;editmode|edit|mode;loadconditions|load|condition conditions;readycheck|ready|check;raidmarker|raid|marker;groupnumber|group|number
-nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|kick;interruptready|interrupt|ready;leveltext|level|text;levelindicator|level|indicator;statusindicators|status|indicator indicators;statusicons|status|icon icons
-onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
-healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
-playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
+demonhunter|demon|hunter;deathknight|death|knight;windshear|wind|shear;castbar|cast|bar;healthbar|health|bar;powerbar|power|bar;showbuffs|show|buffs;
+maxbuffs|max|buffs;customcaps|custom|caps
+smoothfill|smooth soft fluid|fill;smoothfill|weiche weichen sanfte fluessige|fuellung;smoothfill|relleno llenado|suave fluido;
+smoothfill|remplissage|doux fluide;smoothfill|riempimento|fluido morbido;smoothfill|preenchimento|suave fluido
+classpower|class|resource resources power;clickcast|click|cast casting;clickthrough|click|through;editmode|edit|mode;
+loadconditions|load|condition conditions;readycheck|ready|check;raidmarker|raid|marker;groupnumber|group|number
+nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|kick;interruptready|interrupt|ready;leveltext|level|text;
+levelindicator|level|indicator;statusindicators|status|indicator indicators;statusicons|status|icon icons
+onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;
+unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
+healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;
+distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
+playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;
+arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
 ]])
 
 --- Also returns, by word position, the typed pair a canonical word replaced:
@@ -859,7 +867,10 @@ local function SearchLooksLikeSupportQuestion(query, normalized)
     return false
 end
 
-local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare ativar desativar выбрать включить отключить 설정 선택 사용 비활성 활성 下拉 选择 启用 停用 選擇 啟用 停用"
+local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust " ..
+    "increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl " ..
+    "auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare " ..
+    "ativar desativar выбрать включить отключить 설정 선택 사용 비활성 활성 下拉 选择 启用 停用 選擇 啟用 停用"
 
 local function SearchLooksLikeControlQuestion(query, normalized)
     normalized = normalized or NormalizeSearchText(query)
@@ -871,9 +882,12 @@ local function SearchLooksLikeControlQuestion(query, normalized)
     return false
 end
 
-local SEARCH_GENERIC_LOCATION_QUESTION_TERMS = "where|where is|where are|where do|where can|where to|how do|how to|how can|wo|wo ist|wo sind|wo kann|wo finde|wie|wie kann"
+local SEARCH_GENERIC_LOCATION_QUESTION_TERMS = "where|where is|where are|where do|where can|where to|how do|how to|how can|wo|wo ist|wo sind|wo " ..
+    "kann|wo finde|wie|wie kann"
 
-local SEARCH_GENERIC_LOCATION_ACTION_TERMS = "change|changed|changing|configure|customize|customise|edit|find|set|select|choose|adjust|move|resize|enable|disable|show|hide|turn on|turn off|aendern|aendere|andern|einstellen|finden|auswaehlen|verschieben|aktivieren|deaktivieren|anzeigen|ausblenden"
+local SEARCH_GENERIC_LOCATION_ACTION_TERMS = "change|changed|changing|configure|customize|customise|edit|find|set|select|choose|adjust|move|" ..
+    "resize|enable|disable|show|hide|turn on|turn off|aendern|aendere|andern|einstellen|finden|auswaehlen|verschieben|aktivieren|deaktivieren|" ..
+    "anzeigen|ausblenden"
 
 local SEARCH_CONTROL_KINDS = M.KeySetFromWords "toggle dropdown segment slider color button textinput"
 

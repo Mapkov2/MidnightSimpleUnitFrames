@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua
 --- Search target routing, accordion state, and anchor scrolling.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua")
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
@@ -400,10 +400,11 @@ raid=raid|raids
 party=party|group|groups
 ]]
 
-local GLOBAL_SCOPE_TERMS = SearchTermRows [[
+local GLOBAL_SCOPE_TERMS = SearchTermRows([[
 shared=shared scope|shared style|global scope|global style|baseline
 gf_raid=raid frame|raid frames|raid unit|raid units|raid font|raid fonts|raid texture|raid textures|raid health|raid text|raid power|raid bar|raid bars
-gf_party=party frame|party frames|party unit|party units|party font|party fonts|party texture|party textures|party health|party text|party power|party bar|party bars|group frame|group frames|group font|group text
+gf_party=party frame|party frames|party unit|party units|party font|party fonts|party texture|party textures|party health|party text|]] ..
+[[party power|party bar|party bars|group frame|group frames|group font|group text
 targettarget=target of target|targettarget|target target|tot frame|tot font|tot text|tot bar
 focustarget=focus target|focustarget|focus target frame|focus target font|focus target text|focus target bar
 player=player frame|player unit|player font|player text|player health|player power|player bar|player bars
@@ -412,14 +413,15 @@ focus=focus frame|focus unit|focus font|focus text|focus health|focus power|focu
 pet=pet frame|pet unit|pet font|pet text|pet health|pet power|pet bar|pet bars
 pettarget=pet target|pettarget|pet target frame|pet target font|pet target text
 boss=boss frame|boss frames|boss unit|boss units|boss font|boss text|boss health|boss power|boss bar|boss bars
-]]
+]])
 
-local TEXT_KIND_TERMS = SearchTermRows [[
-hp=hp text|health text|hp slot|health slot|show hp|percent hp|hp percent|left hp|center hp|right hp|hp left|hp center|hp right|left health|center health|right health|health left|health center|health right
+local TEXT_KIND_TERMS = SearchTermRows([[
+hp=hp text|health text|hp slot|health slot|show hp|percent hp|hp percent|left hp|center hp|right hp|hp left|hp center|hp right|left health|]] ..
+[[center health|right health|health left|health center|health right
 power=power text|power slot|mana text|energy text|rage text|show power|left power|center power|right power|power left|power center|power right
 advanced=text layer|advanced text|name layer|hp layer|power layer
 name=name text|show name|name position|name anchor|raid group name|left name|center name|right name
-]]
+]])
 
 local TEXT_SLOT_TERMS = SearchTermRows [[
 left=left slot|slot left|left hp|left health|left power|hp left|health left|power left
@@ -548,7 +550,8 @@ false=import current profile|import to current|current profile import
 local DASHBOARD_ROUTE_TERMS = {
     { DASHBOARD_ROUTE_RECOVERY,
         "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
-    { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|options too small|resize window|groesser|kleiner|skalierung" },
+    { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|" ..
+        "options too small|resize window|groesser|kleiner|skalierung" },
 }
 
 local function SearchRouteUnitStatusSelection(route, unit, normalized)
@@ -614,13 +617,17 @@ transparency=transparency|transparent|alpha|opacity|fade|in combat alpha|out of 
 portrait=portrait|class icon|2d portrait|avatar|face
 power_bar=power bar|mana bar|energy bar|rage bar|power height|power smooth fill
 castbar=castbar|cast bar|spell name|cast icon|cast time
-status_icons=status icons|status icon|indicator|level|level text|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez|pet happiness|happiness|advanced status|advanced x offset|advanced y offset|extended x offset|extended y offset
+status_icons=status icons|status icon|indicator|level|level text|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|]] ..
+[[combat icon|rested|incoming rez|pet happiness|happiness|advanced status|advanced x offset|advanced y offset|extended x offset|extended y offset
 load_conditions=load conditions|visibility conditions|show conditions|hide conditions|when to show|when to hide
 boss_layout=boss layout|boss preview|boss frames
-boss_target_highlight=boss target highlight|boss target marker|highlight style|only highlight with multiple boss frames|marker anchor|arrow direction|marker layout|marker size|marker x offset|marker y offset
+boss_target_highlight=boss target highlight|boss target marker|highlight style|only highlight with multiple boss frames|marker anchor|]] ..
+[[arrow direction|marker layout|marker size|marker x offset|marker y offset
 ]],
     gf_layout = [[
-general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|deaktivieren|ausblenden
+general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|]] ..
+[[party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|]] ..
+[[deaktivieren|ausblenden
 portrait=portrait|class icon|2d portrait|avatar|face
 text=text|name text|health text|hp text|power text|font size|text slot|delimiter|hide percent
 power=resource bar|power bar|mana bar|role power|smooth fill|tank power|healer power|dps power
@@ -638,17 +645,21 @@ dstripe=debuff stripe|stripe edge|stripe height|stripe opacity
     gf_auras = [[
 auras=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer|debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
 si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators|placed spell icons
-si_style=spell icon style|spell indicator style|spell icon zoom|spell icon scale|spell icon shape|spell icon opacity|spell icon tooltip|spell icon cooldown|spell icon swipe|spell icon duration bar|spell icon stack
+si_style=spell icon style|spell indicator style|spell icon zoom|spell icon scale|spell icon shape|spell icon opacity|spell icon tooltip|]] ..
+[[spell icon cooldown|spell icon swipe|spell icon duration bar|spell icon stack
 ]],
     gf_indicators = [[
 indicators=indicators|focus glow|frame effects
-sicons=status icons|status icon|dead icon|ghost text|offline icon|afk|dnd|ready check|summon|resurrect|phase|leader icon|assist icon|role icon|raid marker|advanced status|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset
+sicons=status icons|status icon|dead icon|ghost text|offline icon|afk|dnd|ready check|summon|resurrect|phase|leader icon|assist icon|role icon|]] ..
+[[raid marker|advanced status|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset
 ci=corner indicators|corner dots|corner indicator|custom spell editor|slot assignments
 ]],
     gf_priority = [[
-overview=priority frames|enable priority|disable priority|important players|priority group frames|priority party frames|duplicate party frames|duplicate raid frames|extra party frames|extra raid frames|dungeon priority frames
+overview=priority frames|enable priority|disable priority|important players|priority group frames|priority party frames|duplicate party frames|]] ..
+[[duplicate raid frames|extra party frames|extra raid frames|dungeon priority frames
 who_appears=pin player|pinned players|manual pins|automatic tanks|auto tanks|visible slots|hover hotkey|keybind|remove pin|clear pins
-placement=priority placement|attach priority|right of group|left of group|above group|below group|right of party|left of party|right of raid|left of raid|free position|growth|spacing|attachment gap|alignment offset|priority mover|edit mode
+placement=priority placement|attach priority|right of group|left of group|above group|below group|right of party|left of party|right of raid|]] ..
+[[left of raid|free position|growth|spacing|attachment gap|alignment offset|priority mover|edit mode
 ]],
     profiles = [[
 profiles_management=profile management|active profile|rename|copy profile|reset profile
@@ -675,11 +686,13 @@ castbar_textures=textures|texture|outline|castbar texture
 castbar_empowered=empowered casts|evoker|empower|stage blink|hold cast|release cast
 castbar_name_shortening=name shortening|spell name|cast name|max name length
 castbar_focus_kick=focus kick|target kick|interrupt focus|kick cooldown
-castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrupt|kick ready|unavailable fill|unavailable cast fill|kick unavailable|interrupt cooldown fill
+castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrupt|kick ready|unavailable fill|unavailable cast fill|]] ..
+[[kick unavailable|interrupt cooldown fill
 ]],
     opt_misc = [[
 misc_language=language|locale|translation|localization|localisation
-misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize|navigation icons|nav icons|navigation symbols|nav symbols|navi symbole|navigationssymbole
+misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize|navigation icons|nav icons|navigation symbols|nav symbols|]] ..
+[[navi symbole|navigationssymbole
 misc_startup=startup|welcome|welcome message|version check|versioncheck|notices
 misc_mouseover_highlight=mouseover highlight|hover highlight|hover gradient|hover border|highlight style|highlight size
 misc_tooltips=tooltips|tooltip|unitframe tooltips|group frame tooltips|mouseover tooltip|modifier tooltip
@@ -691,7 +704,8 @@ classpower_behavior=behavior|prediction|quick actions
 classpower_visuals=style|visual|texture|spacing|colors
 classpower_visibility=auto hide|visibility|hide empty
 classpower_detached_power=detached power|detached power bar|alternate power|dual resource
-classpower_player_hp=player hp bar|second player hp bar|duplicate hp|duplicate health|class resource hp|class resources hp|shared hp text|smooth fill|hp shape|follow player power|orb size|hp orb|health orb|hp color|class color|dark mode|hp gradient
+classpower_player_hp=player hp bar|second player hp bar|duplicate hp|duplicate health|class resource hp|class resources hp|shared hp text|]] ..
+[[smooth fill|hp shape|follow player power|orb size|hp orb|health orb|hp color|class color|dark mode|hp gradient
 classpower_alt_mana=alternative mana|alt mana|mana bar
 ]],
     auras3_default = [[
@@ -702,7 +716,8 @@ Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swi
     opt_colors = [[
 colors_font=global font color|font color
 colors_classes=class bar colors|class color|class colored
-colors_background=bar background tint|background fill|full bar|missing health only|background color mode|custom tint|match health bar|class color|health gradient|background color|backdrop|missing health|dark mode
+colors_background=bar background tint|background fill|full bar|missing health only|background color mode|custom tint|match health bar|]] ..
+[[class color|health gradient|background color|backdrop|missing health|dark mode
 colors_appearance=unitframe global coloring|appearance|dark mode
 colors_unit=unitframe colors|unit frame colors|reaction color
 colors_npc_type=npc type colors|npc color
@@ -710,8 +725,10 @@ colors_bar_colors=bar colors|health color|hp color
 colors_castbar=castbar colors|castbar color|spell color
 colors_highlight=mouseover highlight color|hover highlight color|highlight colors
 colors_gameplay=gameplay|crosshair|target sound
-colors_power=power bar colors|power bar color|mana color|rage color|energy color|focus power|runic power|insanity color|fury color|pain color|essence color|astral power|lunar power|maelstrom color
-colors_class_power=class power colors|combo point color|holy power color|soul shard|chi color|arcane charges|runes color|essence color|soul fragments|maelstrom weapon|astral power|eclipse|stagger|icicles|ebon might
+colors_power=power bar colors|power bar color|mana color|rage color|energy color|focus power|runic power|insanity color|fury color|pain color|]] ..
+[[essence color|astral power|lunar power|maelstrom color
+colors_class_power=class power colors|combo point color|holy power color|soul shard|chi color|arcane charges|runes color|essence color|]] ..
+[[soul fragments|maelstrom weapon|astral power|eclipse|stagger|icicles|ebon might
 colors_auras=auras|aura colors|buff color|debuff color|timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent|pandemic
 colors_portrait=portrait colors|portrait color
 ]],
@@ -742,15 +759,18 @@ local function SearchRoutePortraitTab(route, unit, normalized)
     then
         tab = "advanced"
     elseif SearchRouteHasAny(normalized,
-        "shape|border|square|circle|rounded|diamond|portraitshape|portraitborderstyle|portraitborderart|portraitborderdirection|portraitborderthickness|portraitfillborder")
+        "shape|border|square|circle|rounded|diamond|portraitshape|portraitborderstyle|portraitborderart|portraitborderdirection|" ..
+            "portraitborderthickness|portraitfillborder")
     then
         tab = "border"
     elseif SearchRouteHasAny(normalized,
-        "placement|detached|attach to frame|anchor point|overlay alignment|layer offset|portrait opacity|portraitplacement|portraitdetachedpoint|portraitdetachedto|portraitoverlayalign|portraitleveloffset|portraitalpha")
+        "placement|detached|attach to frame|anchor point|overlay alignment|layer offset|portrait opacity|portraitplacement|portraitdetachedpoint|" ..
+            "portraitdetachedto|portraitoverlayalign|portraitleveloffset|portraitalpha")
     then
         tab = "placement"
     elseif SearchRouteHasAny(normalized,
-        "size override|width override|height override|portrait x|portrait y|portrait zoom|zoom center|portraitsizeoverride|portraitwidth|portraitheight|portraitoffsetx|portraitoffsety|portraitzoom|portraitpanx|portraitpany")
+        "size override|width override|height override|portrait x|portrait y|portrait zoom|zoom center|portraitsizeoverride|portraitwidth|" ..
+            "portraitheight|portraitoffsetx|portraitoffsety|portraitzoom|portraitpanx|portraitpany")
     then
         tab = "geometry"
     else
@@ -770,7 +790,9 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
     SearchRouteUnitStatusSelection(route, unit, normalized)
     local auraQuery = SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|defensive|defensives|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id|style|appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect|ordering|sort by|custom priority|fixed priority|dynamic priority")
+        "aura|auras|buff|buffs|debuff|debuffs|defensive|defensives|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id|style|" ..
+            "appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect|ordering|sort by|" ..
+            "custom priority|fixed priority|dynamic priority")
     if auraQuery then
         local container
         if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then container = "custom4" end
@@ -858,7 +880,8 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
         if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
     elseif pageKey == "gf_auras" and SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer|style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|ordering|sort by|sort order")
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|" ..
+            "externals|layer|style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|ordering|sort by|sort order")
     then
         local activeScope = scope or M.gfScope or "party"
         local lane = SearchRouteHasAny(normalized, "external defensives|external defensive|externals") and "externals"
@@ -898,7 +921,8 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
     elseif pageKey == "opt_fonts" then
         local scope = SearchGlobalScopeForText(normalized)
         if scope then SearchRouteSetGeneral(route, "_fontScopeKey", scope) end
-        if not scope and SearchRouteHasAny(normalized, "font|fonts|global font|font family|font dropdown|sharedmedia|change font|change fonts|where to change font|where change font|schriftart|schriftart aendern|schrift aendern") then
+        if not scope and SearchRouteHasAny(normalized, "font|fonts|global font|font family|font dropdown|sharedmedia|change font|change fonts|" ..
+            "where to change font|where change font|schriftart|schriftart aendern|schrift aendern") then
             SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
         end
     elseif SEARCH_AURA_ROUTE_PAGES[pageKey] then

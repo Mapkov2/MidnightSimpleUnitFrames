@@ -11,7 +11,10 @@ M.SearchData = Data
 -- Declarative help rows only; routing and scoring live in the search index layer.
 if type(Data.RegisterFAQProvider) == "function" then
     Data.RegisterFAQProvider(function(env)
-        local SearchKeywordList, DASHBOARD_ROUTE_RECOVERY, DASHBOARD_ROUTE_SCALING, DASHBOARD_ROUTE_CHANGELOG, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, SEARCH_DASHBOARD_RECOVERY_KEYWORDS, SEARCH_DASHBOARD_DISCORD_KEYWORDS, SEARCH_DASHBOARD_SUPPORT_KEYWORDS, SEARCH_DASHBOARD_WAGO_KEYWORDS, SEARCH_DASHBOARD_SCALING_KEYWORDS, SEARCH_DASHBOARD_CHANGELOG_KEYWORDS =
+        local SearchKeywordList, DASHBOARD_ROUTE_RECOVERY, DASHBOARD_ROUTE_SCALING, DASHBOARD_ROUTE_CHANGELOG, SEARCH_DISPEL_DEBUFF_KEYWORDS,
+            SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, SEARCH_DASHBOARD_RECOVERY_KEYWORDS,
+            SEARCH_DASHBOARD_DISCORD_KEYWORDS, SEARCH_DASHBOARD_SUPPORT_KEYWORDS, SEARCH_DASHBOARD_WAGO_KEYWORDS, SEARCH_DASHBOARD_SCALING_KEYWORDS,
+            SEARCH_DASHBOARD_CHANGELOG_KEYWORDS =
             Data.FAQEnv(env, [[
                 SearchKeywordList DASHBOARD_ROUTE_RECOVERY DASHBOARD_ROUTE_SCALING DASHBOARD_ROUTE_CHANGELOG
                 SEARCH_DISPEL_DEBUFF_KEYWORDS SEARCH_HIGHLIGHT_BORDER_KEYWORDS SEARCH_DISPEL_OVERLAY_KEYWORDS
@@ -80,7 +83,8 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I resize party or raid frames?",
-                a = "Open Frames > Party/Raid Frames > Layout. Size & Scaling controls frame dimensions and scaling by group size. Group Layout controls growth, columns, and group visibility.",
+                a = "Open Frames > Party/Raid Frames > Layout. Size & Scaling controls frame dimensions and scaling by group size. Group Layout " ..
+                    "controls growth, columns, and group visibility.",
                 p = "gf_layout",
                 t = "Opens: Frames > Party/Raid Frames > Layout",
                 x = "Size & Scaling Group Layout width height spacing columns growth scale",

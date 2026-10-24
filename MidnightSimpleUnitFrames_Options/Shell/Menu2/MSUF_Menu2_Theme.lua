@@ -741,6 +741,15 @@ local function StopAlphaMotion(frame)
     end
 end
 T.StopMotion = StopAlphaMotion
+local function PlayAlphaGroup(frame, group, fromAlpha, toAlpha, onFinished)
+    group:SetScript("OnFinished", function()
+        if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
+        if type(onFinished) == "function" then onFinished(frame) end
+    end)
+    frame:SetAlpha(fromAlpha or 0)
+    if frame.Show then frame:Show() end
+    group:Play()
+end
 function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
         if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
@@ -765,13 +774,7 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     end
     ConfigureAlphaAnim(anim, fromAlpha or 0, toAlpha or 1, ClampMotionDuration(duration, T.motion.standard),
         smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN"))
-    group:SetScript("OnFinished", function()
-        if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
-        if type(onFinished) == "function" then onFinished(frame) end
-    end)
-    frame:SetAlpha(fromAlpha or 0)
-    if frame.Show then frame:Show() end
-    group:Play()
+    PlayAlphaGroup(frame, group, fromAlpha, toAlpha, onFinished)
 end
 function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, onFinished, smoothing, origin)
     if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
@@ -817,13 +820,7 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
         return T.PlayAlpha(frame, fromAlpha, toAlpha, dur, onFinished, smoothing)
     end
     frame._msuf2AlphaScale = group
-    group:SetScript("OnFinished", function()
-        if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
-        if type(onFinished) == "function" then onFinished(frame) end
-    end)
-    frame:SetAlpha(fromAlpha or 0)
-    if frame.Show then frame:Show() end
-    group:Play()
+    PlayAlphaGroup(frame, group, fromAlpha, toAlpha, onFinished)
 end
 function T.PlayMotion(frame, motion, opts)
     opts = opts or {}
@@ -1760,14 +1757,33 @@ local function UpdateSliderThumb(slider)
     if thumb.Show then thumb:Show() end
 end
 local SLIDER_STYLE_HOOKS = {
-    OnEnter = function(self) self._msuf2SliderHovered = true; T.StyleSlider(self) end,
-    OnLeave = function(self) self._msuf2SliderHovered = nil; T.StyleSlider(self) end,
-    OnMouseDown = function(self) self._msuf2SliderActive = true; T.StyleSlider(self) end,
-    OnMouseUp = function(self) self._msuf2SliderActive = nil; T.StyleSlider(self) end,
-    OnDisable = function(self) self._msuf2SliderActive = nil; self._msuf2SliderHovered = nil; T.StyleSlider(self) end,
+    OnEnter = function(self)
+        self._msuf2SliderHovered = true
+        T.StyleSlider(self)
+    end,
+    OnLeave = function(self)
+        self._msuf2SliderHovered = nil
+        T.StyleSlider(self)
+    end,
+    OnMouseDown = function(self)
+        self._msuf2SliderActive = true
+        T.StyleSlider(self)
+    end,
+    OnMouseUp = function(self)
+        self._msuf2SliderActive = nil
+        T.StyleSlider(self)
+    end,
+    OnDisable = function(self)
+        self._msuf2SliderActive = nil
+        self._msuf2SliderHovered = nil
+        T.StyleSlider(self)
+    end,
     OnEnable = function(self) T.StyleSlider(self) end,
     OnValueChanged = function(self) if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
-    OnSizeChanged = function(self) if self._msuf2UpdateFill then self:_msuf2UpdateFill() end; if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
+    OnSizeChanged = function(self)
+        if self._msuf2UpdateFill then self:_msuf2UpdateFill() end
+        if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end
+    end,
 }
 function T.StyleSlider(slider)
     if MenuSkin then MenuSkin.TrackPaint(slider, T.StyleSlider) end
@@ -2619,8 +2635,14 @@ local function ButtonSetScript(self, scriptType, handler)
 end
 local BUTTON_STYLE_HOOKS = {
     OnMouseDown = T.CommitFocusedInput,
-    OnEnter = function(self) self._msuf2Hover = true; ButtonVisual(self, self._msuf2Active, true) end,
-    OnLeave = function(self) self._msuf2Hover = nil; ButtonVisual(self, self._msuf2Active, false) end,
+    OnEnter = function(self)
+        self._msuf2Hover = true
+        ButtonVisual(self, self._msuf2Active, true)
+    end,
+    OnLeave = function(self)
+        self._msuf2Hover = nil
+        ButtonVisual(self, self._msuf2Active, false)
+    end,
     OnEnable = ButtonRefreshVisual,
     OnDisable = ButtonRefreshVisual,
 }
@@ -2762,10 +2784,23 @@ local function CloseButtonVisual(btn, hover, down)
     if label and label.SetTextColor then label:SetTextColor(lr, lg, lb, alpha) end
 end
 local CLOSE_BUTTON_HOOKS = {
-    OnEnter = function(self) self._msuf2CloseHover = true; CloseButtonVisual(self, true, self._msuf2CloseDown) end,
-    OnLeave = function(self) self._msuf2CloseHover = nil; self._msuf2CloseDown = nil; CloseButtonVisual(self, false, false) end,
-    OnMouseDown = function(self) self._msuf2CloseDown = true; CloseButtonVisual(self, self._msuf2CloseHover, true) end,
-    OnMouseUp = function(self) self._msuf2CloseDown = nil; CloseButtonVisual(self, self._msuf2CloseHover, false) end,
+    OnEnter = function(self)
+        self._msuf2CloseHover = true
+        CloseButtonVisual(self, true, self._msuf2CloseDown)
+    end,
+    OnLeave = function(self)
+        self._msuf2CloseHover = nil
+        self._msuf2CloseDown = nil
+        CloseButtonVisual(self, false, false)
+    end,
+    OnMouseDown = function(self)
+        self._msuf2CloseDown = true
+        CloseButtonVisual(self, self._msuf2CloseHover, true)
+    end,
+    OnMouseUp = function(self)
+        self._msuf2CloseDown = nil
+        CloseButtonVisual(self, self._msuf2CloseHover, false)
+    end,
     OnEnable = function(self) CloseButtonVisual(self, self._msuf2CloseHover, self._msuf2CloseDown) end,
     OnDisable = function(self) CloseButtonVisual(self, false, false) end,
 }
@@ -2854,7 +2889,9 @@ function Scroll.PaintBar(bar, hover)
     if thumb.SetColorTexture then
         local c = hover and bar._msuf2ThumbHover or bar._msuf2ThumbBase
         local a = (hover and 0.90 or 0.68) * alpha
-        ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+        ApplyTextureGradient(thumb, "VERTICAL",
+            { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a },
+            { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
     end
 end
 function Scroll.UpdateThumb(bar, offset, maxScroll)
@@ -3086,7 +3123,9 @@ function T.StyleScrollFrame(scroll, anchor)
     local thumbBase = T.colors.coreRim
     local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
-    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
+    ApplyTextureGradient(thumb, "VERTICAL",
+        { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 },
+        { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar._msuf2Thumb = thumb
     bar._msuf2ThumbBase, bar._msuf2ThumbHover = thumbBase, T.colors.coreRaised
     bar._msuf2ScrollOwner = scroll

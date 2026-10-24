@@ -56,10 +56,12 @@ local STAGES = {
         includeSections = { text = true }, prepareSection = "text", prepareTab = "name", prepareState = "unitTextTabSelection", controlLimit = 3,
         controlPaths = { "unit/text/name/show", "unit/text/name/anchor", "unit/text/name/size" } }),
     Row.Unit("uf_player_hp_text", "Set up Player health text", "Skipping keeps the current Player health text.", {
-        includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection",
+        prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
         controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/mode", "unit/text/hp/size" } }),
     Row.Unit("uf_player_power_text", "Set up Player power text", "Skipping keeps the current Player power text.", {
-        includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection",
+        prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
         controlPaths = { "unit/text/power/show", "unit/text/power/slot/mode", "unit/text/power/size" } }),
     Row.Unit("uf_player_portrait", "Set up the Player portrait", "Skipping keeps the current Player portrait.", {
         includeSections = { portrait = true }, prepareSection = "portrait", prepareTab = "general", prepareState = "unitPortraitTabSelection", controlLimit = 3,
@@ -97,11 +99,13 @@ local STAGES = {
         controlPaths = { "group/layout/field/showname", "group/layout/field/nameanchor", "group/layout/field/namefontsize" } }),
     Row.Group("gf_layout", "gf_party_hp_text", "Set up Party health text", "Skipping keeps the current Party health text.", {
         includeSections = { text = true }, includeLockedControls = true,
-        prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
+        prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center",
+        prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
         controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/mode", "group/layout/field/hpfontsize" } }),
     Row.Group("gf_layout", "gf_party_power_text", "Set up Party power text", "Skipping keeps the current Party power text.", {
         includeSections = { text = true }, includeLockedControls = true,
-        prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
+        prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center",
+        prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
         controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/mode", "group/layout/field/powerfontsize" } }),
     Row.Group("gf_layout", "gf_party_resource", "Build the Party resource bar", "Skipping keeps the current Party resource bar.", {
         includeSections = { power = true }, includeLockedControls = true, controlLimit = 4,
@@ -529,7 +533,9 @@ local function StageCue(stage, position, touched)
     end
     if stage.id == "group_intro" then return Tr("PART 2 - Build Party once, then copy it to Raid or Mythic Raid.") end
     if stage.id == "group_edit_mode" then
-        if EditDone.groupPlacement() then return Tr("CHECKPOINT CLEAR - Party Frames moved. Click the mover for its size and spacing popup whenever you need it.") end
+        if EditDone.groupPlacement() then
+            return Tr("CHECKPOINT CLEAR - Party Frames moved. Click the mover for its size and spacing popup whenever you need it.")
+        end
         if EditDone.groupMovement() then return Tr("YOUR MOVE - Click the highlighted Party Frames mover to open Width, Height, and Spacing.") end
         return Tr("YOUR MOVE - Open Edit Mode, drag Party Frames once, then click the mover to see its Width, Height, and Spacing popup.")
     end
@@ -2213,86 +2219,9 @@ local function PaintChromeHeadings(chrome, stage, position, profileMismatch, man
     end
 end
 
-function M.RefreshGuidedTourChrome(reason)
-    local chrome = Runtime.chrome
-    if not chrome then return false end
-    if not TourIsActive() then
-        if Runtime.tourVisualsDirty ~= true then return false end
-        Runtime.warning = nil
-        Runtime.manualAway = nil
-        Runtime.lastVisualSignature = nil
-        Runtime.lastClickCueSignature = nil
-        ClearSectionEmphasis()
-        StopChromeTransition(chrome)
-        chrome:Hide()
-        RefreshEditModeOpenCue(false)
-        AnchorTourScroll(chrome, false)
-        Runtime.tourVisualsDirty = nil
-        return false
-    end
-    Runtime.tourVisualsDirty = true
-
-    local stage = CurrentStage()
-    local reconciledPopup = ReconcileGuidedEditModePopup(stage)
-    if reconciledPopup and M.activeKey == "guided_setup" and not Runtime.popupReconcileRefreshQueued then
-        Runtime.popupReconcileRefreshQueued = true
-        C_Timer.After(0, function()
-            Runtime.popupReconcileRefreshQueued = nil
-            M.RequestRefresh(nil, "GUIDED_POPUP_RECONCILED")
-        end)
-    end
-    local profileMismatch, tourProfile, activeProfile = ProfileMismatch()
-    if profileMismatch then
-        Runtime.warning = nil
-        Runtime.manualAway = nil
-    end
-    local expected = ExpectedPage(stage)
-    local position = CurrentPosition(stage)
-    local touched = CurrentControlTouched(stage, position)
-    local currentPage = M.activeKey
-    if currentPage and currentPage ~= expected then Runtime.manualAway = true end
-    local manualAway = Runtime.manualAway == true and currentPage ~= expected
-    local warning = Runtime.warning
-    if position.cursorNormalized and not profileMismatch and not manualAway then
-        FocusCurrentSection(stage)
-    end
-    local showEditModeOpenCue = not profileMismatch
-        and not manualAway
-        and not warning
-        and ShouldShowEditModeOpenCue()
-    local displayHelp = profileMismatch
-        and format(Tr("This tour belongs to profile %s. You are now editing %s. Restart the tour here or switch back to continue safely."), tourProfile, activeProfile)
-        or manualAway and Tr("Return to the guided page when you are ready to continue.")
-        or warning and warning.text
-        or StageCue(stage, position, touched)
-    if profileMismatch or manualAway then
-        ClearSectionEmphasis()
-    elseif stage.special or position.overview then
-        ClearSectionEmphasis(stage.pageKey)
-    elseif position.section then
-        EmphasizeSection(stage.pageKey, position.section, position.control)
-        EmphasizeControl(stage, position.section, position.controls, position.control)
-    end
-    SetStageIcon(chrome, stage)
-    local stagePosition, stageTotal = ActiveStagePosition(stage)
-    M.Theme.SetTranslatedText(chrome.step, format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
-
-    PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
-    chrome.help:SetText(displayHelp)
+local function PaintChromeButtons(chrome, stage, position, touched, stagePosition, state, displayHelp)
+    local profileMismatch, manualAway, warning = state.profileMismatch, state.manualAway, state.warning
     local alert = profileMismatch or warning
-    local controlCue = not alert and not stage.special and position.control ~= nil
-    local guidedGreen = M.Theme.colors.ok or { 0.24, 0.88, 0.40, 1 }
-    SetFontColor(chrome.help, alert and (M.Theme.colors.warning or M.Theme.colors.warn)
-        or controlCue and guidedGreen
-        or M.Theme.colors.muted)
-    local cueColor = alert and (M.Theme.colors.warning or M.Theme.colors.warn)
-        or controlCue and guidedGreen
-        or M.Theme.colors.accent
-    if cueColor then chrome.cueArrow:SetVertexColor(cueColor[1], cueColor[2], cueColor[3], 1) end
-
-    local fraction = ProgressFraction(stage, position)
-    chrome.progressFill:SetWidth(max(1, floor(((chrome.progress:GetWidth() or 1) - 2) * fraction)))
-
     -- Button texts and states. What the Edit Mode stages still wait for before
     -- Keep and Next unlock (the cooldown anchor choice, the Player move and the
     -- Party move) is read once here and serves both.
@@ -2342,6 +2271,91 @@ function M.RefreshGuidedTourChrome(reason)
     SetButtonEnabled(chrome.skip, skipOn)
     SetButtonEnabled(chrome.next, nextOn)
     SetButtonEnabled(chrome.pause, true)
+end
+
+function M.RefreshGuidedTourChrome(reason)
+    local chrome = Runtime.chrome
+    if not chrome then return false end
+    if not TourIsActive() then
+        if Runtime.tourVisualsDirty ~= true then return false end
+        Runtime.warning = nil
+        Runtime.manualAway = nil
+        Runtime.lastVisualSignature = nil
+        Runtime.lastClickCueSignature = nil
+        ClearSectionEmphasis()
+        StopChromeTransition(chrome)
+        chrome:Hide()
+        RefreshEditModeOpenCue(false)
+        AnchorTourScroll(chrome, false)
+        Runtime.tourVisualsDirty = nil
+        return false
+    end
+    Runtime.tourVisualsDirty = true
+
+    local stage = CurrentStage()
+    local reconciledPopup = ReconcileGuidedEditModePopup(stage)
+    if reconciledPopup and M.activeKey == "guided_setup" and not Runtime.popupReconcileRefreshQueued then
+        Runtime.popupReconcileRefreshQueued = true
+        C_Timer.After(0, function()
+            Runtime.popupReconcileRefreshQueued = nil
+            M.RequestRefresh(nil, "GUIDED_POPUP_RECONCILED")
+        end)
+    end
+    local profileMismatch, tourProfile, activeProfile = ProfileMismatch()
+    if profileMismatch then
+        Runtime.warning = nil
+        Runtime.manualAway = nil
+    end
+    local expected = ExpectedPage(stage)
+    local position = CurrentPosition(stage)
+    local touched = CurrentControlTouched(stage, position)
+    local currentPage = M.activeKey
+    if currentPage and currentPage ~= expected then Runtime.manualAway = true end
+    local manualAway = Runtime.manualAway == true and currentPage ~= expected
+    local warning = Runtime.warning
+    if position.cursorNormalized and not profileMismatch and not manualAway then
+        FocusCurrentSection(stage)
+    end
+    local showEditModeOpenCue = not profileMismatch
+        and not manualAway
+        and not warning
+        and ShouldShowEditModeOpenCue()
+    local displayHelp = profileMismatch
+        and format(Tr("This tour belongs to profile %s. You are now editing %s. Restart the tour here or switch back to continue safely."),
+            tourProfile, activeProfile)
+        or manualAway and Tr("Return to the guided page when you are ready to continue.")
+        or warning and warning.text
+        or StageCue(stage, position, touched)
+    if profileMismatch or manualAway then
+        ClearSectionEmphasis()
+    elseif stage.special or position.overview then
+        ClearSectionEmphasis(stage.pageKey)
+    elseif position.section then
+        EmphasizeSection(stage.pageKey, position.section, position.control)
+        EmphasizeControl(stage, position.section, position.controls, position.control)
+    end
+    SetStageIcon(chrome, stage)
+    local stagePosition, stageTotal = ActiveStagePosition(stage)
+    M.Theme.SetTranslatedText(chrome.step, format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
+
+    PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
+    chrome.help:SetText(displayHelp)
+    local alert = profileMismatch or warning
+    local controlCue = not alert and not stage.special and position.control ~= nil
+    local guidedGreen = M.Theme.colors.ok or { 0.24, 0.88, 0.40, 1 }
+    SetFontColor(chrome.help, alert and (M.Theme.colors.warning or M.Theme.colors.warn)
+        or controlCue and guidedGreen
+        or M.Theme.colors.muted)
+    local cueColor = alert and (M.Theme.colors.warning or M.Theme.colors.warn)
+        or controlCue and guidedGreen
+        or M.Theme.colors.accent
+    if cueColor then chrome.cueArrow:SetVertexColor(cueColor[1], cueColor[2], cueColor[3], 1) end
+
+    local fraction = ProgressFraction(stage, position)
+    chrome.progressFill:SetWidth(max(1, floor(((chrome.progress:GetWidth() or 1) - 2) * fraction)))
+
+    local state = { profileMismatch = profileMismatch, manualAway = manualAway, warning = warning }
+    PaintChromeButtons(chrome, stage, position, touched, stagePosition, state, displayHelp)
     chrome:Show()
     if (reason == "HOST_SIZE" or reason == "WINDOW_RESIZE")
         and not profileMismatch and not manualAway
@@ -2349,15 +2363,17 @@ function M.RefreshGuidedTourChrome(reason)
     then
         FocusGuidedWidget(position.control and position.control.widget, position.section.outer, false)
     end
-    local signature = table.concat({ stage.id, position.section and position.section.id or "overview", position.control and position.control.id or "section", profileMismatch and "profile" or (warning and "warning" or "normal"), manualAway and "away" or "guided" }, "\031")
+    local signature = table.concat({
+        stage.id,
+        position.section and position.section.id or "overview",
+        position.control and position.control.id or "section",
+        profileMismatch and "profile" or (warning and "warning" or "normal"),
+        manualAway and "away" or "guided",
+    }, "\031")
     PlayChromeTransition(chrome, signature, reason)
     RefreshEditModeOpenCue(showEditModeOpenCue)
     RefreshEditModePlacementCue()
-    FlashGuidedClickTargets(chrome, stage, position, {
-        profileMismatch = profileMismatch,
-        manualAway = manualAway,
-        warning = warning,
-    }, reason)
+    FlashGuidedClickTargets(chrome, stage, position, state, reason)
     return true
 end
 
@@ -2949,7 +2965,8 @@ local function BuildEditModePage(ctx, T, W)
         if not decision then
             anchorCopy = Tr("This client has no Cooldown Manager. Unit Frames use their own anchor.")
         elseif anchorDecision == "cooldown" then
-            anchorCopy = Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows.")
+            anchorCopy = Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored " ..
+                "Unitframe layout follows.")
         elseif anchorDecision == "independent" then
             anchorCopy = Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them.")
         else
@@ -3054,7 +3071,8 @@ local function BuildPowerMovesPage(ctx, T, W)
     Header(b, "MSUF power moves", "A focused frame workflow with direct control over the details that matter in combat.")
     InfoCard(b, T, "Touch the preview", "Click a handle to open its exact setting, drag it to move, or right-click for related actions.", "uf_player", 86)
     PreviewCard(b, T, W, "Rounded frames that match, corner for corner",
-        "One clean corner style with five strength levels covers Health, embedded or detached Power, frame outlines, aggro, dispel and highlight borders, on Unitframes and Group Frames alike.",
+        "One clean corner style with five strength levels covers Health, embedded or detached Power, frame outlines, aggro, dispel and highlight " ..
+            "borders, on Unitframes and Group Frames alike.",
         "opt_bars", TourPreview("rounded_frames"))
     InfoCard(b, T, "Spell Icons by spec",
         "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
@@ -3063,7 +3081,8 @@ local function BuildPowerMovesPage(ctx, T, W)
         CooldownAnchorSupported() and "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed."
             or "Place Unitframes and Class Resources independently in Edit Mode.",
         "classpower", 86)
-    InfoCard(b, T, "Find settings with Search", "Search Menu2 in everyday language to jump to the exact setting. Search only includes controls available in your active modules.", "home", 86)
+    InfoCard(b, T, "Find settings with Search", "Search Menu2 in everyday language to jump to the exact setting. Search only includes controls " ..
+        "available in your active modules.", "home", 86)
     return math.abs(b.y) + 34
 end
 

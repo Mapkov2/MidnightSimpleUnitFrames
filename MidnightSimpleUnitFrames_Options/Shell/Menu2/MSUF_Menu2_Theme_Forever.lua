@@ -222,7 +222,7 @@ end
 MSUF.ApplyClassicMenuTheme = function(T)
     -- Appearance presets own materials as well as colors. Resolve before any
     -- renderer captures tokens; switching presets uses the existing reload flow.
-    T.defaultMenuAppearancePreset = MSUF.Client and MSUF.Client.IsForever == true and "classicGlass" or "midnight"
+    T.defaultMenuAppearancePreset = MSUF.Client.IsForever == true and "classicGlass" or "midnight"
     function T.GetMenuAppearancePreset(g)
         local saved = type(g) == "table" and g.menuAppearancePreset
         if saved == "classicGlass" or saved == "midnight" or saved == "midnightDark" then return saved end
