@@ -44,7 +44,10 @@ local pairs = pairs
 local ipairs = ipairs
 local floor = math.floor
 local max = math.max
-local issecretvalue = issecretvalue or function() return false end
+local issecretvalue = issecretvalue
+if not issecretvalue then
+  issecretvalue = function() return false end
+end
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
@@ -951,6 +954,42 @@ local function ResolveHealthRGB(holder, frame, conf, keys, unit, hp, maxHP, r, g
   return ResolveAboveThresholdRGB(conf, keys, unit, frame)
 end
 
+-- One active gradient edge of a layer: a WHITE8 overlay fading from transparent
+-- to the gradient end color toward that edge. Entered only while the layer's
+-- gradient is enabled, so layers without one pay no extra call.
+local function ApplyGradientOverlay(frame, holder, direction, clipWanted, r2, g2, b2)
+  local overlay = EnsureOverlayTexture(holder, direction, clipWanted)
+  local orientation = (direction == "up" or direction == "down") and "VERTICAL" or "HORIZONTAL"
+  local minA, maxA = 0, 1
+  if direction == "left" or direction == "down" then minA, maxA = 1, 0 end
+  if overlay.SetGradient and CreateColor then
+    local minColor = overlay._msufTexLayerMinColor
+    if not minColor then
+      minColor = CreateColor(r2, g2, b2, minA)
+      overlay._msufTexLayerMinColor = minColor
+    elseif minColor.SetRGBA then
+      minColor:SetRGBA(r2, g2, b2, minA)
+    else
+      minColor.r, minColor.g, minColor.b, minColor.a = r2, g2, b2, minA
+    end
+    local maxColor = overlay._msufTexLayerMaxColor
+    if not maxColor then
+      maxColor = CreateColor(r2, g2, b2, maxA)
+      overlay._msufTexLayerMaxColor = maxColor
+    elseif maxColor.SetRGBA then
+      maxColor:SetRGBA(r2, g2, b2, maxA)
+    else
+      maxColor.r, maxColor.g, maxColor.b, maxColor.a = r2, g2, b2, maxA
+    end
+    overlay:SetGradient(orientation, minColor, maxColor)
+  elseif overlay.SetVertexColor then
+    overlay:SetVertexColor(r2, g2, b2, 0.5)
+  end
+  ApplyClip(frame, holder, overlay, clipWanted)
+  overlay:Show()
+  return overlay
+end
+
 local function ApplySlot(frame, conf, unitKey, slot, event)
   local keys = SLOT_KEYS[slot]
   local prefix = keys.prefix
@@ -1072,37 +1111,8 @@ local function ApplySlot(frame, conf, unitKey, slot, event)
     local value = conf[keys[suffix]]
     local active = gradientOn and (direction == "right" and value ~= false or value == true)
     if active then
-      local overlay = EnsureOverlayTexture(holder, direction, clipWanted)
-      local orientation = (direction == "up" or direction == "down") and "VERTICAL" or "HORIZONTAL"
-      local minA, maxA = 0, 1
-      if direction == "left" or direction == "down" then minA, maxA = 1, 0 end
-      if overlay.SetGradient and CreateColor then
-        local minColor = overlay._msufTexLayerMinColor
-        if not minColor then
-          minColor = CreateColor(r2, g2, b2, minA)
-          overlay._msufTexLayerMinColor = minColor
-        elseif minColor.SetRGBA then
-          minColor:SetRGBA(r2, g2, b2, minA)
-        else
-          minColor.r, minColor.g, minColor.b, minColor.a = r2, g2, b2, minA
-        end
-        local maxColor = overlay._msufTexLayerMaxColor
-        if not maxColor then
-          maxColor = CreateColor(r2, g2, b2, maxA)
-          overlay._msufTexLayerMaxColor = maxColor
-        elseif maxColor.SetRGBA then
-          maxColor:SetRGBA(r2, g2, b2, maxA)
-        else
-          maxColor.r, maxColor.g, maxColor.b, maxColor.a = r2, g2, b2, maxA
-        end
-        overlay:SetGradient(orientation, minColor, maxColor)
-      elseif overlay.SetVertexColor then
-        overlay:SetVertexColor(r2, g2, b2, 0.5)
-      end
-      ApplyClip(frame, holder, overlay, clipWanted)
       featherCount = featherCount + 1
-      featherTextures[featherCount] = overlay
-      overlay:Show()
+      featherTextures[featherCount] = ApplyGradientOverlay(frame, holder, direction, clipWanted, r2, g2, b2)
     else
       local overlay = holder.grads and holder.grads[direction]
       if overlay then overlay:Hide() end
@@ -1254,7 +1264,8 @@ local function FrameMatchesUnitScope(frame, unit)
 end
 
 local function RecomputeDriverNeeds(frames)
-  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantUnitTargetPet, wantBossEvents = false, false, false, false, false, false, false
+  wantRegenEvents, wantTargetEvents, wantFocusEvents = false, false, false
+  wantUnitTargetTarget, wantUnitTargetFocus, wantUnitTargetPet, wantBossEvents = false, false, false, false
   wantArenaEvents = false
   for i = 1, #DYNAMIC_MASK_FIELDS do
     local field = DYNAMIC_MASK_FIELDS[i]

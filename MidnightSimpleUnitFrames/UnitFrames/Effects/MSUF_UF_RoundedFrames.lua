@@ -443,7 +443,10 @@ local function SetGroupRoundedEdgeColor(f)
     HideRoundedEdgeStack(f, edge, "_msufRGF_EdgeStack")
     return true
   end
-  if not ApplyRoundedEdgeStack(f, f.barGroup or f, edge, f.barGroup or f, thickness, "_msufRGF_EdgeStack", "_msufRGF_MaskedTextures", "BACKGROUND", -8) then return false end
+  if not ApplyRoundedEdgeStack(f, f.barGroup or f, edge, f.barGroup or f, thickness,
+      "_msufRGF_EdgeStack", "_msufRGF_MaskedTextures", "BACKGROUND", -8) then
+    return false
+  end
   local r, g, b, a = ResolveGroupEdgeColor(f)
   SetRoundedEdgeStackColor(f, edge, "_msufRGF_EdgeStack", r, g, b, a)
   return true
@@ -1629,7 +1632,10 @@ local function HookOnce()
     return ApplyDispelOverlayMask(frame, region, enabled)
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupFrameApplied", function(frame, kind)
-    if IsCombatLocked() then DeferApply(); return end
+    if IsCombatLocked() then
+      DeferApply()
+      return
+    end
     if frame then ApplyToGroupFrame(frame, kind) end
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupIndicatorPrepared", function(frame, kind, enabled, shown, thickness, r, g, b, a)
@@ -1640,7 +1646,10 @@ local function HookOnce()
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupAuraVisualCreated", function(frame, region)
     if not (frame and region and RoundedFrameEnabled(frame)) then return false end
-    if IsCombatLocked() then DeferApply(); return false end
+    if IsCombatLocked() then
+      DeferApply()
+      return false
+    end
     local shared = RoundedPowerBarsEnabled(frame) and PowerIsEmbedded(frame) and (frame.barGroup or frame) or nil
     MaskGroupTexture(frame, region, shared or frame.health or frame.barGroup or frame)
     return true

@@ -735,7 +735,7 @@ end
 --- RefreshPreviewAuras and RefreshPreviewSpellIndicators already take. Classic
 --- flavors compile group lanes from the whole spec and share no cache, so they
 --- keep resolving per row.
-local SHARE_PREVIEW_AURA_CONFIG = not (MSUF.Client and MSUF.Client.IsClassic)
+local SHARE_PREVIEW_AURA_CONFIG = not MSUF.Client.IsClassic
 local function PreviewAuraConfigSpec(frame, compiledSpec)
   if compiledSpec ~= nil or not SHARE_PREVIEW_AURA_CONFIG then return compiledSpec end
   local spec = frame and frame.MSUFSpec

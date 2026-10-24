@@ -193,7 +193,10 @@ if type(SI.GetAuraIcon) ~= "function" then
       local list = specKey and SI.TrackableAuras and SI.TrackableAuras[specKey]
       if type(list) == "table" then
         for i = 1, #list do
-          if list[i].name == auraName then id = SpellID(list[i].spellID); break end
+          if list[i].name == auraName then
+            id = SpellID(list[i].spellID)
+            break
+          end
         end
       end
     end

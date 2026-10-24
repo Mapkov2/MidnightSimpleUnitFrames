@@ -46,7 +46,7 @@ end
 -- Classic's PvP context follows the player's own flag, which flips in combat:
 -- compile the icon whenever configured and let Runtime.UpdatePVP gate it on the
 -- cached context (pvp.contextGated, MSUF_UF_Config.lua).
-local PVP_CONTEXT_GATED = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local PVP_CONTEXT_GATED = MSUF.Client.Family == "Classic"
 
 local function Layer(value, fallback)
   value = floor((tonumber(value) or fallback or 5) + 0.5)
@@ -568,7 +568,7 @@ local function CompileStatus(kind, conf)
   -- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua; only the clients offering it
   -- compile an entry, so Midnight and Mists specs stay as they were.
   local threat
-  if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+  if MSUF.Client.SupportsThreatText == true then
     threat = StatusRegionDef(conf, conf.threatText == true, "threat", resize)
     threat.colorCurve = conf.threatTextColorCurve ~= false
     threat.background = conf.threatTextBackground == true

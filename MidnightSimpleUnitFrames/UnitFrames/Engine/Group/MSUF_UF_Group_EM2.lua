@@ -63,7 +63,7 @@ end
 local GROUP_KINDS = { "party", "raid", "mythicraid" }
 local MOVER_KINDS = { "party", "raid", "mythicraid", "priority" }
 local function SupportedGroupKind(kind)
-  return not MSUF.Client or not MSUF.Client.SupportsGroupKind or MSUF.Client.SupportsGroupKind(kind)
+  return not MSUF.Client.SupportsGroupKind or MSUF.Client.SupportsGroupKind(kind)
 end
 for _, kinds in ipairs({ GROUP_KINDS, MOVER_KINDS }) do
   for i = #kinds, 1, -1 do

@@ -627,6 +627,7 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
 end
 
 -- Existing budget-sensitive painter: no extra phase dispatch on exported Update.
+-- hot path: kept whole (perf rule)
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha,
   writeAbsorbValue, knownAbsorbSecret)
   if frame and refreshFullHealthAlpha == true then

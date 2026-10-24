@@ -188,7 +188,7 @@ end
 
 --- Classic flavors (Vanilla, TBC, Mists) compile through this file too. Their few
 --- differences are gated on this fact, read once at load; Mainline never enters them.
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
 
 --- Classic clients have no War Mode: the context follows the player's own PvP flag
 --- (UnitIsPVP, free-for-all, the flag timer), which also flips mid-combat. The
@@ -334,7 +334,8 @@ local function StatusAllowed(key, id)
   return true
 end
 
-local function CompileStatusEntry(status, id, conf, general, key, showKey, fallbackShow, sizeKey, fallbackSize, anchorKey, fallbackAnchor, xKey, fallbackX, yKey, fallbackY, layerKey, fallbackLayer, legacyLayerKey)
+local function CompileStatusEntry(status, id, conf, general, key, showKey, fallbackShow, sizeKey, fallbackSize,
+    anchorKey, fallbackAnchor, xKey, fallbackX, yKey, fallbackY, layerKey, fallbackLayer, legacyLayerKey)
   local entry = status[id] or {}
   status[id] = entry
   entry.enabled = StatusAllowed(key, id) and StatusBool(conf, general, showKey, fallbackShow) or false
@@ -369,8 +370,14 @@ local function ApplyStatusColor(entry, conf, general, colorPrefix)
   return entry
 end
 
-local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon, legacyLayerKey, colorPrefix)
-  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey, colorPrefix = colorPrefix }
+local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey,
+    xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon, legacyLayerKey, colorPrefix)
+  return {
+    id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault,
+    layerKey, layerDefault,
+    style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey,
+    colorPrefix = colorPrefix,
+  }
 end
 
 local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, anchorDefault, xDefault, yDefault, layerDefault, style, symbol, customIcon)
@@ -381,36 +388,45 @@ local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, 
 end
 
 local UNIT_STATUS_ENTRY_DEFS = {
-  PrefixedStatusDef("leader", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "leaderIconStyle", "BLIZZARD" }, nil, { "leaderIconCustomIcon", "" }),
-  PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
+  PrefixedStatusDef("leader", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7,
+    { "leaderIconStyle", "BLIZZARD" }, nil, { "leaderIconCustomIcon", "" }),
+  PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7,
+    { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
   PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("bossNumber", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", 4, -4, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "raidGroupNameSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "raidGroupNameSize", 12, "raidGroupNameAnchor",
+    "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5,
+    { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
-  PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
-  PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
-  PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7,
+    nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25,
+    { "restedStateIndicatorIconStyle", "BLIZZARD" },
+    { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" },
+    { "restedStateIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7,
+    nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
 -- Hunter pet happiness exists on WoW Forever, Classic Era and TBC, which all
 -- compile here. Midnight and Mists get no entry at all.
-if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+if MSUF.Client.SupportsPetHappiness == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7)
 end
 -- The threat percentage text exists on WoW Forever, Classic Era and TBC (see
 -- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua). Default on, in the bottom-left
 -- corner that no other status element uses; Midnight and Mists get no entry.
-if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+if MSUF.Client.SupportsThreatText == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("threat", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT", 6, 2, 7)
 end
 
-if MSUF.Client and MSUF.Client.IsClassic == true then
+if MSUF.Client.IsClassic == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("petXP", "showPetXPBar", true, "petXPBar", 8, "BOTTOM", 0, -5, 7)
 end

@@ -119,7 +119,10 @@ function Layers.ApplyOwnedSurface(frame, layer, detail)
     if type(current) ~= "number" then return false end
     if originalSurfaceLevels[frame] == nil then originalSurfaceLevels[frame] = current end
     wanted = Layers.ElementLevel(layer, 0, detail)
-    if current ~= wanted then frame:SetFrameLevel(wanted); return true end
+    if current ~= wanted then
+      frame:SetFrameLevel(wanted)
+      return true
+    end
   else
     wanted = originalSurfaceLevels[frame]
     if wanted == nil then return false end

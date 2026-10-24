@@ -1212,7 +1212,7 @@ local SECURE_UNIT_BUTTON_TEMPLATE = "MSUF_GroupHeaderUnitButtonTemplate"
 -- Mainline 12.1 births native AuraContainers inside the restricted header.
 -- Classic has no such template; its addon-owned UNIT_AURA backend attaches
 -- after the secure child exists, so keep this header attribute cleared.
-local SECURE_AURA_CONTAINER_TEMPLATE = not (MSUF.Client and MSUF.Client.IsClassic)
+local SECURE_AURA_CONTAINER_TEMPLATE = not MSUF.Client.IsClassic
   and "CustomAuraContainerTemplate" or nil
 local SECURE_INIT_VERSION = 9
 --- Insecure header method the secure snippet calls for every child it births.

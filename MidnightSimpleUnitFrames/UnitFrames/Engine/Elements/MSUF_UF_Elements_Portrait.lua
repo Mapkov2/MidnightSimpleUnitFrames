@@ -7,10 +7,8 @@ local PublicGlobals = MSUF.PublicGlobals
 -- Era's legacy PlayerFrame does not use the modern HUD portrait atlases.
 -- Do not select them merely because GetAtlasInfo exposes an atlas entry.
 -- The client model owns the answer: WoW Forever runs the Mainline PlayerFrame
--- whatever project ID it reports, so the raw project is never asked here. A
--- harness that loads this element without MSUF.Client keeps the Mainline
--- answer, the build this file belongs to.
-local LEGACY_BLIZZARD_PORTRAIT = MSUF.Client ~= nil and MSUF.Client.IsVanilla == true
+-- whatever project ID it reports, so the raw project is never asked here.
+local LEGACY_BLIZZARD_PORTRAIT = MSUF.Client.IsVanilla == true
 
 local Visuals = MSUF.UFVisuals or {}
 local UF = Visuals.UF or MSUF.UF
@@ -1331,7 +1329,7 @@ local function LayoutBlizzardPortraitCorner(holder, p)
   local available = p.blizzardCornerAvailable
   if available == nil then
     local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
-    available = not MSUF.Client or MSUF.Client.IsForever == true
+    available = MSUF.Client.IsForever == true
       or (getAtlasInfo and getAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS))
   end
   if not available then
@@ -1392,6 +1390,20 @@ local function HidePortraitDecor(holder)
   end
 end
 
+-- The four edge strips, the ring and the dragon art border: every border
+-- renderer LayoutPortraitBorder can leave idle.
+local function HideBorderRenderers(holder, edges)
+  for i = 1, 4 do
+    SetShown(edges[i], false)
+  end
+  if holder.ring then
+    SetShown(holder.ring, false)
+  end
+  if holder.artBorder then
+    SetShown(holder.artBorder, false)
+  end
+end
+
 LayoutPortraitBorder = function(holder, p, r, g, b, a)
   local border = holder and holder.border
   local edges = holder and holder.edges
@@ -1402,15 +1414,7 @@ LayoutPortraitBorder = function(holder, p, r, g, b, a)
   -- shows and replaces every MSUF border renderer, so the border style and
   -- colour settings are deliberately inert here.
   if p and p.shape == "BLIZZARD" then
-    for i = 1, 4 do
-      SetShown(edges[i], false)
-    end
-    if holder.ring then
-      SetShown(holder.ring, false)
-    end
-    if holder.artBorder then
-      SetShown(holder.artBorder, false)
-    end
+    HideBorderRenderers(holder, edges)
     LayoutBlizzardPortraitRing(holder, p)
     return
   end
@@ -1424,15 +1428,7 @@ LayoutPortraitBorder = function(holder, p, r, g, b, a)
     SetShown(holder.blizzCorner, false)
   end
   if not r then
-    for i = 1, 4 do
-      SetShown(edges[i], false)
-    end
-    if holder.ring then
-      SetShown(holder.ring, false)
-    end
-    if holder.artBorder then
-      SetShown(holder.artBorder, false)
-    end
+    HideBorderRenderers(holder, edges)
     return
   end
 

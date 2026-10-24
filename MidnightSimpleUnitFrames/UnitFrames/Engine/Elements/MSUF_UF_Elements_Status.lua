@@ -276,7 +276,7 @@ function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
   end
   local atlas = "UI-HUD-UnitFrame-SmallCircle"
   local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
-  local useNativeAtlas = MSUF.Client and MSUF.Client.IsForever == true
+  local useNativeAtlas = MSUF.Client.IsForever == true
     or (getAtlasInfo and getAtlasInfo(atlas)) ~= nil
   local holder = AdoptRegion(frame, badge, cfg.layer)
   if not badge then

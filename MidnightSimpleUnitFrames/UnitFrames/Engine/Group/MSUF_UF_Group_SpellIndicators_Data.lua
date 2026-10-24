@@ -684,7 +684,7 @@ end
 --- keeps Ancestral Fortitude 16177 (triggered by Ancestral Healing 16176).
 --- EXTERNAL_DEFENSIVE classification and icon file IDs cannot be verified for this
 --- data: no aura depends on either, and icons come from C_Spell.GetSpellTexture.
-local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
+local IS_FOREVER = ns.Client.IsForever == true
 if IS_FOREVER then
   local allSpecs = SI.SpecInfo[SI.ALL_SPECS_KEY]
   SI.SpecMap = {}
@@ -781,11 +781,7 @@ if IS_FOREVER then
       Renew = Placed("icon", "TOPLEFT", 1, -1, 22),
       PowerInfusion = Frame("glow", 0.94, 0.82, 0.31, 1, 1),
     },
-    ClassicPaladin = {
-      BlessingOfProtection = Frame("border", 0.94, 0.82, 0.31, 1, 1),
-      BlessingOfSacrifice = Frame("border", 0.94, 0.50, 0.50, 1, 2),
-      BlessingOfFreedom = Frame("border", 0.47, 0.77, 1.00, 1, 3),
-    },
+    ClassicPaladin = PALADIN_BLESSING_DEFAULTS,
   }
 
   local foreverClassToken, foreverSpecKey

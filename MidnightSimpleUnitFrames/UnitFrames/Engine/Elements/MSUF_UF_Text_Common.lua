@@ -530,7 +530,8 @@ local function InlineTextColor(frame, unit, inline)
   if mode == "DEFAULT" then
     return fr, fg, fb, fa
   elseif mode == "TARGET_NAME" then
-    return NameTextColorFor(frame, frame.MSUFUnitKey, inline.targetNameClassColor == true, inline.targetNameNpcColor == true, nil, inline.targetNameNpcClassColor == true)
+    return NameTextColorFor(frame, frame.MSUFUnitKey, inline.targetNameClassColor == true,
+      inline.targetNameNpcColor == true, nil, inline.targetNameNpcClassColor == true)
   elseif mode == "TOT_NAME" then
     return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget", inline.totNameNpcClassColor == true)
   end

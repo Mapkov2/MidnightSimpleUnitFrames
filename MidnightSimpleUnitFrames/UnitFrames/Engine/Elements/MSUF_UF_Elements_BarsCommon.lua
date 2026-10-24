@@ -625,7 +625,8 @@ local function ApplyTextureColor(region, texture, r, g, b, a, force)
       region:SetVertexColor(r, g, b, a)
       region._msufBgR, region._msufBgG, region._msufBgB, region._msufBgA = r, g, b, a
     end
-  elseif force == true or region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
+  elseif force == true or region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g
+      or region._msufBgB ~= b or region._msufBgA ~= a then
     region:SetColorTexture(r, g, b, a)
     region._msufBgColorTexture = true
     region._msufBgTexture = nil

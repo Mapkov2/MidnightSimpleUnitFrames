@@ -254,7 +254,7 @@ local function ApplyNpcTypeFlags(dst, general, colorKey, unitKey)
   -- Tagged-mob graying exists only where the client has tagging; Midnight never
   -- compiles it. The player and pet frames can never show a tagged mob.
   dst.tapDeniedGray = unitKey ~= "player" and unitKey ~= "pet"
-    and MSUF.Client ~= nil and MSUF.Client.SupportsTapDenied == true
+    and MSUF.Client.SupportsTapDenied == true
     and general.tapDeniedGray ~= false
   dst[colorKey] = general[colorKey] ~= false
   dst.npcTypeTarget = general.npcTypeTarget ~= false
@@ -508,7 +508,10 @@ local SetAbsorbTextureTestMode = function(enabled, scope, category)
   local modes = MSUF.Optional("MSUF_PredictionTestModes")
   if type(modes) ~= "table" then modes = {} end
   local bucket = modes[normalizedScope]
-  if type(bucket) ~= "table" then bucket = {}; modes[normalizedScope] = bucket end
+  if type(bucket) ~= "table" then
+    bucket = {}
+    modes[normalizedScope] = bucket
+  end
   if normalizedCategory then
     bucket[normalizedCategory] = enabled == true or nil
   else
@@ -767,7 +770,7 @@ local ClampStatusLayer = ConfigStatus.ClampLayer
 local CompileUnitStatus = ConfigStatus.CompileUnit
 --- Classic flavors (Vanilla, TBC, Mists) compile through this file too. Their few
 --- differences are gated on this fact, read once at load; Mainline never enters them.
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
 
 local function ResetList(list)
   list = list or {}
@@ -1686,7 +1689,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.enabled = bars.showBarBorder ~= false and border.thickness > 0
   local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
   border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
-  border.strata = Shared.NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
+  border.strata = Shared.NormalizeFrameOutlineStrata(
+    conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
   -- Optional typed outline media. True borders use eight-piece edgeFile
   -- geometry; statusbar textures keep the historic four stretched edges.
   -- Rounded and slanted frames draw both as masked rings along their shape.
@@ -1700,7 +1704,10 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
   border.b = Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0)
   border.a = Number(ScopedValue(conf, general, "barOutlineColorA", general.barBorderA), 1)
-  border.highlightThickness = Number(ScopedValue(conf, general, "highlightBorderThickness", bars.highlightBorderThickness or general.highlightBorderThickness), border.thickness)
+  border.highlightThickness = Number(
+    ScopedValue(conf, general, "highlightBorderThickness",
+      bars.highlightBorderThickness or general.highlightBorderThickness),
+    border.thickness)
   border.aggroR = Number(general.hlAggroColorR or general.aggroBorderColorR or general.aggroBorderR, 1.00)
   border.aggroG = Number(general.hlAggroColorG or general.aggroBorderColorG or general.aggroBorderG, 0.55)
   border.aggroB = Number(general.hlAggroColorB or general.aggroBorderColorB or general.aggroBorderB, 0.00)

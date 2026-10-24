@@ -946,20 +946,44 @@ function Text.Create(frame, spec)
   return EnsureConfiguredTextSinks(frame, spec)
 end
 
-local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
-local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedWidthExplicit", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
+local SIG_SPEC_KEYS = {
+  "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize",
+  "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision",
+}
+local SIG_POWER_KEYS = {
+  "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight",
+  "detachedWidth", "detachedWidthExplicit", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass",
+  "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName",
+}
 local SIG_TEXT_KEYS = {
-  "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
+  "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer",
+  "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY", "directNameWidth",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
-  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftFontSize", "healthCenterFontSize", "healthRightFontSize", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthAbsorbIcon", "healthLeftAbsorbIcon", "healthCenterAbsorbIcon", "healthRightAbsorbIcon", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
-  "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
-  "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftFontSize", "powerCenterFontSize", "powerRightFontSize", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
-  "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
+  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftFontSize", "healthCenterFontSize",
+  "healthRightFontSize", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol",
+  "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals",
+  "healthShortNumbers", "healthAbsorbIcon", "healthLeftAbsorbIcon", "healthCenterAbsorbIcon",
+  "healthRightAbsorbIcon", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY",
+  "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
+  "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY",
+  "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY",
+  "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
+  "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftFontSize", "powerCenterFontSize",
+  "powerRightFontSize", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol",
+  "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY",
+  "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
+  "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY",
+  "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY",
+  "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
   "shortNumbers", "hidePercentSymbol", "hideNameOnDeadOffline",
 }
-local SIG_INLINE_KEYS = { "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor", "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth" }
+local SIG_INLINE_KEYS = {
+  "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor",
+  "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten",
+  "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth",
+}
 local SIG_PARTS = {}
 
 local function SigAddKeys(parts, n, src, keys)

@@ -1356,7 +1356,10 @@ GroupVisuals.UpdateGoneState = UpdateGoneStateFromHealth
 
 local function ApplyNameBar(frame, cfg)
   local bar = frame and frame.MSUFGFNameBar
-  if not frame or not (cfg and cfg.nameBarEnabled) then if bar then bar:Hide() end; return end
+  if not frame or not (cfg and cfg.nameBarEnabled) then
+    if bar then bar:Hide() end
+    return
+  end
   if not bar then
     bar = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     bar:EnableMouse(false)

@@ -44,7 +44,7 @@ local C_SpellBook = C_SpellBook
 -- sampling it, and TargetRange/TargetRefresh query it directly through
 -- DirectRange (spell range first, then CheckInteractDistance out of combat), as
 -- ElvUI does. Retail keeps its event-owned target path unchanged.
-local CLASSIC_TARGET_SAMPLING = MSUF.Client and MSUF.Client.IsClassic == true or false
+local CLASSIC_TARGET_SAMPLING = MSUF.Client.IsClassic == true
 -- No _G.IsSpellInRange fallback: the legacy global takes a spell name or a
 -- spellbook slot, never a spell ID, so SpellRange's numeric IDs would be read
 -- as book slots and return wrong answers instead of failing visibly.

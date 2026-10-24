@@ -703,7 +703,10 @@ local function SuspendHiddenFrameEvents(frame)
     -- A range event skipped while hidden at build has no recipe entry yet;
     -- FrameOnShow's restore reads it from the recipe.
     local reg = frame._msufEventReg
-    if not reg then reg = {}; frame._msufEventReg = reg end
+    if not reg then
+      reg = {}
+      frame._msufEventReg = reg
+    end
     if reg.UNIT_IN_RANGE_UPDATE == nil then
       reg.UNIT_IN_RANGE_UPDATE = frame._msufCoreRangeEventUnitless == true
     end
@@ -920,18 +923,33 @@ local function RouteCacheLeaf(root, fn1, fn2, fn3, fn4, mode, target)
   local key1, key2, key3, key4 = fn1 or NIL_ROUTE_KEY, fn2 or NIL_ROUTE_KEY,
     fn3 or NIL_ROUTE_KEY, fn4 or NIL_ROUTE_KEY
   local node = root[key1]
-  if not node then node = {}; root[key1] = node end
+  if not node then
+    node = {}
+    root[key1] = node
+  end
   local nextNode = node[key2]
-  if not nextNode then nextNode = {}; node[key2] = nextNode end
+  if not nextNode then
+    nextNode = {}
+    node[key2] = nextNode
+  end
   node = nextNode
   nextNode = node[key3]
-  if not nextNode then nextNode = {}; node[key3] = nextNode end
+  if not nextNode then
+    nextNode = {}
+    node[key3] = nextNode
+  end
   node = nextNode
   nextNode = node[key4]
-  if not nextNode then nextNode = {}; node[key4] = nextNode end
+  if not nextNode then
+    nextNode = {}
+    node[key4] = nextNode
+  end
   node = nextNode
   nextNode = node[mode]
-  if not nextNode then nextNode = {}; node[mode] = nextNode end
+  if not nextNode then
+    nextNode = {}
+    node[mode] = nextNode
+  end
   return nextNode, target or NIL_ROUTE_KEY
 end
 
@@ -1000,10 +1018,16 @@ local function SharedSingleRoute(update, unitless, target)
     return BuildSingleRoute(update, unitless, target)
   end
   local node = RouteCache.single[update]
-  if not node then node = {}; RouteCache.single[update] = node end
+  if not node then
+    node = {}
+    RouteCache.single[update] = node
+  end
   local mode = target and "target" or (unitless == true and "unitless" or "unit")
   local leaf = node[mode]
-  if not leaf then leaf = {}; node[mode] = leaf end
+  if not leaf then
+    leaf = {}
+    node[mode] = leaf
+  end
   local key = target or NIL_ROUTE_KEY
   local route = leaf[key]
   if not route then
@@ -1063,7 +1087,10 @@ RegisterFrameEvent = function(frame, event, unitless)
   -- return per event; suspending makes it truly inert, guaranteeing zero
   -- overhead while hidden.
   local reg = frame._msufEventReg
-  if not reg then reg = {}; frame._msufEventReg = reg end
+  if not reg then
+    reg = {}
+    frame._msufEventReg = reg
+  end
   reg[event] = unitless == true
   if unitless == true or not IsUnitEvent(event) or not frame.RegisterUnitEvent then
     frame:RegisterEvent(event)
@@ -1352,10 +1379,16 @@ local function InternRuntimeSequencePlan(functions, labels, count, identity)
       return NewRuntimeSequencePlan(functions, labels, count, identity)
     end
     local byLabel = node[update]
-    if not byLabel then byLabel = {}; node[update] = byLabel end
+    if not byLabel then
+      byLabel = {}
+      node[update] = byLabel
+    end
     local label = labels[i]
     local nextNode = byLabel[label]
-    if not nextNode then nextNode = {}; byLabel[label] = nextNode end
+    if not nextNode then
+      nextNode = {}
+      byLabel[label] = nextNode
+    end
     node = nextNode
   end
 
@@ -1463,10 +1496,16 @@ local function RuntimeRouteSnapshot(update, events, unitlessEvents)
     return { update = update, events = events, unitlessEvents = unitlessEvents }
   end
   local byEvents = Intern.routeSnapshots[update]
-  if not byEvents then byEvents = {}; Intern.routeSnapshots[update] = byEvents end
+  if not byEvents then
+    byEvents = {}
+    Intern.routeSnapshots[update] = byEvents
+  end
   local eventKey = events or NIL_ROUTE_KEY
   local byUnitless = byEvents[eventKey]
-  if not byUnitless then byUnitless = {}; byEvents[eventKey] = byUnitless end
+  if not byUnitless then
+    byUnitless = {}
+    byEvents[eventKey] = byUnitless
+  end
   local unitlessKey = unitlessEvents or NIL_ROUTE_KEY
   local route = byUnitless[unitlessKey]
   if not route then
@@ -1499,7 +1538,10 @@ local function InternRuntimeRoutePlan(routes, order)
     end
     local key = route or NIL_ROUTE_KEY
     local nextNode = node[key]
-    if not nextNode then nextNode = {}; node[key] = nextNode end
+    if not nextNode then
+      nextNode = {}
+      node[key] = nextNode
+    end
     node = nextNode
   end
   local plan = node.plan

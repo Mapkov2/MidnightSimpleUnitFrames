@@ -70,7 +70,7 @@ end
 --- Classic flavors run Blizzard_CompactRaidFrames' Classic family files, whose
 --- manager parents the raid container itself and keeps the single legacy toggle
 --- button. Read once here; Mainline never enters the Classic branches below.
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
 
 --- Classic: the hidden-parent guard exists for foreign addons that already parked a
 --- frame. Classic's CompactRaidFrameManager is hidden by default and parents the

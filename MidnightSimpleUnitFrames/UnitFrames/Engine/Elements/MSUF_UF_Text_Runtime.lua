@@ -904,6 +904,7 @@ function Text.PaintSampleName(frame, previewName)
   ApplyNameTextColor(frame, nil)
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
@@ -1200,6 +1201,7 @@ local function WritePowerValueSlots(frame, event, unit, rt, power, powerMax, nee
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   -- Resolve identity and color before either retained slot-delivery route.
   unit = unit or frame.MSUFUnitKey

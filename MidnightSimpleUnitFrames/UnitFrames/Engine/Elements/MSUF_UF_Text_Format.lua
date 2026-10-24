@@ -969,7 +969,8 @@ local function CompileSecretWriter(slot)
   end
 end
 
-local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret, percentDecimals)
+local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride,
+    pctOverrideSet, suffix, canSecret, percentDecimals)
   if not fs then
     return
   end

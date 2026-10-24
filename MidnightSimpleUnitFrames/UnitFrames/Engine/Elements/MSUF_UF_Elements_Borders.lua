@@ -4,7 +4,7 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Borders.lua")
 local ExportPublic = MSUF.ExportPublic
 local PublicGlobals = MSUF.PublicGlobals
-local IS_CLASSIC = MSUF.Client and MSUF.Client.IsClassic == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 local Visuals = MSUF.UFVisuals or {}
 local UF = Visuals.UF or MSUF.UF
