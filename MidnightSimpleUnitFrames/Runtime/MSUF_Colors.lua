@@ -533,7 +533,10 @@ end
 local function _setRGBA(rKey, gKey, bKey, aKey, r, g, b, a, defR, defG, defB, defA, pushFn)
     local gen = _general()
     if not gen then return end
-    gen[rKey] = r or defR; gen[gKey] = g or defG; gen[bKey] = b or defB; gen[aKey] = a or defA
+    gen[rKey] = r or defR
+    gen[gKey] = g or defG
+    gen[bKey] = b or defB
+    gen[aKey] = a or defA
     if type(pushFn) == "function" then pushFn() else PushVisualUpdates() end
 end
 
@@ -546,10 +549,12 @@ local function _getRGBPalette(rKey, gKey, bKey, palKey, palDefault, defR, defG, 
     -- Namespace read: these getters run per paint, and a table read costs no call.
     local colors = PublicGlobals.MSUF_FONT_COLORS
     if pal and colors and colors[pal] then
-        local c = colors[pal]; return c[1], c[2], c[3]
+        local c = colors[pal]
+        return c[1], c[2], c[3]
     end
     if palDefault and colors and colors[palDefault] then
-        local c = colors[palDefault]; return c[1], c[2], c[3]
+        local c = colors[palDefault]
+        return c[1], c[2], c[3]
     end
     return defR, defG, defB
 end
@@ -564,10 +569,12 @@ local function _getRGBTonumber(rKey, gKey, bKey, palKey, palDefault, defR, defG,
     if r and gg and b then return r, gg, b end
     local colors = PublicGlobals.MSUF_FONT_COLORS
     if g[palKey] and colors and colors[g[palKey]] then
-        local c = colors[g[palKey]]; return c[1], c[2], c[3]
+        local c = colors[g[palKey]]
+        return c[1], c[2], c[3]
     end
     if palDefault and colors and colors[palDefault] then
-        local c = colors[palDefault]; return c[1], c[2], c[3]
+        local c = colors[palDefault]
+        return c[1], c[2], c[3]
     end
     return defR, defG, defB
 end
@@ -585,13 +592,17 @@ local function GetGlobalFontColor()
     return 1, 1, 1
 end
 local function SetGlobalFontColor(r, g, b)
-    local gen = _general(); if not gen then return end
+    local gen = _general()
+    if not gen then return end
     gen.fontColorCustomR, gen.fontColorCustomG, gen.fontColorCustomB = r or 1, g or 1, b or 1
-    gen.useCustomFontColor = true; PushVisualUpdates()
+    gen.useCustomFontColor = true
+    PushVisualUpdates()
 end
 local function ResetGlobalFontToPalette()
-    local g = _general(); if not g then return end
-    g.useCustomFontColor = false; g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB = nil, nil, nil
+    local g = _general()
+    if not g then return end
+    g.useCustomFontColor = false
+    g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB = nil, nil, nil
     PushVisualUpdates()
 end
 
@@ -607,8 +618,10 @@ local function SetCastbarTextColor(r, g, b)
     _setRGB("castbarFontR", "castbarFontG", "castbarFontB", r, g, b, 1, 1, 1, PushCastbarVisualUpdates)
 end
 local function ResetCastbarTextColorToGlobal()
-    local g = _general(); if not g then return end
-    g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil; PushCastbarVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil
+    PushCastbarVisualUpdates()
 end
 
 --- - Castbar Target Name Color -
@@ -628,7 +641,8 @@ local function SetCastbarTargetNameColor(r, g, b)
     _setRGB("castbarTargetNameR", "castbarTargetNameG", "castbarTargetNameB", r, g, b, 1, 1, 1, PushCastbarVisualUpdates)
 end
 local function ResetCastbarTargetNameColor()
-    local g = _general(); if not g then return end
+    local g = _general()
+    if not g then return end
     g.castbarTargetNameR, g.castbarTargetNameG, g.castbarTargetNameB = nil, nil, nil
     PushCastbarVisualUpdates()
 end
@@ -682,10 +696,15 @@ ExportPublic("MSUF_ResetCastbarDetailTextColor", ResetCastbarDetailTextColor)
 
 --- - Castbar Border Color -
 local function GetCastbarBorderColor() return _getRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", 0, 0, 0, 1) end
-local function SetCastbarBorderColor(r, g, b, a) _setRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", r, g, b, a, 0, 0, 0, 1, PushCastbarVisualUpdates) end
+local function SetCastbarBorderColor(r, g, b, a)
+    _setRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", r, g, b, a, 0, 0, 0, 1,
+        PushCastbarVisualUpdates)
+end
 local function ResetCastbarBorderColor()
-    local g = _general(); if not g then return end
-    g.castbarBorderR, g.castbarBorderG, g.castbarBorderB, g.castbarBorderA = nil, nil, nil, nil; PushCastbarVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.castbarBorderR, g.castbarBorderG, g.castbarBorderB, g.castbarBorderA = nil, nil, nil, nil
+    PushCastbarVisualUpdates()
 end
 
 --- - Castbar Background Color -
@@ -695,10 +714,15 @@ local function GetCastbarBackgroundColor()
     return tonumber(g.castbarBgR) or 0.10, tonumber(g.castbarBgG) or 0.10, tonumber(g.castbarBgB) or 0.10, tonumber(g.castbarBgA) or 0.85
 end
 ExportPublic("MSUF_GetCastbarBackgroundColor", GetCastbarBackgroundColor)
-local function SetCastbarBackgroundColor(r, g, b, a) _setRGBA("castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA", r, g, b, a, 0.10, 0.10, 0.10, 0.85, PushCastbarVisualUpdates) end
+local function SetCastbarBackgroundColor(r, g, b, a)
+    _setRGBA("castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA", r, g, b, a, 0.10, 0.10, 0.10, 0.85,
+        PushCastbarVisualUpdates)
+end
 local function ResetCastbarBackgroundColor()
-    local g = _general(); if not g then return end
-    g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil; PushCastbarVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil
+    PushCastbarVisualUpdates()
 end
 
 --- - Cast Colors (interruptible / non-interruptible / feedback) -
@@ -708,27 +732,60 @@ end
 --- belong to Castbars/MSUF_CastbarUtils.lua: it loads after this file in every
 --- TOC and always replaced these exports (custom RGB only; each castbar caller
 --- owns its palette fallback), so this file no longer publishes them.
-local function GetInterruptibleCastColor() return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8) end
-local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8, PushCastbarVisualUpdates) end
-local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
-local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01, PushCastbarVisualUpdates) end
-local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
+local function GetInterruptibleCastColor()
+    return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB",
+        "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8)
+end
+local function SetInterruptibleCastColor(r, g, b)
+    _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8,
+        PushCastbarVisualUpdates)
+end
+local function GetNonInterruptibleCastColor()
+    return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB",
+        "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01)
+end
+local function SetNonInterruptibleCastColor(r, g, b)
+    _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01,
+        PushCastbarVisualUpdates)
+end
+local function GetInterruptFeedbackCastColor()
+    return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB",
+        "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0)
+end
 ExportPublic("MSUF_GetInterruptFeedbackCastColor", GetInterruptFeedbackCastColor)
-local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0, PushCastbarVisualUpdates) end
-local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902) end
-local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.494117647, 0.137254902, PushCastbarVisualUpdates) end
+local function SetInterruptFeedbackCastColor(r, g, b)
+    _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0,
+        PushCastbarVisualUpdates)
+end
+local function GetInterruptUnavailableCastColor()
+    return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB",
+        "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902)
+end
+local function SetInterruptUnavailableCastColor(r, g, b)
+    _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b,
+        1.0, 0.494117647, 0.137254902, PushCastbarVisualUpdates)
+end
 
 --- - Player Castbar Override -
 local function GetPlayerCastbarOverrideEnabled() return (_general() or {}).playerCastbarOverrideEnabled and true or false end
 local function SetPlayerCastbarOverrideEnabled(enabled)
-    local g = _general(); if not g then return end; g.playerCastbarOverrideEnabled = enabled and true or false; PushCastbarVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.playerCastbarOverrideEnabled = enabled and true or false
+    PushCastbarVisualUpdates()
 end
 local function GetPlayerCastbarOverrideMode() return (_general() or {}).playerCastbarOverrideMode or "COLOR" end
 local function SetPlayerCastbarOverrideMode(mode)
-    local g = _general(); if not g then return end; g.playerCastbarOverrideMode = mode; PushCastbarVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.playerCastbarOverrideMode = mode
+    PushCastbarVisualUpdates()
 end
 local function GetPlayerCastbarOverrideColor() return _getRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", 0.0, 0.6, 1.0) end
-local function SetPlayerCastbarOverrideColor(r, g, b) _setRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", r, g, b, 0.0, 0.6, 1.0, PushCastbarVisualUpdates) end
+local function SetPlayerCastbarOverrideColor(r, g, b)
+    _setRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", r, g, b, 0.0, 0.6, 1.0,
+        PushCastbarVisualUpdates)
+end
 
 --- - Class Colors -
 local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
@@ -743,22 +800,26 @@ local function GetClassColor(token)
     return 1, 1, 1
 end
 local function SetClassColor(token, r, g, b)
-    local db = MSUF_DB; if not db then return end
+    local db = MSUF_DB
+    if not db then return end
     db.classColors = db.classColors or {}
     db.classColors[token] = { r = r or 1, g = g or 1, b = b or 1 }
     PushVisualUpdates()
 end
 local function ResetAllClassColors()
     local db = MSUF_DB
-    if db then db.classColors = nil end; PushVisualUpdates()
+    if db then db.classColors = nil end
+    PushVisualUpdates()
 end
 
 --- - Class Bar Background Color -
 local function GetClassBarBgColor() return _getRGBA("classBarBgR", "classBarBgG", "classBarBgB", "classBarBgA", 0, 0, 0, 1) end
 local function SetClassBarBgColor(r, g, b, a) _setRGBA("classBarBgR", "classBarBgG", "classBarBgB", "classBarBgA", r, g, b, a, 0, 0, 0, 1) end
 local function ResetClassBarBgColor()
-    local g = _general(); if not g then return end
-    g.classBarBgR, g.classBarBgG, g.classBarBgB, g.classBarBgA = nil, nil, nil, nil; PushVisualUpdates()
+    local g = _general()
+    if not g then return end
+    g.classBarBgR, g.classBarBgG, g.classBarBgB, g.classBarBgA = nil, nil, nil, nil
+    PushVisualUpdates()
 end
 
 --- - Health Bar Background Fill / Color Mode -
@@ -826,35 +887,75 @@ end
 
 --- - NPC Colors -
 local NPC_TYPE_KEYS = { "npcBoss", "npcMiniboss", "npcCaster", "npcMelee", "npcRegular" }
-local NPC_TYPE_UNITS = { { key = "npcTypeTarget", label = "Target" }, { key = "npcTypeFocus", label = "Focus" }, { key = "npcTypeBoss", label = "Boss" }, { key = "npcTypeToT", label = "Target of Target" } }
+local NPC_TYPE_UNITS = {
+    { key = "npcTypeTarget", label = "Target" }, { key = "npcTypeFocus", label = "Focus" },
+    { key = "npcTypeBoss", label = "Boss" }, { key = "npcTypeToT", label = "Target of Target" },
+}
 
 local function GetNPCColor(kind)
     local db = MSUF_DB
     if db and db.npcColors and db.npcColors[kind] then
-        local t = db.npcColors[kind]; return t.r or 0, t.g or 1, t.b or 0
+        local t = db.npcColors[kind]
+        return t.r or 0, t.g or 1, t.b or 0
     end
     local def = { friendly={0,1,0}, neutral={1,1,0}, enemy={0.85,0.10,0.10}, dead={0.4,0.4,0.4},
         npcBoss={0.74,0.11,0}, npcMiniboss={0.56,0,0.74}, npcCaster={0,0.45,0.74}, npcMelee={0.99,0.99,0.99}, npcRegular={0.70,0.56,0.33} }
-    local d = def[kind] or def.enemy; return d[1], d[2], d[3]
+    local d = def[kind] or def.enemy
+    return d[1], d[2], d[3]
 end
 local function SetNPCColor(kind, r, g, b)
-    local db = MSUF_DB; if not db then return end
+    local db = MSUF_DB
+    if not db then return end
     db.npcColors = db.npcColors or {}
     db.npcColors[kind] = { r = r or 0, g = g or 1, b = b or 0 }
     PushVisualUpdates()
 end
 local function ResetAllNPCColors()
     local db = MSUF_DB
-    if db then db.npcColors = nil end; PushVisualUpdates()
+    if db then db.npcColors = nil end
+    PushVisualUpdates()
 end
 local function GetNPCColorMode() return (_general() or {}).npcColorMode or "reaction" end
-local function SetNPCColorMode(mode) local g = _general(); if g then g.npcColorMode = mode; PushVisualUpdates() end end
-local function GetNPCTypeColorBar() local g = _general(); return not g or g.npcTypeColorBar ~= false end
-local function SetNPCTypeColorBar(v) local g = _general(); if g then g.npcTypeColorBar = v and true or false; PushVisualUpdates() end end
-local function GetNPCTypeColorText() local g = _general(); return not g or g.npcTypeColorText ~= false end
-local function SetNPCTypeColorText(v) local g = _general(); if g then g.npcTypeColorText = v and true or false; PushVisualUpdates() end end
-local function GetNPCClassColorBar() local g = _general(); return g and g.npcClassColorBar == true or false end
-local function SetNPCClassColorBar(v) local g = _general(); if g then g.npcClassColorBar = v and true or false; PushVisualUpdates() end end
+local function SetNPCColorMode(mode)
+    local g = _general()
+    if g then
+        g.npcColorMode = mode
+        PushVisualUpdates()
+    end
+end
+local function GetNPCTypeColorBar()
+    local g = _general()
+    return not g or g.npcTypeColorBar ~= false
+end
+local function SetNPCTypeColorBar(v)
+    local g = _general()
+    if g then
+        g.npcTypeColorBar = v and true or false
+        PushVisualUpdates()
+    end
+end
+local function GetNPCTypeColorText()
+    local g = _general()
+    return not g or g.npcTypeColorText ~= false
+end
+local function SetNPCTypeColorText(v)
+    local g = _general()
+    if g then
+        g.npcTypeColorText = v and true or false
+        PushVisualUpdates()
+    end
+end
+local function GetNPCClassColorBar()
+    local g = _general()
+    return g and g.npcClassColorBar == true or false
+end
+local function SetNPCClassColorBar(v)
+    local g = _general()
+    if g then
+        g.npcClassColorBar = v and true or false
+        PushVisualUpdates()
+    end
+end
 local function ResetNPCTypeColors()
     local db = MSUF_DB
     local colors = db and db.npcColors
@@ -864,8 +965,17 @@ local function ResetNPCTypeColors()
     end
     PushVisualUpdates()
 end
-local function GetNPCTypePerUnit(key) local g = _general(); return not g or g[key] ~= false end
-local function SetNPCTypePerUnit(key, v) local g = _general(); if g then g[key] = v and true or false; PushVisualUpdates() end end
+local function GetNPCTypePerUnit(key)
+    local g = _general()
+    return not g or g[key] ~= false
+end
+local function SetNPCTypePerUnit(key, v)
+    local g = _general()
+    if g then
+        g[key] = v and true or false
+        PushVisualUpdates()
+    end
+end
 
 --- - Pet Frame Color -
 local function GetPetFrameColor() return _getRGB("petFrameColorR", "petFrameColorG", "petFrameColorB", 0, 0.8, 0) end
@@ -877,18 +987,36 @@ local function SetPetFrameColor(r, g, b) _setRGB("petFrameColorR", "petFrameColo
 --- to write `absorbColor*` / `healAbsorbColor*` while every reader consumed
 --- `absorbBarColor*` / `healAbsorbBarColor*` - so color changes never landed.
 --- One-time migration of the legacy keys is done in MSUF_Defaults.
-local function GetAbsorbOverlayColor()         return _getRGBA("absorbBarColorR",     "absorbBarColorG",     "absorbBarColorB",     "absorbBarColorA",     1.0, 1.0, 1.0, 0.45) end
-local function SetAbsorbOverlayColor(r, g, b, a)      _setRGBA("absorbBarColorR",     "absorbBarColorG",     "absorbBarColorB",     "absorbBarColorA",     r, g, b, a, 1.0, 1.0, 1.0, 0.45) end
-local function GetHealAbsorbOverlayColor()     return _getRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA", 0.7, 0.0, 0.0, 0.45) end
-local function SetHealAbsorbOverlayColor(r, g, b, a)  _setRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA", r, g, b, a, 0.7, 0.0, 0.0, 0.45) end
+local function GetAbsorbOverlayColor()
+    return _getRGBA("absorbBarColorR", "absorbBarColorG", "absorbBarColorB", "absorbBarColorA", 1.0, 1.0, 1.0, 0.45)
+end
+local function SetAbsorbOverlayColor(r, g, b, a)
+    _setRGBA("absorbBarColorR", "absorbBarColorG", "absorbBarColorB", "absorbBarColorA", r, g, b, a, 1.0, 1.0, 1.0, 0.45)
+end
+local function GetHealAbsorbOverlayColor()
+    return _getRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA",
+        0.7, 0.0, 0.0, 0.45)
+end
+local function SetHealAbsorbOverlayColor(r, g, b, a)
+    _setRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA", r, g, b, a,
+        0.7, 0.0, 0.0, 0.45)
+end
 
 --- - Power Bar Background -
 local function GetPowerBarBackgroundColor()
     return _getRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA", 0, 0, 0, 1)
 end
-local function SetPowerBarBackgroundColor(r, g, b, a) _setRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA", r, g, b, a, 0, 0, 0, 1) end
+local function SetPowerBarBackgroundColor(r, g, b, a)
+    _setRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA", r, g, b, a, 0, 0, 0, 1)
+end
 local function GetPowerBarBackgroundMatchHP() return (_general() or {}).powerBarBgMatchBarColor and true or false end
-local function SetPowerBarBackgroundMatchHP(v) local g = _general(); if g then g.powerBarBgMatchBarColor = v and true or false; PushVisualUpdates() end end
+local function SetPowerBarBackgroundMatchHP(v)
+    local g = _general()
+    if g then
+        g.powerBarBgMatchBarColor = v and true or false
+        PushVisualUpdates()
+    end
+end
 
 --- - Aggro Border -
 local function GetAggroBorderColor()

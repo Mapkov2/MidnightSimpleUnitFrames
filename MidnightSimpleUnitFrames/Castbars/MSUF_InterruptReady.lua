@@ -18,8 +18,8 @@ local PublicAPI = Castbars.PublicAPI
 local Rounded = Castbars.Rounded
 local Style = Castbars.Style
 local Publish = PublicAPI.Publish
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
-local IS_CLASSIC = MSUF.Client ~= nil and MSUF.Client.IsClassic == true
+local IS_FOREVER = MSUF.Client.IsForever == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 local SpellAPI = C_Spell
 local GetTime = GetTime
@@ -1008,13 +1008,15 @@ local function SyncProjectionMasks(frame, projection)
     if same then return end
     local marker, segment = projection.marker, projection.segment
     for index = #borrowed, 1, -1 do
-        marker:RemoveMaskTexture(borrowed[index]); segment:RemoveMaskTexture(borrowed[index])
+        marker:RemoveMaskTexture(borrowed[index])
+        segment:RemoveMaskTexture(borrowed[index])
         borrowed[index] = nil
     end
     for index = 1, count do
         local mask = fill:GetMaskTexture(index)
         if mask and plainIsSecret(mask) ~= true then
-            marker:AddMaskTexture(mask); segment:AddMaskTexture(mask)
+            marker:AddMaskTexture(mask)
+            segment:AddMaskTexture(mask)
             borrowed[#borrowed + 1] = mask
         end
     end
@@ -1061,15 +1063,20 @@ local function RefreshTimeProjection(frame, castState, general, active)
     if not active or frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false
         or (castState and castState.isNotInterruptible == true) or not ShouldShow(general, frame.unit)
         or not (general.kickReadyTimeMarker or general.kickReadyTimeSegment) then
-        HideTimeProjection(frame); return
+        HideTimeProjection(frame)
+        return
     end
     local duration = frame.MSUF_durationObj or (castState and castState.durationObj)
     if not duration or not duration.GetStartTime or not duration.GetEndTime then
-        HideTimeProjection(frame); return
+        HideTimeProjection(frame)
+        return
     end
     if not state.spellsResolved then ResolveInterruptSpellID() end
     local list = frame._msufKickTimeProjections
-    if not list then list = {}; frame._msufKickTimeProjections = list end
+    if not list then
+        list = {}
+        frame._msufKickTimeProjections = list
+    end
     local raw = ResolveRawNotInterruptible(frame, castState)
     local rawSecret = plainIsSecret(raw) == true
     -- The shade marks the time left after the interrupt recovers, so the
@@ -1121,7 +1128,8 @@ local function RefreshTimeProjection(frame, castState, general, active)
                 local alpha = raw == true and 0 or 1
                 if projection._msufAlpha ~= alpha then
                     projection._msufAlpha = alpha
-                    marker:SetAlpha(alpha); segment:SetAlpha(alpha)
+                    marker:SetAlpha(alpha)
+                    segment:SetAlpha(alpha)
                 end
             end
             if not projection._msufShown or projection._msufMarker ~= showMarker or projection._msufSegment ~= showSegment then

@@ -18,7 +18,7 @@ local Utils = Castbars.Utils
 local PixelLayoutRegion = ns.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarGCD.lua")
 local EditModeAPI = ns.Require("MSUF_EditModeAPI", "Castbars/MSUF_CastbarGCD.lua")
 local CreateFrame = CreateFrame
-local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
+local IS_FOREVER = ns.Client.IsForever == true
 -- Kernel/MSUF_Scheduler.lua loads first in every TOC: keyed deadlines that
 -- allocate nothing after the first use of a key.
 local Scheduler = ns.Scheduler
@@ -150,7 +150,10 @@ end
 RefreshDetached = function(layout)
     local g = GeneralDB()
     if not g then return end
-    if not DetachedWanted() then if detachedFrame then detachedFrame:Hide() end; return end
+    if not DetachedWanted() then
+        if detachedFrame then detachedFrame:Hide() end
+        return
+    end
     local frame = EnsureDetached()
     if layout == true or not frame._msufLaidOut then LayoutDetached(frame, g) end
     local active = frame._msufGCDActive == true
@@ -196,7 +199,10 @@ end
 local function Text(label) return ns.Translate and ns.Translate(label) or label end
 local function DimensionControl(id, label, key, default, min, max)
     return { id = id, label = Text(label), kind = "number", min = min, max = max, step = 1,
-        get = function() local g = GeneralDB(); return g and g[key] or default end,
+        get = function()
+            local g = GeneralDB()
+            return g and g[key] or default
+        end,
         set = function(value)
             local db = Config.Source()
             local g = db and db.general
@@ -602,7 +608,10 @@ driver:SetScript("OnEvent", function(_, event, _, _, spellID)
         SyncRegistration()
         return
     end
-    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then RefreshDetached(); return end
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        RefreshDetached()
+        return
+    end
     OnSucceeded(spellID)
 end)
 --- Kept registered permanently: fires once per loading screen and re-syncs the

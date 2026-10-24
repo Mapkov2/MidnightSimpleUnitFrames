@@ -71,7 +71,7 @@ local PLAYER_CLASS = select(2, UnitClass("player"))
 -- an Edit Mode anchor. Keep the eligibility tied to the resources each flavor
 -- actually implements; a Warrior should not acquire a phantom Combo mover.
 local function CP_CanEditInactiveClassResource()
-    local client = MSUF.Client or {}
+    local client = MSUF.Client
     if client.IsForever or client.IsVanilla or client.IsTBC then
         return PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID"
     end
@@ -97,13 +97,15 @@ local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
 
 local ClientCP = MSUF.CPClient
-local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 if IS_CLASSIC then
     ClientCP = assert(MSUF.CPClassicRouting, "Classic ClassPower routing must load first")
     UnitPower = ClientCP.UnitPower or UnitPower
     UnitPowerDisplayMod = ClientCP.UnitPowerDisplayMod or UnitPowerDisplayMod
     UnitPowerMax = ClientCP.UnitPowerMax or UnitPowerMax
 end
+-- The provider's own optional table (WoW Forever routes target-combo checks through it), read once.
+local ClientCPProvider = ClientCP and ClientCP.Client
 
 --- Resolved once, on the Classic clients only: no Classic game type loads a
 --- Blizzard call site for this entry point, so the Classic build must not
@@ -145,7 +147,7 @@ local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
     NotSecret = NotSecret,
     NeedsAltManaBar = function() return NeedsAltManaBar() end,
     GetClassPowerType = ClientCP and ClientCP.GetClassPowerType or nil,
-    Client = ClientCP and ClientCP.Client or nil,
+    Client = ClientCPProvider,
 })
 local _cpDB = CPConfig._cpDB
 local CP_GetModeEventProfile = CPConfig.GetModeEventProfile
@@ -157,10 +159,8 @@ local CPColors = CP_CallBuilder(CPCoreBuilders.CONTROLLER_COLORS, {
 
 local CP
 
-local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
-    or MSUF.Client.SupportsClassResource("CHARGED")
-local supportsRunes = not (MSUF.Client and MSUF.Client.SupportsClassResource)
-    or MSUF.Client.SupportsClassResource("RUNES")
+local supportsCharged = MSUF.Client.SupportsClassResource("CHARGED")
+local supportsRunes = MSUF.Client.SupportsClassResource("RUNES")
 local function RefreshChargedPoints()
     if not supportsCharged then return end
     for index in pairs(CP.chargedMap) do
@@ -1236,9 +1236,9 @@ local function FullRefresh()
             ClassPowerReader=ClientCP and ClientCP.UnitPower,
             ClassPowerUnit=ClassPowerUnit,
             ClassPowerEvent=function() return CP_ShouldUseFrequentPowerEvents(true) and "UNIT_POWER_FREQUENT" or "UNIT_POWER_UPDATE" end,
-            ClassNeedsTargetChanged=ClientCP and ClientCP.Client and ClientCP.Client.NeedsTargetChanged,
+            ClassNeedsTargetChanged=ClientCPProvider and ClientCPProvider.NeedsTargetChanged,
             AcceptPowerToken=ClientCP and ClientCP.AcceptPowerToken,
-            SupportsEvent=MSUF.Client and MSUF.Client.SupportsEvent,
+            SupportsEvent=MSUF.Client.SupportsEvent,
             NotSecret=NotSecret,Texture=function(key) return CPConfig.ResolveTexture(key) end})
     end
     if CP.resourceExtras then CP.resourceExtras.Refresh() end

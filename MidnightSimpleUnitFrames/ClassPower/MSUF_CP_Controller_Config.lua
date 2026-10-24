@@ -24,8 +24,7 @@ local PlayerVehicleHasComboPoints = PlayerVehicleHasComboPoints
 local GetShapeshiftFormID = GetShapeshiftFormID
 local C_SpellBook = C_SpellBook
 local CP_MODE_EVENT_PROFILE = CPConstants.ModeDescriptors
-local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
-    or MSUF.Client.SupportsClassResource("CHARGED")
+local supportsCharged = MSUF.Client.SupportsClassResource("CHARGED")
 
 --- Bound once by CONTROLLER_CONFIG at controller load: the constants, the
 --- player class, the spec API, the secret guard and the AltMana binding getter.
@@ -415,7 +414,8 @@ local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
     --- its protected aura payload for a resource whose state is deterministic.
     if powerType == "TIP_OF_THE_SPEAR" then profile.aura = false end
     profile.deadAlive = (powerType == "TIP_OF_THE_SPEAR")
-    profile.targetChanged = E.Client and E.Client.NeedsTargetChanged(powerType) == true or false
+    local provider = E.Client
+    profile.targetChanged = provider and provider.NeedsTargetChanged(powerType) == true or false
     return profile
 end
 

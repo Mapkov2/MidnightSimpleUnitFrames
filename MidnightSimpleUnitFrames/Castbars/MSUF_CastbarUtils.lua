@@ -123,8 +123,7 @@ local function GetAnchorFrame()
     -- exposes it on every client, while only the Mainline family ships
     -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
     local cooldownAnchorEnabled = IsCooldownAnchorEnabled(general) == true
-        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-            and general.anchorToCooldown == true)
+        or (MSUF.Client.HostsCooldownManager == true and general.anchorToCooldown == true)
 
     if cooldownAnchorEnabled then
         local cooldown = GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer

@@ -7,7 +7,7 @@ MSUF.CPBuilders = MSUF.CPBuilders or {}
 -- pulses are game rules of Classic Era, TBC and WoW Forever (no other client
 -- has them); their bars need the native duration API.
 function MSUF.CPBuilders.ManaRegenTimersSupported()
-    local client = MSUF.Client or {}
+    local client = MSUF.Client
     local durationUtil = C_DurationUtil
     return (client.IsVanilla == true or client.IsTBC == true or client.IsForever == true)
         and type(durationUtil) == "table" and type(durationUtil.CreateDuration) == "function"

@@ -17,17 +17,9 @@ local Publish = PublicAPI.Publish
 local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
 -- Classic Era and WoW Forever load this file without arena units
 -- (MSUF.Client.SupportsUnit). The answer is fixed for the session, so read it once.
-local HAS_ARENA_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("arena"))
--- The client model's answer includes its Classic event denylist; a partial
--- load without the client model asks the event table directly.
-local HAS_PVP_MATCH_STATE_CHANGED
-if MSUF.Client and type(MSUF.Client.SupportsEvent) == "function" then
-    HAS_PVP_MATCH_STATE_CHANGED = MSUF.Client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
-else
-    HAS_PVP_MATCH_STATE_CHANGED = C_EventUtils
-        and type(C_EventUtils.IsEventValid) == "function"
-        and C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
-end
+local HAS_ARENA_UNITS = MSUF.Client.SupportsUnit("arena")
+-- The client model's answer includes its Classic event denylist.
+local HAS_PVP_MATCH_STATE_CHANGED = MSUF.Client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
 
 -- UF_Config loads first and exports the arena layout delta at file load.
 local GetArenaLayoutDelta = MSUF.Require("MSUF_GetArenaLayoutDelta", "Castbars/MSUF_ArenaCastbars.lua")

@@ -12,7 +12,7 @@ local CPConstants = MSUF.Require("MSUF_CP_CONST", FILE)
 local modeBuilders = CPConstants.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
-local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 --- Perf locals: the stamp helpers and the native-timer plumbing below run per
 --- pip on every power/aura event, and the Essence path runs per
@@ -560,6 +560,23 @@ modeBuilders.TIMER = function(E)
     return { Update = Update }
 end
 
+--- Single-bar modes (continuous, signed, stagger) repaint the bar background and
+--- hide the unused pips and ticks only when the compiled visual or the render
+--- mode changes, never on an ordinary power update.
+local function CP_StampSingleBarSurface(CP, bar, visual, visualVersion)
+    CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0,
+        visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
+    for i = 2, CP.maxBars do
+        local other = CP.bars[i]
+        if other then CP_StampShown(other, false) end
+    end
+    for i = 1, #CP.ticks do
+        if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
+    end
+    CP._singleVisualVersion = visualVersion
+    CP._singleVisualMode = CP.renderMode
+end
+
 --- MSUF_CP_Mode_Continuous.lua
 --- Phase 4 ClassPower split: continuous single-bar mode extracted from the core
 --- file (e.g. Elemental Maelstrom).
@@ -609,17 +626,9 @@ modeBuilders.CONTINUOUS = function(E)
 
         local visualVersion = visual and visual.version or 0
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
-            CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1, 1)
-            CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
-            for i = 2, CP.maxBars do
-                local b2 = CP.bars[i]
-                if b2 then CP_StampShown(b2, false) end
-            end
-            for i = 1, #CP.ticks do
-                if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
-            end
-            CP._singleVisualVersion = visualVersion
-            CP._singleVisualMode = CP.renderMode
+            CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1,
+                visual and visual.baseB or 1, 1)
+            CP_StampSingleBarSurface(CP, bar, visual, visualVersion)
         end
 
         local txt = CP.text
@@ -671,17 +680,7 @@ modeBuilders.CONTINUOUS = function(E)
             CP_StampStatusBarColor(bar, red, green, blue, 1)
             local visualVersion = visual and visual.version or 0
             if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
-                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0,
-                    visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
-                for i = 2, CP.maxBars do
-                    local other = CP.bars[i]
-                    if other then CP_StampShown(other, false) end
-                end
-                for i = 1, #CP.ticks do
-                    if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
-                end
-                CP._singleVisualVersion = visualVersion
-                CP._singleVisualMode = CP.renderMode
+                CP_StampSingleBarSurface(CP, bar, visual, visualVersion)
             end
 
             local txt = CP.text
@@ -796,16 +795,7 @@ modeBuilders.STAGGER = function(E)
         end
 
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
-            CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
-            for i = 2, CP.maxBars do
-                local b2 = CP.bars[i]
-                if b2 then CP_StampShown(b2, false) end
-            end
-            for i = 1, #CP.ticks do
-                if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
-            end
-            CP._singleVisualVersion = visualVersion
-            CP._singleVisualMode = CP.renderMode
+            CP_StampSingleBarSurface(CP, bar, visual, visualVersion)
         end
 
         local txt = CP.text

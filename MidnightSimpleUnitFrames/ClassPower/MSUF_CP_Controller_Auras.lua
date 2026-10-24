@@ -346,7 +346,7 @@ builders.CONTROLLER_AURAS = function(E)
         CPAuras.watched = {}
         CPAuras.AddSpell(CPK.SPELL.MISTS_ARCANE_CHARGE)
         -- Blizzard_UnitFrame/Cata/EclipseBarFrame.lua on upstream/classic.
-        if MSUF.Client and MSUF.Client.IsMists then
+        if MSUF.Client.IsMists then
             CPAuras.AddSpell(48517)
             CPAuras.AddSpell(48518)
         end

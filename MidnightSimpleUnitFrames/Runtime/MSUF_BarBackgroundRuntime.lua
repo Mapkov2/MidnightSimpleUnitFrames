@@ -424,7 +424,10 @@ local function CompileHealthBackgroundPlan(frame)
     local alpha = background and background.a
     if type(alpha) ~= "number" then alpha = frame.MSUFSpec.backgroundAlpha or 0.9 end
     local plan = frame._msufHealthBackgroundPlan
-    if not plan then plan = {}; frame._msufHealthBackgroundPlan = plan end
+    if not plan then
+        plan = {}
+        frame._msufHealthBackgroundPlan = plan
+    end
     plan.texture, plan.alpha = frame.hpBarBG, MSUF_Clamp01(alpha)
     plan.readPercent, plan.readOpaque = readPercent, readOpaque
     plan.readGradient = common and common.GradientColor
@@ -619,7 +622,8 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     end
 
     local powerColorSecret
-    if (cache and cache.powerBarBgMatchHPColor or ((gen and gen.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor))) and frame.hpBar and frame.hpBar.GetStatusBarColor then
+    if (cache and cache.powerBarBgMatchHPColor or ((gen and gen.powerBarBgMatchHPColor)
+        or (bars and bars.powerBarBgMatchBarColor))) and frame.hpBar and frame.hpBar.GetStatusBarColor then
         pr, pg, pb, powerColorSecret = MSUF.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)
     end
 

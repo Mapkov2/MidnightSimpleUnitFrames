@@ -215,7 +215,10 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
         text:SetFormattedText("%d ms", math.floor(networkMS + .5))
         text:Show()
     end
-    if general.castbarShowLatency == false then frame.latencyBar:Hide(); return end
+    if general.castbarShowLatency == false then
+        frame.latencyBar:Hide()
+        return
+    end
     local queueWindowMS = tonumber(GetCVar("SpellQueueWindow") or "0") or 0
     local latencyMS = math_max(networkMS, queueWindowMS)
     local durationMS = durationSeconds * 1000

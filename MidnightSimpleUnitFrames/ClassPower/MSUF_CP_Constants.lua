@@ -278,7 +278,7 @@ local CPK, MODE = K.CPK, K.CPK.MODE
 --- file as well. Their providers (Game/<Flavor>/ClassPower.lua) route the Mists
 --- resources below and the Classic-only signed render mode; Mainline never
 --- sees these keys.
-if (MSUF.Client and MSUF.Client.IsClassic) == true then
+if MSUF.Client.IsClassic == true then
     --- 11 is NATIVE_AURA. Mode ids key the hot-path dispatch tables, so a
     --- Classic-only mode takes the next free number instead of shadowing one.
     MODE.SIGNED_CONTINUOUS = 12

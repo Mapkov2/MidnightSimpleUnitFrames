@@ -20,7 +20,7 @@ local Publish = PublicAPI.Publish
 
 --- Boss units are a client fact: Classic Era and TBC have none. Read once at
 --- load, never per refresh.
-local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("boss"))
+local HAS_BOSS_UNITS = MSUF.Client.SupportsUnit("boss")
 local MAX_BOSS_FRAMES = tonumber(MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5

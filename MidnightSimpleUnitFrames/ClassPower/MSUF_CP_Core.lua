@@ -9,7 +9,7 @@ local CPConstants = Require("MSUF_CP_CONST", FILE)
 local ExportPublic = MSUF.ExportPublic
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
-local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 --- Perf locals: the RUNTIME handlers and the warm font/text refresh below
 --- run per event, so the Lua standard functions they touch are bound once.

@@ -11,8 +11,7 @@ local Publish = PublicAPI.Publish
 -- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
 -- and Era tick counts. TBC and Mists keep the Retail table below until their
 -- spell data has been verified.
-local HAS_ERA_SPELL_DATA = MSUF.Client ~= nil
-    and (MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true)
+local HAS_ERA_SPELL_DATA = MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10

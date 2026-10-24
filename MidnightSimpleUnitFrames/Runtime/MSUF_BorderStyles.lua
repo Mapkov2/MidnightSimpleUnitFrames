@@ -389,8 +389,20 @@ function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset)
         pieces[i]:SetVertexColor(r, g, b, a)
     end
     for i = 1, 4 do pieces[i]:Show() end
-    if runX then pieces[5]:Show(); pieces[6]:Show() else pieces[5]:Hide(); pieces[6]:Hide() end
-    if runY then pieces[7]:Show(); pieces[8]:Show() else pieces[7]:Hide(); pieces[8]:Hide() end
+    if runX then
+        pieces[5]:Show()
+        pieces[6]:Show()
+    else
+        pieces[5]:Hide()
+        pieces[6]:Hide()
+    end
+    if runY then
+        pieces[7]:Show()
+        pieces[8]:Show()
+    else
+        pieces[7]:Hide()
+        pieces[8]:Hide()
+    end
 end
 
 --- Blizzard's own border art (game files, not addon media) gets its look from
