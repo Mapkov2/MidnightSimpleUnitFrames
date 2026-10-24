@@ -479,6 +479,67 @@ Commands.Register({
 })
 
 Commands.Register({
+    name = "compatsave",
+    group = "profiles",
+    usage = "/msuf compatsave [off]",
+    help = "Save every profile in full 6.50-compatible format at the next logout or reload.",
+    run = function(rest)
+        rest = rest:lower()
+        if rest ~= "" and rest ~= "off" then
+            print(Tr("MSUF: Usage: /msuf compatsave [off]."))
+            return
+        end
+        local enabled = rest ~= "off"
+        if not MSUF.DefaultsSchema.SetCompatSave(MSUF_GlobalDB, enabled) then return end
+        if enabled then
+            print(Tr("MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x."))
+            print(Tr("MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels."))
+        else
+            print(Tr("MSUF: Compatibility save off. The next logout or reload uses normal sparse storage."))
+        end
+    end,
+})
+
+do
+    local pending = false
+    Commands.Register({
+        name = "restorebackup",
+        group = "profiles",
+        usage = "/msuf restorebackup [confirm|cancel]",
+        help = "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        run = function(rest)
+            rest = rest:lower()
+            if rest == "cancel" then pending = false return end
+            if CommandsInCombat() then
+                pending = false
+                print(Tr("MSUF: Cannot restore the profile safety copy while in combat."))
+                return
+            end
+            if rest == "" then
+                if type(MSUF_GlobalDB) ~= "table" or type(MSUF_GlobalDB._pre70ProfileBackup) ~= "table" then
+                    print(Tr("MSUF: No pre-7.0 profile safety copy is available."))
+                    return
+                end
+                pending = true
+                print(Tr("MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost."))
+                print(Tr("MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel."))
+                return
+            end
+            if rest ~= "confirm" or not pending then
+                print(Tr("MSUF: Type /msuf restorebackup first to review and confirm the account profile restore."))
+                return
+            end
+            pending = false
+            if MSUF.RestorePre70ProfileBackup() then
+                print(Tr("MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged."))
+            else
+                print(Tr("MSUF: The profile safety copy could not be restored; no backup data was changed."))
+            end
+        end,
+    })
+end
+
+Commands.Register({
     name = "profile",
     aliases = { "profiles" },
     group = "profiles",

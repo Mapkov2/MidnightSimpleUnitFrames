@@ -2837,6 +2837,7 @@ end
 --- of repairing the newly selected table even when its revision is current.
 --- A private copy (export, import candidate) goes through
 --- MSUF_NormalizeProfileDefaults, which never touches that session cache.
+MSUF.DefaultsSchema.IsCurrentProfile = MSUF_Defaults_IsCurrentProfileDB
 local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     assert(type(profile) == "table", "MSUF profile must be a table")
     local _, status = MSUF.DefaultsSchema.RestorePersistence(profile)

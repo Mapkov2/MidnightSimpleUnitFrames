@@ -262,6 +262,7 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     --- avoiding a second complete pass when this exact profile was already
     --- repaired earlier in the startup chain.
     MSUF_ProfileIO_RunEnsureDB(false, true)
+    MSUF.DefaultsSchema.CaptureRollbackBackup(MSUF_GlobalDB)
     MSUF.NumberFormat.Refresh()
     if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
     if not startup then
@@ -276,6 +277,20 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     end
  end
 ExportPublic("MSUF_InitProfiles", MSUF.PublicGlobals.MSUF_InitProfiles)
+function MSUF.RestorePre70ProfileBackup()
+    if Variants and not Variants.CanMutateProfile() then return false end
+    BeforeProfileSwitch()
+    local ok, legacy = MSUF.DefaultsSchema.RestoreRollbackBackup(MSUF_GlobalDB)
+    if not ok then return false end
+    MSUF_DB, MSUF_ActiveProfile = nil, nil
+    MSUF.PublicGlobals.MSUF_InitProfiles({ legacyDB = legacy })
+    if Variants then Variants.ResolveCurrent() end
+    if ProfileSync then ProfileSync.Activate()
+        ProfileSync.RefreshEvents() end
+    ApplyProfileRuntime("PROFILE_BACKUP_RESTORE", false)
+    MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_BACKUP_RESTORE", MSUF_ActiveProfile)
+    return true
+end
 local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
     return MSUF.SuiteLink.NotifyProfileLifecycle(kind, source, target)
 end

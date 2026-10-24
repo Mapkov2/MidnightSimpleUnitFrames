@@ -336,6 +336,7 @@ local function SettleSavedVariables(loadedNow)
     if type(globalDB.global) ~= "table" then
         globalDB.global = {}
     end
+    if loadedNow then MSUF.DefaultsSchema.BeginRollbackSession(globalDB, rawProfileDB) end
     ArchivePre6Profiles()
     SettleLifecycleState()
 end

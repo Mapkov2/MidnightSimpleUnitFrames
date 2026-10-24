@@ -87,9 +87,86 @@ not validate unrelated V3-only owners; old legal alias arrangements still load.
 
 New V3 saves require a V3-capable loader. Neither unchanged 6.50 nor a V2-only
 loader is guaranteed to reconstruct them. Stale-mask cleanup cannot recover
-values already lost by an earlier loader. The backward-migration smoke tests
-pinned 6.50 source excerpts; it establishes only those migration boundaries,
-not complete native downgrade compatibility.
+values already lost by an earlier loader. Use the explicit full-save path below
+before returning to unchanged 6.50x; copying an ordinary sparse save is unsafe.
+
+### Returning to unchanged 6.50x (E5, 2026-10-24)
+
+Run `/msuf compatsave`, then log out or `/reload` **before** replacing 7.0 with
+6.50x. The command prints what it arms. The terminal save first restores variants
+and flushes sync as usual, then persists **every** profile, including inactive
+profiles, as a full revision-17 table. V2/V3 masks are consumed, all elided leaves
+are reconstructed, and migration markers, unknown keys, explicit `false`/`0`/empty
+strings and originally absent optional fields retain their values. Historical
+profiles receive the ordinary defaults normalization when necessary. No 6.50x
+source change, decoder backport or special loader is required for this full
+representation. An unknown/corrupt envelope refuses compatibility saving and
+prints an error instead of falsely stamping it revision 17.
+
+`MSUF_GlobalDB._compatSave` is `"armed"` until a successful terminal full save
+marks it `"saved"`. Repeated terminal saves in that session stay full. A later
+7.0 login checks the original on-disk profiles **before** decoding: a completed
+full revision-17 save disarms the mode and the following logout saves sparse
+again. Sparse/incomplete data cannot consume the request. `/msuf compatsave off`
+cancels it explicitly. These account metadata fields are outside the profile
+pool and unchanged 6.50x ignores them.
+
+`profile_rollback_compat_smoke.lua <root> <client>` starts from serialized V3
+SavedVariables, arms the real slash command, runs the real terminal save, and
+checks every resulting profile through the **pinned 6.50 current-profile guard**
+from `profile_sparse_backward_migration_smoke.lua`. That guard selects the old
+native fast load before any repair/migration. Complete canonical Lua literal
+bytes must equal the original full profiles. The factory and applicable
+SavedVariables corpus run on Mainline, Vanilla, TBC, Mists and Forever. This is
+offline source and value proof; native WoW serialization and a live client
+downgrade remain untested. The separate backward-migration smoke continues to
+pin the older migration boundaries.
+
+### One-time account safety copy
+
+Before the first sparse save, `_pre70ProfileBackup` retains one independent,
+full account snapshot: `{ version = 1, source, profiles, char, legacy? }`.
+The capture happens at SavedVariables settlement, before profile migrations,
+retirement or pre-6 archival. A fresh account captures its initial materialized
+profile after binding. Character bindings and any standalone legacy profile are
+included so recovery retains the original account selection evidence. It never
+copies unrelated account history, never includes itself, never grows with later
+profile edits/creation, and is never overwritten, compacted or consumed by
+restore. Full pre-7.0 inputs remain byte-identical. For an account already saved
+sparse before this build, only the currently reconstructable full data can be
+retained; `source = "reconstructed"` explicitly records that limitation.
+
+There is **one snapshot per account**, with an **8 MiB conservative serialized
+payload budget**. The size walker charges four bytes per string byte (maximum
+Lua escaping), 32 bytes per non-string scalar, plus key/table syntax, counting aliases as
+repeated serialized content. Both input and fully reconstructed output must fit.
+This is a bound on the snapshot payload estimate, not a measurement of native
+WoW file formatting or Lua heap use. No profiles are truncated to fit. Unsafe,
+cyclic, undecodable or oversize input leaves no partial copy; sparse saving is
+disabled for that live account and a logout message explains that it stays
+full. A failed original capture cannot be replaced with post-migration data in
+that session. Existing snapshot data is retained even when invalid.
+
+In the corpus, maximum uncompressed `profile_state_harness.Literal` snapshot
+sizes are **699,795 bytes** on Mainline/Forever and **447,475 bytes** on
+Vanilla/TBC/Mists. The extra full copy is a deliberate one-time storage/memory
+cost; later sparse saves do not create another snapshot. Full-save and sparse
+terminal persistence retain their **zero-byte steady-state allocation** contracts;
+first capture, decoding and explicit recovery may allocate.
+
+`/msuf restorebackup` prints that **all account profiles and character profile
+bindings will be replaced**, losing later edits and profiles. Only a subsequent
+`/msuf restorebackup confirm` performs it; `cancel` discards the pending request,
+and combat refuses it. Restore copies the snapshot, rebinds the profile through
+the normal migration/runtime path, and arms compatibility saving for the next
+logout/reload. The immutable snapshot remains available. This is an account
+profile restore, not an import, rolling history or restore of other addons.
+
+`profile_rollback_backup_smoke.lua <root> <client>` verifies exact pre-login
+corpus bytes, snapshot independence across edits/logout/reload/restore,
+confirmation/cancel/combat, the size bound, and reconstructed-input provenance.
+Both new tests take each of the five client tokens and need director/E4 test
+registration; they add no shipped module or TOC entry.
 
 ### Decoder rejection and quarantine (E2, 2026-10-24)
 

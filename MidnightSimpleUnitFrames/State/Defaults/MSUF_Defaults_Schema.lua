@@ -5790,9 +5790,157 @@ function Schema.PreparePersistence(globalDB)
     return globalDB.profiles
 end
 
+-- Cold account recovery. One immutable snapshot, outside the compacted pool;
+-- never a per-profile history or a copy on each logout.
+do
+    local blockedStore
+    local snapshotLimit = 8 * 1024 * 1024
+
+    local function SnapshotCost(value, remaining)
+        local kind = type(value)
+        if kind == "string" then return #value * 4 + 2 end
+        if kind ~= "table" then return 32 end
+        local cost = 2
+        for key, child in pairs(value) do
+            cost = cost + SnapshotCost(key, remaining - cost) + 4
+            if cost > remaining then return cost end
+            cost = cost + SnapshotCost(child, remaining - cost)
+            if cost > remaining then return cost end
+        end
+        return cost
+    end
+
+    local function Safe(value)
+        local safe = CountTables(value, scratchRefs, scratchPath, 0, scratchLists)
+        ClearScratch()
+        return safe
+    end
+
+    local function CopySafe(value, bounded)
+        if not Safe(value) then return nil end
+        if bounded and SnapshotCost(value, snapshotLimit) > snapshotLimit then return nil end
+        return CopyNewerProfile(value, {})
+    end
+
+    local function IsFull(profile)
+        return Plain(profile) and Safe(profile) and profile._msufDefaultsRevision == 17
+            and profile[sparseV2Marker] == nil and profile[sparseV3.Marker] == nil
+            and Schema.IsCurrentProfile(profile)
+    end
+
+    function Schema.HasRollbackBackup(store)
+        local backup = Plain(store) and store._pre70ProfileBackup
+        return Plain(backup) and backup.version == 1 and Plain(backup.profiles) and Plain(backup.char)
+            and (backup.source == "full" or backup.source == "reconstructed")
+    end
+
+    function Schema.CaptureRollbackBackup(store, legacy)
+        if not Plain(store) then return false end
+        if store._pre70ProfileBackup ~= nil then return Schema.HasRollbackBackup(store) end
+        if store == blockedStore then return false end
+        local profiles = store.profiles
+        if not Plain(profiles) or next(profiles) == nil then
+            if not Plain(legacy) then return false end
+            profiles = { Default = legacy }
+        end
+        local snapshot = CopySafe({ profiles = profiles, char = Plain(store.char) and store.char or {}, legacy = legacy }, true)
+        if not snapshot then
+            blockedStore = store
+            return false
+        end
+        local source = "full"
+        for _, profile in pairs(snapshot.profiles) do
+            if not Plain(profile) then blockedStore = store return false end
+            if profile[sparseV2Marker] ~= nil or profile[sparseV3.Marker] ~= nil
+                or profile._msufDefaultsRevision == sparseToken or profile._msufDefaultsRevision == "MSUF_SPARSE_DEFAULTS_1" then
+                local _, status = Schema.RestorePersistence(profile)
+                if status == "rejected" then blockedStore = store return false end
+                source = "reconstructed"
+            end
+        end
+        if Plain(snapshot.legacy) and (snapshot.legacy[sparseV2Marker] ~= nil or snapshot.legacy[sparseV3.Marker] ~= nil
+            or snapshot.legacy._msufDefaultsRevision == sparseToken
+            or snapshot.legacy._msufDefaultsRevision == "MSUF_SPARSE_DEFAULTS_1") then
+            local _, status = Schema.RestorePersistence(snapshot.legacy)
+            if status == "rejected" then blockedStore = store return false end
+            source = "reconstructed"
+        end
+        snapshot.version, snapshot.source = 1, source
+        if SnapshotCost(snapshot, snapshotLimit) > snapshotLimit then blockedStore = store return false end
+        store._pre70ProfileBackup = snapshot
+        return true
+    end
+
+    -- Inspect the on-disk envelope before login has decoded or migrated it.
+    function Schema.BeginRollbackSession(store, legacy)
+        if not Plain(store) then return end
+        if store._compatSave == "saved" then
+            local full = Plain(store.profiles) and next(store.profiles) ~= nil
+            if full then
+                for _, profile in pairs(store.profiles) do
+                    if not IsFull(profile) then full = false break end
+                end
+            end
+            if full then store._compatSave = nil else store._compatSave = "armed" end
+        end
+        Schema.CaptureRollbackBackup(store, legacy)
+    end
+
+    function Schema.RestoreRollbackBackup(store)
+        if not Schema.HasRollbackBackup(store) then return false end
+        local restored = CopySafe(store._pre70ProfileBackup, true)
+        if not restored then return false end
+        store.profiles, store.char = restored.profiles, restored.char
+        store._compatSave = "armed"
+        return true, restored.legacy
+    end
+
+    function Schema.PersistCompat(store)
+        local profiles = Schema.PreparePersistence(store)
+        if not profiles then return false end
+        for _, profile in pairs(profiles) do
+            if not IsFull(profile) then
+                -- Preflight detached data: an unknown envelope must never be
+                -- stamped as revision 17 or silently presented as downgrade safe.
+                local candidate = CopySafe(profile)
+                if not Plain(candidate) then return false end
+                local _, status = Schema.RestorePersistence(candidate)
+                if status == "rejected" or (tonumber(candidate._msufDefaultsRevision) or 0) > 17 then return false end
+                MSUF.Require("MSUF_NormalizeProfileDefaults", "State/Defaults/MSUF_Defaults_Schema.lua")(candidate, false, true)
+                if not IsFull(candidate) then return false end
+            end
+        end
+        for _, profile in pairs(profiles) do
+            if not IsFull(profile) then
+                Schema.RestorePersistence(profile)
+                MSUF.Require("MSUF_NormalizeProfileDefaults", "State/Defaults/MSUF_Defaults_Schema.lua")(profile, false, true)
+            end
+        end
+        return true, 0
+    end
+
+    function Schema.SetCompatSave(store, enabled)
+        if not Plain(store) then return false end
+        store._compatSave = enabled and "armed" or nil
+        return true
+    end
+end
+
 function Schema.Persist(globalDB)
     local profiles = Schema.PreparePersistence(globalDB)
     if not profiles then return false end
+    if globalDB._compatSave == "armed" or globalDB._compatSave == "saved" then
+        local ok, count = Schema.PersistCompat(globalDB)
+        if ok then globalDB._compatSave = "saved" end
+        if not ok then print(MSUF.Translate("MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.")) end
+        return ok, count
+    end
+    -- A failed safety snapshot leaves the live account full. Standalone codec
+    -- callers have no account/login lifecycle and retain their pure contract.
+    if globalDB == MSUF_GlobalDB and not Schema.HasRollbackBackup(globalDB) then
+        print(MSUF.Translate("MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full."))
+        return false
+    end
     local count = 0
     if CountTables(globalDB, scratchRefs, scratchPath, 0, scratchLists) and scratchRefs[profiles] == 1 then
         for _, profile in pairs(profiles) do count = count + PersistProfile(profile, scratchRefs, scratchLists) end
