@@ -37,7 +37,7 @@ local function MSUF_DeepCopy(v, seen, depth)
 end
 
 local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
-    if type(profile) ~= "table" then return end
+    if type(profile) ~= "table" or MSUF.DefaultsSchema.IsQuarantinedProfile(profile) then return end
     if type(profile.general) ~= "table" then
         profile.general = {}
     end
@@ -127,11 +127,8 @@ local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustar
 --- published by Game/Shared/Initialize.lua (5 on TBC/Mists, 3 on Mainline,
 --- 0 on Vanilla). Clamped to 3..5 so Mainline and Vanilla keep the exact
 --- arena1..3 import, reset and text-scope behavior.
-local MSUF_PROFILEIO_ARENA_SLOTS = math.max(3, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
-local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = {
-    { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
-    { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
-}
+local MSUF_PROFILEIO_ARENA_SLOTS = StateHelpers.AliasMigrations.ArenaSlots
+local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = StateHelpers.AliasMigrations.UnitOwners
 local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacyAliases)
     if type(profile) ~= "table" then return profile end
     local changed = false
@@ -211,58 +208,8 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
         end
     end
 
-    local function NormalizeAnchorTo(conf)
-        local anchor = conf.anchorToUnitframe
-        if type(anchor) ~= "string" or anchor == "" then return end
-        if anchor == "global" then
-            conf.anchorToUnitframe = "GLOBAL"
-        elseif anchor == "free" then
-            conf.anchorToUnitframe = "FREE"
-        elseif anchor == "tot" or anchor == "targetoftarget" then
-            conf.anchorToUnitframe = "targettarget"
-        elseif anchor == "focus_target" or anchor == "focustargettarget" then
-            conf.anchorToUnitframe = "focustarget"
-        elseif anchor:match("^boss%d+$") then
-            conf.anchorToUnitframe = "boss"
-        elseif anchor:match("^arena%d+$") then
-            conf.anchorToUnitframe = "arena"
-        end
-    end
-
-    local function NormalizeNumber(conf, key, minValue, maxValue)
-        local n = tonumber(conf[key])
-        if n == nil then return end
-        if minValue ~= nil and n < minValue then
-            n = minValue
-        elseif maxValue ~= nil and n > maxValue then
-            n = maxValue
-        end
-        conf[key] = n
-    end
-
     local function NormalizeUnit(conf)
-        if type(conf) ~= "table" then return end
-        if conf.anchorFrameName == "UI_Parent" then conf.anchorFrameName = "UIParent" end
-        if conf.point == nil and conf.anchorMyPoint ~= nil then conf.point = conf.anchorMyPoint end
-        if conf.relativePoint == nil and conf.anchorRelPoint ~= nil then conf.relativePoint = conf.anchorRelPoint end
-        if conf.offsetX == nil and conf.x ~= nil then conf.offsetX = conf.x end
-        if conf.offsetY == nil and conf.y ~= nil then conf.offsetY = conf.y end
-        if conf.width == nil and conf.frameWidth ~= nil then conf.width = conf.frameWidth end
-        if conf.height == nil and conf.frameHeight ~= nil then conf.height = conf.frameHeight end
-        NormalizeNumber(conf, "offsetX", -4096, 4096)
-        NormalizeNumber(conf, "offsetY", -4096, 4096)
-        NormalizeNumber(conf, "x", -4096, 4096)
-        NormalizeNumber(conf, "y", -4096, 4096)
-        NormalizeNumber(conf, "width", 1, 4096)
-        NormalizeNumber(conf, "height", 1, 4096)
-        NormalizeNumber(conf, "frameWidth", 1, 4096)
-        NormalizeNumber(conf, "frameHeight", 1, 4096)
-        NormalizeNumber(conf, "spacing", -4096, 4096)
-        if conf.point == "" then conf.point = nil end
-        if conf.relativePoint == "" then conf.relativePoint = nil end
-        if type(conf.point) == "string" then conf.point = string.upper(conf.point) end
-        if type(conf.relativePoint) == "string" then conf.relativePoint = string.upper(conf.relativePoint) end
-        NormalizeAnchorTo(conf)
+        StateHelpers.NormalizePositionAliases(conf, "profileio")
     end
 
     for i = 1, #MSUF_PROFILEIO_UNIT_KEYS do
@@ -281,17 +228,8 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
 end
 
 local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
---- This revision describes the normalization performed by
---- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
---- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
---- translation pipeline gains a new mandatory repair.
---- Cross-reference: State/MSUF_Defaults.lua runs a second, independent alias
---- normalization pipeline (MSUF_EnsureDB_Heavy, gated by
---- MSUF_DEFAULTS_CURRENT_REVISION) over the same text/status/aura alias keys,
---- using the narrower StateHelpers.DefaultsSpec. The two revisions are bumped
---- independently and are deliberately not merged; keep both in mind when a
---- key alias changes.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21
+--- Shared alias/migration ledger; defaults retains its separate broad-fill marker.
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = StateHelpers.AliasMigrations.Revision
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
 --- RC17's destructive hard cut established revision 1 as the canonical Unit
 --- Aura baseline. Later revisions may migrate ownership or storage in place;
@@ -383,17 +321,9 @@ local MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS = {
     "boss1", "boss2", "boss3", "boss4", "boss5",
     "arena1", "arena2", "arena3",
 }
-local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
-    "general",
-    "player", "target", "targettarget",
-    "focus", "focustarget",
-    "pet", "pettarget", "boss", "boss1", "boss2", "boss3", "boss4",
-    "arena", "arena1", "arena2", "arena3",
-    "gf_party", "gf_raid", "gf_mythicraid",
-}
+local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = StateHelpers.AliasMigrations.Contexts.profileio.scopes
 for i = 4, MSUF_PROFILEIO_ARENA_SLOTS do
     MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS[#MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS + 1] = "arena" .. i
-    MSUF_PROFILEIO_TEXT_SCOPE_KEYS[#MSUF_PROFILEIO_TEXT_SCOPE_KEYS + 1] = "arena" .. i
 end
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -1252,11 +1182,11 @@ local function MSUF_ProfileIO_NormalizeProfileAuras(profile)
     return changed
 end
 
---- Profile-side alias normalization pipeline (see the cross-reference note
---- above MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION for its Defaults twin).
+--- Translation uses the shared alias ledger with explicit metadata trust rules.
 MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     if type(profile) ~= "table" then return profile, false end
-    local changed = MSUF.DefaultsSchema.RestorePersistence(profile)
+    local changed, status = MSUF.DefaultsSchema.RestorePersistence(profile)
+    if status == "rejected" then return MSUF.DefaultsSchema.QuarantineProfile(profile), false, status end
     context = type(context) == "table" and context or {}
     --- Only internal callers operating on an already-stored profile may trust
     --- the persisted marker. Import payloads are deliberately never trusted:
@@ -1308,16 +1238,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         profile.general.fontBaselineOffset = 0
         changed = true
     end
-    for i = 1, #MSUF_PROFILEIO_TEXT_SCOPE_KEYS do
-        local key = MSUF_PROFILEIO_TEXT_SCOPE_KEYS[i]
-        local scope = profile[key]
-        if type(scope) == "table" then
-            local isGroupScope = key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid"
-            local inferFontOverride = key ~= "general"
-            changed = StateHelpers.NormalizeTextScope(scope, isGroupScope, StateHelpers.ProfileIOSpec, inferFontOverride) or changed
-            changed = StateHelpers.NormalizeStatusScope(scope, isGroupScope, StateHelpers.ProfileIOSpec) or changed
-        end
-    end
+    changed = StateHelpers.NormalizeProfileTextAliases(profile, "profileio") or changed
     changed = StateHelpers.MigrateSplitStatusText(profile, MSUF_PROFILEIO_TEXT_SCOPE_KEYS) or changed
     changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
@@ -1354,7 +1275,9 @@ MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source)
                 trustNormalizationMarker = true,
             })
             changed = profileChanged or changed
-            MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+            if not MSUF.DefaultsSchema.IsQuarantinedProfile(profile) then
+                MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+            end
         end
     end
     return changed
@@ -1373,3 +1296,8 @@ MSUF.ProfileNormalize = {
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,
     TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent,
 }
+
+function MSUF.ProfileNormalize.PersistenceRejected(profile)
+    local _, status = MSUF.DefaultsSchema.RestorePersistence(profile)
+    return status == "rejected"
+end

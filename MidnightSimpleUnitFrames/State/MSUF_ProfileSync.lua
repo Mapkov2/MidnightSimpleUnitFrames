@@ -268,6 +268,7 @@ function Sync.Flush(full)
         if group.members[MSUF_ActiveProfile] then
             for name in pairs(group.members) do
                 local target=profiles[name]
+                if MSUF.DefaultsSchema.IsQuarantinedProfile(target) then target=MSUF.DefaultsSchema.QuarantineProfile(target) end
                 if name~=MSUF_ActiveProfile and type(target)=="table" then
                     for _,field in ipairs(changes) do
                         if group.modules[Sync.Owner(field.path)] and not Excluded(field.path,group,source,target) then

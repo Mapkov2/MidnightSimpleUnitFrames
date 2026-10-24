@@ -768,3 +768,88 @@ function StateHelpers.SeedTextOffsets(defaults)
     for i = 1, #TEXT_OFFSET_KEYS do defaults[TEXT_OFFSET_KEYS[i]] = 0 end
     return defaults
 end
+
+-- One alias ledger. Defaults-before-Profiles and trusted/import translation
+-- select explicit historical contexts; their order and coercion stay distinct.
+do
+    local groups = { "gf_party", "gf_raid", "gf_mythicraid" }
+    local defaults = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
+    local profileio = {
+        "general", "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget",
+        "boss", "boss1", "boss2", "boss3", "boss4", "arena", "arena1", "arena2", "arena3",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }
+    local slots = math.max(3, MSUF.Client.MaxArenaOpponents)
+    for i = 4, slots do profileio[#profileio + 1] = "arena" .. i end
+    local contexts = {
+        defaults = { spec = StateHelpers.DefaultsSpec, scopes = defaults, groups = groups, offsetLimit = 10000 },
+        profileio = { spec = StateHelpers.ProfileIOSpec, scopes = profileio, offsetLimit = 4096, extendedPositions = true,
+            inferFontOverride = true },
+    }
+    local positionAliases = {
+        { "point", "anchorMyPoint" }, { "relativePoint", "anchorRelPoint" },
+        { "offsetX", "x", true }, { "offsetY", "y", true },
+        { "width", "frameWidth", true }, { "height", "frameHeight", true },
+    }
+    local unitOwners = {
+        { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
+        { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
+    }
+    StateHelpers.AliasMigrations = { Revision = 21, Contexts = contexts, UnitOwners = unitOwners, ArenaSlots = slots }
+    local function NormalizeAnchor(scope)
+        local anchor = scope.anchorToUnitframe
+        if type(anchor) ~= "string" or anchor == "" then return end
+        if anchor == "global" or anchor == "free" then
+            scope.anchorToUnitframe = string.upper(anchor)
+        elseif anchor:match("^boss%d+$") then
+            scope.anchorToUnitframe = "boss"
+        elseif anchor:match("^arena%d+$") then
+            scope.anchorToUnitframe = "arena"
+        else
+            for _, owner in ipairs(unitOwners) do
+                for _, alias in ipairs(owner.aliases) do
+                    -- This spelling was a root alias only, never an anchor alias.
+                    if anchor == alias and alias ~= "target_of_target" then scope.anchorToUnitframe = owner.canonical end
+                end
+            end
+        end
+    end
+    function StateHelpers.NormalizePositionAliases(scope, context)
+        if type(scope) ~= "table" then return false end
+        local rules, changed = contexts[context], false
+        if rules.extendedPositions and scope.anchorFrameName == "UI_Parent" then scope.anchorFrameName = "UIParent" end
+        for _, alias in ipairs(positionAliases) do
+            if not alias[3] or rules.extendedPositions then changed = CopyIfMissing(scope, alias[1], alias[2]) or changed end
+        end
+        changed = NormalizeNumberField(scope, "offsetX", -rules.offsetLimit, rules.offsetLimit) or changed
+        changed = NormalizeNumberField(scope, "offsetY", -rules.offsetLimit, rules.offsetLimit) or changed
+        if rules.extendedPositions then
+            NormalizeNumberField(scope, "x", -4096, 4096)
+            NormalizeNumberField(scope, "y", -4096, 4096)
+            NormalizeNumberField(scope, "width", 1, 4096)
+            NormalizeNumberField(scope, "height", 1, 4096)
+            NormalizeNumberField(scope, "frameWidth", 1, 4096)
+            NormalizeNumberField(scope, "frameHeight", 1, 4096)
+            NormalizeNumberField(scope, "spacing", -4096, 4096)
+            NormalizeAnchor(scope)
+        end
+        changed = UpperStringField(scope, "point", rules.spec.nilEmptyStrings) or changed
+        changed = UpperStringField(scope, "relativePoint", rules.spec.nilEmptyStrings) or changed
+        return changed
+    end
+    function StateHelpers.NormalizeProfileTextAliases(profile, context)
+        local rules, changed = contexts[context], false
+        for _, key in ipairs(rules.scopes) do
+            local group = key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid"
+            changed = NormalizeTextScope(profile[key], group, rules.spec, rules.inferFontOverride and key ~= "general") or changed
+            changed = NormalizeStatusScope(profile[key], group, rules.spec) or changed
+        end
+        if rules.groups then
+            for _, key in ipairs(rules.groups) do
+                changed = NormalizeTextScope(profile[key], true, rules.spec) or changed
+                changed = NormalizeStatusScope(profile[key], true, rules.spec) or changed
+            end
+        end
+        return changed
+    end
+end

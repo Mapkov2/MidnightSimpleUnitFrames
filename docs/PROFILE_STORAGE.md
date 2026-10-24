@@ -1,7 +1,8 @@
 # Profile defaults and persistence
 
-Runtime profiles remain ordinary materialised tables. `MSUF_DB` is the active
-`MSUF_GlobalDB.profiles` entry. Sparse storage runs only at terminal logout;
+Runtime profiles remain ordinary materialised tables. `MSUF_DB` normally aliases
+the active `MSUF_GlobalDB.profiles` entry. Rejected storage envelopes use a
+detached session copy instead (see below). Sparse storage runs only at terminal logout;
 readers, history, variants, sync, copy/reset and import/export retain their
 runtime values and existing table identities. This reduces serialized storage,
 not the runtime profile memory. Absent optional fields remain absent.
@@ -90,31 +91,94 @@ values already lost by an earlier loader. The backward-migration smoke tests
 pinned 6.50 source excerpts; it establishes only those migration boundaries,
 not complete native downgrade compatibility.
 
-### Newer revision recovery (C13, 2026-10-24)
+### Decoder rejection and quarantine (E2, 2026-10-24)
+
+`DefaultsSchema.RestorePersistence(profile)` returns the historical change
+boolean plus an explicit outcome: `not-sparse`, `restored`, or `rejected`.
+An invalid V2/V3 mask, missing referenced owner, unsupported envelope owner or
+orphan V3 envelope is rejected before any reconstruction writes. Both public
+normalizers stop immediately on that outcome; migrations and inactive-profile
+menu filling also skip quarantined data.
+
+The stored profile remains untouched in `MSUF_GlobalDB.profiles`. An independent
+snapshot is retained under `_rejectedProfileBackups[profileName]`, using the
+bounded recovery format below. The session binds a cached independent copy:
+missing values are filled from a fresh normalized factory profile, invalid
+owner types receive safe tables, explicit scalar values are retained, and storage masks are removed only from this working copy.
+For example, `bars.bossCastbarOffsetY = 0` and `general.fontSlug = true` survive
+rejection unchanged in both stored and session data. Later normalizer calls
+recognize the working copy and do not replay migrations against it.
+
+Switching away and back preserves session edits to that copy. Sync writes to a
+quarantined target use its session copy. Logout never writes this copy over the
+original; its session edits are intentionally temporary until the owner repairs
+or explicitly replaces the profile. Reload retries the original envelope with
+the current decoder. Private normalization candidates return a detached copy
+without changing the supplied input; callers must use the returned table.
+
+### Newer revision recovery (C13/E2, 2026-10-24)
 
 Before either login normalizer changes a stored profile with a newer numeric
 `_msufDefaultsRevision` (above 17, excluding the supported 17.5 sparse token),
-the shared decoder saves an independent deep copy under
-`MSUF_GlobalDB._newerRevisionBackups[profileName] = { revision = originalRevision,
-data = originalProfile }`. This includes both V2/V3 masks and unknown fields.
-Inactive stored profiles receive the same protection before translation.
-Startup copies of standalone/donor profiles are backed up from the selected
-saved source under the resolved startup profile name before the copy changes.
+the shared decoder saves an independent deep copy. Active, inactive, standalone
+and startup donor profiles use the same boundary. Ordinary revisions create no
+backup state. A supported full newer profile retains its previous normalization
+behaviour; an undecodable sparse envelope uses quarantine instead.
 
-The first backup for each profile name is retained unchanged across later
-binds and logins. Creating it prints one chat notice for that profile. Current
-and older revisions create neither backup state nor notices. Private export
-or import candidate copies do not replace the stored original. The working
-profile continues through the existing decoder, migrations and normalization;
-the backup is retained account data and is outside the profiles pool, so logout
-compaction does not edit it.
+`MSUF_GlobalDB._newerRevisionBackups[profileName]` is now a bucket with a persisted
+`identity`, an ordered list `order`, and `entries[key]`. A key contains profile
+identity, original revision and a deterministic 64-bit content fingerprint.
+Canonical serialization covers every supported field, including unknown fields
+and both masks. Hash collisions are resolved by comparing complete canonical
+content and adding a suffix, never by replacing an entry. Identical bytes do
+not create another entry. A bucket retains its last three distinct snapshots;
+adding a fourth removes only the oldest entry. Existing single-entry backups
+are imported into this history before adding a new snapshot.
 
-A future loader that understands the saved revision can deep-copy `data` back
-into `profiles[profileName]` before binding and decode it with that revision's
-codec. The older loader never automatically restores or deletes this backup;
-it cannot interpret the newer format. Retain the backup until recovery has
-been verified. `profile_newer_revision_backup_smoke.lua` checks serialized
-byte equality, both masks, active/inactive profiles and repeated binding.
+Each entry contains `{ revision, hash, data }`; existing entries are never edited.
+The bucket's `revision` and `data` fields provide a compatibility view of the
+latest snapshot. Quarantine uses the same format under `_rejectedProfileBackups`.
+Both stores live outside the profiles pool and logout compaction leaves them
+unchanged. Profile rename moves recovery identity and history with the profile.
+Deletion archives its buckets under `_profileRecoveryArchive`; reusing the name
+gets a new identity. Archived snapshots remain restorable by their original key.
+Newer snapshots retain the existing translated chat notice.
+
+`MSUF.DefaultsSchema.RestoreProfileBackup(profileName, key, kind)` explicitly
+replaces that stored profile with an independent copy of the selected entry.
+The default kind selects newer-revision history; `"rejected"` selects quarantine.
+Omitting the key selects the latest snapshot and also upgrades legacy buckets.
+It returns the restored table, or `nil, reason` for an unknown key/store. It
+neither binds nor normalizes the result, and it never edits the backup. Malformed
+persistence envelopes are refused transactionally on import; a valid replacement
+of a quarantined profile adopts the new data and retires its stale session flag.
+Recovery
+should be performed before binding with a loader that understands the saved
+revision; calling it does not add support for an unknown format.
+
+### Shared alias ownership
+
+`StateHelpers.AliasMigrations` owns the alias revision, unit owner aliases and
+context definitions. `NormalizePositionAliases` and `NormalizeProfileTextAliases`
+are the common migration entry points. The narrow `defaults` boot context keeps
+empty strings, rejects non-boolean inverse sources, uses the historical scope
+set and clamps offsets to 10000. The `profileio` context drops empty strings,
+coerces inverse sources, covers import-only scopes, infers scoped font ownership
+and clamps offsets to 4096. Metadata trust remains explicit at the translator
+boundary. The Defaults revision still owns broad default filling, separately
+from the shared alias ledger.
+
+`profile_alias_corpus_bytes_smoke.lua` compares complete corpus subtree dumps
+with a supplied baseline directory (argument 3); `--capture` at argument 4 writes
+the baseline there. Without a baseline directory it compares both shared alias contexts against
+independent pre-refactor rules on the raw corpus, factory and adversarial data. E2 captured all 31 client/fixture runs before the alias refactor, across
+Mainline, Vanilla, TBC, Mists and Forever; the before/after check requires exact
+serialized bytes and does not regenerate goldens. New executable contracts are
+`profile_decoder_quarantine_smoke.lua` and `profile_backup_history_smoke.lua`.
+`profile_ensure_recovery_budget_smoke.lua` measures the cached public runtime
+guard: 10 to 9 VM instructions per call on all five clients, one native type
+check per call unchanged, and zero allocation bytes over 1000 calls (minimum of
+two allocation runs). Recovery work stays after this cached fast path.
 
 ## C11 byte measurements (2026-10-24)
 

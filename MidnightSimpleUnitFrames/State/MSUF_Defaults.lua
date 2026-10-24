@@ -174,8 +174,6 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
 end
 ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRenderDB)
 
-local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
-local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 --- Field helpers are shared with State/MSUF_Profiles.lua through
 --- MSUF.StateHelpers (State/MSUF_StateHelpers.lua, loaded right before this
 --- file). This pipeline always passes StateHelpers.DefaultsSpec: empty strings
@@ -189,6 +187,8 @@ if type(StateHelpers) ~= "table" then
     error("State/MSUF_StateHelpers.lua must load before State/MSUF_Defaults.lua")
 end
 local MSUF_DEFAULTS_SPEC = StateHelpers.DefaultsSpec
+local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = StateHelpers.AliasMigrations.Contexts.defaults.scopes
+local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = StateHelpers.AliasMigrations.Contexts.defaults.groups
 --- Hunter Pet Happiness exists on Classic Era, TBC and WoW Forever. Its status
 --- keys are normalized like every other status prefix there; Midnight keeps the
 --- shared spec untouched. Mists carries the prefix as well, as the Classic
@@ -378,14 +378,7 @@ local function MSUF_Defaults_NormalizeUnitPositionAliases(db)
     local changed = false
     for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
         local u = db[key]
-        if type(u) == "table" then
-            changed = MSUF_Defaults_CopyIfMissing(u, "point", "anchorMyPoint") or changed
-            changed = MSUF_Defaults_CopyIfMissing(u, "relativePoint", "anchorRelPoint") or changed
-            changed = MSUF_Defaults_UpperStringField(u, "point") or changed
-            changed = MSUF_Defaults_UpperStringField(u, "relativePoint") or changed
-            changed = MSUF_Defaults_NormalizeNumberField(u, "offsetX", -10000, 10000) or changed
-            changed = MSUF_Defaults_NormalizeNumberField(u, "offsetY", -10000, 10000) or changed
-        end
+        changed = StateHelpers.NormalizePositionAliases(u, "defaults") or changed
     end
     return changed
 end
@@ -447,9 +440,8 @@ local function MSUF_Defaults_PruneRetiredClassPowerTextFields(db)
     return changed == true
 end
 
---- Defaults-side alias normalization. When MSUF_Profiles.lua has loaded, the
---- shared translator (its own pipeline, see the cross-reference note above
---- MSUF_DEFAULTS_CURRENT_REVISION) runs instead of the narrower fallback below.
+--- Defaults selects the shared ledger's narrow boot context until the complete
+--- translator loads. Stored/factory translation then uses its trusted context.
 local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     if type(db) ~= "table" then return false end
     local changed = StateHelpers.MigrateSplitStatusText(db, MSUF_DEFAULTS_TEXT_SCOPE_KEYS)
@@ -489,14 +481,7 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     end
     changed = MSUF_Defaults_NormalizeUnitPositionAliases(db) or changed
     changed = MSUF_Defaults_NormalizeAuras3Profile(db) or changed
-    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
-        changed = StateHelpers.NormalizeTextScope(db[key], false, MSUF_DEFAULTS_SPEC) or changed
-        changed = StateHelpers.NormalizeStatusScope(db[key], false, MSUF_DEFAULTS_SPEC) or changed
-    end
-    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
-        changed = StateHelpers.NormalizeTextScope(db[key], true, MSUF_DEFAULTS_SPEC) or changed
-        changed = StateHelpers.NormalizeStatusScope(db[key], true, MSUF_DEFAULTS_SPEC) or changed
-    end
+    changed = StateHelpers.NormalizeProfileTextAliases(db, "defaults") or changed
     changed = MSUF_Defaults_NormalizeNumericLayers(db) or changed
     return changed
 end
@@ -1612,12 +1597,8 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
---- Cross-reference: State/MSUF_Profiles.lua runs a second, independent alias
---- normalization pipeline (MSUF_ProfileIO_TranslateProfileToCurrent, gated by
---- MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION) over the same text/status/
---- aura alias keys, using the wider StateHelpers.ProfileIOSpec. The two
---- revisions are bumped independently and are deliberately not merged; keep
---- both in mind when a key alias changes.
+--- Alias rules and their context differences live in StateHelpers.AliasMigrations.
+--- This marker owns broad default filling; the shared alias ledger owns translation.
 local MSUF_DEFAULTS_CURRENT_REVISION = 17
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 
@@ -2694,7 +2675,8 @@ MSUF.ProfileMigrations = (function()
         { revision = 700, replay = true, name = "sparse_persistence_defaults", apply = MSUF.DefaultsSchema.FillMenuDefaults },
     }
     function Migrations.Apply(profile, skipMedia)
-        if type(profile) ~= "table" or MSUF_Defaults_IsFreshInstallProfileDB(profile) then return profile end
+        if type(profile) ~= "table" or MSUF.DefaultsSchema.IsQuarantinedProfile(profile)
+            or MSUF_Defaults_IsFreshInstallProfileDB(profile) then return profile end
         local revision = tonumber(profile._msufStateSchema) or 0
         for _, step in ipairs(Migrations.Ledger) do
             if (not (revision >= step.revision) or step.replay == true)
@@ -2857,7 +2839,8 @@ end
 --- MSUF_NormalizeProfileDefaults, which never touches that session cache.
 local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     assert(type(profile) == "table", "MSUF profile must be a table")
-    MSUF.DefaultsSchema.RestorePersistence(profile)
+    local _, status = MSUF.DefaultsSchema.RestorePersistence(profile)
+    if status == "rejected" then return MSUF.DefaultsSchema.QuarantineProfile(profile) end
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall(profile)
     MSUF.ProfileMigrations.Apply(profile)
     MSUF_Defaults_PruneRetiredClassPowerTextFields(profile)
@@ -2867,9 +2850,12 @@ local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastP
     return MSUF_EnsureDB_Heavy(profile)
 end
 ExportPublic("MSUF_NormalizeProfileDefaults", MSUF_NormalizeProfileDefaults)
+function MSUF.DefaultsSchema.BuildRecoveryDefaults()
+    return MSUF_NormalizeProfileDefaults({}, true)
+end
 
 local function MSUF_EnsureDB(force, allowPersistedFastPath)
-    local profile = _G.MSUF_DB
+    local profile = MSUF_DB
     if type(profile) ~= "table" then
         profile = {}
         ExportPublic("MSUF_DB", profile)
@@ -2879,7 +2865,11 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
         MSUF.ProfilePolicy.NoteSessionProfileDB(profile)
     end
     if force ~= true and MSUF_DB_LastHeavyRun == profile then return profile end
-    MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
+    local normalized = MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
+    if normalized ~= profile then
+        profile = normalized
+        ExportPublic("MSUF_DB", profile)
+    end
     MSUF_DB_LastHeavyRun = profile
     return profile
 end
@@ -2888,6 +2878,7 @@ function MSUF.ProfileMigrations.PrepareBinding(profile)
 end
 function MSUF.ProfileMigrations.AdoptNormalizedProfile(profile)
     assert(type(profile) == "table", "MSUF staged profile must be a table")
+    MSUF.DefaultsSchema.ReleaseQuarantinedProfile(profile)
     MSUF_DB_LastHeavyRun = profile
 end
 ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)

@@ -243,13 +243,14 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     if MSUF_ProfileIO_TranslateProfilesToCurrent then
         MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "init")
     end
+    local boundProfile = profiles[active]
     if MSUF.ProfileMigrations then
         MSUF.ProfileMigrations.ApplyStoredProfiles(profiles)
-        MSUF.ProfileMigrations.PrepareBinding(profiles[active])
+        boundProfile = MSUF.ProfileMigrations.PrepareBinding(boundProfile)
     end
     char.activeProfile = active
     MSUF_ActiveProfile = active
-    MSUF_DB = profiles[active]
+    MSUF_DB = boundProfile
     if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
     MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
     --- After DB swap: seed missing defaults so per-unit conf tables exist.
@@ -353,10 +354,11 @@ function MSUF_SwitchProfile(name)
             trustNormalizationMarker = true,
         })
     end
-    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.PrepareBinding(profiles[name]) end
+    local boundProfile = profiles[name]
+    if MSUF.ProfileMigrations then boundProfile = MSUF.ProfileMigrations.PrepareBinding(boundProfile) end
     char.activeProfile = name
     MSUF_ActiveProfile = name
-    MSUF_DB = profiles[name]
+    MSUF_DB = boundProfile
     if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
     MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
     --- Compiled unit-frame configs are rebuilt by the runtime apply below
@@ -463,6 +465,7 @@ local function DeleteProfile(name, quiet)
     end
     if ProfileSync then ProfileSync.RenameOrDelete(name) end
     profiles[name] = nil
+    MSUF.DefaultsSchema.RenameProfileRecovery(name)
     if MSUF_ActiveProfile == name then
         MSUF_SwitchProfile(fallbackName)
     end
@@ -592,6 +595,7 @@ local function MSUF_RenameProfile(sourceName, destName)
     if ProfileSync then ProfileSync.RenameOrDelete(sourceName,destName) end
     profiles[destName] = src
     profiles[sourceName] = nil
+    MSUF.DefaultsSchema.RenameProfileRecovery(sourceName, destName)
     MSUF.GuidedTour6:RenameProfile(sourceName, destName)
     if chars then
         for _, char in pairs(chars) do
@@ -2233,6 +2237,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     end
     plan.kind = kind
     local payload = plan.payload
+    if Normalize.PersistenceRejected(payload) then return nil, "invalid profile data", ImportFailedLine("Import failed: %s", "invalid profile data") end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
     payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
     --- Variants that will not be imported are dropped before validation, so
@@ -2408,7 +2413,7 @@ function ImportTx.Stage(plan, base)
         candidate = MSUF_DeepCopy(base)
         UnitSelection.Commit(payload, plan.selectedUnits, candidate)
         candidate._msufStateSchema = nil
-        MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
+        candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
         plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
         return candidate
@@ -2424,7 +2429,7 @@ function ImportTx.Stage(plan, base)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
     candidate._msufStateSchema = nil
-    MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
+    candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
     --- The group-frame and aura modules load after this file; the import
     --- refreshes below treat them as optional the same way.
@@ -2657,11 +2662,12 @@ end
 
 local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKey)
     if type(profile) ~= "table" then return nil, "not a table" end
-    MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
+    profile = MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
         source = "external_export", markProfile = true, trustNormalizationMarker = true,
     })
+    if MSUF.DefaultsSchema.IsQuarantinedProfile(profile) then return profile end
     MSUF.PublicGlobals.MSUF_NormalizePortraitRenderDB(profile)
-    MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(profile, false, true)
+    profile = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(profile, false, true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(profile)
     MSUF.GF.RepairGroupDB(profile)
     MSUF.MSUF_Auras3.NormalizeProfileDB(profile)
@@ -2725,7 +2731,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         ImportTx.ReportKeptVariants(plan)
         return true
     end
-    if type(existing) == "table" then
+    if type(existing) == "table" and not MSUF.DefaultsSchema.IsQuarantinedProfile(existing) then
         --- For non-active profiles we can still preserve reference stability if something else points at it.
         MSUF_WipeTable(existing)
         for k, v in pairs(newTable) do
