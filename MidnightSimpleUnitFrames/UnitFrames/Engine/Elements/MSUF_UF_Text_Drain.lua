@@ -14,6 +14,8 @@ local TEXT_DIRTY_DELAY = 0.25
 local dirtyTextQueueA, dirtyTextQueueB = {}, {}
 local dirtyTextWriteQueue = dirtyTextQueueA
 local dirtyTextWriteCount = 0
+local dirtyTextReadQueue
+local dirtyTextReadCount, dirtyTextReadHead = 0, 1
 local dirtyTextTicker
 local FlushDirtyText
 
@@ -104,21 +106,30 @@ local function DirtyTextFrameState(frame)
   return rt, unit, active
 end
 
+-- hot path: kept whole (perf rule)
 FlushDirtyText = function()
-  if dirtyTextWriteCount == 0 then
-    local ticker = dirtyTextTicker
-    dirtyTextTicker = nil
-    if ticker then ticker:Cancel() end
-    return
+  if dirtyTextReadHead > dirtyTextReadCount then
+    if dirtyTextWriteCount == 0 then
+      local ticker = dirtyTextTicker
+      dirtyTextTicker = nil
+      if ticker then ticker:Cancel() end
+      return
+    end
+    dirtyTextReadQueue = dirtyTextWriteQueue
+    dirtyTextReadCount, dirtyTextReadHead = dirtyTextWriteCount, 1
+    dirtyTextWriteQueue = dirtyTextReadQueue == dirtyTextQueueA and dirtyTextQueueB or dirtyTextQueueA
+    dirtyTextWriteCount = 0
   end
-  local batch = dirtyTextWriteQueue
-  local count = dirtyTextWriteCount
-  dirtyTextWriteQueue = batch == dirtyTextQueueA and dirtyTextQueueB or dirtyTextQueueA
-  dirtyTextWriteCount = 0
+  local batch = dirtyTextReadQueue
+  local count = dirtyTextReadCount
 
-  for i = 1, count do
-    local frame = batch[i]
-    batch[i] = nil
+  while dirtyTextReadHead <= count do
+    local head = dirtyTextReadHead
+    local frame = batch[head]
+    batch[head] = nil
+    -- Commit progress before any writer can raise; the native ticker retries
+    -- the remaining batch on its next tick without replaying the failed item.
+    dirtyTextReadHead = head + 1
     if frame and frame._msufTextDirtyQueued == true then
       frame._msufTextDirtyQueued = nil
       local mask = frame._msufTextDirtyMask

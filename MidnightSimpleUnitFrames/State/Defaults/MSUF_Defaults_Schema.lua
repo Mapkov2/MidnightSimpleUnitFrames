@@ -5453,8 +5453,60 @@ local function RestoreSparseV2(profile, prepared)
     return true
 end
 
+-- Capture stored newer data at the shared decoder entry, before either the
+-- profile translator or the defaults normalizer can change it. Private copies
+-- have no stored owner and must not overwrite the account's original backup.
+local function CopyNewerProfile(value, seen)
+    if MSUF.Util.IsSecret(value) or type(value) ~= "table" then return value end
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, child in pairs(value) do
+        copy[CopyNewerProfile(key, seen)] = CopyNewerProfile(child, seen)
+    end
+    return copy
+end
+
+local function SaveNewerRevisionBackup(store, name, profile)
+    local backups = store._newerRevisionBackups
+    if type(backups) ~= "table" then
+        backups = {}
+        store._newerRevisionBackups = backups
+    end
+    if backups[name] ~= nil then return end
+    backups[name] = { revision = profile._msufDefaultsRevision, data = CopyNewerProfile(profile, {}) }
+    print("|cffffd700MSUF:|r " .. string.format(MSUF.Translate(
+        "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved."), name, tostring(profile._msufDefaultsRevision)))
+end
+
+local function BackupNewerRevision(profile)
+    local revision = tonumber(profile._msufDefaultsRevision)
+    if not revision or revision <= 17 or revision == sparseToken then return end
+    local store = MSUF_GlobalDB
+    if type(store) ~= "table" then return end
+    local found = false
+    if type(store.profiles) == "table" then
+        for name, stored in pairs(store.profiles) do
+            if stored == profile then
+                SaveNewerRevisionBackup(store, name, profile)
+                found = true
+            end
+        end
+    end
+    if found then return end
+    -- Startup copies a standalone/donor profile before adding its named entry.
+    -- Preserve the selected saved source, not the already-changing private copy.
+    local legacy = MSUF.FirstLoad6.GetLegacyProfileDB()
+    local charKey = MSUF.Require("MSUF_GetCharKey", "State/Defaults/MSUF_Defaults_Schema.lua")()
+    local name, source = MSUF.ResolveStartupProfile(store, legacy, charKey)
+    if not Plain(source) or MSUF.Util.IsSecret(source._msufDefaultsRevision) then return end
+    revision = tonumber(source._msufDefaultsRevision)
+    if revision and revision > 17 and revision ~= sparseToken then SaveNewerRevisionBackup(store, name, source) end
+end
+
 function Schema.RestorePersistence(profile)
     if not Plain(profile) or MSUF.Util.IsSecret(profile._msufDefaultsRevision) then return false end
+    BackupNewerRevision(profile)
     local marker = profile[sparseV2Marker]
     if MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(profile[sparseV3.Marker]) then return false end
     -- An older loader that materialised the profile (6.50x stamps 17) may leave

@@ -90,6 +90,32 @@ values already lost by an earlier loader. The backward-migration smoke tests
 pinned 6.50 source excerpts; it establishes only those migration boundaries,
 not complete native downgrade compatibility.
 
+### Newer revision recovery (C13, 2026-10-24)
+
+Before either login normalizer changes a stored profile with a newer numeric
+`_msufDefaultsRevision` (above 17, excluding the supported 17.5 sparse token),
+the shared decoder saves an independent deep copy under
+`MSUF_GlobalDB._newerRevisionBackups[profileName] = { revision = originalRevision,
+data = originalProfile }`. This includes both V2/V3 masks and unknown fields.
+Inactive stored profiles receive the same protection before translation.
+Startup copies of standalone/donor profiles are backed up from the selected
+saved source under the resolved startup profile name before the copy changes.
+
+The first backup for each profile name is retained unchanged across later
+binds and logins. Creating it prints one chat notice for that profile. Current
+and older revisions create neither backup state nor notices. Private export
+or import candidate copies do not replace the stored original. The working
+profile continues through the existing decoder, migrations and normalization;
+the backup is retained account data and is outside the profiles pool, so logout
+compaction does not edit it.
+
+A future loader that understands the saved revision can deep-copy `data` back
+into `profiles[profileName]` before binding and decode it with that revision's
+codec. The older loader never automatically restores or deletes this backup;
+it cannot interpret the newer format. Retain the backup until recovery has
+been verified. `profile_newer_revision_backup_smoke.lua` checks serialized
+byte equality, both masks, active/inactive profiles and repeated binding.
+
 ## C11 byte measurements (2026-10-24)
 
 All sizes below use `profile_state_harness.Literal`, with the same serializer
