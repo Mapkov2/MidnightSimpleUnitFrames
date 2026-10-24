@@ -15,6 +15,139 @@ end
 local S = assert(loadfile(root .. "/tools/fixtures/defaults/schema.lua"))()
 local C = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 local H = assert(loadfile(root .. "/tools/tests/profile_state_harness.lua"))()
+-- V3 presence slots inherit the current default; paths/order are the wire identity.
+-- Factory-only leaves are safe because presence records exactly what was stored.
+if arg[3] == "--sparse-v3" then
+    local owners, names = {}, {}
+    local function Eligible(path)
+        for _, key in ipairs(path) do
+            if type(key) == "string" then
+                local lower = key:lower()
+                if key:sub(1, 1) == "_" or lower:find("migration", 1, true) or lower:find("version", 1, true)
+                    or lower:find("revision", 1, true) or lower:find("marker", 1, true) then return false end
+            end
+        end
+        return path[#path] ~= "positionMode"
+    end
+    for id, row in ipairs(S.fields) do
+        local value = row.factory
+        local valid = #row.path >= 2 and Eligible(row.path)
+            and (value[1] == "boolean" or value[1] == "number" or value[1] == "string" or value[1] == "table")
+        for _, client in pairs(S.clients) do
+            local observed = client.factory[id] or value
+            if observed[1] ~= value[1] or observed[2] ~= value[2] then valid = false end
+        end
+        if valid then
+            local path = {}
+            for i = 1, #row.path - 1 do path[i] = row.path[i] end
+            local name = H.Literal(path)
+            if not owners[name] then
+                local lists, node = {}, S.factoryContexts.clients.Mainline.expectedRuntime
+                for depth = 1, #path + 1 do
+                    if type(node) == "table" then
+                        for key in pairs(node) do if type(key) == "number" then lists[depth] = true end end
+                        node = node[path[depth]]
+                    end
+                end
+                owners[name] = { path = path, lists = lists, fields = {} }
+                names[#names + 1] = name
+            end
+            owners[name].fields[#owners[name].fields + 1] = { row.path[#row.path], value[2] }
+        end
+    end
+    table.sort(names)
+    local runtime = assert(io.open(root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua", "rb"))
+    local runtimeText = runtime:read("*a")
+    runtime:close()
+    local old = assert(loadstring("return " .. assert(runtimeText:match("local sparseV2Fields = (%b{})"))))()
+    local existing, pool, ids = {}, {}, {}
+    for id, field in ipairs(old) do existing[H.Literal({ field[1], field[2] })] = id end
+    for _, name in ipairs(names) do
+        for _, field in ipairs(owners[name].fields) do
+            if field[2] == nil then field[2] = {} end
+            local signature = H.Literal(field)
+            if not ids[signature] then
+                pool[#pool + 1] = field
+                ids[signature] = #pool
+            end
+        end
+    end
+    -- Reject slot insertion/removal/reordering even outside --check. Values may
+    -- evolve, but changing presence identities requires a new codec version.
+    local previous = runtimeText:match("%-%- BEGIN SPARSE V3 INHERITED DEFAULTS.-%-%- END SPARSE V3 INHERITED DEFAULTS")
+    if previous then
+        local previousFields, previousOwners, previousRuns = assert(loadstring("local sparseV2Fields = "
+            .. assert(runtimeText:match("local sparseV2Fields = (%b{})")) .. "\n" .. previous
+            .. "\nreturn sparseV3Fields, sparseV3Owners, sparseV3Runs"))()
+        assert(#previousOwners == #names, "V3 owner identities changed; use a new codec version")
+        for i, name in ipairs(names) do
+            local owner, prior = owners[name], previousOwners[i]
+            if prior.runs then
+                prior.fields = {}
+                for _, run in ipairs(prior.runs) do
+                    for _, id in ipairs(previousRuns[run]) do prior.fields[#prior.fields + 1] = id end
+                end
+            end
+            assert(H.Literal(owner.path) == H.Literal(prior.path) and H.Literal(owner.lists) == H.Literal(prior.lists)
+                and #owner.fields == #prior.fields, "V3 owner/slot identities changed; use a new codec version")
+            for j, field in ipairs(owner.fields) do
+                assert(field[1] == previousFields[prior.fields[j]][1], "V3 field identities changed; use a new codec version")
+            end
+        end
+    end
+    local runs, runIds = {}, {}
+    for _, name in ipairs(names) do
+        local owner = owners[name]
+        owner.runs = {}
+        for first = 1, #owner.fields, 20 do
+            local run = {}
+            for i = first, math.min(first + 19, #owner.fields) do run[#run + 1] = ids[H.Literal(owner.fields[i])] end
+            local signature = H.Literal(run)
+            if not runIds[signature] then
+                runs[#runs + 1] = run
+                runIds[signature] = #runs
+            end
+            owner.runs[#owner.runs + 1] = runIds[signature]
+        end
+    end
+    local file, count = Output(), 0
+    file:write("-- BEGIN SPARSE V3 INHERITED DEFAULTS\r\n",
+        "-- Generated by tools/defaults_schema_generate.lua --sparse-v3.\r\n",
+        "-- Slot paths/order are fixed; values intentionally follow current defaults.\r\n",
+        "local sparseV3Fields = {\r\n")
+    for _, field in ipairs(pool) do
+        local oldId = existing[H.Literal(field)]
+        if oldId then file:write("    sparseV2Fields[", oldId, "],\r\n")
+        else file:write("    { ", H.Literal(field[1]), ", ", H.Literal(field[2]), " },\r\n") end
+    end
+    file:write("}\r\nlocal sparseV3Runs = {\r\n")
+    for _, run in ipairs(runs) do
+        file:write("    { ")
+        for _, id in ipairs(run) do file:write(id, ", ") end
+        file:write("},\r\n")
+    end
+    file:write("}\r\nlocal sparseV3Owners = {\r\n")
+    for _, name in ipairs(names) do
+        local owner = owners[name]
+        file:write("    { path = ", H.Literal(owner.path), ", lists = ", H.Literal(owner.lists), ", runs = {\r\n        ")
+        for i, run in ipairs(owner.runs) do
+            file:write(run, ",")
+            if i < #owner.runs then file:write(" ") end
+        end
+        file:write("\r\n    } },\r\n")
+        count = count + #owner.fields
+    end
+    file:write("}\r\n-- END SPARSE V3 INHERITED DEFAULTS\r\n")
+    file:close()
+    if check then
+        local generated = table.concat(outputParts)
+        local current = runtimeText:match("(%-%- BEGIN SPARSE V3 INHERITED DEFAULTS.-%-%- END SPARSE V3 INHERITED DEFAULTS\r?\n)")
+        assert(current == generated, "Sparse V3 generated defaults differ")
+    end
+    print(("defaults_schema_generate: V3 %d inherited fields, %d owners, %d pooled pairs"):format(count, #names, #pool))
+    return
+end
+
 -- Freeze a separate decoder dictionary; its field order is a wire contract.
 -- Presence bits distinguish absent/lazy fields from explicitly stored defaults.
 if sparse then
