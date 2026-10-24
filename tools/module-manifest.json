@@ -16036,6 +16036,182 @@
           "reason": "Optional Modern Dark Suite factory payload for Mainline and WoW Forever; the Suite does not ship on Vanilla, Mists or TBC"
         }
       ]
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Motion.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Surfaces.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Motion.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Fonts.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Surfaces.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Widgets.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Fonts.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Buttons.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Widgets.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Scroll.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Buttons.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Bindings.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Scroll.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Backgrounds.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Rendering.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_ClassPower.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Backgrounds.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Chrome.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_ClassPower.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Hints.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Chrome.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_ZoomPan.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Hints.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Input.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_ZoomPan.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Dock.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Input.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Scenes.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Dock.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview_Rendering.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"
     }
   ],
   "reviewed_lists": {
