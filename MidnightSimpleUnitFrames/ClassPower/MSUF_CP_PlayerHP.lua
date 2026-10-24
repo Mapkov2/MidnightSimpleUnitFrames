@@ -968,15 +968,22 @@ end
 local function Update(event)
     if not PHP.visible then return end
     local common = MSUF.UFBarTextCommon
-    local hp, maxHP
-    hp, maxHP = UnitHealth("player"), UnitHealthMax("player")
+    local hp = UnitHealth("player")
     local hpSecret = IsSecretValue(hp) == true
-    local maxSecret = IsSecretValue(maxHP) == true
-    if not hpSecret then hp = tonumber(hp) or 0 end
-    if not maxSecret then
-        maxHP = tonumber(maxHP) or 1
-        if maxHP < 1 then maxHP = 1 end
+    local maxHP, maxSecret = PHP._maxHP, false
+    -- Only a health-only event may reuse a plain maximum. All max/identity/
+    -- reshow/force events refresh it; secret health retains both native reads.
+    if hpSecret or event ~= "UNIT_HEALTH" or maxHP == nil
+        or PHP._maxHPOwner ~= PHP.owner or PHP._maxHPUnit ~= PHP.frame.unit then
+        maxHP = UnitHealthMax("player")
+        maxSecret = IsSecretValue(maxHP) == true
+        if not maxSecret then
+            maxHP = tonumber(maxHP) or 1
+            if maxHP < 1 then maxHP = 1 end
+        end
+        PHP._maxHPOwner, PHP._maxHPUnit = PHP.owner, PHP.frame.unit
     end
+    if not hpSecret then hp = tonumber(hp) or 0 end
     local maxChanged = maxSecret or PHP._maxHP ~= maxHP
     local hpChanged = hpSecret or PHP._hp ~= hp
     if maxChanged then

@@ -6,6 +6,7 @@ local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarUtils.lua").Castbars
 local Backend = Castbars.Backend
 local Config = Castbars.Config
 local Driver = Castbars.Driver
+local Manager = Castbars.Manager
 local Frames = Castbars.Frames
 local KickReady = Castbars.KickReady
 local PublicAPI = Castbars.PublicAPI
@@ -17,6 +18,7 @@ local Publish = PublicAPI.Publish
 --- before this file and resolve once here.
 local FILE = "Castbars/MSUF_CastbarUtils.lua"
 local Require = MSUF.Require
+local SetTextIfChanged = Require("MSUF_SetTextIfChanged", FILE)
 local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 local IsCooldownAnchorEnabled = Require("MSUF_IsCooldownAnchorEnabled", FILE)
 local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
@@ -1122,7 +1124,7 @@ Utils.CB_ApplyTexts = ApplyCastbarTexts
 Publish("MSUF_CB_ApplyTexts", Utils.CB_ApplyTexts)
 
 -- hot path: kept whole (perf rule)
-local function ClearEmpowerState(frame)
+local function ClearEmpowerState(frame, hideFrame)
     if not frame then return end
 
     frame.isEmpower = nil
@@ -1143,9 +1145,10 @@ local function ClearEmpowerState(frame)
     frame._msufEmpowerElapsed = nil
     frame._msufEmpowerTimerDriven = nil
 
-    if frame.empowerTicks then
-        for index = 1, #frame.empowerTicks do
-            local tick = frame.empowerTicks[index]
+    local ticks = frame.empowerTicks
+    if ticks then
+        for index = 1, #ticks do
+            local tick = ticks[index]
             if tick then
                 tick:Hide()
                 if tick.MSUF_glow then tick.MSUF_glow:Hide() end
@@ -1154,11 +1157,21 @@ local function ClearEmpowerState(frame)
         end
     end
 
-    if frame.empowerSegments then
-        for index = 1, #frame.empowerSegments do
-            local segment = frame.empowerSegments[index]
+    local segments = frame.empowerSegments
+    if segments then
+        for index = 1, #segments do
+            local segment = segments[index]
             if segment then segment:Hide() end
         end
+    end
+
+    -- Player-only hide policy. Shared cast/channel clears omit hideFrame.
+    if hideFrame then
+        frame:SetScript("OnUpdate", nil)
+        Manager.UnregisterCastbar(frame)
+        if frame.timeText then SetTextIfChanged(frame.timeText, "") end
+        if frame.latencyBar then frame.latencyBar:Hide() end
+        frame:Hide()
     end
 end
 Utils.ClearEmpowerState = ClearEmpowerState

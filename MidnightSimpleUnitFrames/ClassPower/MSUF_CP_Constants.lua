@@ -259,7 +259,13 @@ ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", K.ModeDescriptors)
 
 function K.BindModeRunners(runners)
     for _, descriptor in pairs(K.ModeDescriptors) do
-        descriptor.updateFn = runners[descriptor.updateKey]
+        local key = descriptor.updateKey
+        -- Builder return contracts already validate callable shape. Ironfur
+        -- installs its runner on the first enabled Guardian refresh.
+        if key and key ~= "Ironfur" and not runners[key] then
+            error("MSUF: missing required ClassPower renderer '" .. key .. "'", 2)
+        end
+        descriptor.updateFn = runners[key]
     end
     --- Preserve the renderer inspection index as a view, without a second set
     --- of mode traits or bindings. Lazy Ironfur writes through to its descriptor.

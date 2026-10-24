@@ -21,7 +21,6 @@ local Publish = PublicAPI.Publish
 local FILE = "Castbars/MSUF_CastbarEmpower.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local EnsureDB = MSUF.Require("MSUF_EnsureDB", FILE)
-local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
 
 local C_Timer = C_Timer
 local issecretvalue = issecretvalue
@@ -616,56 +615,6 @@ local function PlayerCastbarEmpowerStart(frame)
 
 end
 
--- hot path: kept whole (perf rule)
-local function PlayerCastbarClearEmpower(frame, hideFrame)
-    if not frame then return end
-
-    frame.isEmpower = nil
-    frame.empowerStartTime = nil
-    frame.empowerStageEnds = nil
-    frame.empowerTotalBase = nil
-    frame.empowerTotalWithGrace = nil
-    frame.empowerNextStage = nil
-    frame._msufEmpowerStartNum = nil
-    frame._msufEmpowerTotalNum = nil
-    frame._msufEmpowerBaseNum = nil
-    frame._msufEmpowerStageEndsNum = nil
-    frame.MSUF_empowerLayoutPending = false
-
-    if frame.empowerTicks then
-        for index = 1, #frame.empowerTicks do
-            local tick = frame.empowerTicks[index]
-            if tick then
-                if tick.Hide then tick:Hide() end
-                if tick.MSUF_glow and tick.MSUF_glow.Hide then tick.MSUF_glow:Hide() end
-                if tick.MSUF_flash and tick.MSUF_flash.Hide then tick.MSUF_flash:Hide() end
-            end
-        end
-    end
-
-    if frame.empowerSegments then
-        for index = 1, #frame.empowerSegments do
-            local segment = frame.empowerSegments[index]
-            if segment and segment.Hide then segment:Hide() end
-        end
-    end
-
-    if not hideFrame then return end
-
-    if frame.SetScript then
-        frame:SetScript("OnUpdate", nil)
-    end
-    Manager.UnregisterCastbar(frame)
-    if frame.timeText then
-        SetTextIfChanged(frame.timeText, "")
-    end
-    if frame.latencyBar and frame.latencyBar.Hide then
-        frame.latencyBar:Hide()
-    end
-    if frame.Hide then
-        frame:Hide()
-    end
-end
 
 Empower.BlinkEmpowerTick = BlinkEmpowerTick
 Empower.LayoutEmpowerTicks = LayoutEmpowerTicks
@@ -674,4 +623,4 @@ Publish("MSUF_GetEmpowerStageBlinkTime", Empower.GetEmpowerStageBlinkTime)
 Empower.IsEmpowerStageBlinkEnabled = IsEmpowerStageBlinkEnabled
 Publish("MSUF_IsEmpowerStageBlinkEnabled", Empower.IsEmpowerStageBlinkEnabled)
 Empower.PlayerCastbar_EmpowerStart = PlayerCastbarEmpowerStart
-Empower.PlayerCastbar_ClearEmpower = PlayerCastbarClearEmpower
+Empower.PlayerCastbar_ClearEmpower = Utils.ClearEmpowerState

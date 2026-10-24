@@ -11,8 +11,6 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
-local _G = _G
-
 --- Registry (array for stable order + map for quick lookup)
 MSUF.MSUF_Modules = MSUF.MSUF_Modules or {}
 MSUF.MSUF_ModulesByKey = MSUF.MSUF_ModulesByKey or {}
@@ -87,20 +85,15 @@ local function GetDesiredEnabled(module)
     return true
 end
 
---- A module's state flips only once its Enable/Disable returned, so one that
---- raises is retried at the next apply instead of being recorded as done.
---- Each switch runs through secureexecuterange (every client): the error goes
---- to the error handler and the remaining modules still apply.
-local RunEach = _G.secureexecuterange
-if type(RunEach) ~= "function" then
-    RunEach = function(list, fn) for i = 1, #list do fn(i, list[i]) end end
-end
-local switchSlot = {}
-local function SwitchModule(_, m)
-    local enable = m.__msufSwitchTo == true
-    local fn = enable and m.Enable or m.Disable
+--- Query and transition share the Kernel boundary. Commit state only after
+--- the transition returns; the caller clears the in-progress marker on errors.
+local RunModuleStep = MSUF.RunHostAPIStep
+local function ApplyModule(m)
+    local desired = GetDesiredEnabled(m)
+    if desired == not not m.__msufEnabled then return end
+    local fn = desired and m.Enable or m.Disable
     if type(fn) == "function" then fn(m) end
-    m.__msufEnabled = enable
+    m.__msufEnabled = desired
 end
 
 --- Public: Apply desired enabled/disabled states to all modules.
@@ -112,18 +105,10 @@ function MSUF.MSUF_ApplyModules()
     for i = 1, #MSUF.MSUF_Modules do
         local m = MSUF.MSUF_Modules[i]
         if m and m.__msufSwitchTo == nil then
-            local desired = GetDesiredEnabled(m)
-            local current = not not m.__msufEnabled
-
-            if desired ~= current then
-                -- The in-progress marker keeps a nested apply from switching
-                -- the same module twice.
-                m.__msufSwitchTo = desired
-                switchSlot[1] = m
-                RunEach(switchSlot, SwitchModule)
-                switchSlot[1] = nil
-                m.__msufSwitchTo = nil
-            end
+            -- Guard the query too: it may re-enter Apply or raise.
+            m.__msufSwitchTo = true
+            RunModuleStep("module " .. m.key, ApplyModule, m)
+            m.__msufSwitchTo = nil
         end
     end
 

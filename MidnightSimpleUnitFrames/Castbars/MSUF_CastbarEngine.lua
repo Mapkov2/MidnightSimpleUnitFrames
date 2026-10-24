@@ -18,7 +18,6 @@ local Publish = PublicAPI.Publish
 local PlainNumber = Utils.Castbar_PlainNumber
 local type = type
 local pairs = pairs
-local table_remove = table.remove
 
 ns.MSUF_CastbarEngine = Castbars.Engine
 
@@ -41,59 +40,77 @@ Engine._subs = Engine._subs or {}
 Engine._state = Engine._state or {}
 Engine._generation = Engine._generation or {}
 
---- Tiny pub/sub hook for code that wants cast-state notifications without
---- taking ownership of the castbar frames themselves.
-local function SubscriptionList(key)
-    if not key then
-        return nil
-    end
-
-    local subscriptions = Engine._subs[key]
-    if not subscriptions then
-        subscriptions = {}
-        Engine._subs[key] = subscriptions
-    end
-
-    return subscriptions
-end
-
+--- Stable subscription nodes let nested dispatch compact without moving an
+--- outer cursor. Only Subscribe allocates; removal is a callback tombstone.
 function Engine:Subscribe(key, callback)
-    if not key or type(callback) ~= "function" then
-        return false
+    if not key or type(callback) ~= "function" then return false end
+    local subscriptions = self._subs[key]
+    if not subscriptions then
+        subscriptions = { serial = 0, count = 0 }
+        self._subs[key] = subscriptions
     end
-
-    local subscriptions = SubscriptionList(key)
-    for index = 1, #subscriptions do
-        if subscriptions[index] == callback then return true end
+    -- Cold subscription changes also compact: an idle topic with one lasting
+    -- subscriber must not retain a history of temporary subscriptions.
+    local node, previous, found = subscriptions.first
+    while node do
+        if node.callback then
+            if node.callback == callback then found = true end
+            if previous then previous.next = node else subscriptions.first = node end
+            previous = node
+        end
+        node = node.next
     end
-    subscriptions[#subscriptions + 1] = callback
+    if previous then previous.next = nil else subscriptions.first = nil end
+    subscriptions.last, subscriptions.dirty = previous, nil
+    if found then return true end
+    local serial = subscriptions.serial + 1
+    node = { callback = callback, serial = serial }
+    if subscriptions.last then subscriptions.last.next = node else subscriptions.first = node end
+    subscriptions.last, subscriptions.serial = node, serial
+    subscriptions.count = subscriptions.count + 1
     return true
 end
 
 function Engine:Unsubscribe(key, callback)
-    local subscriptions = key and self._subs and self._subs[key]
+    local subscriptions = key and self._subs[key]
     if not subscriptions then return false end
-    for index = #subscriptions, 1, -1 do
-        if subscriptions[index] == callback then
-            table_remove(subscriptions, index)
-            if #subscriptions == 0 then self._subs[key] = nil end
+    local node = subscriptions.first
+    while node do
+        if node.callback == callback then
+            node.callback = false
+            subscriptions.dirty = true
+            subscriptions.count = subscriptions.count - 1
+            if subscriptions.count == 0 then self._subs[key] = nil end
             return true
         end
+        node = node.next
     end
     return false
 end
 
+-- The serial limit excludes subscriptions added during this notify; a nested
+-- notify is the next notify and sees them. No dispatch latch survives an error.
 function Engine:Notify(key, payload, event)
-    local subscriptions = Engine._subs and Engine._subs[key]
-    if not subscriptions then
-        return
+    local subscriptions = self._subs[key]
+    if not subscriptions then return end
+    local limit, node = subscriptions.serial, subscriptions.first
+    while node and node.serial <= limit do
+        local callback = node.callback
+        if callback then callback(payload, event) end
+        node = node.next
     end
-
-    for index = 1, #subscriptions do
-        local callback = subscriptions[index]
-        if type(callback) == "function" then
-            callback(payload, event)
+    if subscriptions.dirty then
+        local previous
+        node = subscriptions.first
+        while node do
+            if node.callback then
+                if previous then previous.next = node else subscriptions.first = node end
+                previous = node
+            end
+            node = node.next
         end
+        if previous then previous.next = nil else subscriptions.first = nil end
+        subscriptions.last, subscriptions.dirty = previous, nil
     end
 end
 

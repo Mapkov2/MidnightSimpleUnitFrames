@@ -121,11 +121,63 @@ local CPCoreBuilders = CPConst.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 local CPModeBuilders = CPConst.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 local CPFeatureBuilders = CPConst.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
-local function CP_CallBuilder(builder, env)
-    if type(builder) ~= "function" then return nil end
-    local result = builder(env)
-    return (result) and result or nil
+-- Internal load contracts. Lazy Ironfur validates its builder now and its
+-- instance on first enabled refresh, preserving the default-off frame budget.
+local CP_BuilderContracts = {
+    CONTROLLER_CONFIG = "_cpDB:table RefreshConfig ClassPowerEnabled PlayerHPBarEnabled PlayerManaOverrideEnabled "
+        .. "AnyFeatureEnabled EnsureDefaults GetClassPowerType GetModeEventProfile ComputeStructuralSignature ResolveTexture ResolveClassPowerHeight",
+    CONTROLLER_COLORS = "ResolveMWAbove5Color ResolveClassPowerColor ResolveClassPowerBgColor InvalidateCaches ResetTokens "
+        .. "ResolveChargedColor ResolveSlotColorMode ResolveSlotColor ResolveFullResourceColor",
+    CONTROLLER_AURAS = "Get Rebuild ProcessUnitAuraUpdate RefreshActive bySpell:table",
+    BUILD = "CP_EnsureBars CP_Create CP_EnsureRuneText CP_EnsureMainText",
+    LAYOUT = "CP_Layout",
+    PRESENTATION = "CDM_GetScaledWidth CP_ApplyFont CP_ApplyColors CP_RefreshTexture",
+    CONTROLLER_SURFACE = "ClearAugCompositeState ApplyRuneSortOrder ResolveEbonHost GetEbonStyle EnsureHiddenAnchorGeometry",
+    EBON_MIGHT = "ApplyTextStyle RefreshStyle SetActive",
+    CONTROLLER_TICKER = "Stop SyncRuntimeOnUpdates IsActive",
+    ALT_MANA = "NeedsAltManaBar AM_Create AM_Layout AM_ApplyColor AM_UpdateValue AM_RefreshTexture",
+    PLAYER_HP = "PHP:table Refresh ApplyFont RefreshTextures Hide",
+    PLAYER_HP_REQUIRE = "",
+    CONTROLLER_EVENTS = "SetStructuralEventsBound RefreshEventBindings ShouldUseFrequentPowerEvents ShouldUseLiteBindings StructuralEventsBound",
+    SEGMENTED = "Update StopEssenceOnUpdates RuntimeTick",
+    FRACTIONAL = "Update",
+    AURA = "UpdateSegmented UpdateSingle",
+    CONTINUOUS = "Update",
+    STAGGER = "Update RuntimeTick",
+    RUNE = "Update StopOnUpdates RuntimeTick",
+    TIMER = "Update",
+    IRONFUR = "Update SetActive InvalidateLayout RefreshVisual RefreshVisibility",
+    SPECIALS = "OnWarlockCastStart OnWarlockCastEnd OnTipOfTheSpearSpellCast OnSpellTrackerReset",
+    RUNTIME = "OnPowerUpdate OnAuraUpdate OnRuneUpdate OnSpellcastStart OnSpellcastEnd OnManaUpdate "
+        .. "HandleMaxPowerEvent HandleDisplayPowerEvent HandleRareStructuralEvent",
+}
+local function CP_RequireBuilder(registry, name)
+    local builder = registry[name]
+    if type(builder) ~= "function" then
+        error("MSUF: missing required ClassPower builder '" .. name .. "' required by " .. FILE, 2)
+    end
+    return builder
 end
+local function CP_CallBuilder(registry, name, env)
+    local result = CP_RequireBuilder(registry, name)(env)
+    local expected = name == "PLAYER_HP_REQUIRE" and "function" or "table"
+    if type(result) ~= expected then
+        error("MSUF: invalid return from ClassPower builder '" .. name .. "': expected " .. expected, 2)
+    end
+    if expected == "table" then
+        for field, kind in CP_BuilderContracts[name]:gmatch("([%w_]+):?([%w_]*)") do
+            if kind == "" then kind = "function" end
+            if type(result[field]) ~= kind then
+                error("MSUF: invalid ClassPower builder '" .. name .. "' return." .. field .. ": expected " .. kind, 2)
+            end
+        end
+        if name == "CONTINUOUS" and IS_CLASSIC and type(result.UpdateSigned) ~= "function" then
+            error("MSUF: invalid ClassPower builder 'CONTINUOUS' return.UpdateSigned", 2)
+        end
+    end
+    return result
+end
+if MSUF.Client.SupportsClassResource("IRONFUR") then CP_RequireBuilder(CPModeBuilders, "IRONFUR") end
 
 local function CP_Noop() end
 
@@ -136,7 +188,7 @@ local function CP_Noop() end
 
 local NeedsAltManaBar = CP_Noop
 
-local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
+local CPConfig = CP_CallBuilder(CPCoreBuilders, "CONTROLLER_CONFIG", {
     CPConst = CPConst,
     CPK = CPK,
     PT = PT,
@@ -151,7 +203,7 @@ local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
 local _cpDB = CPConfig._cpDB
 local CP_GetModeEventProfile = CPConfig.GetModeEventProfile
 
-local CPColors = CP_CallBuilder(CPCoreBuilders.CONTROLLER_COLORS, {
+local CPColors = CP_CallBuilder(CPCoreBuilders, "CONTROLLER_COLORS", {
     _cpDB = _cpDB,
     POWER_TYPE_TOKENS = POWER_TYPE_TOKENS,
 })
@@ -229,7 +281,7 @@ CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
 }
 
-local CPAuras = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_AURAS, {
+local CPAuras = assert(CP_CallBuilder(CPCoreBuilders, "CONTROLLER_AURAS", {
     CPConst = CPConst,
     CPK = CPK,
     IS_CLASSIC = IS_CLASSIC,
@@ -316,18 +368,16 @@ local CP_EnsureRuneText
 local CP_EnsureMainText
 
 do
-    local build = CP_CallBuilder(CPCoreBuilders.BUILD, {
+    local build = CP_CallBuilder(CPCoreBuilders, "BUILD", {
             CP = CP,
             _cpDB = _cpDB,
             CreateFrame = CreateFrame,
             CP_ResolveTexture = CPConfig.ResolveTexture,
         })
-    if build then
-        CP_EnsureBars = build.CP_EnsureBars or CP_EnsureBars
-        CP_Create = build.CP_Create or CP_Create
-        CP_EnsureRuneText = build.CP_EnsureRuneText
-        CP_EnsureMainText = build.CP_EnsureMainText
-    end
+    CP_EnsureBars = build.CP_EnsureBars
+    CP_Create = build.CP_Create
+    CP_EnsureRuneText = build.CP_EnsureRuneText
+    CP_EnsureMainText = build.CP_EnsureMainText
 end
 
 local CP_ApplyFont
@@ -401,7 +451,7 @@ end
 local CP_Layout
 
 do
-    local layout = CP_CallBuilder(CPCoreBuilders.LAYOUT, {
+    local layout = CP_CallBuilder(CPCoreBuilders, "LAYOUT", {
             CP = CP,
             _cpDB = _cpDB,
             CPConst = CPConst,
@@ -410,9 +460,7 @@ do
             CreateFrame = CreateFrame,
             ResolveClassPowerBgColor = CPColors.ResolveClassPowerBgColor,
         })
-    if layout then
-        CP_Layout = layout.CP_Layout or CP_Layout
-    end
+    CP_Layout = layout.CP_Layout
 end
 
 --- Secret-safe value update + per-bar coloring (charged/empowered support)
@@ -462,36 +510,36 @@ do
         Enum = Enum,
         EnsureRuneText = CP_EnsureRuneText,
         EnsureMainText = CP_EnsureMainText,
-        ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
+        ApplyFont = function() CP_ApplyFont() end,
     }
-    local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
+    local segmented = CP_CallBuilder(CPModeBuilders, "SEGMENTED", commonEnv)
     CP_UpdateValues = segmented.Update
     CP_StopEssenceOnUpdates = segmented.StopEssenceOnUpdates
     _essenceRuntimeTick = segmented.RuntimeTick
-    local fractional = CP_CallBuilder(CPModeBuilders.FRACTIONAL, commonEnv)
+    local fractional = CP_CallBuilder(CPModeBuilders, "FRACTIONAL", commonEnv)
     CP_UpdateValues_Fractional = fractional.Update
-    local aura = CP_CallBuilder(CPModeBuilders.AURA, commonEnv)
+    local aura = CP_CallBuilder(CPModeBuilders, "AURA", commonEnv)
     CP_UpdateValues_AuraSegmented = aura.UpdateSegmented
     CP_UpdateValues_AuraSingle = aura.UpdateSingle
 
     commonEnv.UnitPower = UnitPower
     commonEnv.UnitPowerMax = UnitPowerMax
     commonEnv.TrackedPlayerAuras = CPAuras.bySpell
-    local continuous = CP_CallBuilder(CPModeBuilders.CONTINUOUS, commonEnv)
+    local continuous = CP_CallBuilder(CPModeBuilders, "CONTINUOUS", commonEnv)
     CP_UpdateValues_Continuous = continuous.Update
     if IS_CLASSIC then CP.UpdateSignedContinuous = continuous.UpdateSigned end
 
     commonEnv.UnitStagger = UnitStagger
     commonEnv.UnitHealthMax = UnitHealthMax
     commonEnv.STAGGER_CONST = CPConst.STAGGER or {}
-    local stagger = CP_CallBuilder(CPModeBuilders.STAGGER, commonEnv)
+    local stagger = CP_CallBuilder(CPModeBuilders, "STAGGER", commonEnv)
     CP_UpdateValues_Stagger = stagger.Update
     _staggerRuntimeTick = stagger.RuntimeTick
     --- Ironfur is built lazily on the first enabled Guardian/Bear refresh so
     --- the default-off feature creates no frames and binds no events.
     CP.ironfur = nil
-    CP.BuildIronfur = PLAYER_CLASS == "DRUID" and function()
-        return CP_CallBuilder(CPModeBuilders.IRONFUR, {
+    CP.BuildIronfur = MSUF.Client.SupportsClassResource("IRONFUR") and PLAYER_CLASS == "DRUID" and function()
+        return CP_CallBuilder(CPModeBuilders, "IRONFUR", {
             PLAYER_CLASS = PLAYER_CLASS,
             CP = CP,
             CPK = CPK,
@@ -499,13 +547,13 @@ do
             GetTime = GetTime,
             CP_CheckAutoHide = CP_CheckAutoHide,
             EnsureMainText = CP_EnsureMainText,
-            ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
+            ApplyFont = function() CP_ApplyFont() end,
         })
     end or nil
 end
 
 do
-    local presentation = CP_CallBuilder(CPCoreBuilders.PRESENTATION, {
+    local presentation = CP_CallBuilder(CPCoreBuilders, "PRESENTATION", {
             CP = CP,
             _cpDB = _cpDB,
             PT = PT,
@@ -515,12 +563,10 @@ do
             CP_ResolveTexture = CPConfig.ResolveTexture,
             RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
         })
-    if presentation then
-        CP.cdmScaledWidth = presentation.CDM_GetScaledWidth or CP.cdmScaledWidth
-        CP_ApplyFont = presentation.CP_ApplyFont or CP_ApplyFont
-        CP_ApplyColors = presentation.CP_ApplyColors or CP_ApplyColors
-        CP_RefreshTexture = presentation.CP_RefreshTexture or CP_RefreshTexture
-    end
+    CP.cdmScaledWidth = presentation.CDM_GetScaledWidth
+    CP_ApplyFont = presentation.CP_ApplyFont
+    CP_ApplyColors = presentation.CP_ApplyColors
+    CP_RefreshTexture = presentation.CP_RefreshTexture
 end
 ExportPublic("MSUF_CDM_GetScaledWidth", CP.cdmScaledWidth)
 
@@ -530,7 +576,7 @@ ExportPublic("MSUF_CDM_GetScaledWidth", CP.cdmScaledWidth)
 --- cooldown-frame width sync. The builder installs CP.GetEbonTextLevel and the
 --- CP.CDMWidth* helpers on the shared state table; it runs after BUILD and
 --- LAYOUT so the bound create/layout closures can be passed by value.
-local CPSurface = CP_CallBuilder(CPCoreBuilders.CONTROLLER_SURFACE, {
+local CPSurface = CP_CallBuilder(CPCoreBuilders, "CONTROLLER_SURFACE", {
     CP = CP,
     _cpDB = _cpDB,
     CPConst = CPConst,
@@ -541,15 +587,17 @@ local CPSurface = CP_CallBuilder(CPCoreBuilders.CONTROLLER_SURFACE, {
     CP_Layout = CP_Layout,
 })
 
-CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
-    CP = CP,
-    EBON = CPConst.EBON or {},
-    _cpDB = _cpDB,
-    CreateFrame = CreateFrame,
-    GetHost = CPSurface.ResolveEbonHost,
-    GetStyle = CPSurface.GetEbonStyle,
-    GetTextLevel = CP.GetEbonTextLevel,
-})
+if not IS_CLASSIC then
+    CP.ebonNative = CP_CallBuilder(CPCoreBuilders, "EBON_MIGHT", {
+        CP = CP,
+        EBON = CPConst.EBON or {},
+        _cpDB = _cpDB,
+        CreateFrame = CreateFrame,
+        GetHost = CPSurface.ResolveEbonHost,
+        GetStyle = CPSurface.GetEbonStyle,
+        GetTextLevel = CP.GetEbonTextLevel,
+    })
+end
 --- Classic: no Classic client has Evokers and no Classic TOC loads the Ebon
 --- Might module that installs these hooks; the Aug lifecycle and the font and
 --- visual refreshes call them unguarded.
@@ -584,19 +632,19 @@ do
         CP_CheckAutoHide = CP_CheckAutoHide,
         CP_ApplyRuneSortOrder = CPSurface.ApplyRuneSortOrder,
         EnsureRuneText = CP_EnsureRuneText,
-        ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
+        ApplyFont = function() CP_ApplyFont() end,
     }
 
-    local rune = CP_CallBuilder(CPModeBuilders.RUNE, commonEnv)
+    local rune = CP_CallBuilder(CPModeBuilders, "RUNE", commonEnv)
     CP_UpdateValues_RuneCD = rune.Update
     CP_StopRuneOnUpdates = rune.StopOnUpdates
     _runeRuntimeTick = rune.RuntimeTick
 
-    local timer = CP_CallBuilder(CPModeBuilders.TIMER, commonEnv)
+    local timer = CP_CallBuilder(CPModeBuilders, "TIMER", commonEnv)
     CP_UpdateEbonHost = timer.Update
 end
 
-local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {
+local CPTicker = assert(CP_CallBuilder(CPCoreBuilders, "CONTROLLER_TICKER", {
     CP = CP,
     CPK = CPK,
     CreateFrame = CreateFrame,
@@ -626,7 +674,7 @@ local CP_HandleDisplayPowerEvent
 local CP_HandleRareStructuralEvent
 
 do
-    local specials = CP_CallBuilder(CPFeatureBuilders.SPECIALS, {
+    local specials = CP_CallBuilder(CPFeatureBuilders, "SPECIALS", {
             CP = CP,
             _cpDB = _cpDB,
             CPConst = CPConst,
@@ -644,17 +692,11 @@ do
                 end
             end,
         })
-    if specials then
-        OnWarlockCastStart = specials.OnWarlockCastStart
-        OnWarlockCastEnd = specials.OnWarlockCastEnd
-        OnTipOfTheSpearSpellCast = specials.OnTipOfTheSpearSpellCast
-        OnSpellTrackerReset = specials.OnSpellTrackerReset
-    end
+    OnWarlockCastStart = specials.OnWarlockCastStart
+    OnWarlockCastEnd = specials.OnWarlockCastEnd
+    OnTipOfTheSpearSpellCast = specials.OnTipOfTheSpearSpellCast
+    OnSpellTrackerReset = specials.OnSpellTrackerReset
 
-    OnWarlockCastStart = OnWarlockCastStart or CP_Noop
-    OnWarlockCastEnd = OnWarlockCastEnd or CP_Noop
-    OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast or CP_Noop
-    OnSpellTrackerReset = OnSpellTrackerReset or CP_Noop
 end
 
 
@@ -718,7 +760,7 @@ local AM_UpdateValue
 local AM_RefreshTexture
 
 do
-    local altMana = CP_CallBuilder(CPCoreBuilders.ALT_MANA, {
+    local altMana = CP_CallBuilder(CPCoreBuilders, "ALT_MANA", {
             AM = AM,
             _cpDB = _cpDB,
             PT = PT,
@@ -736,14 +778,12 @@ do
                 return GetBarTexture() or"Interface\\Buttons\\WHITE8x8"
             end,
         })
-    if altMana then
-        NeedsAltManaBar = altMana.NeedsAltManaBar or NeedsAltManaBar
-        AM_Create = altMana.AM_Create or AM_Create
-        AM_Layout = altMana.AM_Layout or AM_Layout
-        AM_ApplyColor = altMana.AM_ApplyColor or AM_ApplyColor
-        AM_UpdateValue = altMana.AM_UpdateValue or AM_UpdateValue
-        AM_RefreshTexture = altMana.AM_RefreshTexture or AM_RefreshTexture
-    end
+    NeedsAltManaBar = altMana.NeedsAltManaBar
+    AM_Create = altMana.AM_Create
+    AM_Layout = altMana.AM_Layout
+    AM_ApplyColor = altMana.AM_ApplyColor
+    AM_UpdateValue = altMana.AM_UpdateValue
+    AM_RefreshTexture = altMana.AM_RefreshTexture
 end
 
 --- Master show/hide + layout integration
@@ -784,9 +824,9 @@ local function CP_PlayerHPNeedsRefresh()
 end
 
 do
-    local validate = assert(CP_CallBuilder(CPCoreBuilders.PLAYER_HP_REQUIRE, MSUF.UF.PlayerHP),
+    local validate = assert(CP_CallBuilder(CPCoreBuilders, "PLAYER_HP_REQUIRE", MSUF.UF.PlayerHP),
         "MSUF: missing required dependency 'UF.PlayerHP readiness' required by ClassPower/MSUF_CP_Controller.lua")
-    local playerHP = CP_CallBuilder(CPCoreBuilders.PLAYER_HP, {
+    local playerHP = CP_CallBuilder(CPCoreBuilders, "PLAYER_HP", {
             CP = CP,
             _cpDB = _cpDB,
             UnitHealth = UnitHealth,
@@ -1272,7 +1312,7 @@ local eventFrame = CreateFrame("Frame")
 --- Event binding policy lives in ClassPower/MSUF_CP_Controller_Events.lua:
 --- the structural events, the per-mode hot-path bindings and the startup
 --- events, all on this one event frame.
-local CPEvents = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_EVENTS, {
+local CPEvents = assert(CP_CallBuilder(CPCoreBuilders, "CONTROLLER_EVENTS", {
     eventFrame = eventFrame,
     CP = CP,
     AM = AM,
@@ -1321,7 +1361,7 @@ ThrottledFullRefresh = function()
 end
 
 do
-    local runtime = CP_CallBuilder(CPFeatureBuilders.RUNTIME, {
+    local runtime = CP_CallBuilder(CPFeatureBuilders, "RUNTIME", {
             CP = CP,
             AM = AM,
             _cpDB = _cpDB,
@@ -1361,27 +1401,16 @@ do
             --- The reader the segmented renderer paints combo points from.
             UnitPower = ClientCP and ClientCP.UnitPower or UnitPower,
         })
-    if runtime then
-        OnPowerUpdate = runtime.OnPowerUpdate
-        OnAuraUpdate = runtime.OnAuraUpdate
-        OnRuneUpdate = runtime.OnRuneUpdate
-        OnSpellcastStart = runtime.OnSpellcastStart
-        OnSpellcastEnd = runtime.OnSpellcastEnd
-        OnManaUpdate = runtime.OnManaUpdate
-        CP_HandleMaxPowerEvent = runtime.HandleMaxPowerEvent
-        CP_HandleDisplayPowerEvent = runtime.HandleDisplayPowerEvent
-        CP_HandleRareStructuralEvent = runtime.HandleRareStructuralEvent
-    end
+    OnPowerUpdate = runtime.OnPowerUpdate
+    OnAuraUpdate = runtime.OnAuraUpdate
+    OnRuneUpdate = runtime.OnRuneUpdate
+    OnSpellcastStart = runtime.OnSpellcastStart
+    OnSpellcastEnd = runtime.OnSpellcastEnd
+    OnManaUpdate = runtime.OnManaUpdate
+    CP_HandleMaxPowerEvent = runtime.HandleMaxPowerEvent
+    CP_HandleDisplayPowerEvent = runtime.HandleDisplayPowerEvent
+    CP_HandleRareStructuralEvent = runtime.HandleRareStructuralEvent
 
-    OnPowerUpdate = OnPowerUpdate or CP_Noop
-    OnAuraUpdate = OnAuraUpdate or CP_Noop
-    OnRuneUpdate = OnRuneUpdate or CP_Noop
-    OnSpellcastStart = OnSpellcastStart or CP_Noop
-    OnSpellcastEnd = OnSpellcastEnd or CP_Noop
-    OnManaUpdate = OnManaUpdate or CP_Noop
-    CP_HandleMaxPowerEvent = CP_HandleMaxPowerEvent or CP_Noop
-    CP_HandleDisplayPowerEvent = CP_HandleDisplayPowerEvent or CP_Noop
-    CP_HandleRareStructuralEvent = CP_HandleRareStructuralEvent or CP_Noop
 end
 
 --- Pre-allocated callback for deferred PBEmbedLayout re-layout after zone transitions.
