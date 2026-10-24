@@ -74,7 +74,9 @@ function Popups.Open(key, anchorFrame)
     local pType = cfg and cfg.popupType
 
     if not pType then
-        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key == "pettarget" or key:match("^boss%d") or key:match("^arena%d") then
+        if key == "player" or key == "target" or key == "focus" or key == "focustarget"
+            or key == "targettarget" or key == "pet" or key == "pettarget"
+            or key:match("^boss%d") or key:match("^arena%d") then
             pType = "unit"
         elseif key:sub(1, 8) == "castbar_" then
             pType = "castbar"
@@ -841,7 +843,17 @@ end
 
 local UnitPopup = {}
 EM2.UnitPopup = UnitPopup
-function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); if pf._lockRatio then Quick.CaptureSizeRatio(pf) end; pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
+function UnitPopup.Open(u, parent)
+    if BlockConfigCombatLocked() then return false end
+    Build()
+    pf.unit = u
+    pf.parent = parent
+    Sync()
+    if pf._lockRatio then Quick.CaptureSizeRatio(pf) end
+    pf:Show()
+    if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end
+    return true
+end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end

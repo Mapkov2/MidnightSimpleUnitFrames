@@ -154,10 +154,13 @@ local function CreateAnchorPicker()
     anchorPicker = ov
     ExportPublic("MSUF_AnchorPicker", ov)
     ov:SetAllPoints(UIParent)
-    ov:SetFrameStrata("FULLSCREEN_DIALOG"); ov:SetFrameLevel(100)
-    ov:EnableMouse(false); ov:EnableKeyboard(true)
+    ov:SetFrameStrata("FULLSCREEN_DIALOG")
+    ov:SetFrameLevel(100)
+    ov:EnableMouse(false)
+    ov:EnableKeyboard(true)
     if ov.SetPropagateKeyboardInput then ov:SetPropagateKeyboardInput(true) end
-    ov:Hide(); ov._onPick = nil
+    ov:Hide()
+    ov._onPick = nil
 
     local panelBg = ThemeColor("popup", { 0.01, 0.015, 0.025, 0.96 })
     local panelEdge = ThemeColor("borderSoft", { 1.00, 0.82, 0.00, 0.75 })
@@ -168,7 +171,9 @@ local function CreateAnchorPicker()
     local danger = ThemeColor("danger", { 1, 0.3, 0.3, 1 })
     local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
-    local bg = PixelLayoutRegion(ov:CreateTexture(nil, "BACKGROUND")); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
+    local bg = PixelLayoutRegion(ov:CreateTexture(nil, "BACKGROUND"))
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.12)
 
     local topPanel = PixelLayoutRegion(CreateFrame("Frame", nil, ov, "BackdropTemplate"))
     topPanel:SetPoint("TOP", ov, "TOP", 0, -92)
@@ -274,7 +279,9 @@ local function EnsureAnchorPicker()
             return
         end
         -- Cache localized strings per open to keep the 33 ms hover loop allocation-light.
-        self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
+        self._elapsed = 0
+        self._pickedFrame = nil
+        self._pickedName = nil
         self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
         self._lCtrlNotHeld = Tr("CTRL: not held")
         self._lHoverNone = Tr("Hover: no named frame found")
@@ -297,8 +304,12 @@ local function EnsureAnchorPicker()
         self:SetScript("OnUpdate", nil)
         if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
         if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
-        self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
-        self._onPick = nil; self._isCandidateAllowed = nil
+        self._elapsed = 0
+        self._pickedFrame = nil
+        self._pickedName = nil
+        self._highlight:Hide()
+        self._onPick = nil
+        self._isCandidateAllowed = nil
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
@@ -309,7 +320,10 @@ local function EnsureAnchorPicker()
             return
         end
         if event ~= "GLOBAL_MOUSE_DOWN" then return end
-        if button == "RightButton" then self:Hide(); return end
+        if button == "RightButton" then
+            self:Hide()
+            return
+        end
         if button ~= "LeftButton" then return end
         if not (IsControlKeyDown and IsControlKeyDown()) then
             self._sub:SetText(self._lCtrlRequired)

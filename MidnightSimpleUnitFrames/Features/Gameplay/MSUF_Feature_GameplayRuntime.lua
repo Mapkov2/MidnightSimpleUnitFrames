@@ -1103,7 +1103,8 @@ local function ApplyCombatTimer(g)
     if combatFrame then
         ApplyCombatTimerAnchor(g)
         combatFrame:SetShown(g.enableCombatTimer)
-        EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer", "combatTimerClickThrough", g.enableCombatTimer == true)
+        EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer",
+            "combatTimerClickThrough", g.enableCombatTimer == true)
     end
 end
 

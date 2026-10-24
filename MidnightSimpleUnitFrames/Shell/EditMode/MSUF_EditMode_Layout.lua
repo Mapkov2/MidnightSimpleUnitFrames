@@ -159,7 +159,7 @@ local function UnitCooldownAnchorName(conf)
     -- exposes it on every client, while only the Mainline family ships
     -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
     local cooldownAnchorEnabled = MSUF.Require("MSUF_IsCooldownAnchorEnabled", CALLER)(general) == true
-        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+        or (MSUF.Client.HostsCooldownManager == true
             and general and general.anchorToCooldown == true)
     if cooldownAnchorEnabled then return "EssentialCooldownViewer" end
     local globalAnchor = general and general.anchorName

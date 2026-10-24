@@ -250,7 +250,10 @@ local function Activate()
         if InCombat() or not layout.ResetPosition then return false end
         layout:ResetPosition()
         return true
-    end, { ScaleControl() })) then active = false; return false end
+    end, { ScaleControl() })) then
+        active = false
+        return false
+    end
     API.RegisterSessionListener(OWNER, SessionChanged)
     SyncHeaders()
     return true

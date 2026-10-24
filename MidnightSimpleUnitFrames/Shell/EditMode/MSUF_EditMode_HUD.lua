@@ -439,12 +439,19 @@ local function BuildExitControls()
             end
             return b
         end
-        ConfBtn("Yes, discard", -64, "danger", function() cf:Hide(); EM2.State.CancelAll() end)
+        ConfBtn("Yes, discard", -64, "danger", function()
+            cf:Hide()
+            EM2.State.CancelAll()
+        end)
         ConfBtn("No, keep", 64, "normal", function() cf:Hide() end)
         cf:EnableKeyboard(true)
         cf:SetScript("OnKeyDown", function(s, k)
-            if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); cf:Hide()
-            else s:SetPropagateKeyboardInput(true) end
+            if k == "ESCAPE" then
+                s:SetPropagateKeyboardInput(false)
+                cf:Hide()
+            else
+                s:SetPropagateKeyboardInput(true)
+            end
         end)
         cf:HookScript("OnHide", function(s)
             if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end

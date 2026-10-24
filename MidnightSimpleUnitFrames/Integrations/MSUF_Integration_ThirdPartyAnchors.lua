@@ -2,9 +2,8 @@ local _, MSUF = ...
 local FILE = "Integrations/MSUF_Integration_ThirdPartyAnchors.lua"
 local Optional, ExportPublic = MSUF.Optional, MSUF.ExportPublic
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
--- WoW Forever, read once from the client model. A harness without MSUF.Client
--- models a client that is not Forever.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- WoW Forever, read once from the client model.
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 -- Third-party anchor integration.
 -- Tracks the MSUF Suite, ArcUI, Skiron, Coolinator and EllesmereUI stable cooldown anchors after they exist.
@@ -143,21 +142,10 @@ local automaticCooldownProviderResolved = false
 --- Client.HostsCooldownManager; addons cannot be installed mid-session, so the
 --- answer is fixed. Keeping it as a plain upvalue leaves every anchor consumer
 --- at a single boolean read and adds no probing to the cold anchor path.
---- A harness that loads this file without the client model models the Mainline
---- client, where only the engine namespace is left to ask about.
-local function ClientHostsCooldownManager()
-    local client = MSUF.Client
-    if client ~= nil then return client.Family == "Mainline" end
-    return true
-end
-local cooldownAnchorClientSupported = ClientHostsCooldownManager()
+local cooldownAnchorClientSupported = MSUF.Client.Family == "Mainline"
 --- Client.HostsCooldownManager already carries the family, the owning Blizzard
---- addon and the engine namespace, so nothing is asked twice here. A harness
---- without the model keeps the namespace probe for the Mainline client it
---- stands in for.
-local cooldownAnchorSupported = MSUF.Client ~= nil
-    and MSUF.Client.HostsCooldownManager == true
-    or (MSUF.Client == nil and type(C_CooldownViewer) == "table")
+--- addon and the engine namespace, so nothing is asked twice here.
+local cooldownAnchorSupported = MSUF.Client.HostsCooldownManager == true
 local InCombat
 local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false
@@ -346,7 +334,8 @@ local function FirstConsentText(providerLabel)
         .. "\n\n"
         .. Tr("Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached.")
         .. "\n\n"
-        .. Tr("Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu.")
+        .. Tr("Nothing will move unless you confirm again in the next step. If you choose Keep independent, "
+            .. "you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu.")
 end
 
 local function FinalConsentText(providerLabel)

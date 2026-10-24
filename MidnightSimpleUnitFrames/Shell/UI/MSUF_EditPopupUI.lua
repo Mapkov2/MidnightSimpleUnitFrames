@@ -479,7 +479,10 @@ function Quick.WireStepper(minus, box, plus, cb)
     end
     minus:SetScript("OnClick", function() commit(-1) end)
     plus:SetScript("OnClick", function() commit(1) end)
-    box:SetScript("OnEnterPressed", function(s) s:ClearFocus(); commitTyped() end)
+    box:SetScript("OnEnterPressed", function(s)
+        s:ClearFocus()
+        commitTyped()
+    end)
     box:SetScript("OnEscapePressed", function(s)
         discardingEdits = true
         if s._msufShownText ~= nil then s:SetText(s._msufShownText) end

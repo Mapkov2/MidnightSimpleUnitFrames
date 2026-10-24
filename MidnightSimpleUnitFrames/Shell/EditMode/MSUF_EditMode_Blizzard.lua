@@ -27,7 +27,7 @@ if type(systemEnum) ~= "table" then return end
 --- or field write from MSUF would reach secure action bar layout. The Micro
 --- Menu stays entirely Blizzard-owned there: no element, no frame access and
 --- no profile snapshot entry.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 --- Blizzard refuses to enter its Edit Mode while the EditModeDisabled game rule
 --- is on (EditModeManagerFrameMixin:CanEnterEditMode). MSUF follows the same

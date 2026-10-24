@@ -135,6 +135,17 @@ local function FullNameForUnit(unit, nativeName)
   return name .. "-" .. realm
 end
 
+local function ValidNativeName(unit)
+  local nativeName
+  if UnitName then nativeName = UnitName(unit) end
+  if issecretvalue(nativeName) == true
+    or type(nativeName) ~= "string"
+    or nativeName == "" then
+    return nil
+  end
+  return nativeName
+end
+
 local function UnitMatchesIdentity(unit, targetUnit, targetFullName)
   if unit == targetUnit then return true end
   if type(targetFullName) ~= "string" or targetFullName == ""
@@ -142,13 +153,8 @@ local function UnitMatchesIdentity(unit, targetUnit, targetFullName)
     or issecretvalue(unit) == true then
     return false
   end
-  local nativeName
-  if UnitName then nativeName = UnitName(unit) end
-  if issecretvalue(nativeName) == true
-    or type(nativeName) ~= "string"
-    or nativeName == "" then
-    return false
-  end
+  local nativeName = ValidNativeName(unit)
+  if not nativeName then return false end
   return FullNameForUnit(unit, nativeName) == targetFullName
 end
 
@@ -346,13 +352,8 @@ local function ApplyChanges()
 end
 
 local function InvalidateUnitCache(unit)
-  local nativeName
-  if UnitName then nativeName = UnitName(unit) end
-  if issecretvalue(nativeName) == true
-    or type(nativeName) ~= "string"
-    or nativeName == "" then
-    return false
-  end
+  local nativeName = ValidNativeName(unit)
+  if not nativeName then return false end
 
   local fullName = FullNameForUnit(unit, nativeName)
   if not fullName then

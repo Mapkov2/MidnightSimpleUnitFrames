@@ -171,7 +171,10 @@ local function Element(id)
     return {
         id = "window_" .. id, label = ("Details! Window %d"):format(id), group = "Details!", order = 900 + id,
         extraControls = { ScaleControl(id) },
-        getFrame = function() local root = Root(id); return root and root.baseframe end,
+        getFrame = function()
+            local root = Root(id)
+            return root and root.baseframe
+        end,
         isEnabled = function() return active and Enabled() and Root(id) ~= nil end,
         captureState = function() return Capture(id) end,
         restoreState = function(state, reason) return Restore(id, state, reason) end,

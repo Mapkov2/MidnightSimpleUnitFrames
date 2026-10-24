@@ -35,7 +35,7 @@ local CLASSIC_TRINKET_TEXTURE = 133453 -- inv_jewelry_trinketpvp_02
 local MISTS_TRINKET_SPELL_ID = 42292
 local MISTS_TRINKET_DURATION = 120
 
-local Client = MSUF.Client or {}
+local Client = MSUF.Client
 -- Every suffixed TOC (Mainline, TBC, Mists, Vanilla) loads
 -- Game/Shared/Initialize.lua before this file, so Client.IsRetail is set.
 local IS_RETAIL = Client.IsRetail == true
