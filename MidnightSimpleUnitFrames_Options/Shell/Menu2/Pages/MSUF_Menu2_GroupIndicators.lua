@@ -564,7 +564,7 @@ function StatusIcons.Open(state, ctx, b, RefreshPage)
 end
 -- Status declarations share the selected-field binder with their own GP readers.
 local STATUS_ROW_OPTIONS = Schema.GroupSelectedOptions({
-    selected = CurrentGFStatusSpec, scope = CurrentScope, default = StatusIcons.SpecDefault,
+    selected = CurrentGFStatusSpec, specs = GF_STATUS_ICON_SPECS, scope = CurrentScope, default = StatusIcons.SpecDefault,
     bool = Bool, number = Num, value = Val, write = Set,
     path = "status.selected.", meta = ControlMeta, stepMeta = StepMeta,
 })
@@ -1576,7 +1576,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         controls[#controls + 1] = control
         return control
     end
-    local styleOwner = { config = Style, scope = CurrentScope,
+    local styleOwner = { config = Style, scope = CurrentScope, recordPath = "spellIndicators.style.",
         changed = function(scope) QueueSpellIndicators(scope, "auras") end,
         path = "spell.style.", meta = StyleMeta, stepMeta = StyleMeta, strictToggles = true, rawNumber = true }
     local styleRows, styleControls = Schema.GroupRecordOptions(styleOwner), {}
@@ -1586,9 +1586,9 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     local halfLeft = max(100, floor((leftW - 12) / 2))
     Schema.Build(ctx, section, {
         { "slider", "iconZoom", 100, { "Icon Zoom (%)", 100, 200, 1, leftW },
-            { leftX, -72, leftW, "LEFT" }, path = "spell.icon_zoom", source = SpellIndicators },
+            { leftX, -72, leftW, "LEFT" }, path = "spell.icon_zoom", setting = Schema.GroupKeys("spellIndicators.iconZoom"), source = SpellIndicators },
         { "slider", "iconScale", 100, { "Icon Scale (%)", 20, 300, 1, leftW }, { leftX, -128, leftW, "LEFT" },
-            path = "spell.icon_scale", lifecycle = IconScaleLifecycle },
+            path = "spell.icon_scale", setting = Schema.GroupKeys("spellIndicators.iconScale"), lifecycle = IconScaleLifecycle },
         { "slider", "alpha", 100, { "Opacity", 10, 100, 5, leftW }, { leftX, -184, leftW, "LEFT" },
             get = function() return floor(((tonumber(Style().alpha) or 1) * 100) + 0.5) end,
             convert = function(value) return min(1, max(0.1, (tonumber(value) or 100) / 100)) end },
@@ -1664,10 +1664,13 @@ function SpellSection.Open(state, ctx, b, RefreshPage)
     state.placedIndicatorCard = W.ControlCard(spells, "Show on Frame", nil, siLeftX - 14, -456, siLeftW + 28, 560)
     state.frameHighlightCard = W.ControlCard(spells, "Highlight Health Bar", nil, siRightX - 14, -456, siRightW + 28, 360)
     state.placedRows = Schema.GroupRecordOptions({ config = PlacedConfig, scope = CurrentScope,
+        recordPath = "spellIndicators.specs.{spec}.{spell}.placed.",
         changed = QueueSpellIndicators, path = "spell.placed.", meta = ControlMeta, stepMeta = StepMeta })
     state.frameRows = Schema.GroupRecordOptions({ config = FrameEffectConfig, scope = CurrentScope,
+        recordPath = "spellIndicators.specs.{spec}.{spell}.frame.",
         changed = QueueSpellIndicators, path = "spell.frame.", meta = ControlMeta, stepMeta = StepMeta })
     state.selectedRows = Schema.GroupRecordOptions({ config = CurrentSpellConfig, scope = CurrentScope,
+        recordPath = "spellIndicators.specs.{spec}.{spell}.",
         changed = QueueSpellIndicators, path = "spell.selected.", meta = ControlMeta, stepMeta = StepMeta })
     state.RefreshState = M.RefreshProxy()
     function state.RequestControlRefresh(reason)
@@ -1755,11 +1758,15 @@ function SpellSection.BuildSpecControls(state, ctx)
         return CurrentSpellConfig(CurrentScope(), true) or SpellIndicators(CurrentScope())
     end
     local specRows = Schema.Build(ctx, spells, {
-        { "switch", "enabled", nil, { "Show spell indicators", siLeftX, -72, siLeftW }, path = "spell.enabled",
+        { "switch", "enabled", nil, { "Show spell indicators", siLeftX, -72, siLeftW },
+            path = "spell.enabled", setting = Schema.GroupKeys("spellIndicators.enabled"),
             flagsBefore = { _msuf2GroupFrameGateAlwaysEnabled = true } },
         { "slider", "layer", 9, { "Layer (0-30)", 0, 30, 1, siRightW }, { siRightX, -72, siRightW, "LEFT" },
-            path = "spell.selected.layer", source = SelectedSpellConfigTable, bind = Schema.GroupNestedBinding },
-        { "dropdown", "spec", nil, { "Spec", SpellSpecValues, siLeftW }, { siLeftX, -116, siLeftW, "LEFT" }, path = "spell.spec" },
+            path = "spell.selected.layer", setting = Schema.Record({
+                "gf_{scope}.spellIndicators.specs.{spec}.{spell}.layer", "gf_{scope}.spellIndicators.layer" }),
+            source = SelectedSpellConfigTable, bind = Schema.GroupNestedBinding },
+        { "dropdown", "spec", nil, { "Spec", SpellSpecValues, siLeftW }, { siLeftX, -116, siLeftW, "LEFT" },
+            path = "spell.spec", setting = Schema.GroupKeys("spellIndicators.spec") },
     }, commandRows)
     local siEnable, siLayer, specDrop = specRows.enabled, specRows.layer, specRows.spec
     local function PreviewAllSpecIconsEnabled()
@@ -1814,7 +1821,7 @@ function SpellSection.BuildSpecControls(state, ctx)
         { "dropdown", "multiSpec", nil, { "Multi-Spec Entry", function() return SpellTrackedSpecValues() end, siRightW },
             { siRightX, -130, siRightW, "LEFT" }, path = "spell.multi_spec.selector", classification = "ephemeral" },
         { "toggle", "tracked", nil, { "Track selected multi spec", siRightX, -184, siRightW },
-            path = "spell.multi_spec.tracked", beforeBind = PrepareTrackHint },
+            path = "spell.multi_spec.tracked", setting = Schema.Record({ "gf_{scope}.spellIndicators.multiSpecs.{selected}" }), beforeBind = PrepareTrackHint },
     }, commandRows)
     local multiSpecDrop, multiSpecEnabled = multiRows.multiSpec, multiRows.tracked
     state.spellGrid = SpellTileGrid.New(ctx, spells, siLeftX, -254, siLeftW, state.RefreshPage)
@@ -1961,6 +1968,7 @@ function SpellSection.BuildPlacedCard(state, ctx)
         end,
     })
     RegisterControl(state.placedColorShortcut, ctx, "spell.selected.color", "Selected Spell Color", "button", "action")
+    state.placedColorShortcut._msuf2ControlSchema.setting = Schema.Record({ "gf_{scope}.spellIndicators.specs.{spec}.{spell}.color" })
     local function RefreshPlacedControlVisibility(placed)
         local iconSelected, barSelected, barTimerSelected = ResolvePlacedSpellIndicatorControlVisibility(placed)
         if placedSize._msuf2Title then placedSize._msuf2Title:SetText(barSelected and "Height" or "Size") end
@@ -2036,6 +2044,7 @@ function SpellSection.BuildFrameCard(state, ctx)
         end,
     })
     RegisterControl(state.frameColorShortcut, ctx, "spell.frame.color", "Health bar highlight color", "button", "action")
+    state.frameColorShortcut._msuf2ControlSchema.setting = Schema.Record({ "gf_{scope}.spellIndicators.specs.{spec}.{spell}.frame.color" })
     local rows = Schema.Build(ctx, spells, {
         { "slider", "priority", 5, { "Priority", 1, 10, 1, siRightW }, { siRightX, -544, siRightW, "LEFT" } },
         { "slider", "alpha", 25, { "Tint Alpha", 5, 100, 5, siRightW }, { siRightX, -598, siRightW, "LEFT" },
@@ -2243,11 +2252,12 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     }, editorCommands).slot
     local categoryDrop = Schema.Build(ctx, corners, {
         { "dropdown", "category", "none", { "Selected Slot Indicator", CICategoryValues, rightW }, { rightX, -176, rightW, "LEFT" },
-            path = "corner.editor.category", binding = "scopeValue", writeDefault = "none", afterSet = RefreshPage, target = CurrentCornerField },
+            path = "corner.editor.category", setting = Schema.Record({ "gf_{scope}.ciSlot{selected}" }),
+            binding = "scopeValue", writeDefault = "none", afterSet = RefreshPage, target = CurrentCornerField },
     }, ROW_OPTIONS).category
     local customStatus = W.Text(corners, "", rightX, -230, rightW, T.colors.muted)
     if customStatus.SetWordWrap then customStatus:SetWordWrap(true) end
-    local customRows = Schema.GroupRecordOptions({
+    local customRows = Schema.GroupRecordOptions({ recordPath = "ciCustom{selected}.",
         config = function(scope, create) return CICustomConfig(scope, CurrentCISlot(), create) end,
         scope = CurrentScope, changed = function(scope) QueueGF(scope, "visual") end,
         path = "corner.editor.", meta = ControlMeta, stepMeta = StepMeta,

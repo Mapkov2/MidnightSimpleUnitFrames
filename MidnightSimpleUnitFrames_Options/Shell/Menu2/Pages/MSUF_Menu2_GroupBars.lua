@@ -39,14 +39,17 @@ local function RequestGroupBarsRefresh(ctx, reason)
     if M.RequestRefresh then M.RequestRefresh(ctx, reason or "gf-bars-ui") elseif M.Refresh then M.Refresh(ctx) end
 end
 local function RawMeta(ctx, path)
-    return ControlMeta(ctx, path)
+    local meta = ControlMeta(ctx, path)
+    local kind, field = path:match("^text%.(%a+)%.slot%.([%w_]+)$")
+    if field then meta.setting = Schema.TextSlots("group", kind, field) end
+    return meta
 end
 local function StepMeta(ctx, path, step)
-    local meta = ControlMeta(ctx, path)
+    local meta = RawMeta(ctx, path)
     meta.step, meta.roundStep = step, true
     return meta
 end
-local RAW_COMMANDS = Schema.GroupCommands({}, ControlMeta, RawMeta)
+local RAW_COMMANDS = Schema.GroupCommands({}, RawMeta, RawMeta)
 local STEP_COMMANDS = Schema.GroupCommands({}, ControlMeta, StepMeta)
 local ROW_OPTIONS = { bind = function(ctx, widget, row, kind)
     local options = GROUP_OPTIONS
@@ -176,6 +179,7 @@ local function GFDispelSymbolSectionHeight(ctx)
     return width >= 760 and 368 or 564
 end
 local function BindExclusivePowerFill(ctx, control, row)
+    row.setting = Schema.Record({ "gf_{scope}." .. row[2], "gf_{scope}." .. row.peer })
     GP.BindExclusiveScopeToggle(ctx, control, row[2], row.peer, row.historyLabel,
         "powerFillMode", function() RequestGroupBarsRefresh(ctx, "gf-power-fill-mode") end)
 end

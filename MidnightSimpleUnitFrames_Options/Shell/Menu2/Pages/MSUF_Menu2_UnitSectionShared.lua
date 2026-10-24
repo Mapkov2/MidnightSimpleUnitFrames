@@ -305,6 +305,7 @@ local function SharedControlMeta(opts, suffix, classification)
         controlPath = semantic:gsub("%.", "/"),
         classification = resolvedClassification,
         settingKey = opts.settingKey,
+        setting = opts.setting,
         actionKey = opts.actionKey,
         actionFixedArgs = opts.actionFixedArgs,
         actionInputArg = opts.actionInputArg,
@@ -312,6 +313,9 @@ local function SharedControlMeta(opts, suffix, classification)
         searchSettingKeyPatterns = opts.searchSettingKeyPatterns,
         command = opts.controlCommand,
     }
+    if resolvedClassification == "action" and (suffix == "run" or tostring(suffix):match("^target%.")) then
+        meta.setting = opts.copySetting or Schema.Record({ "MSUF_DB" })
+    end
     -- Shared section actions inherit the owning page's live scope; the
     -- identity must not masquerade as a static Search Registry action.
     return meta
@@ -943,15 +947,20 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         overlay:Show()
     end)
     RegisterOwnedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
+    pick._msuf2ControlSchema.setting = opts.valueSetting or opts.valueSettingKey
+    pick._msuf2ControlSchema.ephemeralReason = nil
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
     clear:SetScript("OnClick", function()
         if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end
         box:SetText("")
     end)
     RegisterOwnedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
+    clear._msuf2ControlSchema.setting = opts.valueSetting or opts.valueSettingKey
+    clear._msuf2ControlSchema.ephemeralReason = nil
     M.TrackRefresh(ctx, Refresh)
     Schema.Custom(box, { id = (box._msuf2RuntimeControlRecord or {}).controlId or "shared.customAnchor",
-        kind = "customAnchor", labelKey = opts.label or "Custom Anchor Frame", scope = opts.controlDomain or "shared",
+        kind = "textinput", setting = opts.valueSetting or opts.valueSettingKey,
+        labelKey = opts.label or "Custom Anchor Frame", scope = opts.controlDomain or "shared",
         applyDomain = "anchoring", owner = box, get = opts.getValue })
     return { label = label, box = box, pick = pick, clear = clear, Refresh = Refresh }
 end

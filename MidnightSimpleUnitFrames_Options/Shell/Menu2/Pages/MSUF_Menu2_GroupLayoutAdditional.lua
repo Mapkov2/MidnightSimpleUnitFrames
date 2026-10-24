@@ -152,7 +152,8 @@ local function BuildNameBar(ctx, b)
     Schema.Build(ctx, section, { SliderRow("nameBarHeight", 14, "Strip height", 4, 60, 32, -128, width) }, ROW_OPTIONS)
     PercentSlider(ctx, section, "Strip opacity", "nameBarAlpha", .95, width, width + 64, -128)
     Schema.Build(ctx, section, {
-        { "color", "nameBarColor", nil, { "Strip color" }, { 32, -218, width, "LEFT" },
+        { "color", "nameBarColor", nil, { "Strip color" }, setting = Schema.Record({
+            "gf_{scope}.nameBarR", "gf_{scope}.nameBarG", "gf_{scope}.nameBarB" }), { 32, -218, width, "LEFT" },
             get = function()
                 return GP.Num(GP.CurrentScope(), "nameBarR", .05), GP.Num(GP.CurrentScope(), "nameBarG", .05), GP.Num(GP.CurrentScope(), "nameBarB", .05)
             end,
@@ -278,7 +279,7 @@ local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
         local meta = metadata(row[2], prefix)
         local binder = kind == "slider" and GP.BindScopeSlider or kind == "dropdown" and GP.BindScopeDropdown or GP.BindScopeToggle
         binder(ctx, widget, row[2], row[3], "rebuild", meta)
-        Schema.Owned(widget, "group", "rebuild")
+        Schema.Owned(widget, "group", "rebuild")._msuf2ControlSchema.setting = Schema.GroupKeys(row[2])
         meta.label, meta.kind = row[4][1], kind
         if kind == "dropdown" then meta.values = TIER_GROWTH end
         M.RegisterSearchWidget(widget, meta)

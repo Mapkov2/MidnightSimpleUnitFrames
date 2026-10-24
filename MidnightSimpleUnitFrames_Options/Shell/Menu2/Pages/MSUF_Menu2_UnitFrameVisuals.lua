@@ -256,7 +256,7 @@ local function PreparePortraitSwitch(ctx, sec, unit)
             end
             if portraitEnable.refreshDetails then portraitEnable.refreshDetails() end
         end,
-        scope = unit, meta = ReviewedMeta(ctx, "portrait.enabled", "setting", "compound",
+        scope = unit, setting = unit .. ".portraitMode", meta = ReviewedMeta(ctx, "portrait.enabled", "setting", "compound",
             "Portrait is a boolean shortcut over the OFF/LEFT/RIGHT portraitMode enum and restores the remembered side when enabled."),
     })
     portraitEnable:SetChecked(NormalizePortrait(unit) ~= "OFF")
@@ -1197,7 +1197,8 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
     local enabled = ControlRow(ctx, sec, { "sectionSwitch", "enabled", true, { "Enable Castbar" },
         get = function() return ReadCastbarBackend() ~= "HIDE" end,
         set = SetCastbarEnabled,
-        scope = unit, meta = ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
+        scope = unit, setting = Schema.Family({ "general." .. fields.backend, "general." .. fields.enable,
+            "general." .. providerMemoryKey }), meta = ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
             "Castbar visibility coordinates backend, enable state, and remembered provider."),
         beforeBind = function(widget)
             widget._msuf2CastbarState = state
@@ -1582,7 +1583,7 @@ function CastbarSection.IconAndText(s)
             SetPortraitValue(unit, "portraitCastSpellIcon", v and true or false, "MSUF2_PORTRAIT_CAST_ICON")
             M.RequestRefresh(ctx, "portrait-cast-icon-mirror")
         end,
-        scope = unit, meta = ReviewedMeta(ctx, "castbar.portrait_cast_icon", "setting", "duplicate",
+        scope = unit, setting = unit .. ".portraitCastSpellIcon", meta = ReviewedMeta(ctx, "castbar.portrait_cast_icon", "setting", "duplicate",
             "Second surface for the Portrait section cast-icon toggle; that control owns the Search target for portraitCastSpellIcon."),
         beforeBind = function(widget)
             W.AttachUnitEditFocus(widget, unit, "portrait")

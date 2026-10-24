@@ -52,8 +52,11 @@ function TextSection.OpenSection(state, ctx, builder, unit)
         return SettingMeta(ctx, path, unit, key)
     end
     local function SelectedSlotMeta(path)
-        return ReviewedMeta(ctx, path, "setting", "dynamic",
+        local meta = ReviewedMeta(ctx, path, "setting", "dynamic",
             "This control targets the HP or power text slot selected in the slot editor.")
+        local kind, field = path:match("text%.(%a+)%.slot%.([%w_]+)")
+        meta.setting = Schema.TextSlots(unit, kind, field)
+        return meta
     end
     -- The four text tabs share one section frame, so its height has to follow the
     -- tallest card stack of the selected tab. A single fixed height either clips

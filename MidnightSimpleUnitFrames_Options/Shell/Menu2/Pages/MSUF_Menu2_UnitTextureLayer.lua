@@ -665,7 +665,10 @@ local function TextureLayerAdvancedCard(ctx, s)
             UP.RegisterControl(btn, ctx, "texture_layer.gradient_direction." .. value, "Gradient direction", "button",
                 value == "UP" and "action" or "ephemeral")
         end
-        Schema.Owned(btn, unit, "textureLayer")
+        local declaration = Schema.Owned(btn, unit, "textureLayer")._msuf2ControlSchema
+        local keys = {}
+        for _, prefix in ipairs(SLOT_PREFIXES) do keys[#keys + 1] = unit .. "." .. prefix .. PAD_DIRECTION_SUFFIXES[value] end
+        declaration.setting, declaration.ephemeralReason = Schema.Family(keys), nil
         padButtons[value] = btn
         return btn
     end

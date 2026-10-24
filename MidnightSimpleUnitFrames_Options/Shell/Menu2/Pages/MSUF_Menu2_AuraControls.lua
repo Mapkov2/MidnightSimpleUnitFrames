@@ -41,6 +41,334 @@ local function AttachSearchView(ctx, meta)
     end
     return meta
 end
+-- Per-control storage contracts. Selector aliases route search; these narrow
+-- fields describe each writer independently of the container currently selected.
+local CUSTOM_SETTING_FIELDS = {
+    ["appearance.cooldown-anchor"] = "placed.cooldownAnchor",
+    ["appearance.cooldown-swipe"] = "placed.showCooldownSwipe",
+    ["appearance.cooldown-text"] = "placed.showCooldown",
+    ["appearance.cooldowndecimalseconds"] = "placed.cooldownDecimalSeconds",
+    ["appearance.cooldownsize"] = "placed.cooldownSize",
+    ["appearance.cooldownx"] = "placed.cooldownX",
+    ["appearance.cooldowny"] = "placed.cooldownY",
+    ["appearance.dispel-type-border"] = "placed.debuffTypeBorderMode",
+    ["appearance.duration-bar"] = "placed.showDurationBar",
+    ["appearance.duration-direction"] = "placed.durationBarDirection",
+    ["appearance.duration-display"] = "placed.durationBarDisplay",
+    ["appearance.duration-position"] = "placed.durationBarPosition",
+    ["appearance.durationbarheight"] = "placed.durationBarHeight",
+    ["appearance.icon-zoom"] = "placed.iconZoom",
+    ["appearance.opacity"] = "placed.alpha",
+    ["appearance.pandemic.blend"] = "placed.pandemicBlend",
+    ["appearance.pandemic.border-opacity"] = "placed.pandemicBorderAlpha",
+    ["appearance.pandemic.color"] = "placed.pandemicColor",
+    ["appearance.pandemic.enabled"] = "placed.pandemicEnabled",
+    ["appearance.pandemic.style"] = "placed.pandemicStyle",
+    ["appearance.pandemic.tint-opacity"] = "placed.pandemicTintAlpha",
+    ["appearance.pandemicpadding"] = "placed.pandemicPadding",
+    ["appearance.pandemicthickness"] = "placed.pandemicThickness",
+    ["appearance.stack-anchor"] = "placed.stackAnchor",
+    ["appearance.stack-count"] = "placed.showStacks",
+    ["appearance.stacksize"] = "placed.stackSize",
+    ["appearance.stackx"] = "placed.stackX",
+    ["appearance.stacky"] = "placed.stackY",
+    ["appearance.style-padding"] = "placed.stylePadding",
+    ["appearance.swipe-direction"] = "placed.cooldownSwipeReverse",
+    ["appearance.tooltip"] = "placed.showTooltip",
+    ["effect.color"] = "frame.color",
+    ["effect.layer"] = "frame.layer",
+    ["effect.only-during-pandemic-window"] = "frame.onlyInPandemicWindow",
+    ["effect.opacity"] = "frame.color",
+    ["effect.priority"] = "frame.priority",
+    ["effect.thickness"] = "frame.thickness",
+    ["effect.type"] = "frame.type",
+    ["filters.bigdefensive"] = "filters.bigDefensive",
+    ["filters.cancelable"] = "filters.cancelable",
+    ["filters.crowdcontrol"] = "filters.crowdControl",
+    ["filters.dispellableany"] = "filters.dispellableAny",
+    ["filters.enabled"] = "filters.enabled",
+    ["filters.externaldefensive"] = "filters.externalDefensive",
+    ["filters.hide-permanent"] = "filters.hidePermanent",
+    ["filters.hidepermanent"] = "filters.hidePermanent",
+    ["filters.includedispellable"] = "filters.includeDispellable",
+    ["filters.includenameplateonly"] = "filters.includeNameplateOnly",
+    ["filters.max-duration"] = "filters.maxDuration",
+    ["filters.maxduration"] = "filters.maxDuration",
+    ["filters.notcancelable"] = "filters.notCancelable",
+    ["filters.onlyimportant"] = "filters.onlyImportant",
+    ["filters.onlymine"] = "filters.onlyMine",
+    ["filters.raid"] = "filters.raid",
+    ["filters.raidincombat"] = "filters.raidInCombat",
+    ["layout.anchor"] = "placed.anchor",
+    ["layout.growth"] = "placed.growth",
+    ["layout.layer"] = "layer",
+    ["layout.max"] = "placed.max",
+    ["layout.perrow"] = "placed.perRow",
+    ["layout.size"] = "placed.size",
+    ["layout.spacing"] = "placed.spacing",
+    ["reminder.click-cast"] = "placed.reminderClickCast",
+    ["reminder.color"] = "placed.reminderColor",
+    ["reminder.desaturate"] = "placed.reminderDesaturate",
+    ["reminder.enabled"] = "placed.reminderEnabled",
+    ["reminder.enchant-duration"] = "reminderEnchantDurationMinutes",
+    ["reminder.enchant-main-hand"] = "reminderEnchantMainHand",
+    ["reminder.enchant-off-hand"] = "reminderEnchantOffHand",
+    ["reminder.only-castable"] = "placed.reminderOnlyCastable",
+    ["reminder.opacity"] = "placed.reminderAlpha",
+    ["setup.aura-type"] = "auraType",
+    ["setup.enabled"] = "enabled",
+    ["setup.name"] = "name",
+}
+local STYLE_SETTING_FIELDS = {
+    ["anchor"] = "anchor",
+    ["auras3-cooldown-anchor"] = "cooldownTextAnchor",
+    ["auras3-cooldown-swipe-direction"] = "cooldownSwipeReverse",
+    ["auras3-debuff-type-border-mode"] = "debuffTypeBorderMode",
+    ["auras3-duration-bar-direction"] = "durationBarDirection",
+    ["auras3-duration-bar-display"] = "durationBarDisplay",
+    ["auras3-duration-bar-position"] = "durationBarPosition",
+    ["auras3-stealable-marker-style"] = "stealableStyle",
+    ["auras3-sort-method"] = "sortMethod", ["auras3-sort-direction"] = "sortReverse",
+    ["hide-permanent"] = "blacklist.hidePermanent",
+    ["cooldown-swipe-direction"] = "cooldownSwipeReverse",
+    ["cooldownanchor"] = "cooldownAnchor",
+    ["cooldowndecimalseconds"] = "cooldownDecimalSeconds",
+    ["cooldownsize"] = "cooldownSize",
+    ["cooldowntextoffsetx"] = "cooldownTextOffsetX",
+    ["cooldowntextoffsety"] = "cooldownTextOffsetY",
+    ["cooldowntextsize"] = "cooldownTextSize",
+    ["cooldownx"] = "cooldownX",
+    ["cooldowny"] = "cooldownY",
+    ["dispel-border-mode"] = "dispelBorderMode",
+    ["durationbardirection"] = "durationBarDirection",
+    ["durationbardisplay"] = "durationBarDisplay",
+    ["durationbarheight"] = "durationBarHeight",
+    ["durationbarposition"] = "durationBarPosition",
+    ["dynamicscale"] = "dynamicScale",
+    ["growth"] = "growth",
+    ["icon-height"] = "height",
+    ["icon-size"] = "size",
+    ["iconzoom"] = "iconZoom",
+    ["layer"] = "layer",
+    ["max"] = "max",
+    ["max-duration"] = "maxDuration",
+    ["max-icons"] = "max",
+    ["per-row"] = "perRow",
+    ["perrow"] = "perRow",
+    ["showcooldown"] = "showCooldown",
+    ["showcooldownswipe"] = "showCooldownSwipe",
+    ["showcooldowntext"] = "showCooldownText",
+    ["showdurationbar"] = "showDurationBar",
+    ["showstackcount"] = "showStackCount",
+    ["showstacks"] = "showStacks",
+    ["showstealable"] = "showStealable",
+    ["showtooltip"] = "showTooltip",
+    ["size"] = "size",
+    ["spacing"] = "spacing",
+    ["stack-anchor"] = "stackCountAnchor",
+    ["stackanchor"] = "stackAnchor",
+    ["stacksize"] = "stackSize",
+    ["stacktextoffsetx"] = "stackTextOffsetX",
+    ["stacktextoffsety"] = "stackTextOffsetY",
+    ["stacktextsize"] = "stackTextSize",
+    ["stackx"] = "stackX",
+    ["stacky"] = "stackY",
+    ["stylepadding"] = "stylePadding",
+}
+
+-- Physical profile targets are separate from the stable search/navigation aliases.
+local function UnitLayoutSetting(unit, fields)
+    local schema, keys = MSUF.MSUF_Auras3.LaneKeySchema, {}
+    if unit == "shared" then return M.ControlSchema.Fields({ "auras3.shared" }, fields) end
+    for _, runtimeUnit in ipairs(schema.UNIT_FAMILIES[unit] or { unit }) do
+        local root = "auras3.perUnit." .. runtimeUnit .. "."
+        for _, field in ipairs(fields) do
+            local shared = schema.SHARED_LAYOUT_KEYS[field]
+            keys[#keys + 1] = root .. (shared and "layoutShared." or "layout.") .. field
+            keys[#keys + 1] = root .. (shared and "overrideSharedLayout" or "overrideLayout")
+            if schema.STYLE_LAYOUT_KEYS[field] or schema.STYLE_SHARED_LAYOUT_KEYS[field] then keys[#keys + 1] = root .. "overrideStyle" end
+        end
+    end
+    return M.ControlSchema.Family(keys)
+end
+local function UnitRuleSetting(unit, lane, field, blacklist)
+    local keys, schema = {}, MSUF.MSUF_Auras3.LaneKeySchema
+    for _, runtimeUnit in ipairs(schema.UNIT_FAMILIES[unit] or { unit }) do
+        local root = "auras3.perUnit." .. runtimeUnit .. "."
+        keys[#keys + 1] = root .. (blacklist and "blacklist." or "filters.")
+            .. (lane == "buff" and "buffs." or "debuffs.") .. field
+        keys[#keys + 1] = root .. (blacklist and "overrideBlacklist" or "overrideFilters")
+    end
+    return M.ControlSchema.Family(keys)
+end
+local function CustomSetting(page, path)
+    local unit = page:match("^uf_(.+)$")
+    if not unit then return nil end
+    local suffix = path:match("^custom%-container%.(.+)$")
+    if not suffix then return nil end
+    local field = CUSTOM_SETTING_FIELDS[suffix]
+    local container, order = suffix:match("^(custom%d+)%.ordering%.(.+)$")
+    if order then
+        field = order == "sort-direction" and "placed.sortReverse" or "placed.sortMethod"
+        local root = "auras3.customContainers.perUnit." .. unit .. ".items." .. container:match("%d+")
+        if order == "sort-direction" then return root .. "." .. field end
+        return M.ControlSchema.Fields({ root }, { field, "placed.sortReverse", "prioritySpellIDs" })
+    end
+    local preset, role = suffix:match("^(player%-defensives)%.(.+)$")
+    if not preset then preset, role = suffix:match("^(target%-dots)%.(.+)$") end
+    if preset then
+        local fields = { enabled = "enabled", ["portrait-icon"] = "portraitIcon", ["portrait-max-icons"] = "portraitMaxIcons",
+            ["portrait-cooldown-text"] = "portraitCooldownText", ["portrait-position-when-disabled"] = "portraitPositionWhenDisabled",
+            ["auto-blacklist"] = "autoBlacklistPlayerBuffs", ["auto-blacklist-debuffs"] = "autoBlacklistDebuffs" }
+        if not fields[role] then return nil end
+        return "auras3.customContainers.perUnit." .. unit .. ".items.4." .. fields[role]
+    end
+    if not field then return nil end
+    local keys = {}
+    local fields = { field }
+    if suffix == "effect.opacity" then fields[#fields + 1] = "frame.tintAlpha"
+    elseif suffix == "setup.aura-type" then fields[#fields + 1] = "filters.maxDuration"
+    elseif suffix == "filters.raid" then fields[#fields + 1] = "filters.exclusive"
+    elseif suffix == "filters.cancelable" then fields[#fields + 1] = "filters.notCancelable"
+    elseif suffix == "filters.notcancelable" then fields[#fields + 1] = "filters.cancelable" end
+    for _, target in ipairs(fields) do
+        for index = 1, unit == "pet" and 3 or 4 do
+            keys[#keys + 1] = "auras3.customContainers.perUnit." .. unit .. ".items." .. index .. "." .. target
+        end
+    end
+    return M.ControlSchema.Family(keys)
+end
+local function StyleSetting(page, path)
+    local lane, token = path:match("^style%.lane%.([%w]+)%.(.+)$")
+    if token == "auras3-icon-shape" then
+        local kind = lane == "playerdefensives" and "playerDefensives" or lane == "targetdots" and "targetDots" or lane
+        return "auras3.shared.appearanceIconShapes." .. kind
+    end
+    local field = STYLE_SETTING_FIELDS[token]
+    local effect = token and token:match("^full%-frame%.(.+)$")
+    if lane and field or effect then
+        local schema = MSUF.MSUF_Auras3.LaneKeySchema
+        if effect then field = lane .. "FrameEffect" .. (effect == "alpha" and "Color" or effect:gsub("^%l", string.upper))
+        else field = (schema.LANE_STYLE_KEYS[lane] or {})[field] or field end
+        local unit = page:match("^uf_(.+)$") or "shared"
+        if token == "auras3-debuff-type-border-mode" then return UnitLayoutSetting(unit, { field, "useDebuffTypeBorders" }) end
+        return UnitLayoutSetting(unit, { field })
+    end
+    local appearance = path:match("^style%.appearance%.icon%-style%.(.+)$")
+    if appearance then
+        local fields = { ["border-style"] = "styleBorderStyle", styleborderenabled = "styleBorderEnabled",
+            styleborderthickness = "styleBorderThickness", ["stylebordercolor-alpha"] = "styleBorderColor",
+            styleshadowenabled = "styleShadowEnabled", styleshadowsize = "styleShadowSize", ["styleshadowcolor-alpha"] = "styleShadowColor" }
+        field = fields[appearance]
+        if field then
+            return { patterns = { "^auras3%.shared%.appearanceIconStyles%.[%a]+%." .. field .. "$" } }
+        end
+    end
+    local fixed = { ["style.appearance.blizzard-aura-frames.hide-buffs"] = "hideBlizzardBuffFrame",
+        ["style.appearance.blizzard-aura-frames.hide-debuffs"] = "hideBlizzardDebuffFrame",
+        ["style.appearance.native-flow.weapon-enchants"] = "showWeaponEnchants" }
+    return fixed[path] and "auras3.shared." .. fixed[path]
+end
+local function ScopedAuraSetting(page, path)
+    local lane, token = path:match("^group%-style%.lane%.([%w]+)%.(.+)$")
+    if not lane then lane, token = path:match("^group%-workspace%.lane%.([%w]+)%.layout%.(.+)$") end
+    if not lane then lane, token = path:match("^group%-workspace%.lane%.([%w]+)%.filters%.(.+)$") end
+    local field = STYLE_SETTING_FIELDS[token]
+    if token == "max-duration" then field = "blacklist.maxDuration" end
+    if token and token:match("^native%.") then field = "filterToken" end
+    if lane and field then
+        if token == "dispel-border-mode" then
+            local keys = M.ControlSchema.GroupKeys("auras." .. lane .. ".dispelBorderMode").keys
+            for _, key in ipairs(M.ControlSchema.GroupKeys("auras." .. lane .. ".showDispelBorder").keys) do keys[#keys + 1] = key end
+            for _, key in ipairs(M.ControlSchema.GroupKeys("auras." .. lane .. ".showDispelSymbol").keys) do keys[#keys + 1] = key end
+            return M.ControlSchema.Family(keys)
+        end
+        return M.ControlSchema.GroupKeys("auras." .. lane .. "." .. field)
+    end
+    if path == "group-style.root.dynamicscale" then return M.ControlSchema.GroupKeys("auras.dynamicScale") end
+    lane, token = path:match("^unit%-workspace%.lane%.([%w]+)%.layout%.(.+)$")
+    if not lane then lane, token = path:match("^unit%-workspace%.lane%.([%w]+)%.filters%.(.+)$") end
+    field = STYLE_SETTING_FIELDS[token]
+    local unit = page:match("^uf_(.+)$")
+    if unit and lane and field then
+        if token == "max-duration" then return UnitRuleSetting(unit, lane, "maxDuration", true) end
+        local names = { anchor = "anchorKey", growth = "growthKey", ["icon-height"] = "heightPercentKey",
+            ["icon-size"] = "sizeKey", layer = "layerKey", ["max-icons"] = "maxKey", ["per-row"] = "perRowKey", spacing = "spacingKey" }
+        local spec = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[lane]
+        local key = names[token] and spec[names[token]]
+        if not key then return nil end
+        if token == "growth" then return UnitLayoutSetting(unit, { key, spec.wrapKey }) end
+        return UnitLayoutSetting(unit, { key })
+    end
+end
+
+local function UnitWorkspaceSetting(page, path)
+    local unit = page:match("^uf_(.+)$")
+    local lane, part, token = path:match("^unit%-workspace%.lane%.([%a]+)%.([%a]+)%.(.+)$")
+    if not unit or not lane then return nil end
+    local schema = MSUF.MSUF_Auras3.LaneKeySchema
+    if part == "layout" and token == "visible" then
+        local setting = UnitLayoutSetting(unit, { schema.LANE_SPECS[lane].showKey, schema.LANE_SPECS[lane].maxKey })
+        setting.keys[#setting.keys + 1] = "auras3.enabled"
+        local runtimeUnit = (schema.UNIT_FAMILIES[unit] or { unit })[1]
+        setting.keys[#setting.keys + 1] = "auras3." .. schema.UNIT_FLAG[runtimeUnit]
+        return setting
+    end
+    if part ~= "filters" then return nil end
+    if token == "hide-permanent" or token == "max-duration" then
+        return UnitRuleSetting(unit, lane, token == "hide-permanent" and "hidePermanent" or "maxDuration", true)
+    end
+    -- Enabling an exclusive native filter clears its sibling classifications.
+    -- These are the same native rule fields as the existing switch owner.
+    local names = { ["only-mine"] = "onlyMine", ["non-player"] = "nonPlayer", onlymine = "onlyMine", nonplayer = "nonPlayer",
+        onlyimportant = "onlyImportant", raidincombat = "raidInCombat", includenameplateonly = "includeNameplateOnly",
+        includedispellable = "includeDispellable", dispellableany = "dispellableAny", externaldefensive = "externalDefensive",
+        bigdefensive = "bigDefensive", notcancelable = "notCancelable", crowdcontrol = "crowdControl" }
+    local field = names[token] or token
+    local fields = { field }
+    if field == "onlyMine" then
+        if lane == "debuff" then fields[#fields + 1] = "nonPlayer" end
+        if M.CLASSIC_AURA_FILTERS_REDUCED then fields[#fields + 1] = "enabled" end
+    elseif field == "nonPlayer" and M.CLASSIC_AURA_FILTERS_REDUCED then fields = { "nonPlayer", "onlyMine", "enabled" }
+    elseif field ~= "enabled" and field ~= "includeNameplateOnly" then
+        fields = { "onlyImportant", "raid", "raidInCombat", "includeDispellable", "dispellableAny", "exclusive" }
+        local extra = lane == "buff" and { "externalDefensive", "bigDefensive", "cancelable", "notCancelable" }
+            or { "crowdControl", "nonPlayer" }
+        for _, key in ipairs(extra) do fields[#fields + 1] = key end
+        if lane == "debuff" and field == "nonPlayer" then fields[#fields + 1] = "onlyMine" end
+    end
+    local keys = {}
+    for _, field in ipairs(fields) do
+        for _, key in ipairs(UnitRuleSetting(unit, lane, field, false).keys) do keys[#keys + 1] = key end
+    end
+    return M.ControlSchema.Family(keys)
+end
+-- Named aura actions mutate the same records as their existing model owners.
+local function AuraActionSetting(meta)
+    local key, args = meta.actionKey, meta.actionFixedArgs or {}
+    local scope, lane = args.scope, args.lane
+    if key == "aura_custom_whitelist_add_spell" or key == "reset_aura_custom_container"
+        or key == "aura_custom_reminder_enchant_item" then
+        local path = "auras3.customContainers.perUnit." .. scope .. ".items." .. args.index
+        if key == "aura_custom_reminder_enchant_item" then path = path .. ".reminderEnchantItem" end
+        return path
+    end
+    if key == "aura_group_blacklist_add_spell" or key == "aura_group_blacklist_add_preset"
+        or key == "aura_group_blacklist_remove_spell" then
+        return M.ControlSchema.Family(M.ControlSchema.GroupKeys("auras." .. lane .. ".blacklist").keys,
+            nil, { "^gf_[%a]+%.auras%.renderer$" })
+    end
+    if key == "aura_blacklist_add_spell" or key == "aura_blacklist_add_preset" then
+        local keys = {}
+        local family = MSUF.MSUF_Auras3.LaneKeySchema.UNIT_FAMILIES[scope] or { scope }
+        for _, unit in ipairs(family) do
+            keys[#keys + 1] = "auras3.perUnit." .. unit .. ".blacklist." .. (lane == "buff" and "buffs" or "debuffs")
+            keys[#keys + 1] = "auras3.perUnit." .. unit .. ".overrideBlacklist"
+        end
+        return M.ControlSchema.Family(keys)
+    end
+end
+
 -- pageFallback names the page key used when neither ctx nor the menu has one.
 local function AuraControlMeta(ctx, path, classification, routeContract, pageFallback)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
@@ -59,11 +387,27 @@ local function AuraControlMeta(ctx, path, classification, routeContract, pageFal
         meta.settingKey = routeContract
     elseif type(routeContract) == "table" then
         meta.settingKey = routeContract.settingKey
+        meta.setting = routeContract.setting
         meta.actionKey = routeContract.actionKey
         meta.actionFixedArgs = routeContract.actionFixedArgs
         meta.actionInputArg = routeContract.actionInputArg
         meta.searchSettingKeys = routeContract.searchSettingKeys
         meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
+    end
+    if meta.classification == "action" then meta.setting = meta.setting or AuraActionSetting(meta) end
+    if meta.classification == "setting" then
+        meta.setting = meta.setting or CustomSetting(pageKey, path) or StyleSetting(pageKey, path)
+            or UnitWorkspaceSetting(pageKey, path) or ScopedAuraSetting(pageKey, path)
+        if path == "unit-workspace.container-selector" or path == "unit-workspace.tool-selector" then
+            meta.schemaEphemeralReason = "Selects an aura editor workspace; no profile setting is written."
+        end
+    end
+    if pageKey == "gf_auras" and meta.setting then
+        local setting = meta.setting
+        if type(setting) == "string" then setting = M.ControlSchema.Family({ setting }) end
+        setting.keys = setting.keys or {}
+        for _, key in ipairs(M.ControlSchema.GroupKeys("auras.renderer").keys) do setting.keys[#setting.keys + 1] = key end
+        meta.setting = setting
     end
     return AttachSearchView(ctx, meta)
 end

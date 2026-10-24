@@ -64,6 +64,25 @@ local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
     ["name_shortening.max_length"] = { "shortenNameMaxChars" },
     ["name_shortening.no_ellipsis"] = { "shortenNameNoEllipsis" },
 }
+local FONT_STORAGE_FIELDS = {
+    ["scope.override.enabled"] = { { "fontOverride" }, false, nil,
+        { "fontOverride", "nameShortenEnabled", "nameClipSide", "nameNoEllipsis", "nameMaxChars",
+            "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["text_style.outline"] = { { "boldText", "noOutline" }, "general", "fontOverride", { "fontOutline" } },
+    ["text_style.rendering"] = { { "fontMonochrome", "fontSlug", "boldText", "noOutline" }, "general", "fontOverride",
+        { "fontMonochrome", "fontSlug", "fontOutline" } },
+    ["text_style.shadow.opacity"] = { { "fontShadowOpacity", "fontShadowStrength" }, "general", "fontOverride" },
+    ["text_style.shadow.distance"] = { { "fontShadowDistance", "fontShadowStrength" }, "general", "fontOverride" },
+    ["colors.player_name"] = { { "nameColorMode", "nameClassColor" }, "general", "fontOverride", { "nameColorMode" } },
+    ["name_shortening.enabled"] = { { "shortenNames" }, "", "fontOverride",
+        { "nameShortenEnabled", "nameMaxChars", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.style"] = { { "shortenNameClipSide" }, "general", "fontOverride",
+        { "nameClipSide", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.max_length"] = { { "shortenNameMaxChars" }, "general", "fontOverride",
+        { "nameMaxChars", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.no_ellipsis"] = { { "shortenNameShowDots" }, "general", "fontOverride",
+        { "nameNoEllipsis", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+}
 local function Meta(path, classification, exact)
     local resolved = {}
     if type(exact) == "table" then
@@ -83,6 +102,14 @@ local function Meta(path, classification, exact)
             for i = 1, #suffixes do
                 resolved.searchSettingKeyPatterns[i] = "^fontScope%.[%w_]+%." .. suffixes[i] .. "$"
             end
+        end
+    end
+    if (classification or "setting") == "setting" then
+        local storage = FONT_STORAGE_FIELDS[path]
+        if storage then resolved.setting = Schema.ScopedFields(storage[1], storage[2], storage[3], storage[4])
+        elseif path == "font.family" then resolved.setting = Schema.ScopedFields({ "fontKey" }, "general")
+        elseif FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path] then
+            resolved.setting = Schema.ScopedFields(FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path], "general", "fontOverride")
         end
     end
     return ControlMeta("opt_fonts", "global", path, classification, resolved)

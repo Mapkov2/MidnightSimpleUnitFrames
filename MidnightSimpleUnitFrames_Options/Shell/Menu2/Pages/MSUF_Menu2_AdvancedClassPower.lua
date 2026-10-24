@@ -986,6 +986,7 @@ function Page:BuildHeader()
     preview._msuf2StableSearchLabel = "Preview resource"
     RegisterControl(preview, Meta("preview.resource", "setting", {
         settingKey = "menu.classPowerPreviewResource",
+        schemaEphemeralReason = "Selects the class-resource preview; no profile setting is written.",
     }), "Preview resource", "dropdown", CLASS_POWER_PREVIEW_VALUES)
     MoveWidget(preview, head, 14, -selectorH - 16, previewW)
     preview:SetOnValueChanged(function(value)

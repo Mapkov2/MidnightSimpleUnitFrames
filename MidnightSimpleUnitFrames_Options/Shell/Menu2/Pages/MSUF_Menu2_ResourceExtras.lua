@@ -456,6 +456,10 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     for i,row in ipairs(rows) do
         local key=row[2]
         row.meta,row.scope=Meta("marks."..key),"resourceMarks"
+        local paths={"bars.resourceMarks.{selected}."..key}
+        if key=="mode" then paths[#paths+1]="bars.resourceMarks.{selected}.value" end
+        row.setting=Schema.Record(paths)
+        row.setting.resolve=function() return "bars.resourceMarks."..tostring(MarkIndex(Bars)).."."..key end
         row.get=function()
             local rule=Rule()
             if row[1]=="flowToggle" then

@@ -58,6 +58,7 @@ end
 local function BindExclusiveFillToggle(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
     return Schema.Build(ctx, parent, {
         { "toggle", key, false, { label, x, y, width }, domain = "visual",
+            setting = Schema.Record({ "gf_{scope}." .. key, "gf_{scope}." .. peerKey }),
             beforeBind = function(widget) AttachGroupFocus(widget, "bars") end,
             bind = function(widget)
                 GP.BindExclusiveScopeToggle(ctx, widget, key, peerKey, historyLabel, "healthFillMode", function()
@@ -567,7 +568,7 @@ local function BuildClassPriorityRows(ctx, parent, width, topY)
     holder = Shared.MakeDragSortRows(parent, definitions, {
         x = 16, y = topY, width = width - 32, rowHeight = 22, gap = 4,
         controlDomain = "group", controlPageKey = ctx.key, controlPath = "sorting.class_priority",
-        controlClassification = "setting", onReorder = function()
+        controlClassification = "setting", setting = Schema.GroupKeys("classOrder"), onReorder = function()
             M.RunWithHistory("Class priority order", "group:classOrder:" .. CurrentScope(), Save)
         end,
     })
@@ -974,6 +975,7 @@ local function BuildGFAnchorSection(ctx, b)
         y = -112,
         width = customAnchorW,
         getValue = CurrentCustomAnchor,
+        valueSetting = Schema.GroupKeys("anchorToFrame"),
         setValue = SetCustomAnchor,
         isCandidateAllowed = function(frame)
             local gf = MSUF.GF

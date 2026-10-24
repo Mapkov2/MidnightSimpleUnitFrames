@@ -253,6 +253,7 @@ local function BuildCopy(ctx, ui, width)
     Schema.Custom(button, {
         id = "menu2.swingtimers.swing.copy.button", kind = "button", labelKey = "Copy To",
         scope = "swing", applyDomain = "copyNavigation", action = Schema.ButtonAction(button), owner = button,
+        ephemeralReason = "Opens the Swing Timer copy editor; this button does not write a profile setting.",
     })
     ui.section:HookScript("OnHide", popup.Hide)
     ui.HideCopy = popup.Hide

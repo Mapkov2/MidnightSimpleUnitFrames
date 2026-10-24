@@ -35,7 +35,12 @@ local Schema, ROW_OPTIONS = M.ControlSchema, M.ControlSchema.UnitOptions()
 function AurasPage.Own(widget)
     local record = widget and widget._msuf2RuntimeControlRecord
     if not record then return widget end
-    if record.kind == "segment" then return Schema.ScopeOwner(widget, "auras", "menuState") end
+    if record.kind == "segment" then
+        Schema.ScopeOwner(widget, "auras", "menuState")
+        widget._msuf2ControlSchema.setting = nil
+        widget._msuf2ControlSchema.ephemeralReason = "Selects the aura workspace; no profile setting is written."
+        return widget
+    end
     Schema.Owned(widget, "auras", record.classification == "ephemeral" and "menuState" or "auras")
     if record.kind == "dropdown" then widget._msuf2ControlSchema.values = widget.values end
     return widget

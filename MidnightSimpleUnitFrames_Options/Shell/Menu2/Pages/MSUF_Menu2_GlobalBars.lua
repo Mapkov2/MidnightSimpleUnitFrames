@@ -231,6 +231,35 @@ local function Meta(path, classification, exact)
             resolved.searchSettingKeyPatterns = { "^barScope%.[%w_]+%." .. suffix .. "$" }
         end
     end
+    if kind == "setting" then
+        local suffix = BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH[path]
+        local fields, shared, groups = suffix and { suffix }, "general"
+        if path == "scope.override.enabled" then fields, shared, groups = { "hlOverride" }, nil, { "hlOverride", "barTextureOverride" }
+        elseif path == "gradient.enableGradient" then fields = { "enableGradient", "gradientStrength" }
+        elseif path == "gradient.enablePowerGradient" then fields = { "enablePowerGradient", "powerGradientStrength" }
+        elseif path == "gradient.health.strength" then
+            fields = { "gradientStrength", "powerGradientStrength", "powerGradientDirUp", "powerGradientDirDown",
+                "powerGradientDirLeft", "powerGradientDirRight" }
+        elseif path == "outline.color" then fields = { "barOutlineColorMode", "barOutlineColorR", "barOutlineColorG", "barOutlineColorB", "barOutlineColorA" }
+        elseif path == "textures.background" then
+            resolved.setting = Rows.Schema.Family({ "general.barBackgroundTexture", "gf_party.barBackgroundTexture", "gf_raid.barBackgroundTexture",
+                "gf_mythicraid.barBackgroundTexture", "gf_party.barBgTexture", "gf_raid.barBgTexture", "gf_mythicraid.barBgTexture",
+                "gf_party.barTextureOverride", "gf_raid.barTextureOverride", "gf_mythicraid.barTextureOverride",
+                "gf_party.hlOverride", "gf_raid.hlOverride", "gf_mythicraid.hlOverride" })
+        elseif path == "textures.foreground" then groups = { "barTexture", "barTextureOverride" }
+        elseif path == "power.smooth_fill" or path == "power.chunked_fill" then
+            resolved.setting = Rows.Schema.ScopedFields({ "powerSmoothFill", "powerChunkedFill" }, nil)
+            resolved.setting.keys[#resolved.setting.keys + 1] = "bars.smoothPowerBar"
+            resolved.setting.keys[#resolved.setting.keys + 1] = "bars.chunkedPowerBar"
+        elseif path:match("^outline%.") and Rows.keys[path] then fields, shared = { Rows.keys[path][1]:match("%.(.+)$") }, "bars"
+        elseif path == "highlight.boss_target.mode" then fields = { "bossTargetOutlineMode", "bossTargetHighlightEnabled" }
+        elseif path == "highlight.priority.enabled" then fields = { "hlPrioEnabled", "highlightPrioEnabled" }
+        elseif Rows.keys[path] then
+            fields = {}
+            for _, key in ipairs(Rows.keys[path]) do fields[#fields + 1] = key:match("%.(.+)$") end
+        end
+        if fields and not resolved.setting then resolved.setting = Rows.Schema.ScopedFields(fields, shared, "hlOverride", groups) end
+    end
     return ControlMeta("opt_bars", "global", path, classification, resolved)
 end
 -- Page field policies translate into the shared typed binders; input, history,
@@ -788,7 +817,7 @@ local function AttachBarsColorShortcut(section, title, note, label, getRGB, setR
             end,
         }
         RegisterControl(shortcut, registeredMeta, title or label or "Bar color", "color")
-        Rows.Schema.Owned(shortcut, "bars", "contextColors")
+        Rows.Schema.Owned(shortcut, "bars", "contextColors")._msuf2ControlSchema.setting = Rows.Schema.FromMeta(registeredMeta)
     end
     return shortcut
 end
@@ -1055,7 +1084,11 @@ function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradient
             local label = value == "UP" and "Gradient direction" or text
             RegisterControl(btn, meta, label, "button")
             Rows.Schema.Custom(btn, { id = meta.controlId, meta = meta,
-                kind = "button", labelKey = label, scope = "bars", applyDomain = "bars", owner = btn, action = Rows.Schema.ButtonAction(btn) })
+                kind = "button", labelKey = label, scope = "bars", applyDomain = "bars", owner = btn,
+                setting = Rows.Schema.ScopedFields(M.WordList [[
+                    gradientDirUp gradientDirDown gradientDirLeft gradientDirRight gradientDirection gradientStrength
+                    powerGradientDirUp powerGradientDirDown powerGradientDirLeft powerGradientDirRight powerGradientDirection powerGradientStrength
+                ]], "general", "hlOverride"), action = Rows.Schema.ButtonAction(btn) })
             if M.AddTooltip then
                 M.AddTooltip(btn, nil,
                     "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.",
@@ -2055,7 +2088,9 @@ local function BuildSlantedSection(ctx, b)
         end
     end)
     RegisterControl(preset, Meta("slanted.apply_preset", "action"), "Apply slanted bars to all frames", "button")
-    Rows.Schema.Owned(preset, "bars", "bars")
+    local presetDeclaration = Rows.Schema.Owned(preset, "bars", "bars")._msuf2ControlSchema
+    presetDeclaration.setting = Rows.Schema.Record({ "bars.slantedBarsEnabled", "bars.slantedUnitFrames", "bars.slantedGroupFrames",
+        "{unit}.frameBarShape", "gf_{scope}.frameBarShape" })
     Search(preset, "Apply slanted bars to all frames", "button",
         { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
         "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.")

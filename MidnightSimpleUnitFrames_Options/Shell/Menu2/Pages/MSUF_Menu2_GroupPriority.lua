@@ -88,6 +88,10 @@ local function RegisterAction(widget, ctx, path, label, extra, domain)
     RegisterControl(widget, ctx, path, actionLabel, "button", "action", extra)
     Schema.Owned(widget, "profile", domain or "priority")
     widget._msuf2ControlSchema.action = Schema.ButtonAction(widget)
+    if path == "pins.clear_all" or path:match("^pins%.row%.%d+%.") then
+        widget._msuf2ControlSchema.setting = Schema.Record({ "MSUF_GlobalDB.char.{character}.priorityFrames.pins" })
+        widget._msuf2ControlSchema.ephemeralReason = nil
+    end
     return widget
 end
 

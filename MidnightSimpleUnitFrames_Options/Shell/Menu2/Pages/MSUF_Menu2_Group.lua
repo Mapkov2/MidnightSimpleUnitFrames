@@ -87,6 +87,21 @@ local function GroupControlMeta(ctx, semanticPath, classification)
         controlPath = identity:gsub("%.", "/"),
         classification = classification or "setting",
     }
+    local field = tostring(semanticPath or ""):match("^field%.(.+)$")
+    if field and field:match("^growth%.option%.") then field = "growth" end
+    if field and meta.classification == "setting" then meta.setting = M.ControlSchema.GroupKeys(field) end
+    local schema = M.ControlSchema
+    if semanticPath == "basics.frame_provider" then
+        local keys = schema.GroupKeys("enabled").keys
+        for _, key in ipairs(schema.GroupKeys("blizzardFallbackMode").keys) do keys[#keys + 1] = key end
+        meta.setting = schema.Family(keys)
+    elseif semanticPath == "basics.raid_manager" then meta.setting = schema.GroupKeys("raidManagerMode")
+    elseif semanticPath == "text.power.show" then
+        local keys = schema.GroupKeys("showPowerText").keys
+        for _, key in ipairs(schema.GroupKeys("showPower").keys) do keys[#keys + 1] = key end
+        meta.setting = schema.Family(keys)
+    elseif tostring(semanticPath):match("^sorting%.class_priority%.row%.") then meta.setting = schema.GroupKeys("classOrder")
+    elseif tostring(semanticPath):match("^sorting%.role_priority%.row%.") then meta.setting = schema.GroupKeys("roleOrder") end
     -- The control identity describes the visible role. Its command resolves the
     -- currently selected Group scope at runtime, so it is not a static
     -- Search Registry action.

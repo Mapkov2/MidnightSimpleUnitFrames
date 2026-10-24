@@ -203,6 +203,32 @@ function StatusSection.PrepareSearch(state, ctx, unit)
         end
         M.RegisterSearchWidget(control, meta)
         Schema.Owned(control, unit, "unitStatus")
+        local field = semanticPath and semanticPath:match("^status%.selected%.([%a]+)$")
+        if field == "enabled" then field = "show"
+        elseif field == "iconstyle" then field = "iconStyle"
+        elseif field == "customicon" then field = "customIcon" end
+        if not field and semanticPath then
+            field = semanticPath:match("^status%.placement%..*offset_([xy])$")
+                or (semanticPath:match("^status%.placement%..*layer$") and "layer")
+                or (semanticPath:match("^status%.placement%..*width$") and "width")
+        end
+        if field and classification ~= "action" then
+            local keys = {}
+            for _, entry in ipairs(StatusValues(unit)) do
+                local spec = FindStatusSpec(unit, entry.value)
+                if spec and spec[field] then keys[#keys + 1] = unit .. "." .. spec[field] end
+            end
+            local declaration = control._msuf2ControlSchema
+            if #keys == 0 then
+                declaration.setting = nil
+                declaration.ephemeralReason = "This unit has no status indicator with a configurable " .. field .. " field."
+            else
+                declaration.setting = Schema.Family(keys, function()
+                    local selected = CurrentStatusSpec(unit)
+                    return selected and selected[field] and unit .. "." .. selected[field]
+                end)
+            end
+        end
     end
     state.StatusSearchKeywords, state.selectedStatusContract, state.RegisterStatusSearch =
         StatusSearchKeywords, selectedStatusContract, RegisterStatusSearch
@@ -279,6 +305,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
                 end)
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, "ephemeral")
+        control._msuf2ControlSchema.setting = unit .. ".stateIconsTestMode"
+        control._msuf2ControlSchema.ephemeralReason = nil
         return control
     end
     local function StatusPreviewButton(parent, label, xPos, yPos, width, mode, searchLabel, keywords, semanticPath)

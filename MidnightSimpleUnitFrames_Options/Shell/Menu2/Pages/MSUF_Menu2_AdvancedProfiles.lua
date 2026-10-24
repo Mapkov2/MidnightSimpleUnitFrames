@@ -70,6 +70,11 @@ local function ProfilesMeta(path, classification, exact)
     if path == "profile.delete_current" and resolved.actionFixedArgs == nil then
         resolved.actionFixedArgs = { name = { context = "activeProfile" } }
     end
+    if path == "specialization.auto_switch.enabled" then
+        resolved.setting = M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.specAutoSwitch", "MSUF_GlobalDB.char.{character}.activeProfile" })
+    elseif resolved.actionKey == "set_spec_profile" then
+        resolved.setting = M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.specProfileMap.{spec}", "MSUF_GlobalDB.char.{character}.activeProfile" })
+    end
     return ControlMeta("profiles", "advanced", path, classification, resolved)
 end
 local function ModulesMeta(path, classification, exact)
@@ -652,6 +657,7 @@ local function BuildProfilePicker(state)
     -- The selected value is a profile name; search keeps the control name.
     profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
+    profileDrop._msuf2ControlSchema.setting = M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.activeProfile" })
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(state.heroSwitch, profileDrop) end
     profileDrop:SetOnValueChanged(function(value)
         if BlockCombatAction() then

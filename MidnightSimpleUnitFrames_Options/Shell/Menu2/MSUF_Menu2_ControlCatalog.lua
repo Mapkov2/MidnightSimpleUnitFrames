@@ -562,6 +562,7 @@ function Catalog.Register(widget, meta, registrationSource)
         -- real widget exists it owns the same semantic ID; replace the token
         -- instead of reporting a false collision or retaining both records.
         if occupied and occupied.virtual == true and meta.virtual ~= true then
+            if not widget._msuf2ControlSchema then widget._msuf2ControlSchema = occupied.widget._msuf2ControlSchema end
             RemoveRecord(occupied)
             occupied = nil
             STATE.revision = STATE.revision + 1
@@ -655,6 +656,13 @@ function Catalog.Register(widget, meta, registrationSource)
     end
     record.classification = classification
     record.classificationSource = reason
+    if (classification == "ephemeral" or classification == "action" or meta.settingKey or meta.setting)
+        and M.ControlSchema and not widget._msuf2ControlSchema then
+        M.ControlSchema.Custom(widget, { id = record.controlId, kind = kind, scope = pageKey,
+            applyDomain = classification == "ephemeral" and "menuState" or "menuAction", meta = meta,
+            ephemeralReason = classification == "ephemeral" and (meta.ephemeralReason or meta.help
+                or "Menu selection or preview state; no profile setting is written.") or nil })
+    end
     InheritTabPreparation(widget, record)
 
     widget._msuf2RuntimeControlId = record.controlId
@@ -761,7 +769,9 @@ function Catalog.ResolveExactTarget(pageKey, descriptor)
 
     local settingKey = CleanText(descriptor.settingKey)
     local recordSettingKey = CleanText(record.settingKey)
-    if settingKey ~= "" and recordSettingKey ~= "" and recordSettingKey ~= settingKey then
+    local schema = widget._msuf2ControlSchema
+    local familyMatch = schema and M.ControlSchema.Matches(schema.setting, settingKey)
+    if settingKey ~= "" and recordSettingKey ~= "" and recordSettingKey ~= settingKey and not familyMatch then
         return nil, nil, "setting_mismatch"
     end
 
@@ -929,7 +939,13 @@ function M.RegisterVirtualRuntimeControl(meta, registrationSource)
     if not IsValidExplicitId(meta.controlId) then return nil, "virtual controls require a valid explicit controlId" end
     local controlId = meta.controlId
     local existing = STATE.byId[controlId]
-    if existing and existing.virtual ~= true then return existing.controlId, existing end
+    if existing and existing.virtual ~= true then
+        if not existing.widget._msuf2ControlSchema then
+            M.ControlSchema.Custom(existing.widget, { id = meta.controlId, kind = meta.kind,
+                scope = meta.pageKey or existing.pageKey, applyDomain = "virtual", meta = meta, settingPath = meta.settingKey })
+        end
+        return existing.controlId, existing
+    end
     M._virtualRuntimeControlTokens = M._virtualRuntimeControlTokens or {}
     local token = M._virtualRuntimeControlTokens[controlId]
     if not token then
@@ -942,6 +958,8 @@ function M.RegisterVirtualRuntimeControl(meta, registrationSource)
         M.DeclareExactSearchPreparation(token, meta)
     end
     meta.virtual = true
+    M.ControlSchema.Custom(token, { id = meta.controlId, kind = meta.kind, scope = meta.pageKey or "virtual",
+        applyDomain = "virtual", meta = meta, settingPath = meta.settingKey })
     return Catalog.Register(token, meta, registrationSource or "virtual")
 end
 
@@ -977,6 +995,8 @@ function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
     widget._msuf2SearchMeta = searchMeta
     local existing = STATE.byId[meta.controlId]
     if existing and existing.widget ~= widget then RemoveRecord(existing) end
+    M.ControlSchema.Custom(widget, { id = meta.controlId, kind = meta.kind, scope = "menu",
+        applyDomain = "menu", meta = meta, settingPath = meta.settingKey })
     return Catalog.Register(widget, meta, "menu-chrome")
 end
 

@@ -58,6 +58,304 @@ function Schema.SetUnit(domain, unit, key, value, reason, kind)
     return owner.SetString(unit, key, value, reason, flags)
 end
 
+-- A setting declaration is cold metadata only. It never becomes binding metadata:
+-- history scopes, reads, writes and combat gates continue to belong to the binder.
+function Schema.AuraLaneSchema() return MSUF.MSUF_Auras3.LaneKeySchema end
+function Schema.Family(keys, resolve, patterns)
+    return { keys = keys, resolve = resolve, patterns = patterns }
+end
+function Schema.GroupKeys(key)
+    return Schema.Family({ "gf_party." .. key, "gf_raid." .. key, "gf_mythicraid." .. key })
+end
+function Schema.Record(paths)
+    local patterns = {}
+    for _, path in ipairs(paths) do
+        patterns[#patterns + 1] = "^" .. path:gsub("([^%w])", "%%%1"):gsub("%%{[^}]+%%}", "[^.]+") .. "$"
+    end
+    return { recordPaths = paths, patterns = patterns }
+end
+function Schema.Fields(owners, fields)
+    local paths = {}
+    for _, owner in ipairs(owners) do
+        for _, field in ipairs(fields) do paths[#paths + 1] = owner .. "." .. field end
+    end
+    return Schema.Record(paths)
+end
+function Schema.TextSlots(unit, kind, field)
+    local keys = {}
+    local function Add(key)
+        if unit == "group" then
+            for _, path in ipairs(Schema.GroupKeys(key).keys) do keys[#keys + 1] = path end
+        else keys[#keys + 1] = unit .. "." .. key end
+    end
+    for _, slot in ipairs({ "Left", "Center", "Right" }) do
+        local key = (kind == "hp" and "text" or "powerText") .. slot
+        if field == "size" then key = kind .. "Text" .. slot .. "FontSize"
+        elseif field == "hide_percent" then key = kind .. "Text" .. slot .. "HidePercentSymbol" end
+        Add(key)
+        if field == "absorb" then Add("hpText" .. slot .. "AbsorbIcon") end
+    end
+    return Schema.Family(keys)
+end
+function Schema.Matches(setting, path)
+    if type(setting) == "string" then return setting == path end
+    if type(setting) ~= "table" then return false end
+    for _, key in ipairs(setting.keys or {}) do if key == path then return true end end
+    for _, pattern in ipairs(setting.patterns or {}) do if path:match(pattern) then return true end end
+    return false
+end
+local UNIT_SCOPE_ROOTS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
+local GROUP_SCOPE_ROOTS = { "gf_party", "gf_raid", "gf_mythicraid" }
+function Schema.ScopedFields(fields, shared, flag, groupFields)
+    local keys = {}
+    local function Add(root, names, scoped)
+        for _, field in ipairs(names) do
+            keys[#keys + 1] = root == "" and field or root .. "." .. field
+            if scoped and (field:match("^[Pp]owerGradient") or field:match("^gradient")
+                or field:match("BarGradientColor") or field == "enableGradient" or field == "enablePowerGradient") then
+                for _, name in ipairs({ "gradientOverride", "gradientOverrideVersion", "gradientOverrideKeys." .. field }) do
+                    keys[#keys + 1] = root .. "." .. name
+                end
+            end
+        end
+        if scoped and flag then keys[#keys + 1] = root .. "." .. flag end
+    end
+    if shared then Add(shared, fields, false) end
+    for _, root in ipairs(UNIT_SCOPE_ROOTS) do Add(root, fields, true) end
+    for _, root in ipairs(GROUP_SCOPE_ROOTS) do Add(root, groupFields or fields, true) end
+    return Schema.Family(keys)
+end
+-- Scope route aliases are retained for search. Physical declarations use the
+-- storage fields of the same scoped writer, including its ownership markers.
+local function NormalizeScopeTargets(setting)
+    if type(setting) ~= "table" then return setting end
+    local keys, patterns = {}, {}
+    for _, key in ipairs(setting.keys or {}) do keys[#keys + 1] = key end
+    for _, pattern in ipairs(setting.patterns or {}) do
+        if pattern:match("^%^barScope") then
+            local field = pattern:match(".*%%%.(.-)%$$")
+            local base = field and field:match("^(.-)%[RGB%]$")
+            for _, suffix in ipairs(base and { "R", "G", "B" } or { "" }) do
+                for _, key in ipairs(Schema.ScopedFields({ (base or field) .. suffix }, "general", "hlOverride").keys) do
+                    keys[#keys + 1] = key
+                end
+            end
+        else patterns[#patterns + 1] = pattern end
+    end
+    return Schema.Family(keys, setting.resolve, patterns)
+end
+function Schema.FromMeta(meta)
+    if not meta then return nil end
+    if meta.setting then return meta.setting end
+    if meta.searchSettingKeys or meta.searchSettingKeyPatterns then
+        return NormalizeScopeTargets(Schema.Family(meta.searchSettingKeys, nil, meta.searchSettingKeyPatterns))
+    end
+    return meta.settingKey
+end
+-- Named commands retain their existing execution/history owners. Atomic resets
+-- and account operations may replace a complete profile or storage subtree.
+local ACTION_TARGETS = {
+    class_power_quick_setup = {
+        "bars",
+        "player",
+        "general.quickSetupClassBarOffered",
+    },
+    reset_player_totems_layout = {
+        "gameplay.playerTotemsIconSize",
+        "gameplay.playerTotemsOffsetX",
+        "gameplay.playerTotemsOffsetY",
+        "gameplay.playerTotemsAnchorFrom",
+        "gameplay.playerTotemsAnchorTo",
+    },
+    reset_focus_kick_position = {
+        "general.focusKickIconOffsetX",
+        "general.focusKickIconOffsetY",
+    },
+    enable_focus_target_frame = {
+        "focus.enabled",
+        "focustarget.enabled",
+    },
+    show_player_power_or_open_class_resources = {
+        "player.showPowerBar",
+    },
+    reset_selected_group_status_icon = {
+        "gf_{scope}.{field}",
+    },
+    reset_health_gradient_colors = {
+        "general.healthGradient{stop}R",
+        "general.healthGradient{stop}G",
+        "general.healthGradient{stop}B",
+    },
+    reset_aura_colors = {
+        "general",
+    },
+    reset_bar_background_color = {
+        "general.classBarBgR",
+        "general.classBarBgG",
+        "general.classBarBgB",
+        "general.classBarBgA",
+    },
+    reset_bar_colors = {
+        "general",
+    },
+    reset_castbar_colors = {
+        "general",
+    },
+    reset_class_colors = {
+        "classColors",
+    },
+    reset_global_font_color = {
+        "general.useCustomFontColor",
+        "general.fontColorCustomR",
+        "general.fontColorCustomG",
+        "general.fontColorCustomB",
+    },
+    reset_gameplay_colors = {
+        "gameplay.combatTimerColor",
+        "gameplay.combatStateEnterColor",
+        "gameplay.combatStateLeaveColor",
+        "gameplay.crosshairInRangeColor",
+        "gameplay.crosshairOutRangeColor",
+    },
+    reset_npc_type_colors = {
+        "npcColors",
+    },
+    reset_unitframe_colors = {
+        "general",
+        "npcColors",
+    },
+    reset_portrait_colors = {
+        "general",
+        "player",
+        "target",
+        "focus",
+        "targettarget",
+        "focustarget",
+        "pet",
+        "pettarget",
+        "boss",
+    },
+    reset_power_color_token = {
+        "general.powerColorOverrides.{token}",
+    },
+    reset_class_power_color_token = {
+        "general.classPowerColorOverrides.{token}",
+        "general.classPowerBgColorOverrides.{token}",
+    },
+    reset_class_power_slot_colors = {
+        "general.classPowerColorOverrides.{token}",
+    },
+    reset_class_power_full_color = {
+        "general.classPowerColorOverrides.{token}_FULL",
+        "bars.classPowerFullColorEnabled.{token}",
+    },
+    switch_profile = {
+        "MSUF_GlobalDB.char.{character}.activeProfile",
+    },
+    create_profile = {
+        "MSUF_GlobalDB.profiles.{profile}",
+    },
+    copy_profile = {
+        "MSUF_GlobalDB.profiles.{profile}",
+    },
+    reset_profile = {
+        "MSUF_GlobalDB.profiles.{profile}",
+    },
+    import_profile_string = {
+        "MSUF_GlobalDB.profiles.{profile}",
+    },
+    delete_profile = {
+        "MSUF_GlobalDB",
+    },
+    set_new_character_profile = {
+        "MSUF_GlobalDB.global.defaultProfileForNewChars",
+    },
+    menu_history_undo = {
+        "MSUF_DB",
+    },
+    menu_history_redo = {
+        "MSUF_DB",
+    },
+    menu_reset_current_page_prompt = {
+        "MSUF_DB",
+    },
+    menu_window_maximize = {
+        "general.msuf2WindowW",
+        "general.msuf2WindowH",
+    },
+    menu_window_restore = {
+        "general.msuf2WindowW",
+        "general.msuf2WindowH",
+    },
+    set_nav_search_intro = {
+        "MSUF_GlobalDB.char.{character}.menu2State.searchIntroSeen",
+    },
+}
+local NO_PROFILE_WRITE_ACTIONS = {
+    open_page = true, export_profile = true, copy_wago_profiles_link = true,
+    menu_search_clear = true, menu_window_close = true, menu_window_minimize = true,
+    dashboard_page_back = true, dashboard_page_forward = true,
+    ["menu.action.editMode.toggle"] = true, ["menu.action.editMode.enter"] = true,
+}
+local DASHBOARD_TARGETS = {
+    ["display.recovery.factory.reset.all"] = { "MSUF_GlobalDB", "MSUF_DB" },
+    ["display.recovery.reset.positions"] = { "MSUF_DB" },
+    ["scaling.menu.apply"] = { "general.slashMenuScale" },
+    ["scaling.msuf.frames.apply"] = { "general.msufUiScale" },
+}
+local function ActionDeclaration(spec, meta)
+    local key, id = spec.actionKey or meta.actionKey, tostring(spec.id)
+    local paths = ACTION_TARGETS[key]
+    local dashboard = id:match("^menu2%.home%.dashboard%.(.+)$")
+    if dashboard then
+        paths = DASHBOARD_TARGETS[dashboard]
+        if dashboard == "scaling.global.ui.apply" or dashboard:match("^scaling%.global%.ui%.preset%.") then
+            paths = { "general.UIScale.Enabled", "general.UIScale.Scale",
+                "general.globalUiScalePreset", "general.globalUiScaleValue" }
+        elseif dashboard == "display.recovery.print.help" then
+            spec.ephemeralReason = "Prints slash-command help; no profile setting is written."
+        end
+    end
+    if key == "reset_unit_status_indicator" then paths = { spec.scope:gsub("^uf_", "") .. ".{field}" } end
+    if key and key:match("^first_load%.") then paths = { "MSUF_GlobalDB.global.firstLoad6" } end
+    if key == "reset_all_scoped_global_font_overrides" then return Schema.ScopedFields({ "fontOverride" }) end
+    if key == "reset_all_scoped_global_bars_overrides" then
+        return Schema.ScopedFields({ "hlOverride", "slantedBarDirection" }, nil, nil,
+            { "hlOverride", "slantedBarDirection", "barTextureOverride" })
+    end
+    if key == "reset_bar_gradient_colors" then
+        return Schema.ScopedFields({ "healthBarGradientColorR", "healthBarGradientColorG", "healthBarGradientColorB",
+            "powerBarGradientColorR", "powerBarGradientColorG", "powerBarGradientColorB" }, "general", "hlOverride")
+    end
+    if paths then return Schema.Record(paths) end
+    if NO_PROFILE_WRITE_ACTIONS[key] or id:match("^menu2%.home%.dashboard%.support%.link%.")
+        or id:match("^menu2%.home%.dashboard%.guided%.setup%.")
+        or id:match("^advancedprofiles%.hero") or id == "section.actions" then
+        spec.ephemeralReason = "Menu navigation, export or editor action; no profile setting is written."
+    end
+end
+
+local function Declare(spec)
+    local meta = spec.meta or {}
+    spec.setting = spec.setting or meta.setting
+    if not spec.setting and not spec.ephemeralReason and not meta.ephemeral and meta.classification ~= "ephemeral" then
+        spec.setting = Schema.FromMeta(meta) or spec.settingPath
+    else spec.setting = spec.setting or spec.settingPath end
+    if spec.setting == "" then spec.setting = nil end
+    if spec.id:match("^menu2%.home%.dashboard%.scaling%..+%.percent$") then
+        spec.setting = nil
+        spec.ephemeralReason = "Selects a pending scale percentage; only the separate Apply button writes the profile."
+    elseif meta.schemaEphemeralReason then
+        spec.setting, spec.ephemeralReason = nil, meta.schemaEphemeralReason
+    elseif not spec.setting then spec.setting = ActionDeclaration(spec, meta) end
+    if spec.setting then spec.ephemeralReason = nil end
+    if not spec.setting and (meta.ephemeral or meta.classification == "ephemeral" or spec.applyDomain == "menuState"
+        or spec.applyDomain == "sectionNavigation") then
+        spec.ephemeralReason = spec.ephemeralReason or meta.ephemeralReason
+            or "Menu selection, disclosure or preview state; no addon profile setting is written."
+    end
+    return spec
+end
 local function Metadata(spec)
     local meta = {}
     for key, value in pairs(spec.meta or {}) do meta[key] = value end
@@ -104,6 +402,7 @@ end
 function Schema.Bind(ctx, widget, spec)
     assert(type(spec.id) == "string" and spec.id ~= "", "schema stable control ID missing")
     assert(spec.scope and spec.applyDomain, "schema scope/apply domain missing")
+    Declare(spec)
     local get, set = Accessors(spec)
     local meta = Metadata(spec)
     widget._msuf2ControlSchema = spec
@@ -137,7 +436,7 @@ end
 -- shortcuts). Their declaration documents the seam without binding them twice.
 function Schema.Custom(widget, spec)
     assert(spec.id and spec.kind and spec.scope and spec.applyDomain, "custom schema row is incomplete")
-    widget._msuf2ControlSchema = spec
+    widget._msuf2ControlSchema = Declare(spec)
     return widget
 end
 -- Native Click dispatches the current owned button's scripts and separate hooks.
@@ -153,6 +452,10 @@ function Schema.Owned(widget, scope, domain)
         id = record.controlId, kind = record.kind, labelKey = record.label,
         settingPath = record.settingKey, scope = scope, applyDomain = domain,
         meta = widget._msuf2SearchMeta, actionKey = record.actionKey,
+        setting = (widget._msuf2ControlSchema and widget._msuf2ControlSchema.setting) or
+            Schema.FromMeta(widget._msuf2SearchMeta),
+        ephemeralReason = record.classification == "ephemeral" and
+            "Menu selection, disclosure or preview state; no addon profile setting is written." or nil,
         get = command and command.get and function(...)
             return (widget._msuf2CommandAction or record.command).get(...)
         end,
@@ -179,6 +482,7 @@ function Schema.ContextColors(card, id, scope)
         Schema.Custom(widget, {
             id = id, kind = "button", labelKey = widget._msuf2Label:GetText(),
             scope = scope, applyDomain = "contextColors", owner = widget,
+            ephemeralReason = "Opens the contextual color editor; this button does not write a profile setting.",
             get = function() return widget._msuf2ContextColorOptions end,
             action = Schema.ButtonAction(widget), gate = widget._msuf2RefreshContextColorVisibility,
         })
@@ -290,14 +594,17 @@ end
 function Schema.UnitBinding(ctx, widget, row, kind)
     if row.bind then
         row.bind(widget)
-        if widget._msuf2ControlSchema then return widget end
+        if widget._msuf2ControlSchema then
+            widget._msuf2ControlSchema.setting = row.setting or widget._msuf2ControlSchema.setting
+            return widget
+        end
         return Schema.Custom(widget, { id = row[2], kind = kind, labelKey = row[4][1],
-            scope = row.scope or "shared", applyDomain = "menuState", owner = widget })
+            scope = row.scope or "shared", applyDomain = "menuState", owner = widget, setting = row.setting })
     end
     local meta = assert(row.meta, "unit row metadata missing")
     local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
         meta = meta, scope = row.scope or ctx.key, applyDomain = row.domain or "unit",
-        settingPath = meta.settingKey, get = row.get, set = row.set, unit = row.unit,
+        settingPath = meta.settingKey, setting = row.setting, get = row.get, set = row.set, unit = row.unit,
         reason = row.reason, commitOnBlur = row.commitOnBlur, textAdapter = row.textAdapter,
         defaultSource = function() return row[3] end, roundStep = row.roundStep }
     if kind == "slider" then spec.range = { row[4][2], row[4][3], row[4][4] } end
@@ -356,7 +663,7 @@ function Schema.GroupBinding(ctx, widget, row, kind)
     local key, default, domain = row[2], row[3], row.domain or "visual"
     local meta = gp.ControlMeta(ctx, row.path or "field." .. tostring(key), row.classification)
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1],
-        scope = "group", applyDomain = domain, meta = meta }
+        scope = "group", applyDomain = domain, meta = meta, setting = row.setting or Schema.GroupKeys(key) }
     local bind = kind == "toggle" and gp.BindScopeToggle or kind == "slider" and gp.BindScopeSlider
         or kind == "dropdown" and gp.BindScopeDropdown
     assert(bind, "unsupported group scope kind: " .. tostring(kind))(ctx, widget, key, default, domain, meta)
@@ -435,6 +742,7 @@ local function GroupBindingOptions(owner, accessors)
         if row.bind then
             row.bind(ctx, widget, row)
             Schema.Owned(widget, "group", row.domain or "visual")
+            widget._msuf2ControlSchema.setting = row.setting or widget._msuf2ControlSchema.setting
             return
         end
         local get, set, fallback, afterBind = accessors(owner, row, kind, widget, ctx)
@@ -443,7 +751,7 @@ local function GroupBindingOptions(owner, accessors)
         local meta = kind == "slider" and owner.stepMeta(ctx, path, row[4][4]) or owner.meta(ctx, path, row.classification)
         local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
             scope = "group", applyDomain = row.domain or "visual", meta = meta, get = get, set = set,
-            commitOnBlur = row.commitOnBlur }
+            commitOnBlur = row.commitOnBlur, setting = row.setting or (owner.setting and owner.setting(row)) }
         if kind == "slider" then
             spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, function() return fallback end
         end
@@ -455,6 +763,12 @@ local function GroupBindingOptions(owner, accessors)
 end
 
 function Schema.GroupRecordOptions(owner)
+    owner.setting = function(row)
+        local prefix = "gf_{scope}." .. assert(owner.recordPath, "group record path missing")
+        local paths = {}
+        for _, field in ipairs(row.channels or { row[2] }) do paths[#paths + 1] = prefix .. field end
+        return Schema.Record(paths)
+    end
     return GroupBindingOptions(owner, RecordAccessors)
 end
 
@@ -498,6 +812,20 @@ local function SelectedAccessors(owner, row, kind)
     return row.get or Get, Set, fallback
 end
 function Schema.GroupSelectedOptions(owner)
+    owner.setting = function(row)
+        local keys = {}
+        for _, selected in ipairs(owner.specs) do
+            local field = selected[row[2]]
+            if field then
+                for _, path in ipairs(Schema.GroupKeys(field).keys) do keys[#keys + 1] = path end
+            end
+        end
+        return Schema.Family(keys, function()
+            local selected = owner.selected()
+            local field = selected and selected[row[2]]
+            return field and "gf_" .. owner.scope() .. "." .. field
+        end)
+    end
     return GroupBindingOptions(owner, SelectedAccessors)
 end
 
@@ -539,7 +867,9 @@ end
 local SCOPE_OPTIONS = GroupBindingOptions({ path = "field.", meta = ScopeMeta, stepMeta = ScopeMeta }, ScopeAccessors)
 function Schema.GroupOptions()
     return { bind = function(ctx, widget, row, kind)
-        if row.binding == "scopeValue" then SCOPE_OPTIONS.bind(ctx, widget, row, kind)
+        if row.binding == "scopeValue" then
+            row.setting = row.setting or Schema.GroupKeys(row.target and row.target() or row[2])
+            SCOPE_OPTIONS.bind(ctx, widget, row, kind)
         else Schema.GroupBinding(ctx, widget, row, kind) end
     end }
 end

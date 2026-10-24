@@ -1,0 +1,205 @@
+"""Generate live Menu2 schema coverage (run inside the shared Lua slot).
+
+  python tools/menu_schema_coverage.py --write --lua <lua51>
+  python tools/menu_schema_coverage.py --check
+
+Generation runs the existing search commands, Classic first, with a tool-only
+capture hook. Thus search and coverage use the same actual page builds and finite
+workspace states. Capture includes widgetless controls and declarations omitted
+from search. It does not execute setters or prove in-game rendering.
+"""
+import argparse
+import csv
+import hashlib
+import json
+import os
+import re
+import subprocess
+import tempfile
+from pathlib import Path
+from urllib.parse import unquote
+
+ROOT = Path(__file__).resolve().parents[1]
+MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+INDEXES = ("Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua",
+           "Search/MSUF_Menu2_Search_StaticIndex_Data.lua")
+SETTING_KINDS = {"toggle", "checkbox", "slider", "dropdown", "segment", "color", "textinput", "editbox", "input"}
+
+
+def read(path):
+    return path.read_bytes().decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def menu_hash(root, classic):
+    digest = hashlib.sha256()
+    excluded = set(INDEXES if classic else INDEXES[1:])
+    menu = root / MENU
+    for path in sorted(menu.rglob("*"), key=lambda item: item.relative_to(menu).as_posix()):
+        if path.suffix.lower() in {".lua", ".xml"}:
+            rel = path.relative_to(menu).as_posix()
+            if rel not in excluded:
+                digest.update(rel.encode() + b"\0" + read(path).encode() + b"\0")
+    return digest.hexdigest().upper()
+
+
+def source_hash(root, include_indexes=True):
+    paths = set()
+    for directory in ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options", "tools", ".github"):
+        paths.update(p for p in (root / directory).rglob("*") if p.suffix.lower() in {".lua", ".xml", ".toc"})
+    paths.update(root / name for name in (
+        "tools/menu_schema_coverage.py", "tools/menu_schema_project.lua", "tools/menu_schema_harness.lua",
+        "tools/classic-client-matrix.tsv", "tools/load-graph.lock"))
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        if not include_indexes and path.as_posix().endswith(tuple(INDEXES)):
+            continue
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0" + read(path).encode() + b"\0")
+    return digest.hexdigest().upper()
+
+
+def index_data(root, name, current=True):
+    text = read(root / MENU / name)
+    blob = re.search(r"StaticIndexBlob = \[==\[\n(.*?)\]==\]", text, re.S)
+    count = re.search(r"StaticIndexRecordCount = (\d+)", text)
+    stamp = re.search(r'StaticIndexSourceSha256 = "([A-F0-9]{64})"', text)
+    if not blob or not count or not stamp:
+        raise ValueError("malformed search inventory: " + name)
+    rows = [line.split("\t") for line in blob[1].splitlines()]
+    if len(rows) != int(count[1]) or any(len(row) != 12 for row in rows):
+        raise ValueError("incomplete search inventory: " + name)
+    if current and stamp[1] != menu_hash(root, name == INDEXES[0]):
+        raise ValueError("stale search inventory: " + name)
+    return {"sourceSha256": stamp[1], "blobSha256": hashlib.sha256(blob[1].encode()).hexdigest(),
+            "rowCount": len(rows), "identities": sorted(row[7] for row in rows)}, rows
+
+
+def physical_path(value):
+    normalized = value.replace("%.", ".").replace("%_", "_").lstrip("^")
+    return not re.match(r"(?:barScope|fontScope|menu|uf_[a-z]+)\.|profiles\.specAutoSwitch|auras3\.(?:player|target|focus|pet|boss|arena)(?:\.|[0-9])", normalized)
+
+
+def valid_setting(value):
+    if isinstance(value, str):
+        return bool(value.strip()) and not any(char in value for char in "{}") and physical_path(value)
+    if not isinstance(value, dict):
+        return False
+    keys, patterns = value.get("keys") or [], value.get("patterns") or []
+    if not isinstance(keys, list) or not isinstance(patterns, list) or not (keys or patterns):
+        return False
+    return (all(isinstance(key, str) and key.strip() and "{" not in key and physical_path(key) for key in keys)
+            and all(isinstance(pattern, str) and pattern.startswith("^") and pattern.endswith("$") and physical_path(pattern) for pattern in patterns))
+
+
+def profile_control(row):
+    return bool(row.get("setting")) or row.get("classification") == "setting" and not row.get("ephemeralReason")
+
+
+def declared(row):
+    schema_id = row.get("schemaId")
+    identity = row.get("controlId", "")
+    return (schema_id and (schema_id == identity or identity == "schema:" + row.get("pageKey", "") + ":" + schema_id)
+            and row.get("scope") and row.get("applyDomain")
+            and ({"editbox": "textinput", "input": "textinput", "checkbox": "toggle"}.get(row.get("kind"), row.get("kind"))
+                 == row.get("schemaKind")))
+
+
+def audit(evidence, root):
+    issues, total, proven = [], 0, 0
+    if evidence.get("version") != 2 or evidence.get("sourceSha256") != source_hash(root):
+        issues.append("missing/stale live schema projection")
+    clients = evidence.get("clients", {})
+    required = {row["Suffix"] for row in csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t")}
+    required.add("Forever")
+    if set(clients) != required:
+        issues.append("client projection inventory differs")
+    for flavor, client in clients.items():
+        rows = client.get("controls", [])
+        if not rows or len({row["controlId"] for row in rows}) != len(rows) or client.get("allDeclarationsCaptured") is not True:
+            issues.append("incomplete declaration inventory: " + flavor)
+        for row in rows:
+            for problem in row.get("observationIssues", {}):
+                issues.append(flavor + ":" + row["controlId"] + ":" + problem)
+            if profile_control(row):
+                total += 1
+                variants = row.get("settingDeclarations", {})
+                if declared(row) and valid_setting(row.get("setting")) and variants and all(valid_setting(v) for v in variants.values()):
+                    proven += 1
+                else:
+                    issues.append("unproven profile control: " + flavor + ":" + row["controlId"])
+            elif (row.get("kind") in SETTING_KINDS or row.get("classification") == "action"
+                  or row.get("controlId", "").startswith("schema:") and row.get("kind") == "button"):
+                if not declared(row) or not row.get("ephemeralReason"):
+                    issues.append("unexplained non-profile control: " + flavor + ":" + row["controlId"])
+    indexes = evidence.get("indexes", {})
+    for name in INDEXES:
+        current, search_rows = index_data(root, name)
+        if indexes.get(name) != current:
+            issues.append("search crosswalk differs: " + name)
+        family = {row["Suffix"] for row in csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t")
+                  if (row["IsClassic"] == "true") == (name == INDEXES[0])}
+        if name == INDEXES[1]:
+            family.add("Forever")
+        built = {row["controlId"] for flavor, client in clients.items() if flavor in family for row in client.get("controls", [])}
+        for row in search_rows:
+            if row[2] not in SETTING_KINDS:
+                continue
+            parts = row[7].split("\x1f")
+            if len(parts) != 3 or parts[0] != "id" or unquote(parts[2]) not in built:
+                issues.append("indexed setting absent from live declarations: " + name + ":" + row[7])
+    return proven, total, issues
+
+
+def generate(root, lua):
+    before = source_hash(root, include_indexes=False)
+    matrix = list(csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t"))
+    baseline = {name: index_data(root, name, current=False)[0] for name in INDEXES}
+    evidence = {"version": 2, "clients": {}, "indexes": {}}
+    with tempfile.TemporaryDirectory(prefix="menu-schema-") as directory:
+        env = dict(os.environ, LUA_INIT="@tools/menu_schema_harness.lua", MSUF_SCHEMA_CAPTURE_DIR=directory)
+        env.pop("MSUF_SCHEMA_CATALOG_SOURCE", None)
+        for classic, name in zip((True, False), INDEXES):
+            env["MSUF_SEARCH_SOURCE_SHA256"] = menu_hash(root, classic)
+            command = [lua, ".github/scripts/search_static_index_project.lua"]
+            if classic:
+                command.extend(("--flavor", "Vanilla"))
+            print(" ".join(command), flush=True)
+            subprocess.run(command, cwd=root, env=env, check=True)
+            # The original generator writes LF. Preserve the worktree CRLF convention.
+            path = root / MENU / name
+            path.write_bytes(read(path).replace("\n", "\r\n").encode())
+            current, _ = index_data(root, name)
+            lost = sorted(set(baseline[name]["identities"]) - set(current["identities"]))
+            evidence["indexes"][name] = current
+            print("%s: %d -> %d rows; %d lost" % (name, baseline[name]["rowCount"], current["rowCount"], len(lost)), flush=True)
+            if lost:
+                raise ValueError("search rows lost: " + repr(lost))
+        for flavor in [row["Suffix"] for row in matrix] + ["Forever"]:
+            controls = list(json.loads(read(Path(directory) / (flavor + ".json"))).values())
+            controls.sort(key=lambda row: row["controlId"])
+            evidence["clients"][flavor] = {"allDeclarationsCaptured": True, "controls": controls}
+            print(flavor + ": " + str(len(controls)) + " live declarations", flush=True)
+    if before != source_hash(root, include_indexes=False):
+        raise ValueError("sources changed during page builds; regenerate the projection")
+    evidence["sourceSha256"] = source_hash(root)
+    return evidence
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--lua", default="lua")
+    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    path = ROOT / "tools/menu_schema_coverage.json"
+    evidence = generate(ROOT, args.lua) if args.write else json.loads(read(path))
+    proven, total, issues = audit(evidence, ROOT)
+    if args.write:
+        path.write_bytes((json.dumps(evidence, ensure_ascii=False, indent=2) + "\n").replace("\n", "\r\n").encode())
+    for issue in issues:
+        print(issue)
+    print("menu schema: %d/%d proven; %d issues" % (proven, total, len(issues)))
+    return 1 if issues else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

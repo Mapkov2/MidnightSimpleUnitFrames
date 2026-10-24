@@ -33,15 +33,12 @@ Other finite dynamic global families require reviewed tools/scorecard_global_fam
 rows: file, line, prefix, suffix, source_sha256 (normalized LF source), names
 (a JSON array of exact names), reason. Source/family changes invalidate the row.
 
-settingKey coverage requires current generated menu indexes and schema provenance
-from tools/menu_schema_coverage.json (version 1). Its indexes object maps relative
-index paths to sourceSha256, blobSha256, records, unindexedRecords,
-allSettingsCaptured=true and settingControlCount. Each setting identity has
-exactly one record: identity, controlId, settingKey, schemaId, schemaSettingPath,
-schemaKind, scope, applyDomain. Capture all setting controls before search
-filtering; unindexedRecords holds those omitted from the search blob. The
-projection must inspect actual widget schema declarations; search metadata
-alone cannot establish schema coverage. No in-game rendering proof is claimed.
+settingKey coverage reads tools/menu_schema_coverage.json (version 2), generated
+from actual declarations during live page builds on every supported client. The
+projection captures declarations before search filtering, lists ephemeral reasons
+and crosswalks the current indexes. Its source digest includes the page sources,
+core providers, reused build harness and projection tools. Metadata proves declared
+write targets only; no in-game rendering or setter-execution proof is claimed.
 """
 
 import argparse
@@ -57,6 +54,7 @@ from pathlib import Path
 import gen_global_keep as keep
 import public_globals_ledger as ledger
 import quality_ratchet as ratchet
+import menu_schema_coverage as schema_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 HOT = "-- hot path: kept whole (perf rule)"
@@ -378,76 +376,10 @@ def global_counts(root):
 
 
 def menu_coverage(root):
-    menu = root / "MidnightSimpleUnitFrames_Options/Shell/Menu2"
-    index_names = ("Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua",
-                   "Search/MSUF_Menu2_Search_StaticIndex_Data.lua")
-    sources = {path.relative_to(menu).as_posix(): keep.read(path)
-               for path in menu.rglob("*") if path.suffix.lower() in (".lua", ".xml")}
-    covered_count = total = declared_count = 0
-    stale, issues = [], []
-    evidence_path = root / "tools/menu_schema_coverage.json"
-    evidence = json.loads(keep.read(evidence_path)) if evidence_path.exists() else {}
-    if evidence.get("version") != 1:
-        issues.append("schema projection provenance missing/version invalid")
-    for index, name in enumerate(index_names):
-        text = sources[name]
-        digest = hashlib.sha256()
-        excluded = set(index_names) if index == 0 else {name}
-        for rel in sorted(sources):
-            if rel not in excluded:
-                digest.update(rel.encode("utf-8") + b"\0" + sources[rel].encode("utf-8") + b"\0")
-        recorded = re.search(r'StaticIndexSourceSha256 = "([A-F0-9]{64})"', text)
-        if not recorded or recorded.group(1) != digest.hexdigest().upper():
-            stale.append(name)
-        blob = re.search(r"StaticIndexBlob = \[==\[\n(.*?)\]==\]", text, re.S)
-        if not blob:
-            raise ValueError("menu inventory missing: " + name)
-        rows = [line.split("\t") for line in blob.group(1).splitlines()]
-        expected = re.search(r"StaticIndexRecordCount = (\d+)", text)
-        if not expected or len(rows) != int(expected.group(1)) or any(len(row) != 12 for row in rows):
-            raise ValueError("menu inventory malformed: " + name)
-        settings = [row for row in rows if row[2] in SETTING_KINDS]
-        if not settings:
-            raise ValueError("menu inventory contains no setting controls: " + name)
-        total += len(settings)
-        covered_count += sum(bool(row[3].strip()) for row in settings)
-        projection = evidence.get("indexes", {}).get(name, {})
-        if (projection.get("sourceSha256") != (recorded.group(1) if recorded else None)
-                or projection.get("blobSha256") != hashlib.sha256(blob.group(1).encode("utf-8")).hexdigest()):
-            issues.append("schema projection missing/stale: " + name)
-            continue
-        records = projection.get("records", [])
-        by_identity = {record["identity"]: record for record in records}
-        identities = {row[7] for row in settings}
-        if len(by_identity) != len(records) or len(identities) != len(settings) or set(by_identity) != identities:
-            issues.append("schema projection identities differ: " + name)
-            continue
-        unindexed = projection.get("unindexedRecords")
-        if (projection.get("allSettingsCaptured") is not True or not isinstance(unindexed, list)
-                or projection.get("settingControlCount") != len(settings) + len(unindexed)):
-            issues.append("complete pre-search schema projection missing: " + name)
-            continue
-        extra_ids = [record.get("identity") for record in unindexed]
-        if not all(extra_ids) or len(set(extra_ids)) != len(extra_ids) or identities.intersection(extra_ids):
-            issues.append("unindexed schema projection identities differ: " + name)
-            continue
-
-        def declared(record, setting_key, kind):
-            return (bool(setting_key.strip()) and record.get("settingKey") == setting_key
-                    and record.get("schemaSettingPath") == setting_key
-                    and record.get("schemaKind") == kind
-                    and record.get("schemaId") == record.get("controlId")
-                    and all(record.get(key) for key in ("schemaId", "scope", "applyDomain")))
-
-        for row in settings:
-            record = by_identity[row[7]]
-            declared_count += bool(declared(record, row[3], row[2]))
-        total += len(unindexed)
-        for record in unindexed:
-            key, kind = record.get("settingKey", ""), record.get("schemaKind")
-            covered_count += bool(key.strip())
-            declared_count += kind in SETTING_KINDS and bool(declared(record, key, kind))
-    return covered_count, total, stale, declared_count, issues
+    path = root / "tools/menu_schema_coverage.json"
+    evidence = json.loads(keep.read(path)) if path.exists() else {}
+    proven, total, issues = schema_coverage.audit(evidence, root)
+    return proven, total, [], proven, issues
 
 
 def main():
@@ -475,7 +407,7 @@ def main():
                      "only listed hot-path copies", clones_open == 0))
         count, total, stale, declared, issues = menu_coverage(args.root)
         rows.append(("schema settingKey coverage of menu controls", "%d/%d proven; %d keyed (%.2f%%)%s" %
-                     (declared, total, count, 100 * count / total, "; stale inventory" if stale else ""),
+                     (declared, total, count, 100 * count / total if total else 0, "; stale inventory" if stale else ""),
                      "100%, current schema projection", declared == total and not stale and not issues))
         details.extend("global outside generated keep: " + name for name in extra)
         details.extend(frame_reasons)

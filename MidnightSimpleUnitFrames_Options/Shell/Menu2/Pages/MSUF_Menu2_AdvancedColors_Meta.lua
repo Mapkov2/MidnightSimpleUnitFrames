@@ -205,6 +205,96 @@ local COLOR_CHANNEL_PATHS = M.KeySetFromWords [[font.name_custom.color predictio
     level_difficulty.easy level_difficulty.trivial threat.curve.low threat.curve.mid threat.curve.high
     texture_layer.color texture_layer.gradient_color texture_layer2.color texture_layer2.gradient_color
     texture_layer3.color texture_layer3.gradient_color]]
+-- Search aliases keep their public routing contract. Schema targets describe
+-- the actual scalar channels or records used by these existing color owners.
+local COLOR_STORAGE_PREFIXES = {
+    ["api.SetAbsorbOverlayColor"] = { "absorbBarColor", "RGBA" },
+    ["api.SetAggroBorderColor"] = { "hlAggroColor aggroBorderColor aggroBorder", "RGB" },
+    ["api.SetCastbarTargetNameColor"] = { "castbarTargetName", "RGB" },
+    ["api.SetCastbarTextColor"] = { "castbarFont", "RGB" },
+    ["api.SetGlobalFontColor"] = { "fontColorCustom", "RGB", "useCustomFontColor" },
+    ["api.SetHealAbsorbOverlayColor"] = { "healAbsorbBarColor", "RGBA" },
+    ["api.SetInterruptFeedbackCastColor"] = { "castbarInterruptFeedback", "RGB" },
+    ["api.SetInterruptUnavailableCastColor"] = { "castbarInterruptUnavailable", "RGB" },
+    ["api.SetInterruptibleCastColor"] = { "castbarInterruptible", "RGB" },
+    ["api.SetNonInterruptibleCastColor"] = { "castbarNonInterruptible", "RGB" },
+    ["api.SetPetFrameColor"] = { "petFrameColor", "RGB" },
+    ["api.SetPowerBarBackgroundColor"] = { "powerBarBgColor", "RGBA" },
+    ["bar.purge_border_color"] = { "hlPurgeColor purgeBorderColor", "RGB" },
+    ["castbar.player_override.custom_color"] = { "playerCastbarOverride", "RGB" },
+    ["general.castbarBg"] = { "castbarBg", "RGBA" },
+    ["general.castbarBorder"] = { "castbarBorder", "RGBA" },
+    ["general.classBarBg"] = { "classBarBg", "RGBA" },
+    ["general.unifiedBar"] = { "unifiedBar", "RGB" },
+    ["general.healthGradientHigh"] = { "healthGradientHigh", "RGB" },
+    ["general.healthGradientMid"] = { "healthGradientMid", "RGB" },
+    ["general.healthGradientLow"] = { "healthGradientLow", "RGB" },
+    ["bar.outline_color"] = { "barOutlineColor", "RGBA", "barOutlineColorMode" },
+    ["font.name_custom.color"] = { "nameColor", "RGB", "nameColorMode nameClassColor" },
+}
+local COLOR_STORAGE_FIELDS = {
+    ["appearance.bar_mode"] = { "barMode", "darkMode", "useClassColors" },
+    ["background.color_mode"] = { "barBgColorMode", "barBgMatchHPColor", "barBgClassColor" },
+    ["appearance.dark_mode_tone"] = { "darkBarGray", "darkBarTone" },
+    ["font.text_mode.player_name"] = { "nameColorMode", "nameClassColor" },
+    ["font.text_mode.npc_name"] = { "nameNpcClassColor", "npcNameRed" },
+    ["font.text_mode.hp_text"] = { "colorHealthTextByHealth" },
+    ["font.text_mode.power_text"] = { "colorPowerTextByType" },
+}
+local function ColorStorageSetting(path)
+    local schema, keys = M.ControlSchema, {}
+    if COLOR_STORAGE_FIELDS[path] then return schema.Fields({ "general" }, COLOR_STORAGE_FIELDS[path]) end
+    local mirroredPrefix = ({ ["portrait.background_color"] = "portraitBgColor", ["portrait.border_color"] = "portraitBorderColor",
+        ["texture_layer.color"] = "texLayerColor", ["texture_layer.gradient_color"] = "texLayerGradient2",
+        ["texture_layer2.color"] = "texLayer2Color", ["texture_layer2.gradient_color"] = "texLayer2Gradient2",
+        ["texture_layer3.color"] = "texLayer3Color", ["texture_layer3.gradient_color"] = "texLayer3Gradient2" })[path]
+    if mirroredPrefix then
+        local fields = {}
+        for channel in ("RGB"):gmatch(".") do fields[#fields + 1] = mirroredPrefix .. channel end
+        return schema.Fields({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }, fields)
+    end
+    if path == "gameplay.combat_enter_color" or path == "gameplay.combat_state_color_sync" then
+        return schema.Fields({ "gameplay" }, path == "gameplay.combat_enter_color"
+            and { "combatStateEnterColor", "combatStateLeaveColor" } or { "combatStateColorSync", "combatStateLeaveColor" })
+    end
+    local channels = COLOR_STORAGE_PREFIXES[path]
+    if channels then
+        for prefix in channels[1]:gmatch("%S+") do
+            for channel in channels[2]:gmatch(".") do keys[#keys + 1] = "general." .. prefix .. channel end
+        end
+        for field in (channels[3] or ""):gmatch("%S+") do keys[#keys + 1] = "general." .. field end
+        return schema.Family(keys)
+    end
+    local slot = path:match("^class_power%.resource_slots%.slot%.(%d+)$")
+    if slot or path == "class_power.resource_slots.mode" then
+        local setting = schema.Record({ "bars.classPowerSlotColorModes.{token}" })
+        setting.keys = { "bars.classPowerComboPointColorMode" }
+        for _, key in ipairs(COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path] or {}) do setting.keys[#setting.keys + 1] = key end
+        return setting
+    end
+    if path == "class_power.full_resource.color" then
+        return schema.Record({ "general.classPowerColorOverrides.{token}_FULL", "bars.classPowerFullColorEnabled.{token}" })
+    end
+    local dispel = path:match("^auras%.dispel%.([%a]+)%.enabled$")
+    if dispel then
+        for _, spec in ipairs(M.DISPEL_COLOR_SPECS) do
+            if spec.path == dispel then return "general.dispelTypeColorOverrides." .. spec.key end
+        end
+    end
+    local detail = ({ ["castbar.text_color.spell_name"] = "SpellName", ["castbar.text_color.time"] = "Time",
+        ["castbar.text_color.target_name"] = "TargetName" })[path]
+    if detail or path == "castbar.text_color.reset" then
+        for _, prefix in ipairs(CAST_DETAIL_UNIT_KEYS) do
+            for _, suffix in ipairs(detail and { detail } or { "SpellName", "Time", "TargetName" }) do
+                for channel in ("RGB"):gmatch(".") do keys[#keys + 1] = "general." .. prefix .. suffix .. "Color" .. channel end
+            end
+        end
+        return schema.Family(keys)
+    end
+    if path == "status_text.color.value" or path == "status_text.color.reset" then
+        return schema.Record({ "{unit}.{indicator}ColorR", "{unit}.{indicator}ColorG", "{unit}.{indicator}ColorB" })
+    end
+end
 local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
     if exact.settingKey == nil then
@@ -228,6 +318,7 @@ local function Meta(path, classification, exact)
         exact.searchSettingKeys = COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
         exact.searchSettingKeyPatterns = COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
     end
+    exact.setting = exact.setting or ColorStorageSetting(path)
     return ControlMeta("opt_colors", "advanced", path, classification, exact)
 end
 CP.Meta = Meta

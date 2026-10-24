@@ -807,6 +807,7 @@ function PageBuilderStages.WireAccordionHeader(entry, ctx, title, collapseHintCl
                 set = SetSectionOpenImmediate,
             },
         })
+        M.ControlSchema.Owned(header, pageToken, "sectionNavigation")
     end
 end
 --- The accordion builder; installed once per build.
@@ -1212,6 +1213,9 @@ function W.SettingsRows(ctx, parent, spec)
         local hasReset = type(row.reset) == "function"
         local widget = BuildCardControl(ctx, parent, row, x, y, colW - (hasReset and 22 or 0))
         if widget then
+            M.ControlSchema.Custom(widget, { id = row.controlId or row.id, kind = kind,
+                scope = ctx.key, applyDomain = "settingsRows", meta = row, setting = row.setting,
+                settingPath = row.settingKey, get = row.get, set = row.set })
             if row.id then controls[row.id] = widget end
             list[#list + 1] = widget
             if hasReset then
