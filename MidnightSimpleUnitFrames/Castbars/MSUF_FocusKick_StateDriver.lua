@@ -44,8 +44,12 @@ local function SetFocusCastbarSuppressed(suppressed)
     focusCastbar._msufFocusKickSuppressed = suppressed and true or nil
     if suppressed then
         focusCastbar:SetAlpha(0)
-    elseif type(G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
-        G.MSUF_UF_ApplyCastbarRangeAlpha(focusCastbar, nil, true)
+        return
+    end
+    -- Releasing the source frame returns it to the range-fade alpha, not to 1.
+    local applyRangeAlpha = ns.Optional("MSUF_UF_ApplyCastbarRangeAlpha")
+    if applyRangeAlpha then
+        applyRangeAlpha(focusCastbar, nil, true)
     else
         focusCastbar:SetAlpha(1)
     end
